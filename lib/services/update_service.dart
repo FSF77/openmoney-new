@@ -406,14 +406,15 @@ exit 0
     File(scriptPath).writeAsStringSync(scriptContent, flush: true);
     await Process.run('/bin/chmod', ['+x', scriptPath]);
 
-    // Spawn detached process
-    Process.start(
+    // Executa o script diretamente como processo desanexado do SO
+    await Process.start(
       '/bin/bash',
-      ['-c', 'nohup /bin/bash "$scriptPath" >/dev/null 2>&1 &'],
+      [scriptPath],
       mode: ProcessStartMode.detached,
     );
 
-    // Terminate current app
+    // Pequena pausa para garantir o fork no SO antes de terminar
+    await Future.delayed(const Duration(milliseconds: 250));
     exit(0);
   }
 
@@ -448,15 +449,22 @@ if "%ERRORLEVEL%"=="0" (
     goto waitloop
 )
 
+timeout /t 1 /nobreak >nul
 xcopy /s /e /y "%NEW_DIR%\\*" "%TARGET_DIR%\\"
 start "" "%TARGET_EXE%"
+rd /s /q "${tempDir.path}" 2>nul
 del "%~f0"
 exit
 ''';
 
     File(scriptPath).writeAsStringSync(scriptContent, flush: true);
-    Process.start('cmd.exe', ['/c', 'start', '', scriptPath], mode: ProcessStartMode.detached);
+    await Process.start(
+      'cmd.exe',
+      ['/c', scriptPath],
+      mode: ProcessStartMode.detached,
+    );
 
+    await Future.delayed(const Duration(milliseconds: 250));
     exit(0);
   }
 
