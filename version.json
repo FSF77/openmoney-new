@@ -12,5 +12,13 @@
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.1.zip",
     "sha256": "792d3ce646555686dbe22d013afacbd4fe7c626ae04e04fd17847f9800f09831",
     "sizeMb": 10
+  },
+  "windows": {
+    "version": "2.0.1",
+    "build": 2,
+    "releaseDate": "26/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.1.zip",
+    "sha256": "d6883147494f74dedecd04003f134f69d89bd63812f3cf66970b5b4aa9f0b617",
+    "sizeMb": 12
   }
 }
