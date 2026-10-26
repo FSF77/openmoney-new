@@ -1,24 +1,24 @@
-{
-  "version": "2.0.3",
-  "build": 4,
-  "releaseDate": "26/10/2026",
-  "title": "OpenMoney Flutter v2.0.3",
-  "notes": "OpenMoney Flutter v2.0.3 - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.",
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "macos": {
-    "version": "2.0.3",
-    "build": 4,
-    "releaseDate": "26/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.3.zip",
-    "sha256": "0b10345c1670f3067ffc4817623861009327ac34bdad7753cd6ef22b61188511",
-    "sizeMb": 10
-  },
-  "windows": {
-    "version": "2.0.1",
-    "build": 2,
-    "releaseDate": "26/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.1.zip",
-    "sha256": "d6883147494f74dedecd04003f134f69d89bd63812f3cf66970b5b4aa9f0b617",
-    "sizeMb": 12
-  }
+﻿{
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "build":  4,
+    "version":  "2.0.3",
+    "notes":  "OpenMoney Flutter v2.0.3 para Windows - Versao oficial multiplataforma.",
+    "releaseDate":  "26/10/2026",
+    "windows":  {
+                    "build":  4,
+                    "version":  "2.0.3",
+                    "sizeMb":  12,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.3.zip",
+                    "sha256":  "af3f14ad531c485903433fc061a3108d125e46942bd96fcc162e764d02302715",
+                    "releaseDate":  "26/10/2026"
+                },
+    "macos":  {
+                  "version":  "2.0.3",
+                  "build":  4,
+                  "releaseDate":  "26/10/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.3.zip",
+                  "sha256":  "0b10345c1670f3067ffc4817623861009327ac34bdad7753cd6ef22b61188511",
+                  "sizeMb":  10
+              },
+    "title":  "OpenMoney Flutter v2.0.3"
 }
