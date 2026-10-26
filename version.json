@@ -1,16 +1,16 @@
 {
-  "version": "2.0.4",
-  "build": 5,
+  "version": "2.0.5",
+  "build": 6,
   "releaseDate": "26/10/2026",
-  "title": "OpenMoney Flutter v2.0.4",
-  "notes": "OpenMoney Flutter v2.0.4 - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.",
+  "title": "OpenMoney Flutter v2.0.5",
+  "notes": "OpenMoney Flutter v2.0.5 - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.",
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
   "macos": {
-    "version": "2.0.4",
-    "build": 5,
+    "version": "2.0.5",
+    "build": 6,
     "releaseDate": "26/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.4.zip",
-    "sha256": "5159ccdfb34d5290602856d09dd25ac24cb7606d72632fb1e995e3a4bf4c7415",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.5.zip",
+    "sha256": "9d401a539901f49cb73c55af7cc4bfcfe14cad7a6e3c5549268eda66424fd5a4",
     "sizeMb": 10
   }
 }
