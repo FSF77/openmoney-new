@@ -1,24 +1,24 @@
-﻿{
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  1,
-    "version":  "2.0.0",
-    "notes":  "OpenMoney Flutter v2.0.0 para Windows - Versao oficial multiplataforma.",
-    "releaseDate":  "25/10/2026",
-    "windows":  {
-                    "build":  1,
-                    "version":  "2.0.0",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.0.zip",
-                    "sha256":  "4a7ac0e79b9f4864e3ba4395e05a85214466fe8f2d96949d456797e978d3c2ee",
-                    "releaseDate":  "25/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.0.0",
-                  "build":  1,
-                  "releaseDate":  "25/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.0.zip",
-                  "sha256":  "f4f1dc33a27f87eb4fbd189dbea9d78d72716e272c047157b4a780b193d1e81b",
-                  "sizeMb":  10
-              },
-    "title":  "OpenMoney Flutter v2.0.0"
+{
+  "version": "2.0.1",
+  "build": 2,
+  "releaseDate": "26/10/2026",
+  "title": "OpenMoney Flutter v2.0.1",
+  "notes": "OpenMoney Flutter v2.0.1 - Backups em ZIP com retenção de 7 dias, exportação/importação CSV com status e favorita, normalização de transferências e confirmação na exclusão de categorias.",
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "macos": {
+    "version": "2.0.1",
+    "build": 2,
+    "releaseDate": "26/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.1.zip",
+    "sha256": "b535a1952bafcbf2aa204eeb264a4cab6998526b205316cae7bf3c7262770ff8",
+    "sizeMb": 10
+  },
+  "windows": {
+    "version": "2.0.0",
+    "build": 1,
+    "releaseDate": "25/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.0.zip",
+    "sha256": "4a7ac0e79b9f4864e3ba4395e05a85214466fe8f2d96949d456797e978d3c2ee",
+    "sizeMb": 12
+  }
 }

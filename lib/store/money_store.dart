@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
+import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
 import '../services/importers_exporters.dart';
 
@@ -668,18 +669,59 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
+  String get appSupportDirPath => _appSupportDirPath;
+
   void _ensureDailyBackup(File dbFile) {
     if (kIsWeb || _appSupportDirPath.isEmpty) return;
-    try {
-      final sep = Platform.pathSeparator;
-      final backupsDir = Directory('$_appSupportDirPath${sep}Backups');
-      backupsDir.createSync(recursive: true);
-      final today = todayISO();
-      final backupFile = File('${backupsDir.path}${sep}openmoney-$today.json');
-      if (!backupFile.existsSync() && dbFile.existsSync()) {
-        dbFile.copySync(backupFile.path);
-      }
-    } catch (_) {}
+    BackupManager.instance.ensureDailyBackup(
+      appSupportDirPath: _appSupportDirPath,
+      databasePath: dbFile.path,
+    );
+  }
+
+  Future<String?> createManualZipBackup() async {
+    if (kIsWeb || dbPath.isEmpty) return null;
+    return await BackupManager.instance.createTimestampedBackup(
+      appSupportDirPath: _appSupportDirPath,
+      databasePath: dbPath,
+      prefix: 'manual',
+    );
+  }
+
+  Future<String?> createAutomaticPreDeleteBackup() async {
+    if (kIsWeb || dbPath.isEmpty) return null;
+    return await BackupManager.instance.createTimestampedBackup(
+      appSupportDirPath: _appSupportDirPath,
+      databasePath: dbPath,
+      prefix: 'backup-pre-exclusao',
+    );
+  }
+
+  List<BackupFileInfo> availableBackups() {
+    return BackupManager.instance.availableBackups(
+      appSupportDirPath: _appSupportDirPath,
+    );
+  }
+
+  void revealBackupsInFinder() {
+    BackupManager.instance.revealInFinder(_appSupportDirPath);
+  }
+
+  Future<bool> restoreDatabaseFromZip(String zipPath) async {
+    final loaded = await BackupManager.instance.extractDatabase(zipPath: zipPath);
+    if (loaded == null) return false;
+
+    db = loaded;
+    migrate();
+    syncRecs();
+    syncCards();
+    rebuildIndexes();
+    if (db.accounts.isNotEmpty) {
+      selectedAccountId = db.accounts.first.id;
+    }
+    save(immediate: true);
+    notifyListeners();
+    return true;
   }
 
   // MARK: - Migration & Sync

@@ -5,6 +5,7 @@ import '../services/native_file_picker.dart';
 import '../services/update_service.dart';
 import '../store/money_store.dart';
 import 'modals/account_modal.dart';
+import 'modals/backups_history_modal.dart';
 import 'modals/batch_delete_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/mobile_inbox_modal.dart';
@@ -76,6 +77,14 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             },
             const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () {
               showDatabaseFileManagerModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.keyB,
+                control: true, shift: true): () {
+              showBackupsHistoryModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.keyB,
+                meta: true, shift: true): () {
+              showBackupsHistoryModal(context, widget.store);
             },
           },
           child: Focus(
@@ -632,6 +641,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 label: 'Limpeza de Lançamentos em Lote',
                 selected: false,
                 onTap: () => showBatchDeleteModal(context, widget.store),
+              ),
+              _SidebarNavTile(
+                icon: Icons.archive_outlined,
+                label: 'Backups de Segurança (.zip)',
+                selected: false,
+                onTap: () => showBackupsHistoryModal(context, widget.store),
               ),
               _SidebarNavTile(
                 icon: Icons.system_update_alt,

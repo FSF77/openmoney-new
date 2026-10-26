@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/main.dart';
 import 'package:openmoney/models/openmoney_models.dart';
+import 'package:openmoney/services/backup_manager.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
+import 'package:openmoney/services/importers_exporters.dart';
 import 'package:openmoney/store/money_store.dart';
 
 void main() {
@@ -263,6 +266,107 @@ CX
         year: 2026,
       );
       expect(matrix.expenseSection.grandTotal, 15075);
+    });
+
+    test('6. CSV Export & Import includes Account status, favorite and transfer replacement', () {
+      final store = MoneyStore(autoBoot: false);
+      store.db.accounts.first.favorite = true;
+      store.saveAccount(
+        name: 'Poupança Inter',
+        type: 'Poupança',
+        openingCents: 50000,
+        closeDay: 1,
+        dueDay: 10,
+        payAccId: '',
+        inactive: true,
+      );
+      final poup = store.db.accounts.firstWhere((a) => a.name == 'Poupança Inter');
+      expect(poup.isInactive, true);
+
+      // Transação comum
+      store.addTransaction(
+        accId: store.db.accounts.first.id,
+        date: '2026-10-20',
+        payee: 'Supermercado',
+        catSelection: 'Alimentação › Mercado',
+        memo: 'Compras da semana',
+        signedAmt: -12050,
+      );
+
+      // Transação de transferência com chevron
+      store.addTransaction(
+        accId: store.db.accounts.first.id,
+        date: '2026-10-21',
+        payee: 'Transferência para Poupança',
+        catSelection: 'Transferência › Poupança Inter',
+        memo: 'Aporte',
+        signedAmt: -5000,
+      );
+
+      // Exporta CSV
+      final csv = store.exportCSVString();
+      expect(csv.contains('"Status da Conta"'), true);
+      expect(csv.contains('"Favorita"'), true);
+      expect(csv.contains('Habilitada'), true);
+      expect(csv.contains('"Transferência: Poupança Inter"'), true);
+      expect(csv.contains('Transferência ›'), false);
+
+      // Testa Importação CSV com transferência › chevron e status de conta
+      final csvToImport = '''"Data";"Conta";"Status da Conta";"Favorita";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"
+"2026-10-22";"Banco XP";"Habilitada";"Sim";"Aporte XP";"Transferência › Poupança Inter";"Nota aporte";"-200,00";"Sim";""
+"2026-10-23";"Banco Safra";"Desabilitada";"Não";"Aporte Safra";"Transferência › Poupança Inter";"";"-300,00";"Sim";""
+''';
+
+      final res = CSVImporter.parse(
+        content: csvToImport,
+        existingAccounts: store.db.accounts,
+        existingCats: store.db.cats,
+        existingTxs: store.db.txs,
+      );
+
+      expect(res.newAccounts.length, 2);
+      final xpAcc = res.newAccounts.firstWhere((a) => a.name == 'Banco XP');
+      final safraAcc = res.newAccounts.firstWhere((a) => a.name == 'Banco Safra');
+      expect(xpAcc.isFavorite, true);
+      expect(xpAcc.isActive, true);
+      expect(safraAcc.isInactive, true);
+
+      expect(res.newTxs.length, 2);
+      expect(res.newTxs[0].cat, 'Transferência: Poupança Inter');
+      expect(res.newTxs[1].cat, 'Transferência: Poupança Inter');
+    });
+
+    test('7. BackupManager creates ZIP, prunes and extracts Database properly', () async {
+      final tempDir = Directory.systemTemp.createTempSync('om_backup_test_');
+      final dbFile = File('${tempDir.path}/test_openmoney.json');
+      final db = Database(
+        accounts: [Account(id: 'acc1', name: 'Conta Teste', type: 'Corrente', opening: 1000)],
+        cats: [CategoryItem(name: 'Geral', type: 'Despesa')],
+        txs: [Transaction(id: 'tx1', acc: 'acc1', date: '2026-10-25', payee: 'Loja', cat: 'Geral', memo: '', amt: -500, rec: true)],
+        recs: [],
+        budgets: {},
+        v: 6,
+      );
+      dbFile.writeAsStringSync(jsonEncode(db.toJson()));
+
+      await BackupManager.instance.ensureDailyBackup(
+        appSupportDirPath: tempDir.path,
+        databasePath: dbFile.path,
+        force: true,
+      );
+
+      final backups = BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path);
+      expect(backups.length, 1);
+      expect(backups.first.filename.endsWith('.zip'), true);
+
+      final restoredDb = await BackupManager.instance.extractDatabase(zipPath: backups.first.path);
+      expect(restoredDb != null, true);
+      expect(restoredDb!.accounts.first.name, 'Conta Teste');
+      expect(restoredDb.txs.first.payee, 'Loja');
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
   });
 

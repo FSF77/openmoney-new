@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../ui/theme/liquid_glass.dart';
 
 class OpenMoneyVersion {
-  static const String version = '2.0.0';
+  static const String version = '2.0.1';
   static const int build = 1;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =

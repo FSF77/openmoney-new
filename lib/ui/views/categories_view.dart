@@ -227,7 +227,29 @@ class _CategoriesViewState extends State<CategoriesView> {
   void _handleDeleteCategory(CategoryItem cat) {
     final usageCount = widget.store.categoryUsageCount(cat.path);
     if (usageCount == 0) {
-      widget.store.deleteCategory(cat.path);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Excluir Categoria'),
+          content: Text(
+            'Deseja realmente excluir a categoria "${cat.name}"?\nEsta categoria não possui lançamentos.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () {
+                widget.store.deleteCategory(cat.path);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Excluir'),
+            ),
+          ],
+        ),
+      );
       return;
     }
 

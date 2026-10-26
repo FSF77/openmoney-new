@@ -318,15 +318,36 @@ class CSVExporter {
     });
 
     final lines = <String>[
-      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"',
+      '"Data";"Conta";"Status da Conta";"Favorita";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"',
     ];
 
     for (final tx in filtered) {
       final acc = accMap[tx.acc];
       final accName = _escapeCSV(acc?.name ?? 'Conta');
+      final accStatus = (acc?.isInactive == true) ? 'Desabilitada' : 'Habilitada';
+      final accFav = (acc?.isFavorite == true) ? 'Sim' : 'Não';
       final dateStr = tx.date;
       final payeeStr = _escapeCSV(tx.payee);
-      final catStr = _escapeCSV(tx.cat);
+      
+      // Ao exportar uma categoria que seja transferência entre contas,
+      // não use "Transferência › nome da conta" e sim "Transferência: nome da conta"
+      var exportedCat = tx.cat;
+      final xferChevronRegex = RegExp(
+        r'^\s*transfer[eê]ncia\s*[›>]\s*(.*)$',
+        caseSensitive: false,
+      );
+      final xferMatch = xferChevronRegex.firstMatch(exportedCat);
+      if (xferMatch != null) {
+        final targetAccName = xferMatch.group(1)?.trim() ?? '';
+        exportedCat = 'Transferência: $targetAccName';
+      } else if (tx.xfer != null && !exportedCat.startsWith('Transferência:')) {
+        exportedCat = exportedCat
+            .replaceAll(' › ', ': ')
+            .replaceAll(' ›', ': ')
+            .replaceAll('› ', ': ')
+            .replaceAll('›', ': ');
+      }
+      final catStr = _escapeCSV(exportedCat);
       final memoStr = _escapeCSV(tx.memo);
       final isNeg = tx.amt < 0;
       final absCents = tx.amt.abs();
@@ -345,7 +366,7 @@ class CSVExporter {
       }
 
       lines.add(
-        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}"',
+        '"$dateStr";"$accName";"$accStatus";"$accFav";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}"',
       );
     }
 
@@ -356,6 +377,8 @@ class CSVExporter {
 class _ColumnMapping {
   int? date;
   int? account;
+  int? accountStatus;
+  int? accountFavorite;
   int? payee;
   int? category;
   int? memo;
@@ -366,11 +389,14 @@ class _ColumnMapping {
   _ColumnMapping({
     this.date,
     this.account,
+    this.accountStatus,
+    this.accountFavorite,
     this.payee,
     this.category,
     this.memo,
     this.amount,
     this.reconciled,
+    this.invoice,
   });
 
   int get score {
@@ -442,7 +468,20 @@ class CSVImporter {
     } else {
       dataStartIndex = 0;
       final sampleRow = records[0];
-      if (sampleRow.length >= 6) {
+      if (sampleRow.length >= 8) {
+        colMap = _ColumnMapping(
+          date: 0,
+          account: 1,
+          accountStatus: 2,
+          accountFavorite: 3,
+          payee: 4,
+          category: 5,
+          memo: 6,
+          amount: 7,
+          reconciled: sampleRow.length > 8 ? 8 : null,
+          invoice: sampleRow.length > 9 ? 9 : null,
+        );
+      } else if (sampleRow.length >= 6) {
         colMap = _ColumnMapping(
           date: 0,
           account: 1,
@@ -522,14 +561,52 @@ class CSVImporter {
           } else {
             accType = 'Corrente';
           }
+
+          bool? isInactive;
+          if (colMap.accountStatus != null && colMap.accountStatus! < row.length) {
+            final st = removeDiacritics(row[colMap.accountStatus!].trim()).toLowerCase();
+            if (st.contains('desabilit') || st.contains('inativ') || st == 'false' || st == '0') {
+              isInactive = true;
+            } else if (st.contains('habilit') || st.contains('ativ') || st == 'true' || st == '1') {
+              isInactive = null;
+            }
+          }
+
+          bool? isFavorite;
+          if (colMap.accountFavorite != null && colMap.accountFavorite! < row.length) {
+            final fv = removeDiacritics(row[colMap.accountFavorite!].trim()).toLowerCase();
+            if (fv == 'sim' || fv == 'yes' || fv == 'true' || fv == '1' || fv.contains('favorit')) {
+              isFavorite = true;
+            }
+          }
+
           final newAcc = Account(
             id: uid(),
             name: accName,
             type: accType,
             opening: 0,
+            inactive: isInactive,
+            favorite: isFavorite,
           );
           newAccounts.add(newAcc);
           allAccounts.add(newAcc);
+        } else {
+          // Atualiza status e favorita se a conta já existe e ainda não foi alterada nesta importação
+          final existingAcc = allAccounts.firstWhere((a) => cmpPt(a.name, accName) == 0);
+          if (colMap.accountStatus != null && colMap.accountStatus! < row.length) {
+            final st = removeDiacritics(row[colMap.accountStatus!].trim()).toLowerCase();
+            if (st.contains('desabilit') || st.contains('inativ')) {
+              existingAcc.inactive = true;
+            } else if (st.contains('habilit') || st.contains('ativ')) {
+              existingAcc.inactive = null;
+            }
+          }
+          if (colMap.accountFavorite != null && colMap.accountFavorite! < row.length) {
+            final fv = removeDiacritics(row[colMap.accountFavorite!].trim()).toLowerCase();
+            if (fv == 'sim' || fv == 'yes' || fv == 'true' || fv == '1') {
+              existingAcc.favorite = true;
+            }
+          }
         }
       }
     }
@@ -588,14 +665,28 @@ class CSVImporter {
       var cat = (colMap.category != null && colMap.category! < row.length)
           ? row[colMap.category!].trim()
           : '';
+
+      // Normaliza categorias de transferência com chevron para "Transferência: nome da conta"
+      final xferChevronRegex = RegExp(
+        r'^\s*transfer[eê]ncia\s*[›>]\s*(.*)$',
+        caseSensitive: false,
+      );
+      final xferMatch = xferChevronRegex.firstMatch(cat);
+      if (xferMatch != null) {
+        final targetAccName = xferMatch.group(1)?.trim() ?? '';
+        cat = 'Transferência: $targetAccName';
+      }
+
       if (cat.isEmpty) {
         cat = parsedAmt < 0 ? 'Outros' : 'Outras Rendas';
       }
-      cat = cat
-          .replaceAll(' : ', kCategorySep)
-          .replaceAll(':', kCategorySep)
-          .replaceAll(' / ', kCategorySep)
-          .replaceAll('/', kCategorySep);
+      if (!cat.startsWith('Transferência:')) {
+        cat = cat
+            .replaceAll(' : ', kCategorySep)
+            .replaceAll(':', kCategorySep)
+            .replaceAll(' / ', kCategorySep)
+            .replaceAll('/', kCategorySep);
+      }
 
       if (!knownCatPaths.contains(cat)) {
         knownCatPaths.add(cat);
@@ -700,7 +791,22 @@ class CSVImporter {
               col.contains('banco') ||
               col.contains('bank') ||
               col.contains('carteira'))) {
-        map.account = idx;
+        if (col.contains('status') || col.contains('habilit') || col.contains('ativ')) {
+          map.accountStatus ??= idx;
+        } else if (col.contains('favorit') || col.contains('fav')) {
+          map.accountFavorite ??= idx;
+        } else {
+          map.account = idx;
+        }
+      } else if (map.accountStatus == null &&
+          (col.contains('status') ||
+              col.contains('habilitad') ||
+              col.contains('desabilitad') ||
+              col.contains('inativ'))) {
+        map.accountStatus = idx;
+      } else if (map.accountFavorite == null &&
+          (col.contains('favorit') || col == 'fav' || col.contains('star'))) {
+        map.accountFavorite = idx;
       } else if (map.payee == null &&
           (col.contains('desc') ||
               col.contains('benef') ||

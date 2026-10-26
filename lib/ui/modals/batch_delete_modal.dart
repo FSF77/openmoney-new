@@ -203,7 +203,7 @@ class _BatchDeleteDialogState extends State<_BatchDeleteDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Segurança: Um backup automático em JSON será salvo na pasta da base antes de executar a exclusão.',
+                'Segurança: Um backup automático (.zip) será gerado na pasta de backups antes de executar a exclusão.',
                 style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
             ],
@@ -221,9 +221,10 @@ class _BatchDeleteDialogState extends State<_BatchDeleteDialog> {
           label: Text('Backup + Excluir (${preview.count})'),
           onPressed: preview.count == 0
               ? null
-              : () {
+              : () async {
                   if (!kIsWeb && widget.store.dbPath.isNotEmpty) {
                     try {
+                      await widget.store.createAutomaticPreDeleteBackup();
                       final backupPath =
                           '${widget.store.dbPath}.backup-pre-exclusao-${todayISO()}.json';
                       File(backupPath).writeAsStringSync(
@@ -240,7 +241,9 @@ class _BatchDeleteDialogState extends State<_BatchDeleteDialog> {
                     endDate: _endCtrl.text.trim(),
                     deleteTransferCounterparts: _deleteCounterparts,
                   );
-                  Navigator.pop(context);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 },
         ),
       ],
