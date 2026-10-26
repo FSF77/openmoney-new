@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
+import '../modals/category_drill_down_modal.dart';
 import '../theme/liquid_glass.dart';
 
 class CategoriesView extends StatefulWidget {
@@ -13,6 +17,81 @@ class CategoriesView extends StatefulWidget {
 
 class _CategoriesViewState extends State<CategoriesView> {
   String _selectedType = 'Despesa';
+
+  void _showCategoryDrillDown(String categoryPath) {
+    showCategoryDrillDownModal(context, widget.store, categoryPath);
+  }
+
+  Future<void> _exportCategoriesCsv() async {
+    if (kIsWeb) return;
+    final savePath = await NativeFilePicker.saveFile(
+      title: 'Exportar Categorias e Subcategorias (CSV)',
+      defaultName: 'openmoney-categorias-${todayISO()}.csv',
+      allowedExtensions: ['csv'],
+    );
+    if (savePath == null || savePath.isEmpty) return;
+
+    try {
+      final csv = widget.store.exportCategoriesCSVString();
+      final f = File(savePath);
+      f.parent.createSync(recursive: true);
+      f.writeAsStringSync(csv, flush: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Categorias exportadas com sucesso em:\n$savePath'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao exportar categorias: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importCategoriesCsv() async {
+    if (kIsWeb) return;
+    final selectedPath = await NativeFilePicker.pickFile(
+      title: 'Importar Categorias e Subcategorias (CSV)',
+      allowedExtensions: ['csv'],
+    );
+    if (selectedPath == null || selectedPath.isEmpty) return;
+
+    try {
+      final bytes = File(selectedPath).readAsBytesSync();
+      final summary = widget.store.importCategoriesCSVBytes(bytes);
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(summary.title),
+            content: Text(summary.formattedMessage),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao importar categorias: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
 
   void _showCategoryFormModal({CategoryItem? editing, String? presetParent}) {
     final nameCtrl = TextEditingController(text: editing?.name ?? '');
@@ -262,8 +341,10 @@ class _CategoriesViewState extends State<CategoriesView> {
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SegmentedButton<String>(
                     segments: const [
@@ -276,7 +357,16 @@ class _CategoriesViewState extends State<CategoriesView> {
                     onSelectionChanged: (s) =>
                         setState(() => _selectedType = s.first),
                   ),
-                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.file_upload_outlined, size: 16),
+                    label: const Text('Importar CSV'),
+                    onPressed: _importCategoriesCsv,
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.download, size: 16),
+                    label: const Text('Exportar CSV'),
+                    onPressed: _exportCategoriesCsv,
+                  ),
                   FilledButton.icon(
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Nova Categoria'),
@@ -301,29 +391,51 @@ class _CategoriesViewState extends State<CategoriesView> {
                 Row(
                   children: [
                     Expanded(
-                      child: Row(
-                        children: [
-                          Text(
-                            top.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _showCategoryDrillDown(top.path),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 6),
+                            child: Row(
+                              children: [
+                                Text(
+                                  top.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                StatusBadge(
+                                  text: '$topCount lanç.',
+                                  color: colors.accent,
+                                ),
+                                if (!top.effectiveIncludeInReports) ...[
+                                  const SizedBox(width: 6),
+                                  StatusBadge(
+                                    text: 'OCULTA DE RELATÓRIOS',
+                                    color: colors.textMuted,
+                                  ),
+                                ],
+                                const SizedBox(width: 6),
+                                Icon(
+                                  Icons.open_in_new,
+                                  size: 14,
+                                  color: colors.accent,
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          StatusBadge(
-                            text: '$topCount lanç.',
-                            color: colors.accent,
-                          ),
-                          if (!top.effectiveIncludeInReports) ...[
-                            const SizedBox(width: 6),
-                            StatusBadge(
-                              text: 'OCULTA DE RELATÓRIOS',
-                              color: colors.textMuted,
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.list_alt, size: 15),
+                      label: const Text('Lançamentos'),
+                      onPressed: () => _showCategoryDrillDown(top.path),
                     ),
                     TextButton.icon(
                       icon: const Icon(Icons.add, size: 15),
@@ -351,25 +463,49 @@ class _CategoriesViewState extends State<CategoriesView> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Row(
-                              children: [
-                                Text(
-                                  '↳ ${sub.name}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: colors.textSecondary,
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => _showCategoryDrillDown(sub.path),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 5),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '↳ ${sub.name}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: colors.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '($subCount lanç.)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: colors.accent,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.open_in_new,
+                                        size: 12,
+                                        color: colors.accent,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '($subCount)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: colors.textMuted,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
+                          ),
+                          IconButton(
+                            tooltip: 'Ver Lançamentos',
+                            icon: Icon(Icons.list_alt,
+                                size: 16, color: colors.accent),
+                            onPressed: () => _showCategoryDrillDown(sub.path),
                           ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 16),

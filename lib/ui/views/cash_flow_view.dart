@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/cash_flow_engine.dart';
+import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -30,27 +31,52 @@ class _CashFlowViewState extends State<CashFlowView> {
         DateTime.now().year;
   }
 
-  void _exportCsv(CashFlowMatrix matrix) {
+  Future<void> _exportCsv(CashFlowMatrix matrix) async {
     final csv = CashFlowEngine.generateCSV(matrix);
     if (!kIsWeb) {
-      final dir = widget.store.defaultCloudOrDocumentsDir();
-      final sep = Platform.pathSeparator;
-      final path =
-          '$dir${sep}openmoney-fluxo-caixa-${_periodKind.label.toLowerCase()}-$_year.csv';
-      try {
-        File(path).writeAsStringSync(csv, flush: true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✓ Fluxo de Caixa exportado em: $path')),
-        );
-        return;
-      } catch (_) {}
+      final defaultName =
+          'openmoney-fluxo-caixa-${_periodKind.label.toLowerCase()}-$_year.csv';
+      final savePath = await NativeFilePicker.saveFile(
+        title: 'Salvar Fluxo de Caixa (CSV)',
+        defaultName: defaultName,
+        allowedExtensions: ['csv'],
+      );
+      if (savePath != null && savePath.isNotEmpty) {
+        try {
+          final f = File(savePath);
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync(csv, flush: true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✓ Fluxo de Caixa exportado em:\n$savePath'),
+              ),
+            );
+          }
+          return;
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Erro ao salvar CSV: $e'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+          return;
+        }
+      }
+      return;
     }
     Clipboard.setData(ClipboardData(text: csv));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
           content: Text(
-              '✓ Fluxo de Caixa CSV copiado para a área de transferência!')),
-    );
+              '✓ Fluxo de Caixa CSV copiado para a área de transferência!'),
+        ),
+      );
+    }
   }
 
   @override
@@ -251,7 +277,7 @@ class _CashFlowViewState extends State<CashFlowView> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
-                  width: 230.0 + (matrix.columns.length + 1) * 104.0,
+                  width: 210.0 + (matrix.columns.length + 1) * 104.0 + 32.0,
                   child: ListView(
                     children: [
                       // Matrix Column Header

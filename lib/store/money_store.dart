@@ -74,7 +74,11 @@ class MoneyStore extends ChangeNotifier {
   String selectedAccountId = 'a1';
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
+  bool sidebarShowFavorites = true;
+  bool sidebarShowActiveAccounts = true;
+  bool sidebarShowInactiveAccounts = false;
   bool showMissingDatabasePrompt = false;
+  bool showWelcomeScreen = false;
   String missingDatabasePath = '';
   List<RecentFileItem> recentFiles = [];
   ImportSummary? lastImportSummary;
@@ -152,7 +156,7 @@ class MoneyStore extends ChangeNotifier {
       final home = Platform.environment['HOME'] ?? '.';
       baseDir = '$home/.local/share';
     }
-    _appSupportDirPath = '$baseDir${sep}OpenMoney';
+    _appSupportDirPath = '$baseDir${sep}OpenMoneyNew';
     _configFilePath = '$_appSupportDirPath${sep}config.json';
     _defaultDbFilePath = '$_appSupportDirPath${sep}openmoney.json';
   }
@@ -227,9 +231,29 @@ class MoneyStore extends ChangeNotifier {
     if (cfg['isDarkMode'] is bool) {
       isDarkMode = cfg['isDarkMode'] as bool;
     }
+    if (cfg['sidebarShowFavorites'] is bool) {
+      sidebarShowFavorites = cfg['sidebarShowFavorites'] as bool;
+    }
+    if (cfg['sidebarShowActiveAccounts'] is bool) {
+      sidebarShowActiveAccounts = cfg['sidebarShowActiveAccounts'] as bool;
+    }
+    if (cfg['sidebarShowInactiveAccounts'] is bool) {
+      sidebarShowInactiveAccounts = cfg['sidebarShowInactiveAccounts'] as bool;
+    }
 
     final configuredPath = (cfg['dbPath'] as String?)?.trim() ?? '';
     final hasConfiguredPath = configuredPath.isNotEmpty;
+
+    // Se é a primeira vez (sem arquivo configurado e sem arquivo padrão existente),
+    // abre a tela de Boas-Vindas para escolher ou criar via gerenciador de arquivos nativo
+    if (!hasConfiguredPath && !File(_defaultDbFilePath).existsSync()) {
+      showWelcomeScreen = true;
+      dbPath = '';
+      db = Database();
+      rebuildIndexes();
+      notifyListeners();
+      return;
+    }
 
     if (hasConfiguredPath && !File(configuredPath).existsSync()) {
       missingDatabasePath = configuredPath;
@@ -274,6 +298,30 @@ class MoneyStore extends ChangeNotifier {
     isDarkMode = !isDarkMode;
     final cfg = _readConfig();
     cfg['isDarkMode'] = isDarkMode;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleSidebarFavorites() {
+    sidebarShowFavorites = !sidebarShowFavorites;
+    final cfg = _readConfig();
+    cfg['sidebarShowFavorites'] = sidebarShowFavorites;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleSidebarActiveAccounts() {
+    sidebarShowActiveAccounts = !sidebarShowActiveAccounts;
+    final cfg = _readConfig();
+    cfg['sidebarShowActiveAccounts'] = sidebarShowActiveAccounts;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleSidebarInactiveAccounts() {
+    sidebarShowInactiveAccounts = !sidebarShowInactiveAccounts;
+    final cfg = _readConfig();
+    cfg['sidebarShowInactiveAccounts'] = sidebarShowInactiveAccounts;
     _writeConfig(cfg);
     notifyListeners();
   }
@@ -338,7 +386,10 @@ class MoneyStore extends ChangeNotifier {
     if (kIsWeb || path.isEmpty) return false;
     try {
       final f = File(path);
-      if (!f.existsSync()) return false;
+      if (!f.existsSync()) {
+        debugPrint('[OpenMoney] Arquivo não encontrado: $path');
+        return false;
+      }
       final raw = f.readAsStringSync();
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       final loaded = Database.fromJson(decoded);
@@ -362,9 +413,11 @@ class MoneyStore extends ChangeNotifier {
       registerRecentFile(path);
       _setupFileWatcher(path);
       showMissingDatabasePrompt = false;
+      showWelcomeScreen = false;
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[OpenMoney] Erro ao carregar base $path: $e\n$st');
       return false;
     }
   }
@@ -404,6 +457,7 @@ class MoneyStore extends ChangeNotifier {
     selectedAccountId = 'a1';
     activeModule = NavModule.account;
     showMissingDatabasePrompt = false;
+    showWelcomeScreen = false;
     save(immediate: true);
     registerRecentFile(path);
     _setupFileWatcher(path);
@@ -599,18 +653,11 @@ class MoneyStore extends ChangeNotifier {
       final targetFile = File(dbPath);
       targetFile.parent.createSync(recursive: true);
 
-      final tmpFile = File('$dbPath.tmp');
-      final bakFile = File('$dbPath.bak');
-
       final encoded = jsonEncode(db.toJson());
-      if (bakFile.existsSync()) {
-        try {
-          bakFile.deleteSync();
-        } catch (_) {}
-      }
-      tmpFile.writeAsStringSync(encoded, flush: true);
-      tmpFile.renameSync(dbPath);
-      _lastSavedModificationDate = File(dbPath).lastModifiedSync();
+
+      // Gravação direta e síncrona com flush obrigatório
+      targetFile.writeAsStringSync(encoded, flush: true);
+      _lastSavedModificationDate = targetFile.lastModifiedSync();
       _ensureDailyBackup(targetFile);
     } catch (_) {
       try {
@@ -1111,6 +1158,34 @@ class MoneyStore extends ChangeNotifier {
       remainingCents: remaining,
       isFullyPaid: isFullyPaid,
     );
+  }
+
+  /// Retorna todos os lançamentos pertencentes à fatura `key` de um cartão de crédito,
+  /// independentemente da data de compra (`t.date`).
+  List<Transaction> invoiceTransactions(String cardId, String key) {
+    final cardAcc = accById(cardId);
+    if (cardAcc == null ||
+        cardAcc.type != kCardType ||
+        cardAcc.card == null) {
+      return [];
+    }
+    final cardCfg = cardAcc.card!;
+    rebuildIndexesIfNeeded();
+    final cardTxs = _cachedTxsByAccount[cardId] ?? [];
+    final list = cardTxs.where((t) {
+      if (t.auto == true) return false;
+      final ik = t.ik ?? invKeyFor(cardCfg, t.date);
+      return ik == key;
+    }).toList();
+    list.sort((a, b) {
+      final dc = a.date.compareTo(b.date);
+      if (dc != 0) return dc;
+      final tA = a.createdAt ?? 0.0;
+      final tB = b.createdAt ?? 0.0;
+      if (tA != tB) return tA.compareTo(tB);
+      return a.id.compareTo(b.id);
+    });
+    return list;
   }
 
   List<CategoryItem> topCategories({String? type}) {
@@ -2427,6 +2502,65 @@ class MoneyStore extends ChangeNotifier {
     lastImportSummary = summary;
     notifyListeners();
     return summary;
+  }
+
+  MobileInboxImportResult importMobileInboxBytes(Uint8List bytes) {
+    final result = MobileInboxImporter.parse(
+      bytes: bytes,
+      existingAccounts: db.accounts,
+      existingCats: db.cats,
+      existingTxs: db.txs,
+    );
+
+    for (final cat in result.newCats) {
+      if (!db.cats.any((c) => c.path.toLowerCase() == cat.path.toLowerCase())) {
+        db.cats.add(cat);
+      }
+    }
+    if (result.newCats.isNotEmpty) {
+      db.cats.sort(byCatSort);
+    }
+
+    db.txs.addAll(result.newTxs);
+    syncRecs();
+    syncCards();
+    rebuildIndexes();
+    save(immediate: true);
+
+    final reviewItems = <MobileInboxImportItem>[];
+    for (final tx in result.newTxs) {
+      final accName = accById(tx.acc)?.name ?? 'Conta';
+      reviewItems.add(
+        MobileInboxImportItem(
+          txId: tx.id,
+          accountName: accName,
+          date: tx.date,
+          payee: tx.payee,
+          cat: tx.cat,
+          memo: tx.memo,
+          amt: tx.amt,
+          rec: tx.rec,
+        ),
+      );
+    }
+
+    final sheetResult = MobileInboxImportResult(
+      items: reviewItems,
+      skippedCount: result.skippedCount,
+      newCatsCount: result.newCats.length,
+      source: 'OpenMoney Coletor Mobile',
+    );
+
+    lastImportSummary = ImportSummary(
+      title: 'Lançamentos do Celular Importados',
+      importedCount: result.newTxs.length,
+      skippedCount: result.skippedCount,
+      newCategoriesCount: result.newCats.length,
+      newAccountsCount: 0,
+      details: 'Origem: OpenMoney Coletor Mobile',
+    );
+    notifyListeners();
+    return sheetResult;
   }
 
   String exportCSVString({String? accountFilterId}) {

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
-import '../modals/transaction_modal.dart';
+import '../modals/category_drill_down_modal.dart';
 import '../theme/liquid_glass.dart';
 
 class ReportsView extends StatelessWidget {
@@ -13,126 +14,11 @@ class ReportsView extends StatelessWidget {
     String categoryPath,
     String monthYM,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = OpenMoneyColors(isDark);
-    bool filterCurrentMonthOnly = true;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final affected = store.affectedCategoryPaths(categoryPath);
-          final txs = store.db.txs.where((t) {
-            if (!affected.contains(t.cat) && t.cat != categoryPath) {
-              return false;
-            }
-            if (filterCurrentMonthOnly && !t.date.startsWith(monthYM)) {
-              return false;
-            }
-            return true;
-          }).toList()
-            ..sort((a, b) => b.date.compareTo(a.date));
-
-          final totalCents = txs.fold<int>(0, (s, t) => s + t.amt);
-
-          return AlertDialog(
-            backgroundColor: colors.bgSecondary,
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Auditoria de Categoria: $categoryPath',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                SegmentedButton<bool>(
-                  segments: [
-                    ButtonSegment(
-                      value: true,
-                      label: Text(fmtMonth(monthYM)),
-                    ),
-                    const ButtonSegment(
-                      value: false,
-                      label: Text('Todo o Histórico'),
-                    ),
-                  ],
-                  selected: {filterCurrentMonthOnly},
-                  onSelectionChanged: (s) =>
-                      setModalState(() => filterCurrentMonthOnly = s.first),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: 680,
-              height: 440,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${txs.length} lançamento(s) • Total: ${brl(totalCents)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const Divider(height: 18),
-                  Expanded(
-                    child: txs.isEmpty
-                        ? const Center(
-                            child: Text('Nenhum lançamento encontrado.'),
-                          )
-                        : ListView.separated(
-                            itemCount: txs.length,
-                            separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, i) {
-                              final t = txs[i];
-                              final accName =
-                                  store.accById(t.acc)?.name ?? 'Conta';
-                              return ListTile(
-                                dense: true,
-                                title: Text(
-                                  t.payee,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${fmtDate(t.date)} • $accName • ${t.cat}${t.memo.isNotEmpty ? " • ${t.memo}" : ""}',
-                                ),
-                                trailing: Text(
-                                  brl(t.amt),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: t.amt >= 0
-                                        ? colors.income
-                                        : colors.expense,
-                                  ),
-                                ),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  showTransactionEditModal(context, store, t);
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Fechar'),
-              ),
-            ],
-          );
-        },
-      ),
+    showCategoryDrillDownModal(
+      context,
+      store,
+      categoryPath,
+      initialCurrentMonthOnly: true,
     );
   }
 
@@ -180,10 +66,33 @@ class ReportsView extends StatelessWidget {
                   ),
                 ],
               ),
-              MonthYearPickerBar(
-                currentMonthYM: store.month,
-                availableYears: store.allYearsInDatabase(),
-                onMonthChanged: (ym) => store.month = ym,
+              Wrap(
+                spacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  MonthYearPickerBar(
+                    currentMonthYM: store.month,
+                    availableYears: store.allYearsInDatabase(),
+                    onMonthChanged: (ym) => store.month = ym,
+                  ),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.picture_as_pdf, size: 16),
+                    label: const Text('Exportar PDF A4'),
+                    onPressed: () {
+                      final pdfBytes =
+                          PdfReportGenerator.buildMonthlyReportPdfBytes(
+                        store: store,
+                        monthYM: store.month,
+                        data: data,
+                      );
+                      PdfReportGenerator.saveAndOpenPdfBytes(
+                        context,
+                        pdfBytes: pdfBytes,
+                        defaultFileName: 'Relatorio-${store.month}.pdf',
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -257,10 +166,10 @@ class ReportsView extends StatelessWidget {
                   width: colWidth,
                   child: _buildCategorySectionCard(
                     context: context,
-                    title: 'Despesas por Categoria',
-                    groups: data.expenseGroups,
-                    grandTotal: data.totalExpense,
-                    barColor: colors.expense,
+                    title: 'Receitas por Categoria',
+                    groups: data.incomeGroups,
+                    grandTotal: data.totalIncome,
+                    barColor: colors.income,
                     colors: colors,
                   ),
                 ),
@@ -268,10 +177,10 @@ class ReportsView extends StatelessWidget {
                   width: colWidth,
                   child: _buildCategorySectionCard(
                     context: context,
-                    title: 'Receitas por Categoria',
-                    groups: data.incomeGroups,
-                    grandTotal: data.totalIncome,
-                    barColor: colors.income,
+                    title: 'Despesas por Categoria',
+                    groups: data.expenseGroups,
+                    grandTotal: data.totalExpense,
+                    barColor: colors.expense,
                     colors: colors,
                   ),
                 ),
@@ -333,51 +242,67 @@ class ReportsView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () =>
-                        _showCategoryDrillDown(context, g.name, store.month),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  g.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13.5,
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
+                          _showCategoryDrillDown(context, g.name, store.month),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          g.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13.5,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Icon(
+                                        Icons.open_in_new,
+                                        size: 13,
+                                        color: colors.accent,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                              Text(
-                                '${g.percentage}% • ${brl(g.total)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                  color: barColor,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
+                                Text(
+                                  '${g.percentage}% • ${brl(g.total)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: barColor,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
-                            child: LinearProgressIndicator(
-                              value: (g.percentage / 100.0).clamp(0.0, 1.0),
-                              minHeight: 6,
-                              backgroundColor: colors.borderGlass,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(barColor),
+                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: (g.percentage / 100.0).clamp(0.0, 1.0),
+                                minHeight: 6,
+                                backgroundColor: colors.borderGlass,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(barColor),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -385,36 +310,51 @@ class ReportsView extends StatelessWidget {
                     const SizedBox(height: 6),
                     ...g.subs.map((sub) {
                       final fullPath = '${g.name}$kCategorySep${sub.name}';
-                      return InkWell(
-                        onTap: () => _showCategoryDrillDown(
-                          context,
-                          fullPath,
-                          store.month,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 3, 4, 3),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '↳ ${sub.name}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                              Text(
-                                '${sub.percentage}% • ${brl(sub.amount)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textSecondary,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
+                      return MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _showCategoryDrillDown(
+                            context,
+                            fullPath,
+                            store.month,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '↳ ${sub.name}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.open_in_new,
+                                      size: 11,
+                                      color: colors.accent,
+                                    ),
                                   ],
                                 ),
-                              ),
-                            ],
+                                Text(
+                                  '${sub.percentage}% • ${brl(sub.amount)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textSecondary,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );

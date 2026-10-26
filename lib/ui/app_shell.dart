@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/openmoney_models.dart';
+import '../services/native_file_picker.dart';
+import '../services/update_service.dart';
 import '../store/money_store.dart';
 import 'modals/account_modal.dart';
 import 'modals/batch_delete_modal.dart';
 import 'modals/csv_qif_modal.dart';
+import 'modals/mobile_inbox_modal.dart';
+import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
 import 'views/account_ledger_view.dart';
 import 'views/budget_view.dart';
@@ -23,7 +27,13 @@ class OpenMoneyAppShell extends StatefulWidget {
 }
 
 class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
-  bool _showInactiveAccounts = false;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService.showUpdateDialog(context, manual: false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +44,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         final colors = OpenMoneyColors(isDark);
         final width = MediaQuery.of(context).size.width;
         final isDesktopOrTablet = width >= 860;
+
+        if (widget.store.showWelcomeScreen) {
+          return WelcomeDatabaseSelectionScreen(store: widget.store);
+        }
 
         if (widget.store.showMissingDatabasePrompt) {
           return _buildMissingDatabaseRescueScreen(context, colors);
@@ -325,6 +339,15 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
+                        tooltip: 'Verificar Atualizações',
+                        icon: const Icon(Icons.system_update_alt, size: 18),
+                        onPressed: () => UpdateService.showUpdateDialog(
+                          context,
+                          manual: true,
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
                         tooltip: 'Alternar Tema Claro / Escuro',
                         icon: Icon(
                           widget.store.isDarkMode
@@ -391,8 +414,165 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             children: [
-              // Analytical Modules Section
-              _SidebarSectionHeader(title: 'MÓDULOS E PLANEJAMENTO'),
+              // 1. Contas Favoritas (se houver)
+              if (favAccounts.isNotEmpty) ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: widget.store.toggleSidebarFavorites,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          widget.store.sidebarShowFavorites
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 16,
+                          color: colors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'CONTAS FAVORITAS ★ (${favAccounts.length})',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (widget.store.sidebarShowFavorites)
+                  ...favAccounts.map(
+                    (a) => _SidebarAccountTile(
+                      account: a,
+                      balanceCents: widget.store.balance(a, predicted: false),
+                      selected:
+                          widget.store.activeModule == NavModule.account &&
+                              widget.store.selectedAccountId == a.id,
+                      colors: colors,
+                      onTap: () =>
+                          selectModule(NavModule.account, accountId: a.id),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+
+              // 2. Contas Ativas com colapso/expansão persistido em config.json
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: widget.store.toggleSidebarActiveAccounts,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            widget.store.sidebarShowActiveAccounts
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 16,
+                            color: colors.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'CONTAS ATIVAS (${regActive.length})',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              color: colors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Nova Conta',
+                        icon: Icon(Icons.add_circle_outline,
+                            size: 17, color: colors.accent),
+                        onPressed: () =>
+                            showAccountModal(context, widget.store),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (widget.store.sidebarShowActiveAccounts)
+                ...regActive.map(
+                  (a) => _SidebarAccountTile(
+                    account: a,
+                    balanceCents: widget.store.balance(a, predicted: false),
+                    selected: widget.store.activeModule == NavModule.account &&
+                        widget.store.selectedAccountId == a.id,
+                    colors: colors,
+                    onTap: () =>
+                        selectModule(NavModule.account, accountId: a.id),
+                  ),
+                ),
+
+              // 3. Contas Inativas (colapsável e persistido em config.json)
+              if (regInactive.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: widget.store.toggleSidebarInactiveAccounts,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              widget.store.sidebarShowInactiveAccounts
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              size: 16,
+                              color: colors.textMuted,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'CONTAS INATIVAS (${regInactive.length})',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (widget.store.sidebarShowInactiveAccounts)
+                  ...regInactive.map(
+                    (a) => _SidebarAccountTile(
+                      account: a,
+                      balanceCents: widget.store.balance(a, predicted: false),
+                      selected:
+                          widget.store.activeModule == NavModule.account &&
+                              widget.store.selectedAccountId == a.id,
+                      colors: colors,
+                      onTap: () =>
+                          selectModule(NavModule.account, accountId: a.id),
+                    ),
+                  ),
+              ],
+
+              const SizedBox(height: 14),
+
+              // 4. Módulos e Planejamento (Abaixo das Contas)
+              const _SidebarSectionHeader(title: 'MÓDULOS E PLANEJAMENTO'),
               _SidebarNavTile(
                 icon: Icons.notifications_active_outlined,
                 label: 'Contas a Pagar & Receber',
@@ -435,120 +615,32 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 selected: widget.store.activeModule == NavModule.search,
                 onTap: () => selectModule(NavModule.search),
               ),
-
-              const SizedBox(height: 10),
-              if (favAccounts.isNotEmpty) ...[
-                _SidebarSectionHeader(title: 'CONTAS FAVORITAS ★'),
-                ...favAccounts.map(
-                  (a) => _SidebarAccountTile(
-                    account: a,
-                    balanceCents: widget.store.balance(a, predicted: false),
-                    selected: widget.store.activeModule == NavModule.account &&
-                        widget.store.selectedAccountId == a.id,
-                    colors: colors,
-                    onTap: () =>
-                        selectModule(NavModule.account, accountId: a.id),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _SidebarSectionHeader(title: 'CONTAS ATIVAS'),
-                  IconButton(
-                    tooltip: 'Nova Conta',
-                    icon: Icon(Icons.add_circle_outline,
-                        size: 17, color: colors.accent),
-                    onPressed: () => showAccountModal(context, widget.store),
-                  ),
-                ],
+              _SidebarNavTile(
+                icon: Icons.phone_iphone,
+                label: 'Importar do Celular (.json)',
+                selected: false,
+                onTap: () => showMobileInboxImportFlow(context, widget.store),
               ),
-              ...regActive.map(
-                (a) => _SidebarAccountTile(
-                  account: a,
-                  balanceCents: widget.store.balance(a, predicted: false),
-                  selected: widget.store.activeModule == NavModule.account &&
-                      widget.store.selectedAccountId == a.id,
-                  colors: colors,
-                  onTap: () =>
-                      selectModule(NavModule.account, accountId: a.id),
-                ),
+              _SidebarNavTile(
+                icon: Icons.import_export,
+                label: 'Importar / Exportar (CSV / QIF)',
+                selected: false,
+                onTap: () => showCsvQifCenterModal(context, widget.store),
               ),
-
-              if (regInactive.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () => setState(
-                      () => _showInactiveAccounts = !_showInactiveAccounts),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'CONTAS INATIVAS (${regInactive.length})',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textMuted,
-                          ),
-                        ),
-                        Icon(
-                          _showInactiveAccounts
-                              ? Icons.expand_less
-                              : Icons.expand_more,
-                          size: 16,
-                          color: colors.textMuted,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_showInactiveAccounts)
-                  ...regInactive.map(
-                    (a) => _SidebarAccountTile(
-                      account: a,
-                      balanceCents: widget.store.balance(a, predicted: false),
-                      selected:
-                          widget.store.activeModule == NavModule.account &&
-                              widget.store.selectedAccountId == a.id,
-                      colors: colors,
-                      onTap: () =>
-                          selectModule(NavModule.account, accountId: a.id),
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-
-        // Bottom Utility Bar (CSV/QIF & Batch Clean)
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: colors.borderGlass)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.import_export, size: 16),
-                  label: const Text(
-                    'CSV / QIF',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  onPressed: () =>
-                      showCsvQifCenterModal(context, widget.store),
-                ),
+              _SidebarNavTile(
+                icon: Icons.cleaning_services_outlined,
+                label: 'Limpeza de Lançamentos em Lote',
+                selected: false,
+                onTap: () => showBatchDeleteModal(context, widget.store),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Limpeza de Lançamentos em Lote',
-                icon: const Icon(Icons.cleaning_services_outlined, size: 18),
-                onPressed: () => showBatchDeleteModal(context, widget.store),
+              _SidebarNavTile(
+                icon: Icons.system_update_alt,
+                label: 'Buscar Atualizações...',
+                selected: false,
+                onTap: () => UpdateService.showUpdateDialog(
+                  context,
+                  manual: true,
+                ),
               ),
             ],
           ),
@@ -601,19 +693,28 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   children: [
                     FilledButton.icon(
                       icon: const Icon(Icons.folder_open),
-                      label: const Text('Localizar / Escolher Base (.json)'),
-                      onPressed: () => showDatabaseFileManagerModal(
-                        context,
-                        widget.store,
-                      ),
+                      label: const Text('Procurar Base no Finder (.json)'),
+                      onPressed: () async {
+                        final selected = await NativeFilePicker.pickFile(
+                          title: 'Localizar Base de Dados OpenMoney (.json)',
+                          allowedExtensions: ['json'],
+                        );
+                        if (selected != null && selected.isNotEmpty) {
+                          widget.store.openDatabaseFromPath(selected);
+                        }
+                      },
                     ),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.add),
-                      label: const Text('Iniciar Nova Base Padrão'),
-                      onPressed: () {
-                        final dir = widget.store.defaultCloudOrDocumentsDir();
-                        widget.store
-                            .createNewDatabaseAtPath('$dir/openmoney.json');
+                      label: const Text('Criar Nova Base em Outro Local'),
+                      onPressed: () async {
+                        final savePath = await NativeFilePicker.saveFile(
+                          title: 'Escolher Local para Salvar Nova Base',
+                          defaultName: 'openmoney.json',
+                        );
+                        if (savePath != null && savePath.isNotEmpty) {
+                          widget.store.createNewDatabaseAtPath(savePath);
+                        }
                       },
                     ),
                   ],
@@ -736,7 +837,7 @@ class _SidebarAccountTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         margin: const EdgeInsets.only(bottom: 2),
         decoration: BoxDecoration(
           color: selected
@@ -745,24 +846,50 @@ class _SidebarAccountTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              isCard
-                  ? Icons.credit_card
-                  : Icons.account_balance_wallet_outlined,
-              size: 16,
-              color: selected ? colors.accent : colors.textSecondary,
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: selected
+                    ? colors.accent.withValues(alpha: 0.15)
+                    : colors.borderGlass.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isCard
+                    ? Icons.credit_card
+                    : Icons.account_balance_wallet_outlined,
+                size: 16,
+                color: selected ? colors.accent : colors.textSecondary,
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 9),
             Expanded(
-              child: Text(
-                account.name,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? colors.accent : colors.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    account.name,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? colors.accent : colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1.5),
+                  Text(
+                    account.type,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textMuted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 6),

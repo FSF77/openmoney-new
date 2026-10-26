@@ -1350,3 +1350,258 @@ class QIFImporter {
     );
   }
 }
+
+// MARK: - Mobile Inbox Importer (OpenMoney Coletor .json)
+
+class MobileInboxImportItem {
+  final String txId;
+  final String accountName;
+  final String date;
+  final String payee;
+  final String cat;
+  final String memo;
+  final int amt;
+  final bool rec;
+
+  const MobileInboxImportItem({
+    required this.txId,
+    required this.accountName,
+    required this.date,
+    required this.payee,
+    required this.cat,
+    required this.memo,
+    required this.amt,
+    required this.rec,
+  });
+}
+
+class MobileInboxImportResult {
+  final List<MobileInboxImportItem> items;
+  final int skippedCount;
+  final int newCatsCount;
+  final String source;
+
+  const MobileInboxImportResult({
+    required this.items,
+    this.skippedCount = 0,
+    this.newCatsCount = 0,
+    this.source = 'OpenMoney Coletor Mobile',
+  });
+}
+
+class MobileInboxItem {
+  final String? id;
+  final String acc;
+  final String? peer;
+  final String date;
+  final String payee;
+  final String cat;
+  final String? memo;
+  final int amt;
+  final bool? rec;
+  final String? xfer;
+  final String? receiptThumb;
+
+  const MobileInboxItem({
+    this.id,
+    required this.acc,
+    this.peer,
+    required this.date,
+    required this.payee,
+    required this.cat,
+    this.memo,
+    required this.amt,
+    this.rec,
+    this.xfer,
+    this.receiptThumb,
+  });
+
+  factory MobileInboxItem.fromJson(Map<String, dynamic> json) {
+    int parsedAmt = 0;
+    final rawAmt = json['amt'];
+    if (rawAmt is int) {
+      parsedAmt = rawAmt;
+    } else if (rawAmt is num) {
+      parsedAmt = rawAmt.round();
+    } else if (rawAmt is String) {
+      parsedAmt = int.tryParse(rawAmt) ?? (parseAmountCents(rawAmt) ?? 0);
+    }
+
+    return MobileInboxItem(
+      id: json['id']?.toString(),
+      acc: (json['acc'] ?? '').toString(),
+      peer: json['peer']?.toString(),
+      date: (json['date'] ?? todayISO()).toString(),
+      payee: (json['payee'] ?? 'Lançamento').toString(),
+      cat: (json['cat'] ?? '').toString(),
+      memo: json['memo']?.toString(),
+      amt: parsedAmt,
+      rec: json['rec'] is bool ? json['rec'] as bool : null,
+      xfer: json['xfer']?.toString(),
+      receiptThumb: json['receiptThumb']?.toString(),
+    );
+  }
+}
+
+class MobileInboxImporter {
+  static ({
+    List<Transaction> newTxs,
+    List<CategoryItem> newCats,
+    int skippedCount,
+  }) parse({
+    required Uint8List bytes,
+    required List<Account> existingAccounts,
+    required List<CategoryItem> existingCats,
+    required List<Transaction> existingTxs,
+  }) {
+    final content = readTextBytesWithEncoding(bytes).replaceAll('\uFEFF', '').trim();
+    final items = <MobileInboxItem>[];
+
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        final rawTxs = decoded['txs'];
+        if (rawTxs is List) {
+          for (final el in rawTxs) {
+            if (el is Map<String, dynamic>) {
+              items.add(MobileInboxItem.fromJson(el));
+            }
+          }
+        }
+      } else if (decoded is List) {
+        for (final el in decoded) {
+          if (el is Map<String, dynamic>) {
+            items.add(MobileInboxItem.fromJson(el));
+          }
+        }
+      }
+    } catch (_) {
+      return (newTxs: [], newCats: [], skippedCount: 0);
+    }
+
+    final newTxs = <Transaction>[];
+    final newCats = <CategoryItem>[];
+    final knownCatPaths = existingCats.map((c) => c.path.toLowerCase()).toSet();
+    int skippedCount = 0;
+
+    final existingIdSet = existingTxs.map((t) => t.id).toSet();
+
+    for (final item in items) {
+      final txId = (item.id != null && item.id!.isNotEmpty) ? item.id! : uid();
+
+      if (existingIdSet.contains(txId)) {
+        skippedCount++;
+        continue;
+      }
+
+      final cleanPayeeLower = item.payee.trim().toLowerCase();
+      final isDuplicate = existingTxs.any((existing) =>
+          existing.acc == item.acc &&
+          existing.date == item.date &&
+          existing.payee.trim().toLowerCase() == cleanPayeeLower &&
+          existing.amt == item.amt &&
+          existing.cat == item.cat);
+      if (isDuplicate) {
+        skippedCount++;
+        continue;
+      }
+
+      Account? targetAcc;
+      for (final a in existingAccounts) {
+        if (a.id == item.acc) {
+          targetAcc = a;
+          break;
+        }
+      }
+      if (targetAcc == null) {
+        for (final a in existingAccounts) {
+          if (cmpPt(a.name, item.acc) == 0) {
+            targetAcc = a;
+            break;
+          }
+        }
+      }
+      if (targetAcc == null) {
+        for (final a in existingAccounts) {
+          if (!a.isInactive) {
+            targetAcc = a;
+            break;
+          }
+        }
+      }
+
+      final finalAccId = targetAcc?.id ?? item.acc;
+
+      var catPath = item.cat.trim();
+      if (catPath.contains(':') && !catPath.contains(kCategorySep)) {
+        catPath = catPath
+            .split(':')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .join(kCategorySep);
+      }
+
+      if (catPath.isNotEmpty && !knownCatPaths.contains(catPath.toLowerCase())) {
+        final catType = item.amt >= 0 ? 'Receita' : 'Despesa';
+        final parts = catPath.split(kCategorySep);
+        final CategoryItem createdCat;
+        if (parts.length > 1) {
+          final parent = parts.first.trim();
+          final sub = parts.last.trim();
+          if (!knownCatPaths.contains(parent.toLowerCase())) {
+            final parentCat =
+                CategoryItem(name: parent, parent: null, type: catType);
+            newCats.add(parentCat);
+            knownCatPaths.add(parent.toLowerCase());
+          }
+          createdCat = CategoryItem(name: sub, parent: parent, type: catType);
+        } else {
+          createdCat = CategoryItem(name: catPath, parent: null, type: catType);
+        }
+        newCats.add(createdCat);
+        knownCatPaths.add(createdCat.path.toLowerCase());
+      }
+
+      String? ik;
+      if (targetAcc != null &&
+          targetAcc.type == kCardType &&
+          targetAcc.card != null) {
+        ik = invKeyFor(targetAcc.card!, item.date);
+      }
+
+      var memo = item.memo ?? '';
+      if (item.receiptThumb != null && item.receiptThumb!.isNotEmpty) {
+        if (!memo.contains('Comprovante')) {
+          memo = memo.isEmpty
+              ? '[Comprovante Digitalizado]'
+              : '$memo [Comprovante Digitalizado]';
+        }
+      }
+
+      final rec = item.rec ?? (item.date.compareTo(todayISO()) <= 0);
+
+      final tx = Transaction(
+        id: txId,
+        acc: finalAccId,
+        peer: item.peer,
+        date: item.date,
+        payee: item.payee,
+        cat: catPath,
+        memo: memo,
+        amt: item.amt,
+        rec: rec,
+        xfer: item.xfer,
+        ik: ik,
+      );
+
+      newTxs.add(tx);
+      existingIdSet.add(txId);
+    }
+
+    return (
+      newTxs: newTxs,
+      newCats: newCats,
+      skippedCount: skippedCount,
+    );
+  }
+}

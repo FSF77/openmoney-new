@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_modal.dart';
 import '../modals/batch_delete_modal.dart';
@@ -32,6 +33,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   int _installments = 2;
   String _freq = 'monthly';
   String? _customIk;
+  bool _filterCardByInvoice = true;
   List<PayeeSuggestion> _suggestions = [];
 
   @override
@@ -139,14 +141,19 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     final isCard = acc.type == kCardType && acc.card != null;
     final invSummary =
         isCard ? widget.store.invoiceSummary(acc.id, widget.store.month) : null;
+    final invTxs = isCard
+        ? widget.store.invoiceTransactions(acc.id, widget.store.month)
+        : <Transaction>[];
     final pendingCount = widget.store.pendingCountForAccount(acc.id);
 
     // Group transactions day by day with running Real and Predicted balances
     final dayGroups = <_DayGroup>[];
-    int runningReal = monthData.openingReal;
-    int runningPred = monthData.openingPred;
+    final useInvoiceTxs = isCard && _filterCardByInvoice;
+    final activeTxs = useInvoiceTxs ? invTxs : monthData.transactions;
+    int runningReal = useInvoiceTxs ? 0 : monthData.openingReal;
+    int runningPred = useInvoiceTxs ? 0 : monthData.openingPred;
 
-    for (final tx in monthData.transactions) {
+    for (final tx in activeTxs) {
       if (tx.rec) runningReal += tx.amt;
       runningPred += tx.amt;
 
@@ -248,7 +255,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       onMonthChanged: (ym) => widget.store.month = ym,
                     ),
                     Wrap(
-                      spacing: 16,
+                      spacing: 12,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _HeaderBalancePill(
@@ -268,6 +275,33 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             final res = widget.store
                                 .adjustPredictions(widget.store.month);
                             showPredictionsAdjustModal(context, res);
+                          },
+                        ),
+                        FilledButton.tonalIcon(
+                          icon: const Icon(Icons.picture_as_pdf, size: 16),
+                          label: Text(isCard ? 'Exportar Fatura PDF' : 'Exportar Extrato PDF'),
+                          onPressed: () {
+                            final exportTxs = isCard
+                                ? widget.store.invoiceTransactions(
+                                    acc.id,
+                                    widget.store.month,
+                                  )
+                                : monthData.transactions;
+                            final pdfBytes = PdfReportGenerator.buildStatementOrInvoicePdfBytes(
+                              store: widget.store,
+                              account: acc,
+                              monthYM: widget.store.month,
+                              transactions: exportTxs,
+                              invoiceSummary: invSummary,
+                            );
+                            final defaultName = isCard
+                                ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                                : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                            PdfReportGenerator.saveAndOpenPdfBytes(
+                              context,
+                              pdfBytes: pdfBytes,
+                              defaultFileName: defaultName,
+                            );
                           },
                         ),
                       ],
@@ -333,15 +367,33 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                         ],
                       ),
-                      FilledButton.tonalIcon(
-                        icon: const Icon(Icons.payments_outlined, size: 16),
-                        label: const Text('Pagar / Adiantar Fatura'),
-                        onPressed: () => showInvoicePaymentModal(
-                          context,
-                          widget.store,
-                          cardAccount: acc,
-                          summary: invSummary,
-                        ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          FilterChip(
+                            label: Text(
+                              _filterCardByInvoice
+                                  ? 'Exibindo Fatura (${invTxs.length} lanç.)'
+                                  : 'Exibindo Mês Civil (${monthData.transactions.length} lanç.)',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                            selected: _filterCardByInvoice,
+                            onSelected: (v) =>
+                                setState(() => _filterCardByInvoice = v),
+                          ),
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.payments_outlined, size: 16),
+                            label: const Text('Pagar / Adiantar Fatura'),
+                            onPressed: () => showInvoicePaymentModal(
+                              context,
+                              widget.store,
+                              cardAccount: acc,
+                              summary: invSummary,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -752,65 +804,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      // Day Header with Closing Real & Predicted Balances
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.bgPrimary.withValues(alpha: 0.45),
-                          border: Border(
-                            bottom: BorderSide(color: colors.borderGlass),
-                          ),
-                        ),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 12,
-                            runSpacing: 4,
-                            children: [
-                              Text(
-                                '${fmtDate(group.date)} · ${weekdayShort(group.date).toUpperCase()}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.accent,
-                                ),
-                              ),
-                              Wrap(
-                                spacing: 14,
-                                children: [
-                                  Text(
-                                    'Saldo Real: ${brl(group.closingReal)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: colors.textPrimary,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures()
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    'Previsto: ${brl(group.closingPred)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: colors.textSecondary,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures()
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                       ...group.items.map((tx) {
                         final isHighlighted =
                             widget.store.highlightedTxId == tx.id;
@@ -887,17 +880,32 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 ],
                               ],
                             ),
-                            subtitle: Text(
-                              [
-                                tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
-                                if (tx.memo.isNotEmpty) tx.memo,
-                                if (tx.ik != null && tx.ik!.isNotEmpty)
-                                  'Fatura ${tx.ik}',
-                              ].join(' • '),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (tx.memo.trim().isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Text(
+                                      tx.memo.trim(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  [
+                                    tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
+                                    if (tx.ik != null && tx.ik!.isNotEmpty)
+                                      'Fatura ${tx.ik}',
+                                  ].join(' • '),
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                              ],
                             ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -936,6 +944,69 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                         );
                       }),
+                      // Day Footer with Closing Real & Predicted Balances
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.bgPrimary.withValues(alpha: 0.35),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(12),
+                            bottomRight: Radius.circular(12),
+                          ),
+                          border: Border(
+                            top: BorderSide(color: colors.borderGlass),
+                          ),
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              Text(
+                                '${fmtDate(group.date)} · ${weekdayShort(group.date).toUpperCase()}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.accent,
+                                ),
+                              ),
+                              Wrap(
+                                spacing: 14,
+                                children: [
+                                  Text(
+                                    'Saldo Real: ${brl(group.closingReal)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.textPrimary,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    'Previsto: ${brl(group.closingPred)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textSecondary,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 );

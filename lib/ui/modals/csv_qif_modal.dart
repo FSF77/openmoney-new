@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import 'mobile_inbox_modal.dart';
 
 Future<void> showCsvQifCenterModal(
   BuildContext context,
@@ -166,6 +168,121 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                   border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.folder_open, size: 16),
+                    label: const Text('Procurar Arquivo para Importar (Finder)'),
+                    onPressed: () async {
+                      final selected = await NativeFilePicker.pickFile(
+                        title: 'Selecionar Arquivo CSV ou QIF',
+                        allowedExtensions: ['csv', 'qif'],
+                      );
+                      if (selected != null && selected.isNotEmpty) {
+                        setState(() {
+                          _filePathCtrl.text = selected;
+                        });
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.save_as_outlined, size: 16),
+                    label: const Text('Definir Destino para Exportar CSV'),
+                    onPressed: () async {
+                      final savePath = await NativeFilePicker.saveFile(
+                        title: 'Escolher Destino para Salvar CSV',
+                        defaultName: 'openmoney-${todayISO()}.csv',
+                        allowedExtensions: ['csv'],
+                      );
+                      if (savePath != null && savePath.isNotEmpty) {
+                        setState(() {
+                          _filePathCtrl.text = savePath;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const Divider(height: 22),
+              const Text(
+                'Coletor Mobile (.json) & Catálogo de Categorias (CSV):',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.phone_iphone, size: 16),
+                    label: const Text('Importar do Celular (.json)'),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await showMobileInboxImportFlow(context, widget.store);
+                    },
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.category_outlined, size: 16),
+                    label: const Text('Importar Categorias (CSV)'),
+                    onPressed: () async {
+                      final selected = await NativeFilePicker.pickFile(
+                        title: 'Importar Categorias e Subcategorias (CSV)',
+                        allowedExtensions: ['csv'],
+                      );
+                      if (selected != null && selected.isNotEmpty) {
+                        try {
+                          final bytes = File(selected).readAsBytesSync();
+                          final summary =
+                              widget.store.importCategoriesCSVBytes(bytes);
+                          setState(() {
+                            _isError = false;
+                            _statusMessage = summary.formattedMessage;
+                          });
+                        } catch (e) {
+                          setState(() {
+                            _isError = true;
+                            _statusMessage =
+                                'Erro ao importar categorias: $e';
+                          });
+                        }
+                      }
+                    },
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.download_outlined, size: 16),
+                    label: const Text('Exportar Categorias (CSV)'),
+                    onPressed: () async {
+                      final savePath = await NativeFilePicker.saveFile(
+                        title: 'Exportar Categorias e Subcategorias (CSV)',
+                        defaultName: 'openmoney-categorias-${todayISO()}.csv',
+                        allowedExtensions: ['csv'],
+                      );
+                      if (savePath != null && savePath.isNotEmpty) {
+                        try {
+                          final csv = widget.store.exportCategoriesCSVString();
+                          final f = File(savePath);
+                          f.parent.createSync(recursive: true);
+                          f.writeAsStringSync(csv, flush: true);
+                          setState(() {
+                            _isError = false;
+                            _statusMessage =
+                                '✓ Categorias exportadas com sucesso em:\n$savePath';
+                          });
+                        } catch (e) {
+                          setState(() {
+                            _isError = true;
+                            _statusMessage =
+                                'Erro ao exportar categorias: $e';
+                          });
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
               if (_statusMessage != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -279,8 +396,38 @@ Future<void> showDatabaseFileManagerModal(
                     runSpacing: 8,
                     children: [
                       ActionChip(
+                        avatar: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Procurar no Finder / Explorer'),
+                        onPressed: () async {
+                          final selected = await NativeFilePicker.pickFile(
+                            title: 'Escolher Base OpenMoney (.json)',
+                            allowedExtensions: ['json'],
+                          );
+                          if (selected != null && selected.isNotEmpty) {
+                            setModalState(() {
+                              pathCtrl.text = selected;
+                            });
+                          }
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.create_new_folder_outlined, size: 16),
+                        label: const Text('Escolher Local para Nova Base'),
+                        onPressed: () async {
+                          final savePath = await NativeFilePicker.saveFile(
+                            title: 'Escolher Local para Salvar Nova Base',
+                            defaultName: 'openmoney.json',
+                          );
+                          if (savePath != null && savePath.isNotEmpty) {
+                            setModalState(() {
+                              pathCtrl.text = savePath;
+                            });
+                          }
+                        },
+                      ),
+                      ActionChip(
                         avatar: const Icon(Icons.cloud_outlined, size: 16),
-                        label: const Text('Pasta Nuvem Padrão (iCloud/OneDrive)'),
+                        label: const Text('Pasta Nuvem Padrão'),
                         onPressed: () {
                           setModalState(() {
                             pathCtrl.text =
