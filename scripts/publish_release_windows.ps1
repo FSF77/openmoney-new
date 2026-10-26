@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # OpenMoney Flutter - Script de Compilacao e Publicacao para Windows (PowerShell)
 # Repositorio Oficial: https://github.com/FSF77/openmoney-new
 # ==============================================================================
@@ -115,7 +115,7 @@ $UpdatedJson = $Data | ConvertTo-Json -Depth 5
 Write-Host "version.json atualizado com sucesso." -ForegroundColor Green
 
 # 4. Commit e Push no proprio repositorio openmoney-new
-& git add version.json "downloads/windows/$ZipName"
+& git add pubspec.yaml pubspec.lock version.json "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {

@@ -305,16 +305,19 @@ CX
 
       // Exporta CSV
       final csv = store.exportCSVString();
-      expect(csv.contains('"Status da Conta"'), true);
-      expect(csv.contains('"Favorita"'), true);
-      expect(csv.contains('Habilitada'), true);
+      expect(csv.contains('"Conta Ativa"'), true);
+      expect(csv.contains('"Conta Favorita"'), true);
+      expect(csv.contains('Sim'), true);
       expect(csv.contains('"Transferência: Poupança Inter"'), true);
       expect(csv.contains('Transferência ›'), false);
 
-      // Testa Importação CSV com transferência › chevron e status de conta
-      final csvToImport = '''"Data";"Conta";"Status da Conta";"Favorita";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"
-"2026-10-22";"Banco XP";"Habilitada";"Sim";"Aporte XP";"Transferência › Poupança Inter";"Nota aporte";"-200,00";"Sim";""
-"2026-10-23";"Banco Safra";"Desabilitada";"Não";"Aporte Safra";"Transferência › Poupança Inter";"";"-300,00";"Sim";""
+      // Valida cabeçalho exato no final
+      expect(csv.contains('"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa"'), true);
+
+      // Testa Importação CSV com transferência › chevron e status de conta no final
+      final csvToImport = '''"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa"
+"2026-10-22";"Banco XP";"Aporte XP";"Transferência › Poupança Inter";"Nota aporte";"-200,00";"Sim";"";"Sim";"Sim"
+"2026-10-23";"Banco Safra";"Aporte Safra";"Transferência › Poupança Inter";"";"-300,00";"Sim";"";"Não";"Não"
 ''';
 
       final res = CSVImporter.parse(

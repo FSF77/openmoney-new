@@ -318,14 +318,12 @@ class CSVExporter {
     });
 
     final lines = <String>[
-      '"Data";"Conta";"Status da Conta";"Favorita";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"',
+      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa"',
     ];
 
     for (final tx in filtered) {
       final acc = accMap[tx.acc];
       final accName = _escapeCSV(acc?.name ?? 'Conta');
-      final accStatus = (acc?.isInactive == true) ? 'Desabilitada' : 'Habilitada';
-      final accFav = (acc?.isFavorite == true) ? 'Sim' : 'Não';
       final dateStr = tx.date;
       final payeeStr = _escapeCSV(tx.payee);
       
@@ -365,8 +363,11 @@ class CSVExporter {
         }
       }
 
+      final accFav = (acc?.isFavorite == true) ? 'Sim' : 'Não';
+      final accAtiva = (acc?.isInactive == true) ? 'Não' : 'Sim';
+
       lines.add(
-        '"$dateStr";"$accName";"$accStatus";"$accFav";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}"',
+        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}";"$accFav";"$accAtiva"',
       );
     }
 
@@ -468,7 +469,20 @@ class CSVImporter {
     } else {
       dataStartIndex = 0;
       final sampleRow = records[0];
-      if (sampleRow.length >= 8) {
+      if (sampleRow.length >= 10) {
+        colMap = _ColumnMapping(
+          date: 0,
+          account: 1,
+          payee: 2,
+          category: 3,
+          memo: 4,
+          amount: 5,
+          reconciled: 6,
+          invoice: 7,
+          accountFavorite: 8,
+          accountStatus: 9,
+        );
+      } else if (sampleRow.length >= 8) {
         colMap = _ColumnMapping(
           date: 0,
           account: 1,
@@ -565,9 +579,9 @@ class CSVImporter {
           bool? isInactive;
           if (colMap.accountStatus != null && colMap.accountStatus! < row.length) {
             final st = removeDiacritics(row[colMap.accountStatus!].trim()).toLowerCase();
-            if (st.contains('desabilit') || st.contains('inativ') || st == 'false' || st == '0') {
+            if (st == 'nao' || st == 'no' || st.contains('desabilit') || st.contains('inativ') || st == 'false' || st == '0') {
               isInactive = true;
-            } else if (st.contains('habilit') || st.contains('ativ') || st == 'true' || st == '1') {
+            } else if (st == 'sim' || st == 'yes' || st.contains('habilit') || st.contains('ativ') || st == 'true' || st == '1') {
               isInactive = null;
             }
           }
@@ -595,9 +609,9 @@ class CSVImporter {
           final existingAcc = allAccounts.firstWhere((a) => cmpPt(a.name, accName) == 0);
           if (colMap.accountStatus != null && colMap.accountStatus! < row.length) {
             final st = removeDiacritics(row[colMap.accountStatus!].trim()).toLowerCase();
-            if (st.contains('desabilit') || st.contains('inativ')) {
+            if (st == 'nao' || st == 'no' || st.contains('desabilit') || st.contains('inativ') || st == 'false' || st == '0') {
               existingAcc.inactive = true;
-            } else if (st.contains('habilit') || st.contains('ativ')) {
+            } else if (st == 'sim' || st == 'yes' || st.contains('habilit') || st.contains('ativ') || st == 'true' || st == '1') {
               existingAcc.inactive = null;
             }
           }
@@ -802,10 +816,13 @@ class CSVImporter {
           (col.contains('status') ||
               col.contains('habilitad') ||
               col.contains('desabilitad') ||
-              col.contains('inativ'))) {
+              col.contains('inativ') ||
+              col.contains('conta ativa') ||
+              col == 'ativa' ||
+              col == 'ativo')) {
         map.accountStatus = idx;
       } else if (map.accountFavorite == null &&
-          (col.contains('favorit') || col == 'fav' || col.contains('star'))) {
+          (col.contains('favorit') || col.contains('conta favorita') || col == 'fav' || col.contains('star'))) {
         map.accountFavorite = idx;
       } else if (map.payee == null &&
           (col.contains('desc') ||

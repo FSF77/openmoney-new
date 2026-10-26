@@ -283,25 +283,48 @@ class BackupManager {
     }
   }
 
-  /// Lista todos os backups disponíveis ordenados do mais recente para o mais antigo
+  /// Lista todos os backups disponíveis ordenados do mais recente para o mais antigo.
+  /// No macOS/Windows, verifica tanto a pasta atual quanto pastas legadas conhecidas (ex: OpenMoney e OpenMoneyNew)
   List<BackupFileInfo> availableBackups({required String appSupportDirPath}) {
     if (kIsWeb) return [];
     try {
-      final dir = getBackupsDirectory(appSupportDirPath);
-      if (!dir.existsSync()) return [];
+      final dirsToScan = <Directory>{};
+      final primaryDir = getBackupsDirectory(appSupportDirPath);
+      if (primaryDir.existsSync()) {
+        dirsToScan.add(primaryDir);
+      }
+
+      // Se appSupportDirPath for OpenMoneyNew ou OpenMoney, inclui também a pasta parceira
+      if (!kIsWeb) {
+        final sep = Platform.pathSeparator;
+        if (appSupportDirPath.endsWith('OpenMoneyNew')) {
+          final legacyDir = Directory('${appSupportDirPath.replaceAll(RegExp(r'OpenMoneyNew$'), 'OpenMoney')}${sep}Backups');
+          if (legacyDir.existsSync()) dirsToScan.add(legacyDir);
+        } else if (appSupportDirPath.endsWith('OpenMoney')) {
+          final newDir = Directory('${appSupportDirPath.replaceAll(RegExp(r'OpenMoney$'), 'OpenMoneyNew')}${sep}Backups');
+          if (newDir.existsSync()) dirsToScan.add(newDir);
+        }
+      }
 
       final list = <BackupFileInfo>[];
-      for (final entity in dir.listSync()) {
-        if (entity is File && entity.path.toLowerCase().endsWith('.zip')) {
-          try {
-            final stat = entity.statSync();
-            list.add(BackupFileInfo(
-              path: entity.path,
-              filename: entity.uri.pathSegments.last,
-              date: stat.modified,
-              sizeBytes: stat.size,
-            ));
-          } catch (_) {}
+      final seenFilenames = <String>{};
+
+      for (final dir in dirsToScan) {
+        for (final entity in dir.listSync()) {
+          if (entity is File && entity.path.toLowerCase().endsWith('.zip')) {
+            final fname = entity.uri.pathSegments.last;
+            if (seenFilenames.contains(fname)) continue;
+            try {
+              final stat = entity.statSync();
+              list.add(BackupFileInfo(
+                path: entity.path,
+                filename: fname,
+                date: stat.modified,
+                sizeBytes: stat.size,
+              ));
+              seenFilenames.add(fname);
+            } catch (_) {}
+          }
         }
       }
 

@@ -149,7 +149,7 @@ chmod +x "${ROOT_DIR}/install.sh"
 
 # 4. Commit e Push no próprio repositório openmoney-new
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add version.json install.sh "downloads/macos/${ZIP_NAME}"
+git add pubspec.yaml pubspec.lock version.json install.sh "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else
