@@ -2,14 +2,37 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../ui/theme/liquid_glass.dart';
 
 class OpenMoneyVersion {
-  static const String version = '2.0.1';
-  static const int build = 1;
+  static const String fallbackVersion = '2.0.1';
+  static const int fallbackBuild = 2;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
       'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';
+
+  static String _version = fallbackVersion;
+  static int _build = fallbackBuild;
+  static bool _initialized = false;
+
+  static String get version => _version;
+  static int get build => _build;
+
+  static Future<void> init() async {
+    if (_initialized) return;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) {
+        _version = info.version;
+      }
+      final parsedBuild = int.tryParse(info.buildNumber);
+      if (parsedBuild != null) {
+        _build = parsedBuild;
+      }
+    } catch (_) {}
+    _initialized = true;
+  }
 }
 
 class ReleaseVersionInfo {
@@ -102,6 +125,7 @@ class UpdateService {
     _isChecking = true;
 
     try {
+      await OpenMoneyVersion.init();
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 7);
 

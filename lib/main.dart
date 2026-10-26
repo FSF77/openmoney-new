@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'services/update_service.dart';
 import 'store/money_store.dart';
 import 'ui/app_shell.dart';
 import 'ui/theme/liquid_glass.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await OpenMoneyVersion.init();
 
   final store = MoneyStore(autoBoot: false);
 
