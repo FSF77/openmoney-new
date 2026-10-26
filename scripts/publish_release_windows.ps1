@@ -1,6 +1,6 @@
-# ==============================================================================
-# OpenMoney Flutter - Script de Compilação e Publicação para Windows (PowerShell)
-# Repositório Oficial: https://github.com/FSF77/openmoney-new
+﻿# ==============================================================================
+# OpenMoney Flutter - Script de Compilacao e Publicacao para Windows (PowerShell)
+# Repositorio Oficial: https://github.com/FSF77/openmoney-new
 # ==============================================================================
 
 param (
@@ -13,7 +13,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = Split-Path -Parent $ScriptDir
 Set-Location $RootDir
 
-# 1. Extrai versão do pubspec.yaml
+# 1. Extrai versao do pubspec.yaml
 $PubspecContent = Get-Content "$RootDir\pubspec.yaml"
 $VersionLine = $PubspecContent | Select-String -Pattern "^version:\s*([0-9\.]+)\+?([0-9]*)" | Select-Object -First 1
 
@@ -25,18 +25,18 @@ if ($VersionLine -match "version:\s*([0-9\.]+)\+?([0-9]*)") {
     $BuildNum = "1"
 }
 
-$Notes = if ($CustomNotes) { $CustomNotes } else { "OpenMoney Flutter v$Version para Windows - Versão oficial multiplataforma." }
+$Notes = if ($CustomNotes) { $CustomNotes } else { "OpenMoney Flutter v$Version para Windows - Versao oficial multiplataforma." }
 $ReleaseDate = Get-Date -Format "dd/MM/yyyy"
 
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "  🚀 OpenMoney Flutter Windows — Build & Publish v$Version+$BuildNum" -ForegroundColor Cyan
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "====================================================================" -ForegroundColor Cyan
+Write-Host "  OpenMoney Flutter Windows - Build and Publish v$Version+$BuildNum" -ForegroundColor Cyan
+Write-Host "====================================================================" -ForegroundColor Cyan
 
-# 2. Compilação do Windows Release
-Write-Host "🔨 Compilando aplicativo Windows em modo Release..." -ForegroundColor Yellow
+# 2. Compilacao do Windows Release
+Write-Host "Compilando aplicativo Windows em modo Release..." -ForegroundColor Yellow
 & flutter build windows --release
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "❌ Falha na compilação do Flutter Windows."
+    Write-Error "Falha na compilacao do Flutter Windows."
     exit 1
 }
 
@@ -46,7 +46,7 @@ if (-not (Test-Path $ReleaseDir)) {
 }
 
 if (-not (Test-Path "$ReleaseDir\openmoney.exe")) {
-    Write-Error "❌ Erro: Executável não encontrado em $ReleaseDir\openmoney.exe"
+    Write-Error "Erro: Executavel nao encontrado em $ReleaseDir\openmoney.exe"
     exit 1
 }
 
@@ -61,19 +61,19 @@ if (Test-Path $ZipPath) {
     Remove-Item $ZipPath -Force
 }
 
-Write-Host "📦 Compactando $ZipName..." -ForegroundColor Yellow
+Write-Host "Compactando $ZipName..." -ForegroundColor Yellow
 Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $ZipPath -Force
 
 $FileHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
 $FileSizeMb = [math]::Round(((Get-Item $ZipPath).Length / 1MB))
 
-Write-Host "✅ Pacote gerado com sucesso: $ZipPath" -ForegroundColor Green
+Write-Host "Pacote gerado com sucesso: $ZipPath" -ForegroundColor Green
 Write-Host "   Tamanho: ~$FileSizeMb MB"
 Write-Host "   SHA256:  $FileHash"
 
 $DownloadUrl = "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/$ZipName"
 
-# 3. Atualização do version.json
+# 3. Atualizacao do version.json
 $VersionJsonFile = "$RootDir\version.json"
 $JsonObj = @{}
 
@@ -114,20 +114,20 @@ $UpdatedJson = $Data | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($VersionJsonFile, $UpdatedJson, [System.Text.Encoding]::UTF8)
 Write-Host "version.json atualizado com sucesso." -ForegroundColor Green
 
-# 4. Commit e Push no próprio repositório openmoney-new
+# 4. Commit e Push no proprio repositorio openmoney-new
 & git add version.json "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {
-    Write-Host "ℹ️ Nenhuma alteração a commitar."
+    Write-Host "Nenhuma alteracao a commitar."
 } else {
     & git commit -m "Release Windows v$Version (Build $BuildNum) - $ReleaseDate"
     & git tag -f "v$Version-windows"
-    Write-Host "📤 Enviando release para o GitHub..." -ForegroundColor Yellow
+    Write-Host "Enviando release para o GitHub..." -ForegroundColor Yellow
     & git push origin main --tags
 }
 
 Write-Host ""
-Write-Host "🎉 Versão Windows v$Version publicada com sucesso no repositório oficial!" -ForegroundColor Green
-Write-Host "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
-Write-Host "📥 Download: $DownloadUrl"
+Write-Host "Versao Windows v$Version publicada com sucesso no repositorio oficial!" -ForegroundColor Green
+Write-Host "Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
+Write-Host "Download: $DownloadUrl"
