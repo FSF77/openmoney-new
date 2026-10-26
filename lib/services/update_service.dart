@@ -7,9 +7,9 @@ import '../ui/theme/liquid_glass.dart';
 class OpenMoneyVersion {
   static const String version = '2.0.0';
   static const int build = 1;
-  static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-releases';
+  static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
-      'https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json';
+      'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';
 }
 
 class ReleaseVersionInfo {
@@ -109,7 +109,7 @@ class UpdateService {
       String targetUrl = '${OpenMoneyVersion.feedUrl}?t=${DateTime.now().millisecondsSinceEpoch}';
       try {
         final commitUri = Uri.parse(
-          'https://api.github.com/repos/FSF77/openmoney-releases/commits/main',
+          'https://api.github.com/repos/FSF77/openmoney-new/commits/main',
         );
         final commitReq = await client.getUrl(commitUri);
         commitReq.headers.set('User-Agent', 'OpenMoney-App');
@@ -120,7 +120,7 @@ class UpdateService {
           final sha = commitJson['sha'] as String?;
           if (sha != null && sha.isNotEmpty) {
             targetUrl =
-                'https://raw.githubusercontent.com/FSF77/openmoney-releases/$sha/version-flutter.json';
+                'https://raw.githubusercontent.com/FSF77/openmoney-new/$sha/version.json';
           }
         }
       } catch (_) {

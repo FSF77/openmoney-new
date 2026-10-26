@@ -157,28 +157,26 @@ Seus dados pertencem exclusivamente a você:
 
 ## 🔄 Sistema de Atualização Automática (Auto-Update)
 
-O OpenMoney Flutter possui um motor de atualização in-app integrado ([`lib/services/update_service.dart`](file:///Users/fabiano/Developer/OpenMoneyFlutter/lib/services/update_service.dart)), conectado ao repositório público de releases:
+O OpenMoney Flutter possui um motor de atualização in-app integrado ([`lib/services/update_service.dart`](file:///Users/fabiano/Developer/OpenMoneyFlutter/lib/services/update_service.dart)), conectado ao repositório oficial:
 
-- **Repositório Público de Distribuição**: [https://github.com/FSF77/openmoney-releases](https://github.com/FSF77/openmoney-releases)
-- **Feed de Versões**: [https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json](https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json)
+- **Repositório Oficial**: [https://github.com/FSF77/openmoney-new](https://github.com/FSF77/openmoney-new)
+- **Feed de Versões**: [https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json](https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json)
 
-### Estrutura Segregada de Downloads
-Para preservar a integridade das versões legadas em Swift e suportar múltiplos sistemas operacionais, os pacotes do OpenMoney Flutter ficam organizados em diretórios próprios:
+### Estrutura de Downloads e Atualizações
+Os pacotes e o feed residem diretamente no repositório principal:
 
 ```text
-openmoney-releases/
-├── version.json                     # Feed legado Swift (mantido)
-├── downloads/
-│   └── OpenMoney-<versao>.zip       # Binários legados Swift (mantidos)
-├── version-flutter.json             # Novo feed oficial OpenMoney Flutter
-└── downloads/flutter/
+openmoney-new/
+├── version.json                     # Feed oficial de versão (macOS e Windows)
+├── install.sh                       # Script de instalação rápida no macOS (curl | bash)
+└── downloads/
     ├── macos/
     │   └── OpenMoney-macOS-<versao>.zip
     └── windows/
         └── OpenMoney-Windows-<versao>.zip
 ```
 
-### Formato do Feed `version-flutter.json`
+### Formato do Feed `version.json`
 ```json
 {
   "version": "2.0.0",
@@ -186,12 +184,12 @@ openmoney-releases/
   "releaseDate": "25/10/2026",
   "title": "OpenMoney Flutter v2.0.0",
   "notes": "Lançamento oficial multiplataforma com suporte nativo a macOS e Windows.",
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-releases",
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
   "macos": {
     "version": "2.0.0",
     "build": 1,
     "releaseDate": "25/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-releases/raw/main/downloads/flutter/macos/OpenMoney-macOS-2.0.0.zip",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.0.zip",
     "sha256": "...",
     "sizeMb": 28
   },
@@ -199,7 +197,7 @@ openmoney-releases/
     "version": "2.0.0",
     "build": 1,
     "releaseDate": "25/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-releases/raw/main/downloads/flutter/windows/OpenMoney-Windows-2.0.0.zip",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.0.zip",
     "sha256": "...",
     "sizeMb": 24
   }
@@ -218,10 +216,10 @@ openmoney-releases/
 
 ## 🛠️ Scripts de Compilação e Publicação
 
-O projeto conta com scripts automatizados para compilar e publicar releases diretamente no repositório público:
+O projeto conta com scripts automatizados para compilar e publicar releases diretamente no repositório:
 
 ### 🍏 No macOS (`scripts/publish_release_macos.sh`)
-Compila o app em modo Release, empacota o zip, calcula hash SHA256, clona o repositório de releases, atualiza `version-flutter.json` e envia as tags Git:
+Compila o app em modo Release, empacota o zip em `downloads/macos/`, calcula hash SHA256, atualiza `version.json` e envia para o GitHub:
 
 ```bash
 # Executar a publicação (usa a versão configurada no pubspec.yaml)

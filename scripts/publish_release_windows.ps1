@@ -1,6 +1,6 @@
 # ==============================================================================
 # OpenMoney Flutter - Script de Compilação e Publicação para Windows (PowerShell)
-# Repositório de Releases: https://github.com/FSF77/openmoney-releases
+# Repositório Oficial: https://github.com/FSF77/openmoney-new
 # ==============================================================================
 
 param (
@@ -42,7 +42,6 @@ if ($LASTEXITCODE -ne 0) {
 
 $ReleaseDir = "$RootDir\build\windows\x64\runner\Release"
 if (-not (Test-Path $ReleaseDir)) {
-    # Tenta caminho alternativo sem x64 dependendo da versão do Flutter
     $ReleaseDir = "$RootDir\build\windows\runner\Release"
 }
 
@@ -51,19 +50,18 @@ if (-not (Test-Path "$ReleaseDir\openmoney.exe")) {
     exit 1
 }
 
-$DistDir = "$RootDir\dist\flutter\windows"
-if (-not (Test-Path $DistDir)) {
-    New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
+$DownloadsWinDir = "$RootDir\downloads\windows"
+if (-not (Test-Path $DownloadsWinDir)) {
+    New-Item -ItemType Directory -Path $DownloadsWinDir -Force | Out-Null
 }
 
 $ZipName = "OpenMoney-Windows-$Version.zip"
-$ZipPath = "$DistDir\$ZipName"
+$ZipPath = "$DownloadsWinDir\$ZipName"
 if (Test-Path $ZipPath) {
     Remove-Item $ZipPath -Force
 }
 
 Write-Host "📦 Compactando $ZipName..." -ForegroundColor Yellow
-# Compacta todos os arquivos e pastas da pasta Release
 Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $ZipPath -Force
 
 $FileHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
@@ -73,31 +71,10 @@ Write-Host "✅ Pacote gerado com sucesso: $ZipPath" -ForegroundColor Green
 Write-Host "   Tamanho: ~$FileSizeMb MB"
 Write-Host "   SHA256:  $FileHash"
 
-# 3. Publicação no repositório openmoney-releases
-$ReleasesRepo = "https://github.com/FSF77/openmoney-releases.git"
-$StagingDir = "$env:TEMP\openmoney-releases-staging-$([guid]::NewGuid().ToString().Substring(0,8))"
-if (Test-Path $StagingDir) {
-    Remove-Item -Recurse -Force $StagingDir
-}
+$DownloadUrl = "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/$ZipName"
 
-Write-Host "📡 Clonando repositório de distribuição: $ReleasesRepo..." -ForegroundColor Yellow
-& git clone $ReleasesRepo $StagingDir
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "❌ Falha ao clonar repositório de releases."
-    exit 1
-}
-
-$DownloadFlutterWinDir = "$StagingDir\downloads\flutter\windows"
-if (-not (Test-Path $DownloadFlutterWinDir)) {
-    New-Item -ItemType Directory -Path $DownloadFlutterWinDir -Force | Out-Null
-}
-
-Copy-Item -Path $ZipPath -Destination "$DownloadFlutterWinDir\$ZipName" -Force
-
-$DownloadUrl = "https://github.com/FSF77/openmoney-releases/raw/main/downloads/flutter/windows/$ZipName"
-
-# 4. Atualização do version-flutter.json
-$VersionJsonFile = "$StagingDir\version-flutter.json"
+# 3. Atualização do version.json
+$VersionJsonFile = "$RootDir\version.json"
 $JsonObj = @{}
 
 if (Test-Path $VersionJsonFile) {
@@ -109,7 +86,6 @@ if (Test-Path $VersionJsonFile) {
     }
 }
 
-# Converte para hashtable para fácil manipulação
 $Data = @{}
 if ($JsonObj.PSObject.Properties.Name -contains "version") {
     foreach ($prop in $JsonObj.PSObject.Properties) {
@@ -122,7 +98,7 @@ $Data["build"] = [int]$BuildNum
 $Data["releaseDate"] = $ReleaseDate
 $Data["title"] = "OpenMoney Flutter v$Version"
 $Data["notes"] = $Notes
-$Data["githubReleaseUrl"] = "https://github.com/FSF77/openmoney-releases"
+$Data["githubReleaseUrl"] = "https://github.com/FSF77/openmoney-new"
 
 $WinData = @{
     "version" = $Version
@@ -136,28 +112,22 @@ $Data["windows"] = $WinData
 
 $UpdatedJson = $Data | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($VersionJsonFile, $UpdatedJson, [System.Text.Encoding]::UTF8)
-Write-Host "version-flutter.json atualizado com sucesso." -ForegroundColor Green
+Write-Host "version.json atualizado com sucesso." -ForegroundColor Green
 
-# 5. Commit e Push no openmoney-releases
-Set-Location $StagingDir
-& git config user.name "FSF77"
-& git config user.email "FSF77@users.noreply.github.com"
-& git add version-flutter.json "downloads/flutter/windows/$ZipName"
+# 4. Commit e Push no próprio repositório openmoney-new
+& git add version.json "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {
-    Write-Host "ℹ️ Nenhuma alteração a commitar no repositório de releases."
+    Write-Host "ℹ️ Nenhuma alteração a commitar."
 } else {
-    & git commit -m "Release OpenMoney Flutter Windows v$Version (Build $BuildNum) - $ReleaseDate"
-    & git tag -f "v$Version-windows-flutter"
-    Write-Host "📤 Enviando pacote para o GitHub (openmoney-releases)..." -ForegroundColor Yellow
-    & git push origin main --tags --force
+    & git commit -m "Release Windows v$Version (Build $BuildNum) - $ReleaseDate"
+    & git tag -f "v$Version-windows"
+    Write-Host "📤 Enviando release para o GitHub..." -ForegroundColor Yellow
+    & git push origin main --tags
 }
 
-Set-Location $RootDir
-Remove-Item -Recurse -Force $StagingDir
-
 Write-Host ""
-Write-Host "🎉 Versão Windows v$Version publicada com sucesso no openmoney-releases!" -ForegroundColor Green
-Write-Host "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json"
+Write-Host "🎉 Versão Windows v$Version publicada com sucesso no repositório oficial!" -ForegroundColor Green
+Write-Host "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
 Write-Host "📥 Download: $DownloadUrl"

@@ -3,7 +3,7 @@ set -e
 
 # ==============================================================================
 # OpenMoney Flutter - Script de Compilação e Publicação para macOS
-# Repositório de Releases: https://github.com/FSF77/openmoney-releases
+# Repositório Oficial: https://github.com/FSF77/openmoney-new
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,7 +21,7 @@ if [ -z "$BUILD_NUM" ]; then
     BUILD_NUM="1"
 fi
 
-NOTES="${1:-OpenMoney Flutter v${VERSION} - Versão multiplataforma oficial com suporte a macOS, Windows, iPhone e iPad.}"
+NOTES="${1:-OpenMoney Flutter v${VERSION} - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🚀 OpenMoney Flutter macOS — Build & Publish v${VERSION}+${BUILD_NUM}"
@@ -44,15 +44,14 @@ fi
 # Remove atributos estendidos / quarentena do bundle antes do zip
 xattr -cr "${APP_PATH}" 2>/dev/null || true
 
-DIST_DIR="${ROOT_DIR}/dist/flutter/macos"
-mkdir -p "${DIST_DIR}"
+DOWNLOADS_MAC_DIR="${ROOT_DIR}/downloads/macos"
+mkdir -p "${DOWNLOADS_MAC_DIR}"
 ZIP_NAME="OpenMoney-macOS-${VERSION}.zip"
-ZIP_PATH="${DIST_DIR}/${ZIP_NAME}"
+ZIP_PATH="${DOWNLOADS_MAC_DIR}/${ZIP_NAME}"
 
 rm -f "${ZIP_PATH}"
 
 echo "📦 Compactando ${ZIP_NAME}..."
-# Empacota renomeando para OpenMoney.app na raiz do zip se necessário
 TMP_PACKAGE_DIR="/tmp/openmoney_pkg_$$"
 rm -rf "${TMP_PACKAGE_DIR}"
 mkdir -p "${TMP_PACKAGE_DIR}"
@@ -63,28 +62,15 @@ rm -rf "${TMP_PACKAGE_DIR}"
 SHA256=$(shasum -a 256 "${ZIP_PATH}" | awk '{print $1}')
 FILE_SIZE_MB=$(du -m "${ZIP_PATH}" | awk '{print $1}')
 RELEASE_DATE=$(date "+%d/%m/%Y")
-RELEASE_TIME=$(date "+%H:%M")
 
 echo "✅ Pacote gerado com sucesso: ${ZIP_PATH}"
 echo "   Tamanho: ~${FILE_SIZE_MB} MB"
 echo "   SHA256:  ${SHA256}"
 
-# 2. Publicação no repositório openmoney-releases
-RELEASES_REPO="https://github.com/FSF77/openmoney-releases.git"
-STAGING_DIR="/tmp/openmoney-releases-staging-$$"
-rm -rf "${STAGING_DIR}"
+DOWNLOAD_URL="https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/${ZIP_NAME}"
 
-echo "📡 Clonando repositório de distribuição: ${RELEASES_REPO}..."
-git clone "${RELEASES_REPO}" "${STAGING_DIR}"
-
-DOWNLOAD_FLUTTER_MAC_DIR="${STAGING_DIR}/downloads/flutter/macos"
-mkdir -p "${DOWNLOAD_FLUTTER_MAC_DIR}"
-cp -f "${ZIP_PATH}" "${DOWNLOAD_FLUTTER_MAC_DIR}/${ZIP_NAME}"
-
-DOWNLOAD_URL="https://github.com/FSF77/openmoney-releases/raw/main/downloads/flutter/macos/${ZIP_NAME}"
-
-# 3. Atualização do version-flutter.json
-VERSION_JSON_FILE="${STAGING_DIR}/version-flutter.json"
+# 2. Atualização do version.json
+VERSION_JSON_FILE="${ROOT_DIR}/version.json"
 
 python3 - << EOF
 import json, os
@@ -103,7 +89,7 @@ data["build"] = int("${BUILD_NUM}")
 data["releaseDate"] = "${RELEASE_DATE}"
 data["title"] = "OpenMoney Flutter v${VERSION}"
 data["notes"] = """${NOTES}"""
-data["githubReleaseUrl"] = "https://github.com/FSF77/openmoney-releases"
+data["githubReleaseUrl"] = "https://github.com/FSF77/openmoney-new"
 
 if "macos" not in data:
     data["macos"] = {}
@@ -117,33 +103,33 @@ data["macos"]["sizeMb"] = int("${FILE_SIZE_MB}")
 
 with open(version_file, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
-print("version-flutter.json atualizado com sucesso.")
+print("version.json atualizado com sucesso.")
 EOF
 
-# 4. Cria script de instalação rápida curl | bash para o Flutter macOS
-cat > "${STAGING_DIR}/install-flutter.sh" << 'EOF'
+# 3. Cria/atualiza o script de instalação rápida curl | bash
+cat > "${ROOT_DIR}/install.sh" << 'EOF'
 #!/bin/bash
 set -e
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  🚀 Instalador do OpenMoney Flutter para macOS      "
+echo "  🚀 Instalador do OpenMoney para macOS              "
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-TMP_DIR="/tmp/openmoney-flutter-install-$$"
+TMP_DIR="/tmp/openmoney-install-$$"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
 echo "📡 Consultando versão mais recente..."
-VERSION_JSON=$(curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json)
+VERSION_JSON=$(curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json)
 DOWNLOAD_URL=$(echo "$VERSION_JSON" | grep -o '"downloadUrl": *"[^"]*"' | head -n 1 | cut -d '"' -f 4)
 VERSION=$(echo "$VERSION_JSON" | grep -o '"version": *"[^"]*"' | head -n 1 | cut -d '"' -f 4)
 
 if [ -z "$DOWNLOAD_URL" ]; then
-    echo "❌ Erro ao obter URL de download do OpenMoney Flutter."
+    echo "❌ Erro ao obter URL de download do OpenMoney."
     exit 1
 fi
 
-echo "📦 Baixando OpenMoney Flutter v${VERSION}..."
+echo "📦 Baixando OpenMoney v${VERSION}..."
 curl -# -L "$DOWNLOAD_URL" -o "$TMP_DIR/OpenMoney.zip"
 
 echo "📂 Instalando em /Applications..."
@@ -155,31 +141,25 @@ xattr -cr /Applications/OpenMoney.app 2>/dev/null || true
 
 rm -rf "$TMP_DIR"
 echo ""
-echo "✅ OpenMoney Flutter v${VERSION} instalado com sucesso!"
+echo "✅ OpenMoney v${VERSION} instalado com sucesso!"
 echo "🚀 Abrindo aplicativo..."
 open /Applications/OpenMoney.app
 EOF
-chmod +x "${STAGING_DIR}/install-flutter.sh"
+chmod +x "${ROOT_DIR}/install.sh"
 
-# 5. Commit e Push no openmoney-releases
-cd "${STAGING_DIR}"
-git config user.name "FSF77"
-git config user.email "FSF77@users.noreply.github.com"
-
-git add version-flutter.json install-flutter.sh "downloads/flutter/macos/${ZIP_NAME}"
+# 4. Commit e Push no próprio repositório openmoney-new
+echo "📤 Comitando e enviando para o repositório openmoney-new..."
+git add version.json install.sh "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
-    echo "ℹ️ Nenhuma alteração a commitar no repositório de releases."
+    echo "ℹ️ Nenhuma alteração a commitar."
 else
-    git commit -m "Release OpenMoney Flutter macOS v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
-    git tag -f "v${VERSION}-flutter"
-    echo "📤 Enviando pacote para o GitHub (openmoney-releases)..."
-    git push origin main --tags --force
+    git commit -m "Release macOS v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
+    git tag -f "v${VERSION}"
+    echo "📤 Enviando release para o GitHub..."
+    git push origin main --tags
 fi
 
-cd "${ROOT_DIR}"
-rm -rf "${STAGING_DIR}"
-
 echo ""
-echo "🎉 Versão macOS v${VERSION} publicada com sucesso no openmoney-releases!"
-echo "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-releases/main/version-flutter.json"
+echo "🎉 Versão macOS v${VERSION} publicada com sucesso no repositório oficial!"
+echo "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
 echo "📥 Download: ${DOWNLOAD_URL}"

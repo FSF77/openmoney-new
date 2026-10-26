@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>OpenMoney Coletor</title>
+
+  <!-- PWA & Mobile Settings -->
+  <meta name="theme-color" content="#0a0e17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Coletor">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="header-top-row">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="OpenMoney" class="brand-icon">
+        <div class="brand-title">OpenMoney</div>
+        <span class="brand-badge">Coletor</span>
+      </div>
+      <button id="btnHeaderSetup" class="btn-gear-setup" title="Configurar Base">
+        <span>⚙️</span>
+      </button>
+    </div>
+    <!-- Nome do arquivo na linha de baixo para visualização completa -->
+    <div class="header-base-row" id="headerBaseRow">
+      <span class="base-status-dot" id="headerBaseDot"></span>
+      <span id="headerBaseName" class="base-file-name">Nenhuma base vinculada</span>
+      <span class="base-change-hint">Trocar</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- Action Buttons (Escanear, Voz e Manual) -->
+    <div class="action-grid">
+      <button id="btnScanReceipt" class="btn-action-main btn-scan">
+        <div class="btn-action-icon">📷</div>
+        <div class="btn-action-label">Escanear Recibo</div>
+        <div class="btn-action-sub">OCR automático</div>
+      </button>
+
+      <button id="btnVoiceTx" class="btn-action-main btn-voice">
+        <div class="btn-action-icon">🎙️</div>
+        <div class="btn-action-label">Falar Gasto</div>
+        <div class="btn-action-sub">Comando de voz</div>
+      </button>
+
+      <button id="btnManualTx" class="btn-action-main btn-manual">
+        <div class="btn-action-icon">✍️</div>
+        <div class="btn-action-label">Novo Lançamento</div>
+        <div class="btn-action-sub">Digitação rápida</div>
+      </button>
+    </div>
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="fileCameraInput" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="fileStructureInput" accept=".json" style="display:none;">
+
+    <!-- Resumo de Contas Ativas (Carrossel Horizontal) -->
+    <div class="section-header">
+      <span class="section-title">Minhas Contas</span>
+    </div>
+    <div id="accountsScrollContainer" class="accounts-scroll">
+      <!-- Injetado dinamicamente -->
+    </div>
+
+    <!-- Fila de Lançamentos Pendentes -->
+    <div class="section-header">
+      <span class="section-title">Na Fila para o Mac</span>
+      <span id="badgePendingCount" class="badge-counter">0</span>
+    </div>
+
+    <div id="pendingListContainer" class="pending-list">
+      <!-- Injetado dinamicamente -->
+    </div>
+
+    <!-- Banner de Exportação para o Mac -->
+    <div id="exportCardContainer" class="export-card" style="display:none;">
+      <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">
+        Os lançamentos acima estão prontos para envio ao Mac.
+      </div>
+      <button id="btnExportToMac" class="btn-export-mac">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        <span>Exportar para o Mac (openmoney_inbox.json)</span>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- MODAL: Configurar / Vincular Base Inicial -->
+  <div id="modalSetup" class="modal-overlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div class="sheet-title">Configurar Contas</div>
+        <button class="sheet-close">&times;</button>
+      </div>
+
+      <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.5;margin-bottom:18px;">
+        Para o coletor saber suas contas, saldos de referência e categorias, selecione o arquivo <strong>openmoney.json</strong> do seu iCloud Drive uma única vez.
+      </p>
+
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-md);padding:14px;margin-bottom:18px;">
+        <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">Base vinculada:</div>
+        <div id="setupCurrentBaseInfo" style="font-size:0.8rem;color:var(--text-muted);">Nenhuma base vinculada ainda.</div>
+      </div>
+
+      <button id="btnChooseStructureFile" class="btn-submit">
+        📁 Selecionar openmoney.json no iCloud Drive
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: Incluir / Validar Lançamento (Manual ou Escaneado) -->
+  <div id="modalTxForm" class="modal-overlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div id="txModalTitle" class="sheet-title">Novo Lançamento</div>
+        <button class="sheet-close">&times;</button>
+      </div>
+
+      <input type="hidden" id="formTxId" value="">
+      <input type="hidden" id="formReceiptThumb" value="">
+
+      <!-- Preview do Comprovante (se houver) -->
+      <div id="receiptPreviewWrap" style="display:none;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-md);padding:8px 12px;margin-bottom:14px;">
+        <img id="receiptPreviewImg" src="" alt="Comprovante" style="width:50px;height:50px;object-fit:cover;border-radius:6px;">
+        <div>
+          <div style="font-size:0.82rem;font-weight:700;color:var(--om-green);">✓ Comprovante Escaneado</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);">Dados extraídos via OCR local</div>
+        </div>
+      </div>
+
+      <!-- Tipo de Lançamento (Despesa / Receita) -->
+      <div class="segmented-control">
+        <button type="button" class="segmented-btn active despesa" id="btnTypeExpense" data-type="despesa">Despesa</button>
+        <button type="button" class="segmented-btn" id="btnTypeIncome" data-type="receita">Receita</button>
+      </div>
+
+      <!-- Valor -->
+      <div class="form-group">
+        <label class="form-label">Valor (R$)</label>
+        <input type="text" id="formAmount" class="form-input amount-input" placeholder="0,00" inputmode="decimal">
+      </div>
+
+      <!-- Favorecido / Local com Autocomplete Inteligente -->
+      <div class="form-group" id="formPayeeGroup">
+        <label class="form-label">Estabelecimento / Favorecido</label>
+        <div class="autocomplete-wrapper">
+          <input type="text" id="formPayee" class="form-input" placeholder="Ex: Mercado, Padaria, Posto, Salário" autocomplete="off" autocapitalize="words">
+          <div id="payeeDropdown" class="autocomplete-dropdown"></div>
+        </div>
+      </div>
+
+      <!-- Conta -->
+      <div class="form-group">
+        <label class="form-label">Conta</label>
+        <select id="formAccount" class="form-select"></select>
+      </div>
+
+      <!-- Categoria -->
+      <div class="form-group">
+        <label class="form-label">Categoria</label>
+        <select id="formCategory" class="form-select"></select>
+      </div>
+
+      <!-- Data -->
+      <div class="form-group">
+        <label class="form-label">Data</label>
+        <input type="date" id="formDate" class="form-input">
+      </div>
+
+      <!-- Observação -->
+      <div class="form-group">
+        <label class="form-label">Nota / Detalhe (Opcional)</label>
+        <input type="text" id="formMemo" class="form-input" placeholder="Anotação opcional">
+      </div>
+
+      <button id="btnSaveToQueue" class="btn-submit">
+        + Adicionar à Fila de Envio
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: OCR em Processamento -->
+  <div id="modalOcrLoading" class="modal-overlay">
+    <div class="sheet" style="max-height: 40vh;">
+      <div class="ocr-loading-view">
+        <div class="spinner"></div>
+        <div style="font-weight:700;font-size:1.1rem;margin-bottom:6px;">Processando Comprovante</div>
+        <div id="ocrProgressStatus" style="font-size:0.84rem;color:var(--text-muted);">Iniciando OCR local no aparelho...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Reconhecimento de Voz Ativo -->
+  <div id="modalVoiceListening" class="modal-overlay">
+    <div class="sheet" style="max-height: 48vh; text-align: center;">
+      <div class="voice-modal-view">
+        <div class="voice-mic-halo">
+          <div class="voice-mic-pulse"></div>
+          <div class="voice-mic-core">🎙️</div>
+        </div>
+        <div style="font-weight: 700; font-size: 1.15rem; margin-top: 14px; margin-bottom: 4px;">Ouvindo... pode falar</div>
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">Ex: "Almoço 45 reais no cartão Inter" ou "Farmácia 38 e 90"</div>
+        
+        <textarea id="voiceTranscriptPreview" class="voice-transcript-box" rows="2" placeholder="Fale agora... ou toque para ditar com o microfone do teclado"></textarea>
+        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">💡 Dica: você também pode tocar acima e ditar pelo microfone do teclado do iPhone</div>
+
+        <div style="display: flex; gap: 10px; margin-top: 14px;">
+          <button id="btnCancelVoice" class="btn-cancel-voice" style="flex:1;">Cancelar</button>
+          <button id="btnStopVoice" class="btn-stop-voice" style="flex:1.5;">✓ Concluir Fala</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/app.js?v=1.0.5"></script>
+</body>
+</html>
