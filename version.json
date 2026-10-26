@@ -1,16 +1,16 @@
 {
-  "version": "2.0.1",
-  "build": 2,
+  "version": "2.0.2",
+  "build": 3,
   "releaseDate": "26/10/2026",
-  "title": "OpenMoney Flutter v2.0.1",
-  "notes": "OpenMoney Flutter v2.0.1 - Controle dinâmico de versão/build por plataforma e auto-updater aperfeiçoado.",
+  "title": "OpenMoney Flutter v2.0.2",
+  "notes": "OpenMoney Flutter v2.0.2 - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.",
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
   "macos": {
-    "version": "2.0.1",
-    "build": 2,
+    "version": "2.0.2",
+    "build": 3,
     "releaseDate": "26/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.1.zip",
-    "sha256": "792d3ce646555686dbe22d013afacbd4fe7c626ae04e04fd17847f9800f09831",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.2.zip",
+    "sha256": "80282f20442e6e936ae3869ba271a4f6912a73d39fdab6a340db304a8a77ac57",
     "sizeMb": 10
   },
   "windows": {
