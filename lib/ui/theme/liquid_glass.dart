@@ -69,6 +69,17 @@ class GlassCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
 
+    Widget cardBody = ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Padding(
+          padding: padding,
+          child: child,
+        ),
+      ),
+    );
+
     Widget content = Container(
       margin: margin,
       decoration: BoxDecoration(
@@ -86,15 +97,9 @@ class GlassCard extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Padding(
-            padding: padding,
-            child: child,
-          ),
-        ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: cardBody,
       ),
     );
 
