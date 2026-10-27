@@ -1126,9 +1126,16 @@ class _SidebarAccountTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 1.5),
                     Text(
-                      account.isInactive
-                          ? '${account.type} • Inativa'
-                          : account.type,
+                      () {
+                        final typeStr = account.isInactive
+                            ? '${account.type} • Inativa'
+                            : account.type;
+                        if (account.business != null &&
+                            account.business!.isNotEmpty) {
+                          return '$typeStr • ${account.business}';
+                        }
+                        return typeStr;
+                      }(),
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w500,

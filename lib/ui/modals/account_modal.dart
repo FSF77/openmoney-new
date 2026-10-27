@@ -33,6 +33,7 @@ class _AccountDialog extends StatefulWidget {
 class _AccountDialogState extends State<_AccountDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _openingCtrl;
+  late final TextEditingController _businessCtrl;
   late String _type;
   late int _closeDay;
   late int _dueDay;
@@ -49,6 +50,7 @@ class _AccountDialogState extends State<_AccountDialog> {
     _openingCtrl = TextEditingController(
       text: acc != null ? formatInputCents(acc.opening) : '0,00',
     );
+    _businessCtrl = TextEditingController(text: acc?.business ?? '');
     _type = acc?.type ?? 'Corrente';
     _closeDay = acc?.card?.closeDay ?? 1;
     _dueDay = acc?.card?.dueDay ?? 10;
@@ -72,6 +74,7 @@ class _AccountDialogState extends State<_AccountDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _openingCtrl.dispose();
+    _businessCtrl.dispose();
     super.dispose();
   }
 
@@ -91,6 +94,7 @@ class _AccountDialogState extends State<_AccountDialog> {
       payAccId: _payAccId,
       inactive: _inactive,
       favorite: _favorite,
+      business: _businessCtrl.text,
     );
 
     if (err != null) {
@@ -227,6 +231,72 @@ class _AccountDialogState extends State<_AccountDialog> {
                   border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _businessCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Negócio / Entidade (Agrupador)',
+                  hintText: 'Ex.: PF, PJ, Consultoria...',
+                  border: const OutlineInputBorder(),
+                  prefixIcon:
+                      const Icon(Icons.business_outlined, size: 20),
+                  suffixIcon: _businessCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          onPressed: () {
+                            _businessCtrl.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 6),
+              Builder(builder: (context) {
+                final suggestions = {
+                  'PF',
+                  'PJ',
+                  ...widget.store.allBusinesses
+                }.toList();
+                return Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: suggestions.map((tag) {
+                    final isSelected =
+                        _businessCtrl.text.trim().toLowerCase() ==
+                            tag.toLowerCase();
+                    return ActionChip(
+                      label: Text(tag),
+                      avatar: isSelected
+                          ? const Icon(Icons.check, size: 14)
+                          : null,
+                      backgroundColor: isSelected
+                          ? colors.accent.withValues(alpha: 0.18)
+                          : null,
+                      side: isSelected
+                          ? BorderSide(color: colors.accent)
+                          : null,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? colors.accent : null,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      onPressed: () {
+                        setState(() {
+                          if (isSelected) {
+                            _businessCtrl.clear();
+                          } else {
+                            _businessCtrl.text = tag;
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                );
+              }),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
                 initialValue: _type,

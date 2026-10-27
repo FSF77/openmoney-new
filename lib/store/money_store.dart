@@ -1280,6 +1280,31 @@ class MoneyStore extends ChangeNotifier {
   List<Account> get regularInactiveAccounts =>
       db.accounts.where((a) => a.isInactive && !a.isFavorite).toList();
 
+  /// Lista ordenada de todos os negócios cadastrados nas contas (sem duplicatas).
+  List<String> get allBusinesses {
+    final set = <String>{};
+    for (final acc in db.accounts) {
+      final b = acc.business?.trim();
+      if (b != null && b.isNotEmpty) {
+        set.add(b);
+      }
+    }
+    final list = set.toList();
+    list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  /// Retorna as contas ativas que pertencem a um negócio específico.
+  List<Account> accountsForBusiness(String business) {
+    final bNorm = business.trim().toLowerCase();
+    return activeAccounts
+        .where((a) => (a.business?.trim().toLowerCase() ?? '') == bNorm)
+        .toList();
+  }
+
+  /// Retorna o nome do negócio de uma conta.
+  String? businessForAccountId(String accId) => accById(accId)?.business;
+
   AccountMonthData accountMonthData(String accountId, String targetMonth) {
     rebuildIndexesIfNeeded();
     final accTxs = _cachedTxsByAccount[accountId] ?? [];
@@ -1497,9 +1522,14 @@ class MoneyStore extends ChangeNotifier {
     required String payAccId,
     bool inactive = false,
     bool favorite = false,
+    String? business,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da conta.';
+
+    final trimmedBiz = business?.trim();
+    final cleanBiz =
+        (trimmedBiz != null && trimmedBiz.isNotEmpty) ? trimmedBiz : null;
 
     CardConfig? cardCfg;
     if (type == kCardType) {
@@ -1520,6 +1550,7 @@ class MoneyStore extends ChangeNotifier {
         db.accounts[idx].card = cardCfg;
         db.accounts[idx].inactive = inactive ? true : null;
         db.accounts[idx].favorite = favorite ? true : null;
+        db.accounts[idx].business = cleanBiz;
         if (type == kCardType && db.accounts[idx].invoices == null) {
           db.accounts[idx].invoices = {};
         }
@@ -1535,6 +1566,7 @@ class MoneyStore extends ChangeNotifier {
         invoices: type == kCardType ? {} : null,
         inactive: inactive ? true : null,
         favorite: favorite ? true : null,
+        business: cleanBiz,
       );
       db.accounts.add(acc);
       selectedAccountId = newId;
@@ -2631,8 +2663,16 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Monthly Report Builder
 
-  MonthlyReportData buildMonthlyReport(String monthYM) {
+  MonthlyReportData buildMonthlyReport(
+    String monthYM, {
+    Set<String>? accountFilterIds,
+  }) {
     final txs = monthTransactions(monthYM).where((tx) {
+      if (accountFilterIds != null &&
+          accountFilterIds.isNotEmpty &&
+          !accountFilterIds.contains(tx.acc)) {
+        return false;
+      }
       if (tx.xfer != null || tx.peer != null) return false;
       if (!isCategoryIncludedInReports(tx.cat)) return false;
       return true;

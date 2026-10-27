@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
+import '../modals/account_multi_select_filter.dart';
 import '../modals/category_drill_down_modal.dart';
 import '../theme/liquid_glass.dart';
 
-class ReportsView extends StatelessWidget {
+class ReportsView extends StatefulWidget {
   final MoneyStore store;
   const ReportsView({super.key, required this.store});
+
+  @override
+  State<ReportsView> createState() => _ReportsViewState();
+}
+
+class _ReportsViewState extends State<ReportsView> {
+  Set<String> _selectedAccountIds = {};
 
   void _showCategoryDrillDown(
     BuildContext context,
@@ -16,7 +24,7 @@ class ReportsView extends StatelessWidget {
   ) {
     showCategoryDrillDownModal(
       context,
-      store,
+      widget.store,
       categoryPath,
       initialCurrentMonthOnly: true,
     );
@@ -26,7 +34,11 @@ class ReportsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final data = store.buildMonthlyReport(store.month);
+    final data = widget.store.buildMonthlyReport(
+      widget.store.month,
+      accountFilterIds:
+          _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
@@ -70,10 +82,16 @@ class ReportsView extends StatelessWidget {
                 spacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  AccountMultiSelectFilter(
+                    store: widget.store,
+                    selectedAccountIds: _selectedAccountIds,
+                    onSelectionChanged: (set) =>
+                        setState(() => _selectedAccountIds = set),
+                  ),
                   MonthYearPickerBar(
-                    currentMonthYM: store.month,
-                    availableYears: store.allYearsInDatabase(),
-                    onMonthChanged: (ym) => store.month = ym,
+                    currentMonthYM: widget.store.month,
+                    availableYears: widget.store.allYearsInDatabase(),
+                    onMonthChanged: (ym) => widget.store.month = ym,
                   ),
                   FilledButton.icon(
                     icon: const Icon(Icons.picture_as_pdf, size: 16),
@@ -81,14 +99,14 @@ class ReportsView extends StatelessWidget {
                     onPressed: () {
                       final pdfBytes =
                           PdfReportGenerator.buildMonthlyReportPdfBytes(
-                        store: store,
-                        monthYM: store.month,
+                        store: widget.store,
+                        monthYM: widget.store.month,
                         data: data,
                       );
                       PdfReportGenerator.saveAndOpenPdfBytes(
                         context,
                         pdfBytes: pdfBytes,
-                        defaultFileName: 'Relatorio-${store.month}.pdf',
+                        defaultFileName: 'Relatorio-${widget.store.month}.pdf',
                       );
                     },
                   ),
@@ -246,8 +264,8 @@ class ReportsView extends StatelessWidget {
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () =>
-                          _showCategoryDrillDown(context, g.name, store.month),
+                      onTap: () => _showCategoryDrillDown(
+                          context, g.name, widget.store.month),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Column(
@@ -317,7 +335,7 @@ class ReportsView extends StatelessWidget {
                           onTap: () => _showCategoryDrillDown(
                             context,
                             fullPath,
-                            store.month,
+                            widget.store.month,
                           ),
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),

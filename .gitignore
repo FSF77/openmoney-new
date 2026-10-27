@@ -47,6 +47,7 @@ app.*.map.json
 
 # Legacy Swift reference archive (excluded from the multi-platform repository)
 /legacy_swift/
+/legacy_swift_upd/
 *.tmp
 
 # Widget Preview related

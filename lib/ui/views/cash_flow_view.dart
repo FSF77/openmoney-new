@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../services/cash_flow_engine.dart';
 import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
+import '../modals/account_multi_select_filter.dart';
 import '../theme/liquid_glass.dart';
 
 class CashFlowView extends StatefulWidget {
@@ -18,7 +19,7 @@ class CashFlowView extends StatefulWidget {
 class _CashFlowViewState extends State<CashFlowView> {
   CashFlowPeriodKind _periodKind = CashFlowPeriodKind.monthly;
   late int _year;
-  String _accountFilter = 'all';
+  Set<String> _selectedAccountIds = {};
   CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   CashFlowDateMode _dateMode = CashFlowDateMode.transactionDate;
   String _searchQuery = '';
@@ -89,7 +90,8 @@ class _CashFlowViewState extends State<CashFlowView> {
       accounts: widget.store.db.accounts,
       periodKind: _periodKind,
       year: _year,
-      accountFilterId: _accountFilter == 'all' ? null : _accountFilter,
+      accountFilterIds:
+          _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       statusFilter: _statusFilter,
       dateMode: _dateMode,
       searchQuery: _searchQuery,
@@ -181,33 +183,11 @@ class _CashFlowViewState extends State<CashFlowView> {
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    SizedBox(
-                      width: 210,
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _accountFilter,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Conta',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text(
-                                'Todas as Contas (Sem Transferências)'),
-                          ),
-                          ...widget.store.db.accounts.map(
-                            (a) => DropdownMenuItem(
-                              value: a.id,
-                              child: Text(a.name),
-                            ),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _accountFilter = v);
-                        },
-                      ),
+                    AccountMultiSelectFilter(
+                      store: widget.store,
+                      selectedAccountIds: _selectedAccountIds,
+                      onSelectionChanged: (set) =>
+                          setState(() => _selectedAccountIds = set),
                     ),
                     SizedBox(
                       width: 190,

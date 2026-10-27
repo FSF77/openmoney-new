@@ -120,6 +120,7 @@ class Account {
   Map<String, InvoiceInfo>? invoices;
   bool? inactive;
   bool? favorite;
+  String? business;
 
   Account({
     required this.id,
@@ -130,6 +131,7 @@ class Account {
     this.invoices,
     this.inactive,
     this.favorite,
+    this.business,
   });
 
   bool get isInactive => inactive == true;
@@ -158,6 +160,9 @@ class Account {
           CardConfig.fromJson(Map<String, dynamic>.from(json['card'] as Map));
     }
 
+    final rawBiz = json['business'] as String?;
+    final trimmedBiz = rawBiz?.trim();
+
     return Account(
       id: json['id'] as String? ?? uid(),
       name: json['name'] as String? ?? 'Conta',
@@ -167,6 +172,8 @@ class Account {
       invoices: parsedInvoices,
       inactive: json['inactive'] as bool?,
       favorite: json['favorite'] as bool?,
+      business:
+          (trimmedBiz != null && trimmedBiz.isNotEmpty) ? trimmedBiz : null,
     );
   }
 
@@ -180,6 +187,8 @@ class Account {
           'invoices': invoices!.map((k, v) => MapEntry(k, v.toJson())),
         if (inactive != null) 'inactive': inactive,
         if (favorite != null) 'favorite': favorite,
+        if (business != null && business!.trim().isNotEmpty)
+          'business': business!.trim(),
       };
 
   Account copyWith({
@@ -191,6 +200,7 @@ class Account {
     Map<String, InvoiceInfo>? invoices,
     bool? inactive,
     bool? favorite,
+    String? business,
   }) {
     return Account(
       id: id ?? this.id,
@@ -202,6 +212,7 @@ class Account {
           this.invoices?.map((k, v) => MapEntry(k, v.copyWith())),
       inactive: inactive ?? this.inactive,
       favorite: favorite ?? this.favorite,
+      business: business ?? this.business,
     );
   }
 }

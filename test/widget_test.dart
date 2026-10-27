@@ -748,6 +748,222 @@ CX
       // R$ 10.000,00 - R$ 2.000,00 = R$ 8.000,00
       expect(store.balance(accY, predicted: false), 800000);
     });
+
+    test('17. TransactionCopy preserves source tx and supports installment & card invoice calculation', () {
+      final store = MoneyStore(autoBoot: false);
+      store.saveAccount(
+        name: 'Conta Corrente',
+        type: 'Corrente',
+        openingCents: 100000,
+        closeDay: 1,
+        dueDay: 1,
+        payAccId: '',
+      );
+      final currentAcc = store.db.accounts.first;
+
+      store.saveAccount(
+        name: 'Cartão Black',
+        type: kCardType,
+        openingCents: 0,
+        closeDay: 10,
+        dueDay: 20,
+        payAccId: currentAcc.id,
+      );
+      final cardAcc = store.db.accounts.firstWhere((a) => a.type == kCardType);
+
+      // Cria transação parcelada original no cartão
+      store.addTransaction(
+        accId: cardAcc.id,
+        date: '2026-10-15',
+        payee: 'Notebook Gamer',
+        catSelection: 'Compras',
+        memo: 'Parcela de teste',
+        signedAmt: -300000,
+        mode: 'installment',
+        installments: 3,
+      );
+
+      final manualInstallments = store.db.txs.where((t) => t.plan != null && t.payee.startsWith('Notebook Gamer')).toList();
+      expect(manualInstallments.length, 3);
+      final firstInstallment = manualInstallments.firstWhere((t) => t.pn == 1);
+      expect(firstInstallment.pt, 3);
+      expect(firstInstallment.payee, 'Notebook Gamer (1/3)');
+
+      // Simula a lógica de cópia do TransactionCopySheet
+      final cleanPayee = firstInstallment.payee.replaceAll(RegExp(r'\s*\(\d+\/\d+\)$'), '').trim();
+      expect(cleanPayee, 'Notebook Gamer');
+
+      // Copia para conta corrente como lançamento único independente
+      store.addTransaction(
+        accId: currentAcc.id,
+        date: '2026-10-27',
+        payee: cleanPayee,
+        catSelection: firstInstallment.cat,
+        memo: firstInstallment.memo,
+        signedAmt: -firstInstallment.amt.abs(),
+        mode: 'single',
+      );
+
+      final copiedTx = store.db.txs.last;
+      expect(copiedTx.payee, 'Notebook Gamer');
+      expect(copiedTx.acc, currentAcc.id);
+      expect(copiedTx.plan, isNull);
+      expect(copiedTx.pn, isNull);
+      expect(copiedTx.pt, isNull);
+      expect(copiedTx.amt, -100000); // 100000 cents preservado do primeiro lançamento
+      // Garante que o lançamento original não foi modificado
+      expect(firstInstallment.payee, 'Notebook Gamer (1/3)');
+      expect(firstInstallment.acc, cardAcc.id);
+    });
+
+    test('18. Multi-account filter and Business entity (PF / PJ) cash flow & report reconciliation rules', () {
+      final store = MoneyStore(autoBoot: false);
+      store.db.accounts.clear();
+      store.db.txs.clear();
+
+      // 1. Cadastra contas PF e PJ com o campo business
+      store.saveAccount(
+        name: 'Nubank PF',
+        type: 'Corrente',
+        openingCents: 100000, // R$ 1.000,00
+        closeDay: 1,
+        dueDay: 10,
+        payAccId: '',
+        business: 'PF',
+      );
+      final accPf1 = store.db.accounts.first;
+
+      store.saveAccount(
+        name: 'Cartão UV PF',
+        type: kCardType,
+        openingCents: 0,
+        closeDay: 10,
+        dueDay: 20,
+        payAccId: accPf1.id,
+        business: 'PF',
+      );
+      final cardPf = store.db.accounts.firstWhere((a) => a.type == kCardType);
+
+      store.saveAccount(
+        name: 'Inter PJ',
+        type: 'Corrente',
+        openingCents: 500000, // R$ 5.000,00
+        closeDay: 1,
+        dueDay: 10,
+        payAccId: '',
+        business: 'PJ',
+      );
+      final accPj = store.db.accounts.firstWhere((a) => a.name == 'Inter PJ');
+
+      // Verifica agrupamento de negócios no store
+      expect(store.allBusinesses, containsAll(['PF', 'PJ']));
+      final pfAccounts = store.accountsForBusiness('PF');
+      expect(pfAccounts.length, 2);
+      expect(pfAccounts.map((a) => a.name), containsAll(['Nubank PF', 'Cartão UV PF']));
+
+      // 2. Transações
+      // Tx1: Receita direta em PF (Salário R$ 300,00)
+      store.addTransaction(
+        accId: accPf1.id,
+        date: '2026-05-10',
+        payee: 'Salário',
+        catSelection: 'Rendimento : Salário',
+        memo: '',
+        signedAmt: 30000,
+        mode: 'single',
+      );
+
+      // Tx2: Despesa em PF no cartão (Supermercado R$ 100,00)
+      store.addTransaction(
+        accId: cardPf.id,
+        date: '2026-05-12',
+        payee: 'Mercado',
+        catSelection: 'Alimentação : Supermercado',
+        memo: '',
+        signedAmt: -10000,
+        mode: 'single',
+      );
+
+      // Tx3: Transferência INTERNA dentro de PF (Conta Nubank -> Pagamento Fatura Cartão UV R$ 100,00)
+      store.addTransaction(
+        accId: accPf1.id,
+        date: '2026-05-20',
+        payee: 'Pagamento Cartão',
+        catSelection: 'xfer:${cardPf.id}',
+        memo: '',
+        signedAmt: -10000,
+        mode: 'single',
+      );
+
+      // Tx4: Transferência ENTRE NEGÓCIOS (PJ -> PF Distribuição de Lucro R$ 2.000,00)
+      store.addTransaction(
+        accId: accPj.id,
+        date: '2026-05-05',
+        payee: 'Distribuição de Lucros',
+        catSelection: 'xfer:${accPf1.id}',
+        memo: '',
+        signedAmt: -200000,
+        mode: 'single',
+      );
+
+      // 3. Teste do Fluxo de Caixa filtrando apenas PF (Nubank PF + Cartão UV)
+      final pfIds = {accPf1.id, cardPf.id};
+      final matrixPf = CashFlowEngine.buildMatrix(
+        transactions: store.db.txs,
+        accounts: store.db.accounts,
+        periodKind: CashFlowPeriodKind.monthly,
+        year: 2026,
+        accountFilterIds: pfIds,
+      );
+
+      // Na matriz de PF:
+      // - Tx3 (transferência interna entre Nubank e Cartão UV) DEVE SER IGNORADA
+      // - Tx4 (transferência vinda da PJ para a PF) DEVE APARECER como Receita/Entrada de R$ 2.000,00
+      final mayColIndex = 4; // Maio (mês 5, índice 4)
+      final totalIncomeMay = matrixPf.incomeSection.periodTotals[mayColIndex];
+      // Rendimento = R$ 300,00 (Salário) + R$ 2.000,00 (Entrada externa vinda da PJ) = R$ 2.300,00 (230000 cents)
+      expect(totalIncomeMay, 230000);
+
+      final totalExpenseMay = matrixPf.expenseSection.periodTotals[mayColIndex];
+      // Despesa = R$ 100,00 (Mercado) - a transferência interna não soma despesa
+      expect(totalExpenseMay, 10000);
+
+      // Saldo inicial do grupo PF: apenas abertura de accPf1 (100000), cartão é 0
+      expect(matrixPf.priorBalancePeriodTotals[0], 100000);
+
+      // 4. Teste do Fluxo de Caixa filtrando apenas PJ (Inter PJ)
+      final pjIds = {accPj.id};
+      final matrixPj = CashFlowEngine.buildMatrix(
+        transactions: store.db.txs,
+        accounts: store.db.accounts,
+        periodKind: CashFlowPeriodKind.monthly,
+        year: 2026,
+        accountFilterIds: pjIds,
+      );
+
+      // Na matriz de PJ:
+      // - Tx4 (saída de R$ 2.000,00 para PF) DEVE APARECER como Despesa/Saída
+      final totalExpenseMayPj = matrixPj.expenseSection.periodTotals[mayColIndex];
+      expect(totalExpenseMayPj, 200000);
+      expect(matrixPj.priorBalancePeriodTotals[0], 500000); // Saldo inicial PJ = 500000
+
+      // 5. Teste em "Todas as Contas" (sem filtro)
+      final matrixAll = CashFlowEngine.buildMatrix(
+        transactions: store.db.txs,
+        accounts: store.db.accounts,
+        periodKind: CashFlowPeriodKind.monthly,
+        year: 2026,
+        accountFilterIds: null,
+      );
+      // Todas as transferências (internas ao sistema como um todo) são ignoradas
+      expect(matrixAll.incomeSection.periodTotals[mayColIndex], 30000); // Apenas Salário R$ 300,00
+      expect(matrixAll.expenseSection.periodTotals[mayColIndex], 10000); // Apenas Mercado R$ 100,00
+
+      // 6. Teste de Relatório Mensal filtrando por conta
+      final reportPf = store.buildMonthlyReport('2026-05', accountFilterIds: pfIds);
+      expect(reportPf.totalIncome, 30000); // Relatório ignora xfer/peer e inclui apenas receitas categorizadas
+      expect(reportPf.totalExpense, 10000);
+    });
   });
 
   testWidgets('5. Renders OpenMoneyApp shell cleanly on Desktop & Mobile', (WidgetTester tester) async {

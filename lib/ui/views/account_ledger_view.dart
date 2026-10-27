@@ -83,6 +83,22 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     return todayISO();
   }
 
+  Future<void> _pickDate() async {
+    final curIso = _resolveIsoDate();
+    final initialDate = dateFromISO(curIso);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2099, 12, 31),
+    );
+    if (picked != null) {
+      setState(() {
+        _dateCtrl.text = fmtDate(isoFromDate(picked));
+      });
+    }
+  }
+
   void _onPayeeChanged(String val) {
     final list = widget.store.payeeSuggestions(val);
     setState(() {
@@ -528,14 +544,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       SizedBox(
-                        width: 112,
+                        width: 142,
                         child: TextField(
                           controller: _dateCtrl,
                           style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Data',
                             isDense: true,
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_month, size: 18),
+                              tooltip: 'Escolher data no calendário',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: _pickDate,
+                            ),
                           ),
                         ),
                       ),
@@ -1048,6 +1071,22 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
+                                if (tx.auto != true) ...[
+                                  IconButton(
+                                    tooltip: 'Copiar Lançamento',
+                                    icon: Icon(
+                                      Icons.copy_rounded,
+                                      size: 16,
+                                      color: colors.textMuted,
+                                    ),
+                                    onPressed: () => showTransactionCopyModal(
+                                      context,
+                                      widget.store,
+                                      tx,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                ],
                                 IconButton(
                                   tooltip: 'Excluir Lançamento',
                                   icon: Icon(

@@ -204,6 +204,7 @@ class CashFlowEngine {
     required CashFlowPeriodKind periodKind,
     required int year,
     String? accountFilterId,
+    Set<String>? accountFilterIds,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
     CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
     String searchQuery = '',
@@ -318,15 +319,39 @@ class CashFlowEngine {
     }
 
     final numCols = columns.length;
-    final isSpecificAccount =
-        accountFilterId != null && accountFilterId.isNotEmpty;
+
+    final Set<String>? activeAccountFilter = () {
+      if (accountFilterIds != null && accountFilterIds.isNotEmpty) {
+        return accountFilterIds;
+      }
+      if (accountFilterId != null &&
+          accountFilterId.isNotEmpty &&
+          accountFilterId != 'all') {
+        return {accountFilterId};
+      }
+      return null;
+    }();
+    final isSpecificAccounts =
+        activeAccountFilter != null && activeAccountFilter.isNotEmpty;
 
     final filteredTxs = transactions.where((tx) {
-      if (isSpecificAccount && tx.acc != accountFilterId) {
+      if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) {
         return false;
       }
-      if (!isSpecificAccount && isTransferTransaction(tx)) {
-        return false;
+      // Regra de transferências entre contas no Fluxo de Caixa:
+      // 1. Quando estiver em "Todas as Contas", não devem aparecer e nem somar como receita ou despesa.
+      // 2. Quando contas específicas estiverem selecionadas:
+      //    - Se a contraparte (peer/card) também estiver entre as contas selecionadas: IGNORAR (transferência interna ao grupo).
+      //    - Se a contraparte NÃO estiver entre as contas selecionadas: MOSTRAR (para conciliar o saldo do grupo).
+      if (isTransferTransaction(tx)) {
+        if (!isSpecificAccounts) {
+          return false;
+        }
+        final counterpartId = tx.peer ?? tx.card;
+        if (counterpartId != null &&
+            activeAccountFilter.contains(counterpartId)) {
+          return false;
+        }
       }
       switch (statusFilter) {
         case CashFlowStatusFilter.all:
@@ -576,11 +601,10 @@ class CashFlowEngine {
     final netGrand = incomeSection.grandTotal - expenseSection.grandTotal;
 
     int initialOpening = 0;
-    if (isSpecificAccount) {
+    if (isSpecificAccounts) {
       for (final a in accounts) {
-        if (a.id == accountFilterId) {
-          initialOpening = a.type == kCardType ? 0 : a.opening;
-          break;
+        if (activeAccountFilter.contains(a.id)) {
+          initialOpening += (a.type == kCardType ? 0 : a.opening);
         }
       }
     } else {
@@ -611,7 +635,7 @@ class CashFlowEngine {
     final validAccountIds = accounts.map((a) => a.id).toSet();
 
     for (final tx in transactions) {
-      if (isSpecificAccount && tx.acc != accountFilterId) continue;
+      if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) continue;
       if (accounts.isNotEmpty && !validAccountIds.contains(tx.acc)) continue;
 
       switch (statusFilter) {
