@@ -134,8 +134,9 @@ $WinData = @{
 $Data["windows"] = $WinData
 
 $UpdatedJson = $Data | ConvertTo-Json -Depth 5
-[System.IO.File]::WriteAllText($VersionJsonFile, $UpdatedJson, [System.Text.Encoding]::UTF8)
-Write-Host "version.json atualizado com sucesso." -ForegroundColor Green
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($VersionJsonFile, $UpdatedJson, $Utf8NoBom)
+Write-Host "version.json atualizado com sucesso (UTF-8 sem BOM)." -ForegroundColor Green
 
 # 4. Commit e Push no proprio repositorio openmoney-new
 & git add pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
