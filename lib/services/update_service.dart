@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../ui/theme/liquid_glass.dart';
 
 class OpenMoneyVersion {
-  static const String fallbackVersion = '2.0.1';
-  static const int fallbackBuild = 2;
+  static const String fallbackVersion = '2.0.13';
+  static const int fallbackBuild = 13;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
       'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';
@@ -24,11 +25,20 @@ class OpenMoneyVersion {
     try {
       final info = await PackageInfo.fromPlatform();
       if (info.version.isNotEmpty) {
-        _version = info.version;
-      }
-      final parsedBuild = int.tryParse(info.buildNumber);
-      if (parsedBuild != null) {
-        _build = parsedBuild;
+        final parsedBuild = int.tryParse(info.buildNumber);
+        // Usa o PackageInfo apenas se não for menor que o fallback compilado no código Dart
+        if (UpdateService.isVersionGreaterThan(
+              info.version,
+              parsedBuild,
+              fallbackVersion,
+              fallbackBuild,
+            ) ||
+            info.version == fallbackVersion) {
+          _version = info.version;
+          if (parsedBuild != null) {
+            _build = parsedBuild;
+          }
+        }
       }
     } catch (_) {}
     _initialized = true;
@@ -422,96 +432,140 @@ exit 0
     final extractDir = '${tempDir.path}\\extracted';
     Directory(extractDir).createSync(recursive: true);
 
-    // Extract using tar or powershell
-    var res = await Process.run('tar', ['-xf', zipFile.path, '-C', extractDir]);
-    if (res.exitCode != 0) {
-      res = await Process.run('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        'Expand-Archive -Path "${zipFile.path}" -DestinationPath "$extractDir" -Force',
-      ]);
+    // 1. Extração primária nativa via pacote Dart 'archive' (independente de tar/PowerShell)
+    bool extractedOk = false;
+    try {
+      final bytes = await zipFile.readAsBytes();
+      final archive = ZipDecoder().decodeBytes(bytes);
+      for (final file in archive) {
+        final normalizedName = file.name.replaceAll('/', '\\');
+        final outPath = '$extractDir\\$normalizedName';
+        if (file.isFile) {
+          final outFile = File(outPath);
+          outFile.parent.createSync(recursive: true);
+          outFile.writeAsBytesSync(file.content as List<int>, flush: true);
+        } else {
+          Directory(outPath).createSync(recursive: true);
+        }
+      }
+      extractedOk = File('$extractDir\\openmoney.exe').existsSync() ||
+          Directory('$extractDir\\data').existsSync();
+    } catch (e) {
+      debugPrint('[UpdateService] Fallback para extração externa: $e');
     }
 
-    // Remove quarentena / Mark of the Web (Zone.Identifier) que o Defender anexa a arquivos baixados
-    await Process.run('powershell', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      'Get-ChildItem -Path "$extractDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue',
-    ]);
+    // 2. Fallbacks via tar ou PowerShell caso necessário
+    if (!extractedOk) {
+      var res = await Process.run('tar', ['-xf', zipFile.path, '-C', extractDir]);
+      if (res.exitCode != 0) {
+        await Process.run('powershell', [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'Expand-Archive -LiteralPath "${zipFile.path}" -DestinationPath "$extractDir" -Force',
+        ]);
+      }
+    }
+
+    // Verifica se há uma subpasta única contendo o openmoney.exe
+    String sourceDir = extractDir;
+    if (!File('$sourceDir\\openmoney.exe').existsSync()) {
+      final subDirs = Directory(extractDir)
+          .listSync()
+          .whereType<Directory>()
+          .toList();
+      for (final sub in subDirs) {
+        if (File('${sub.path}\\openmoney.exe').existsSync()) {
+          sourceDir = sub.path;
+          break;
+        }
+      }
+    }
+
+    if (!File('$sourceDir\\openmoney.exe').existsSync() &&
+        !Directory('$sourceDir\\data').existsSync()) {
+      throw Exception('Pacote de atualização inválido ou corrompido após extração.');
+    }
 
     final currentExe = Platform.resolvedExecutable;
     final targetDir = File(currentExe).parent.path;
     final currentPid = pid;
-    final scriptPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.ps1';
+    final batPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.bat';
+    final vbsPath = '${Directory.systemTemp.path}\\openmoney_launcher_$currentPid.vbs';
 
-    final scriptContent = '''# OpenMoney Silent Updater
-\$ErrorActionPreference = "Continue"
+    // Script .bat nativo (zero restrição de política do PowerShell ou SmartScreen)
+    final batContent = '''@echo off
+setlocal EnableDelayedExpansion
+set "LOG_FILE=%TEMP%\\openmoney_updater.log"
+echo === OpenMoney Windows Updater started at %DATE% %TIME% === > "%LOG_FILE%"
+echo Source: "$sourceDir" >> "%LOG_FILE%"
+echo Target: "$targetDir" >> "%LOG_FILE%"
+echo Exe: "$currentExe" >> "%LOG_FILE%"
 
-\$logFile = "\$env:TEMP\\openmoney_updater.log"
-"--- Update started at \$(Get-Date) ---" | Out-File \$logFile -Force
+:: 1. Aguarda encerramento gracioso e garante finalizacao do processo
+timeout /t 1 /nobreak >nul 2>&1
+taskkill /F /PID $currentPid >> "%LOG_FILE%" 2>&1
+taskkill /F /IM openmoney.exe >> "%LOG_FILE%" 2>&1
 
-# 1. Aguarda o processo anterior encerrar (timeout maximo 10s para nunca congelar)
-try {
-    \$proc = Get-Process -Id $currentPid -ErrorAction SilentlyContinue
-    if (\$proc) {
-        "Waiting for PID $currentPid to exit..." | Out-File \$logFile -Append
-        \$proc.WaitForExit(10000)
-    }
-} catch {
-    \$_ | Out-File \$logFile -Append
-}
-Start-Sleep -Milliseconds 800
+:: 2. Loop ate que openmoney.exe esteja destravado para escrita (max 15 tentativas)
+set /a RETRIES=0
+:WAIT_UNLOCK
+set /a RETRIES+=1
+if exist "$currentExe.old" del /f /q "$currentExe.old" >nul 2>&1
+ren "$currentExe" "openmoney.exe.old" >> "%LOG_FILE%" 2>&1
+if exist "$currentExe.old" (
+    ren "$currentExe.old" "openmoney.exe" >> "%LOG_FILE%" 2>&1
+    goto COPY_FILES
+)
+if %RETRIES% GEQ 15 goto COPY_FILES
+timeout /t 1 /nobreak >nul 2>&1
+goto WAIT_UNLOCK
 
-# 2. Forçar fechamento de qualquer instância restante do openmoney.exe
-Get-Process -Name "openmoney" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 400
+:COPY_FILES
+echo Copying files with robocopy... >> "%LOG_FILE%"
+robocopy "$sourceDir" "$targetDir" /E /IS /IT /IM /R:10 /W:1 /NP >> "%LOG_FILE%" 2>&1
+set "RC=%ERRORLEVEL%"
+echo Robocopy exit code: !RC! >> "%LOG_FILE%"
+if !RC! GEQ 8 (
+    echo Fallback to xcopy... >> "%LOG_FILE%"
+    xcopy /s /e /y /h /r "$sourceDir\\*" "$targetDir\\" >> "%LOG_FILE%" 2>&1
+)
 
-# 3. Copia os novos arquivos para o diretorio do aplicativo
-try {
-    "Copying from $extractDir to $targetDir ..." | Out-File \$logFile -Append
-    & robocopy "$extractDir" "$targetDir" /e /r:5 /w:1 /np | Out-File \$logFile -Append
-    if (\$LASTEXITCODE -ge 8) {
-        "Robocopy exit code \$LASTEXITCODE >= 8, using Copy-Item fallback..." | Out-File \$logFile -Append
-        Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force -ErrorAction Stop
-    }
-} catch {
-    "Error copying files: \$_" | Out-File \$logFile -Append
-    Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force -ErrorAction SilentlyContinue
-}
+if exist "$targetDir\\openmoney.exe.old" del /f /q "$targetDir\\openmoney.exe.old" >nul 2>&1
 
-# 4. Desbloqueia arquivos no destino contra bloqueios do Windows Defender
-Get-ChildItem -Path "$targetDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue
+echo Launching updated application... >> "%LOG_FILE%"
+start "" /D "$targetDir" "$currentExe"
 
-# 5. Inicia o aplicativo atualizado
-"Starting updated application: $currentExe" | Out-File \$logFile -Append
-Start-Process -FilePath "$currentExe" -WorkingDirectory "$targetDir"
-
-# 6. Limpa a pasta temporaria e o script
-Start-Sleep -Seconds 1
-Remove-Item -Path "${tempDir.path}" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -Path \$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+timeout /t 2 /nobreak >nul 2>&1
+rd /s /q "${tempDir.path}" >nul 2>&1
+del /f /q "$vbsPath" >nul 2>&1
+del /f /q "%~f0" >nul 2>&1
+exit
 ''';
 
-    File(scriptPath).writeAsStringSync(scriptContent, flush: true);
-    await Process.start(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptPath,
-      ],
-      mode: ProcessStartMode.detached,
-    );
+    File(batPath).writeAsStringSync(batContent, flush: true);
 
-    await Future.delayed(const Duration(milliseconds: 300));
+    // Launcher VBScript para rodar o .bat de forma 100% invisivel (WindowStyle = 0) e desacoplado do Flutter
+    final vbsContent =
+        'CreateObject("WScript.Shell").Run """$batPath""", 0, False\r\n';
+    File(vbsPath).writeAsStringSync(vbsContent, flush: true);
+
+    try {
+      await Process.start(
+        'wscript.exe',
+        ['//B', '//NoLogo', vbsPath],
+        mode: ProcessStartMode.detached,
+      );
+    } catch (_) {
+      await Process.start(
+        'cmd.exe',
+        ['/c', 'start', '', '/min', batPath],
+        mode: ProcessStartMode.detached,
+      );
+    }
+
+    await Future.delayed(const Duration(milliseconds: 400));
     exit(0);
   }
 

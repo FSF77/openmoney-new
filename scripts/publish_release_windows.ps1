@@ -25,6 +25,16 @@ if ($VersionLine -match "version:\s*([0-9\.]+)\+?([0-9]*)") {
     $BuildNum = "1"
 }
 
+# Sincroniza fallbackVersion e fallbackBuild em lib/services/update_service.dart
+$UpdateServiceFile = "$RootDir\lib\services\update_service.dart"
+if (Test-Path $UpdateServiceFile) {
+    $UsContent = [System.IO.File]::ReadAllText($UpdateServiceFile, [System.Text.Encoding]::UTF8)
+    $UsContent = $UsContent -replace "static const String fallbackVersion = '[^']*';", "static const String fallbackVersion = '$Version';"
+    $UsContent = $UsContent -replace "static const int fallbackBuild = [0-9]+;", "static const int fallbackBuild = $BuildNum;"
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($UpdateServiceFile, $UsContent, $Utf8NoBom)
+}
+
 $Notes = if ($CustomNotes) { $CustomNotes } else { "OpenMoney Flutter v$Version para Windows - Versao oficial multiplataforma." }
 $ReleaseDate = Get-Date -Format "dd/MM/yyyy"
 
@@ -139,7 +149,7 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 Write-Host "version.json atualizado com sucesso (UTF-8 sem BOM)." -ForegroundColor Green
 
 # 4. Commit e Push no proprio repositorio openmoney-new
-& git add pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
+& git add lib/services/update_service.dart pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {

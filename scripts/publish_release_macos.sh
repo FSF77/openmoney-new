@@ -21,6 +21,10 @@ if [ -z "$BUILD_NUM" ]; then
     BUILD_NUM="1"
 fi
 
+# Sincroniza fallbackVersion e fallbackBuild em lib/services/update_service.dart
+sed -i '' "s/static const String fallbackVersion = '.*';/static const String fallbackVersion = '${VERSION}';/g" "${ROOT_DIR}/lib/services/update_service.dart"
+sed -i '' "s/static const int fallbackBuild = [0-9]*;/static const int fallbackBuild = ${BUILD_NUM};/g" "${ROOT_DIR}/lib/services/update_service.dart"
+
 NOTES="${1:-OpenMoney Flutter v${VERSION} - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -195,7 +199,7 @@ chmod +x "${ROOT_DIR}/install.sh"
 
 # 4. Commit e Push no próprio repositório openmoney-new
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
+git add lib/ test/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else
