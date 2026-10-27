@@ -27,6 +27,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   final TextEditingController _payeeCtrl = TextEditingController();
   final TextEditingController _memoCtrl = TextEditingController();
   final TextEditingController _amtCtrl = TextEditingController();
+  final TextEditingController _searchCtrl = TextEditingController();
   bool _isExpense = true;
   String _catSelection = '';
   String _mode = 'single'; // 'single', 'installment', 'recurring'
@@ -68,6 +69,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -149,9 +151,23 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
         : <Transaction>[];
     final pendingCount = widget.store.pendingCountForAccount(acc.id);
 
+    // Search / filter transactions in month
+    final q = _searchCtrl.text.trim().toLowerCase();
+    final filteredTxs = q.isEmpty
+        ? monthData.transactions
+        : monthData.transactions.where((t) {
+            final amtStr = (t.amt / 100.0).toStringAsFixed(2);
+            final amtBrl = brl(t.amt).toLowerCase();
+            return t.payee.toLowerCase().contains(q) ||
+                t.memo.toLowerCase().contains(q) ||
+                t.cat.toLowerCase().contains(q) ||
+                amtStr.contains(q) ||
+                amtBrl.contains(q);
+          }).toList();
+
     // Group transactions day by day with running Real and Predicted balances
     final dayGroups = <_DayGroup>[];
-    final activeTxs = monthData.transactions;
+    final activeTxs = filteredTxs;
     int runningReal = monthData.openingReal;
     int runningPred = monthData.openingPred;
 
@@ -255,6 +271,48 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       currentMonthYM: widget.store.month,
                       availableYears: widget.store.allYearsInDatabase(),
                       onMonthChanged: (ym) => widget.store.month = ym,
+                    ),
+                    Container(
+                      width: 220,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceGlass,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        style: const TextStyle(fontSize: 12.5),
+                        textAlignVertical: TextAlignVertical.center,
+                        decoration: InputDecoration(
+                          hintText: 'Filtrar no mês...',
+                          hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: colors.textMuted,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.filter_list,
+                            size: 16,
+                            color: colors.textSecondary,
+                          ),
+                          suffixIcon: _searchCtrl.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 14),
+                                  splashRadius: 14,
+                                  onPressed: () {
+                                    setState(() => _searchCtrl.clear());
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
                     ),
                     Wrap(
                       spacing: 12,
@@ -793,9 +851,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Nenhum lançamento em ${fmtMonth(widget.store.month)}.',
+                          _searchCtrl.text.trim().isNotEmpty
+                              ? 'Nenhum lançamento encontrado para "${_searchCtrl.text.trim()}".'
+                              : 'Nenhum lançamento em ${fmtMonth(widget.store.month)}.',
                           style: TextStyle(color: colors.textSecondary),
                         ),
+                        if (_searchCtrl.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            icon: const Icon(Icons.clear, size: 14),
+                            label: const Text('Limpar filtro'),
+                            onPressed: () {
+                              setState(() => _searchCtrl.clear());
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),
