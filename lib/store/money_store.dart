@@ -523,10 +523,14 @@ class MoneyStore extends ChangeNotifier {
     final byMonth = <String, List<Transaction>>{};
     final payeeMap = <String, _PayeeCacheEntry>{};
 
+    final cardAccounts = <String, Account>{};
     for (final acc in db.accounts) {
       realByAcc[acc.id] = acc.opening;
       predByAcc[acc.id] = acc.opening;
       byAcc[acc.id] = [];
+      if (acc.type == kCardType && acc.card != null) {
+        cardAccounts[acc.id] = acc;
+      }
     }
 
     final endOfMonth = '$_month-31';
@@ -539,8 +543,21 @@ class MoneyStore extends ChangeNotifier {
       if (tx.rec) {
         realByAcc[tx.acc] = (realByAcc[tx.acc] ?? 0) + tx.amt;
       }
-      if (tx.rec || tx.date.compareTo(endOfMonth) <= 0) {
-        predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+
+      final cardAcc = cardAccounts[tx.acc];
+      if (cardAcc != null) {
+        // Conta tipo Cartão de crédito: não duplica pagamento automático de fatura no previsto
+        // e compras consideram a chave/mês da fatura (ik)
+        if (tx.auto != true) {
+          final ik = tx.ik ?? invKeyFor(cardAcc.card!, tx.date);
+          if (ik.compareTo(_month) <= 0) {
+            predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          }
+        }
+      } else {
+        if (tx.rec || tx.date.compareTo(endOfMonth) <= 0) {
+          predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+        }
       }
 
       if (tx.auto != true && tx.xfer == null) {
@@ -611,12 +628,26 @@ class MoneyStore extends ChangeNotifier {
   void rebuildPredictedBalances() {
     final endOfMonth = '$_month-31';
     final predByAcc = <String, int>{};
+    final cardAccounts = <String, Account>{};
     for (final acc in db.accounts) {
       predByAcc[acc.id] = acc.opening;
+      if (acc.type == kCardType && acc.card != null) {
+        cardAccounts[acc.id] = acc;
+      }
     }
     for (final tx in db.txs) {
-      if (tx.rec || tx.date.compareTo(endOfMonth) <= 0) {
-        predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+      final cardAcc = cardAccounts[tx.acc];
+      if (cardAcc != null) {
+        if (tx.auto != true) {
+          final ik = tx.ik ?? invKeyFor(cardAcc.card!, tx.date);
+          if (ik.compareTo(_month) <= 0) {
+            predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          }
+        }
+      } else {
+        if (tx.rec || tx.date.compareTo(endOfMonth) <= 0) {
+          predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+        }
       }
     }
     int totalPred = 0;
@@ -1202,6 +1233,49 @@ class MoneyStore extends ChangeNotifier {
     );
   }
 
+  /// Retorna os lançamentos e saldo anterior acumulado da fatura `key` de um cartão de crédito.
+  AccountMonthData cardInvoiceMonthData(String cardId, String key) {
+    final cardAcc = accById(cardId);
+    if (cardAcc == null ||
+        cardAcc.type != kCardType ||
+        cardAcc.card == null) {
+      return accountMonthData(cardId, key);
+    }
+    final cardCfg = cardAcc.card!;
+    rebuildIndexesIfNeeded();
+    final cardTxs = _cachedTxsByAccount[cardId] ?? [];
+
+    int priorReal = cardAcc.opening;
+    int priorPred = cardAcc.opening;
+    final invTxs = <Transaction>[];
+
+    for (final t in cardTxs) {
+      if (t.auto == true) continue;
+      final ik = t.ik ?? invKeyFor(cardCfg, t.date);
+      if (ik.compareTo(key) < 0) {
+        if (t.rec) priorReal += t.amt;
+        priorPred += t.amt;
+      } else if (ik == key) {
+        invTxs.add(t);
+      }
+    }
+
+    invTxs.sort((a, b) {
+      final dc = a.date.compareTo(b.date);
+      if (dc != 0) return dc;
+      final tA = a.createdAt ?? 0.0;
+      final tB = b.createdAt ?? 0.0;
+      if (tA != tB) return tA.compareTo(tB);
+      return a.id.compareTo(b.id);
+    });
+
+    return AccountMonthData(
+      openingReal: priorReal,
+      openingPred: priorPred,
+      transactions: invTxs,
+    );
+  }
+
   /// Retorna todos os lançamentos pertencentes à fatura `key` de um cartão de crédito,
   /// independentemente da data de compra (`t.date`).
   List<Transaction> invoiceTransactions(String cardId, String key) {
@@ -1334,6 +1408,52 @@ class MoneyStore extends ChangeNotifier {
     final idx = db.accounts.indexWhere((a) => a.id == id);
     if (idx == -1) return;
     db.accounts[idx].favorite = !db.accounts[idx].isFavorite ? true : null;
+    markIndexesDirty();
+    save();
+  }
+
+  void moveAccountWithinGroup(List<Account> group, int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= group.length) return;
+    if (newIndex < 0 || newIndex >= group.length) return;
+    if (oldIndex == newIndex) return;
+
+    final movedAcc = group[oldIndex];
+    final targetAcc = group[newIndex];
+
+    final fromGlobalIdx = db.accounts.indexWhere((a) => a.id == movedAcc.id);
+    if (fromGlobalIdx == -1) return;
+
+    final item = db.accounts.removeAt(fromGlobalIdx);
+    final toGlobalIdx = db.accounts.indexWhere((a) => a.id == targetAcc.id);
+    if (toGlobalIdx == -1) {
+      db.accounts.insert(fromGlobalIdx, item);
+      return;
+    }
+
+    final insertIdx = oldIndex < newIndex ? toGlobalIdx + 1 : toGlobalIdx;
+    db.accounts.insert(insertIdx, item);
+    markIndexesDirty();
+    save();
+  }
+
+  void moveAccountStepWithinGroup(List<Account> group, String id, int delta) {
+    final idx = group.indexWhere((a) => a.id == id);
+    if (idx == -1) return;
+    final newIdx = idx + delta;
+    if (newIdx < 0 || newIdx >= group.length) return;
+    moveAccountWithinGroup(group, idx, newIdx);
+  }
+
+  void moveAccount(String draggedId, String targetId) {
+    if (draggedId == targetId) return;
+    final fromIdx = db.accounts.indexWhere((a) => a.id == draggedId);
+    final toIdx = db.accounts.indexWhere((a) => a.id == targetId);
+    if (fromIdx == -1 || toIdx == -1) return;
+
+    final item = db.accounts.removeAt(fromIdx);
+    final newToIdx = db.accounts.indexWhere((a) => a.id == targetId);
+    final insertIdx = fromIdx < toIdx ? newToIdx + 1 : newToIdx;
+    db.accounts.insert(insertIdx, item);
     markIndexesDirty();
     save();
   }

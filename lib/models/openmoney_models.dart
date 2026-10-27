@@ -1102,6 +1102,19 @@ String fmtMonth(String ym) {
   return '${mName[0].toUpperCase()}${mName.substring(1)} de $y';
 }
 
+String formatInvoiceKeyForDisplay(String ik) {
+  final clean = ik.trim();
+  final parts = clean.split('-');
+  if (parts.length == 2) {
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (y != null && m != null) {
+      return '${pad2(m)}/${y.toString().padLeft(4, '0')}';
+    }
+  }
+  return clean;
+}
+
 String weekdayShort(String iso) {
   final d = dateFromISO(iso);
   return _ptWeekdaysShort[d.weekday - 1];
@@ -1272,7 +1285,8 @@ String invKeyFor(CardConfig card, String date) {
   final m = int.tryParse(parts[1]) ?? 1;
   final d = int.tryParse(parts[2]) ?? 1;
   final k = '${y.toString().padLeft(4, '0')}-${pad2(m)}';
-  return d > card.closeDay ? addMonthsYM(k, 1) : k;
+  final closeMonth = d > card.closeDay ? addMonthsYM(k, 1) : k;
+  return card.dueDay <= card.closeDay ? addMonthsYM(closeMonth, 1) : closeMonth;
 }
 
 ({String close, String due}) invDates(CardConfig card, String key) {
@@ -1282,13 +1296,13 @@ String invKeyFor(CardConfig card, String date) {
   }
   final y = int.tryParse(parts[0]) ?? DateTime.now().year;
   final m = int.tryParse(parts[1]) ?? 1;
-  final dk = card.dueDay <= card.closeDay ? addMonthsYM(key, 1) : key;
-  final dParts = dk.split('-');
-  final dy = int.tryParse(dParts[0]) ?? y;
-  final dm = int.tryParse(dParts[1]) ?? m;
+  final closeKey = card.dueDay <= card.closeDay ? addMonthsYM(key, -1) : key;
+  final cParts = closeKey.split('-');
+  final cy = int.tryParse(cParts[0]) ?? y;
+  final cm = int.tryParse(cParts[1]) ?? m;
   return (
-    close: '$key-${dayIn(y, m, card.closeDay)}',
-    due: '$dk-${dayIn(dy, dm, card.dueDay)}',
+    close: '$closeKey-${dayIn(cy, cm, card.closeDay)}',
+    due: '$key-${dayIn(y, m, card.dueDay)}',
   );
 }
 

@@ -431,6 +431,12 @@ exit 0
       ]);
     }
 
+    // Remove quarentena / Mark of the Web (Zone.Identifier) que o Defender anexa a arquivos baixados
+    await Process.run('powershell', [
+      '-Command',
+      'Get-ChildItem -Path "$extractDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue',
+    ]);
+
     final currentExe = Platform.resolvedExecutable;
     final targetDir = File(currentExe).parent.path;
     final currentPid = pid;
@@ -450,7 +456,17 @@ if "%ERRORLEVEL%"=="0" (
 )
 
 timeout /t 1 /nobreak >nul
-xcopy /s /e /y "%NEW_DIR%\\*" "%TARGET_DIR%\\"
+
+:: Tenta copiar com robocopy (retenta caso o Defender esteja varrendo o arquivo)
+robocopy "%NEW_DIR%" "%TARGET_DIR%" /e /r:3 /w:1 >nul 2>&1
+if %ERRORLEVEL% GEQ 8 (
+    :: Fallback para xcopy se robocopy falhar
+    xcopy /s /e /y "%NEW_DIR%\\*" "%TARGET_DIR%\\" >nul 2>&1
+)
+
+:: Desbloqueia arquivos no destino
+powershell -Command "Get-ChildItem -Path '%TARGET_DIR%' -Recurse | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
+
 start "" "%TARGET_EXE%"
 rd /s /q "${tempDir.path}" 2>nul
 del "%~f0"

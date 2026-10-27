@@ -137,8 +137,11 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
     final acc = widget.account;
-    final monthData = widget.store.accountMonthData(acc.id, widget.store.month);
     final isCard = acc.type == kCardType && acc.card != null;
+    final useInvoiceTxs = isCard && _filterCardByInvoice;
+    final monthData = useInvoiceTxs
+        ? widget.store.cardInvoiceMonthData(acc.id, widget.store.month)
+        : widget.store.accountMonthData(acc.id, widget.store.month);
     final invSummary =
         isCard ? widget.store.invoiceSummary(acc.id, widget.store.month) : null;
     final invTxs = isCard
@@ -148,10 +151,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
 
     // Group transactions day by day with running Real and Predicted balances
     final dayGroups = <_DayGroup>[];
-    final useInvoiceTxs = isCard && _filterCardByInvoice;
-    final activeTxs = useInvoiceTxs ? invTxs : monthData.transactions;
-    int runningReal = useInvoiceTxs ? 0 : monthData.openingReal;
-    int runningPred = useInvoiceTxs ? 0 : monthData.openingPred;
+    final activeTxs = monthData.transactions;
+    int runningReal = monthData.openingReal;
+    int runningPred = monthData.openingPred;
 
     for (final tx in activeTxs) {
       if (tx.rec) runningReal += tx.amt;
@@ -329,7 +331,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                           ),
                           Text(
-                            'Fecha: ${fmtDate(invSummary.closeDate)} • Vence: ${fmtDate(invSummary.dueDate)} • Débito: ${invSummary.payAccountName}',
+                            'Vence: ${fmtDate(invSummary.dueDate)} • Fechamento: ${fmtDate(invSummary.closeDate)} • Débito: ${invSummary.payAccountName}',
                             style: TextStyle(
                               fontSize: 12,
                               color: colors.textSecondary,
@@ -845,7 +847,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                             title: Row(
                               children: [
-                                Expanded(
+                                Flexible(
+                                  flex: 3,
                                   child: Text(
                                     tx.payee,
                                     style: TextStyle(
@@ -853,6 +856,34 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                       fontSize: 13.5,
                                       color: colors.textPrimary,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: Text(
+                                    '•',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.textMuted,
+                                    ),
+                                  ),
+                                ),
+                                Flexible(
+                                  flex: 4,
+                                  child: Text(
+                                    tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: tx.cat.isEmpty
+                                          ? colors.textMuted
+                                          : colors.textSecondary,
+                                      fontStyle: tx.cat.isEmpty
+                                          ? FontStyle.italic
+                                          : FontStyle.normal,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 if (isPred) ...[
@@ -878,35 +909,38 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     color: colors.warning,
                                   ),
                                 ],
+                                if (tx.ik != null && tx.ik!.isNotEmpty && tx.auto != true) ...[
+                                  const SizedBox(width: 6),
+                                  StatusBadge(
+                                    text: 'FATURA ${formatInvoiceKeyForDisplay(tx.ik!)}',
+                                    color: colors.accentIndigo,
+                                    icon: Icons.receipt_outlined,
+                                  ),
+                                ],
                               ],
                             ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (tx.memo.trim().isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 2),
+                            subtitle: (tx.memo.trim().isNotEmpty ||
+                                    (tx.ik != null &&
+                                        tx.ik!.isNotEmpty &&
+                                        tx.auto != true))
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 2),
                                     child: Text(
-                                      tx.memo.trim(),
+                                      [
+                                        if (tx.memo.trim().isNotEmpty)
+                                          tx.memo.trim(),
+                                        if (tx.ik != null &&
+                                            tx.ik!.isNotEmpty &&
+                                            tx.auto != true)
+                                          'Fatura ${formatInvoiceKeyForDisplay(tx.ik!)}',
+                                      ].join(' • '),
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: colors.textSecondary,
                                       ),
                                     ),
-                                  ),
-                                Text(
-                                  [
-                                    tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
-                                    if (tx.ik != null && tx.ik!.isNotEmpty)
-                                      'Fatura ${tx.ik}',
-                                  ].join(' • '),
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    color: colors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
+                                  )
+                                : null,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

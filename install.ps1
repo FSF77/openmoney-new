@@ -72,8 +72,12 @@ try {
     $extractDir = Join-Path $tempDir "extracted"
     Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
+    # Remove o bloqueio de segurança do Windows (Mark of the Web / Zone.Identifier)
+    Get-ChildItem -Path $extractDir -Recurse | Unblock-File -ErrorAction SilentlyContinue
+
     # Copiar recursivamente os arquivos extraídos para o diretório de instalação
     Copy-Item -Path "$extractDir\*" -Destination $installDir -Recurse -Force
+    Get-ChildItem -Path $installDir -Recurse | Unblock-File -ErrorAction SilentlyContinue
 
     # 6. Criar Atalho no Menu Iniciar
     $startMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"

@@ -253,18 +253,6 @@ String? parseInvoiceKey(String raw) {
   return null;
 }
 
-String formatInvoiceKeyForDisplay(String ik) {
-  final clean = ik.trim();
-  final parts = clean.split('-');
-  if (parts.length == 2) {
-    final y = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (y != null && m != null) {
-      return '${pad2(m)}/${y.toString().padLeft(4, '0')}';
-    }
-  }
-  return clean;
-}
 
 String _detectCsvDelimiter(String firstLine) {
   final semi = ';'.allMatches(firstLine).length;

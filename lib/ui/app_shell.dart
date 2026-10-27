@@ -455,18 +455,34 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ),
                 ),
                 if (widget.store.sidebarShowFavorites)
-                  ...favAccounts.map(
-                    (a) => _SidebarAccountTile(
+                  ...favAccounts.map((a) {
+                    final idx = favAccounts.indexOf(a);
+                    return _SidebarAccountTile(
+                      key: ValueKey(a.id),
                       account: a,
                       balanceCents: widget.store.balance(a, predicted: false),
+                      predCents: widget.store.balance(a, predicted: true),
                       selected:
                           widget.store.activeModule == NavModule.account &&
                               widget.store.selectedAccountId == a.id,
                       colors: colors,
+                      store: widget.store,
+                      isFirstInGroup: idx == 0,
+                      isLastInGroup: idx == favAccounts.length - 1,
+                      onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                        favAccounts,
+                        a.id,
+                        -1,
+                      ),
+                      onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                        favAccounts,
+                        a.id,
+                        1,
+                      ),
                       onTap: () =>
                           selectModule(NavModule.account, accountId: a.id),
-                    ),
-                  ),
+                    );
+                  }),
                 const SizedBox(height: 8),
               ],
 
@@ -514,17 +530,33 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               if (widget.store.sidebarShowActiveAccounts)
-                ...regActive.map(
-                  (a) => _SidebarAccountTile(
+                ...regActive.map((a) {
+                  final idx = regActive.indexOf(a);
+                  return _SidebarAccountTile(
+                    key: ValueKey(a.id),
                     account: a,
                     balanceCents: widget.store.balance(a, predicted: false),
+                    predCents: widget.store.balance(a, predicted: true),
                     selected: widget.store.activeModule == NavModule.account &&
                         widget.store.selectedAccountId == a.id,
                     colors: colors,
+                    store: widget.store,
+                    isFirstInGroup: idx == 0,
+                    isLastInGroup: idx == regActive.length - 1,
+                    onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                      regActive,
+                      a.id,
+                      -1,
+                    ),
+                    onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                      regActive,
+                      a.id,
+                      1,
+                    ),
                     onTap: () =>
                         selectModule(NavModule.account, accountId: a.id),
-                  ),
-                ),
+                  );
+                }),
 
               // 3. Contas Inativas (colapsável e persistido em config.json)
               if (regInactive.isNotEmpty) ...[
@@ -564,18 +596,34 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ),
                 ),
                 if (widget.store.sidebarShowInactiveAccounts)
-                  ...regInactive.map(
-                    (a) => _SidebarAccountTile(
+                  ...regInactive.map((a) {
+                    final idx = regInactive.indexOf(a);
+                    return _SidebarAccountTile(
+                      key: ValueKey(a.id),
                       account: a,
                       balanceCents: widget.store.balance(a, predicted: false),
+                      predCents: widget.store.balance(a, predicted: true),
                       selected:
                           widget.store.activeModule == NavModule.account &&
                               widget.store.selectedAccountId == a.id,
                       colors: colors,
+                      store: widget.store,
+                      isFirstInGroup: idx == 0,
+                      isLastInGroup: idx == regInactive.length - 1,
+                      onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                        regInactive,
+                        a.id,
+                        -1,
+                      ),
+                      onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                        regInactive,
+                        a.id,
+                        1,
+                      ),
                       onTap: () =>
                           selectModule(NavModule.account, accountId: a.id),
-                    ),
-                  ),
+                    );
+                  }),
               ],
 
               const SizedBox(height: 14),
@@ -833,91 +881,292 @@ class _SidebarNavTile extends StatelessWidget {
 class _SidebarAccountTile extends StatelessWidget {
   final Account account;
   final int balanceCents;
+  final int predCents;
   final bool selected;
   final OpenMoneyColors colors;
+  final MoneyStore store;
+  final bool isFirstInGroup;
+  final bool isLastInGroup;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
   final VoidCallback onTap;
 
   const _SidebarAccountTile({
+    super.key,
     required this.account,
     required this.balanceCents,
+    required this.predCents,
     required this.selected,
     required this.colors,
+    required this.store,
+    required this.isFirstInGroup,
+    required this.isLastInGroup,
+    required this.onMoveUp,
+    required this.onMoveDown,
     required this.onTap,
   });
+
+  void _showContextMenu(BuildContext context, Offset globalPos) {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(globalPos, globalPos),
+      Offset.zero & overlay.size,
+    );
+
+    final future = showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 16, color: colors.textSecondary),
+              const SizedBox(width: 8),
+              const Text('Editar conta...'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'toggle_favorite',
+          child: Row(
+            children: [
+              Icon(
+                account.isFavorite ? Icons.star_border : Icons.star,
+                size: 16,
+                color: colors.warning,
+              ),
+              const SizedBox(width: 8),
+              Text(account.isFavorite
+                  ? 'Remover dos favoritos'
+                  : 'Marcar como favorita'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'toggle_inactive',
+          child: Row(
+            children: [
+              Icon(
+                account.isInactive
+                    ? Icons.check_circle_outline
+                    : Icons.archive_outlined,
+                size: 16,
+                color: colors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(account.isInactive ? 'Reativar conta' : 'Desativar conta'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'move_up',
+          enabled: !isFirstInGroup,
+          child: Row(
+            children: [
+              Icon(
+                Icons.arrow_upward,
+                size: 16,
+                color:
+                    !isFirstInGroup ? colors.textSecondary : colors.textMuted,
+              ),
+              const SizedBox(width: 8),
+              const Text('Mover para cima'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'move_down',
+          enabled: !isLastInGroup,
+          child: Row(
+            children: [
+              Icon(
+                Icons.arrow_downward,
+                size: 16,
+                color:
+                    !isLastInGroup ? colors.textSecondary : colors.textMuted,
+              ),
+              const SizedBox(width: 8),
+              const Text('Mover para baixo'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    future.then((choice) {
+      if (choice == null || !context.mounted) return;
+      switch (choice) {
+        case 'edit':
+          showAccountModal(context, store, editingAccount: account);
+          break;
+        case 'toggle_favorite':
+          store.toggleAccountFavorite(account.id);
+          break;
+        case 'toggle_inactive':
+          store.toggleAccountInactive(account.id);
+          break;
+        case 'move_up':
+          onMoveUp();
+          break;
+        case 'move_down':
+          onMoveDown();
+          break;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final isCard = account.type == kCardType;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        margin: const EdgeInsets.only(bottom: 2),
-        decoration: BoxDecoration(
-          color: selected
-              ? colors.accent.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: selected
-                    ? colors.accent.withValues(alpha: 0.15)
-                    : colors.borderGlass.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isCard
-                    ? Icons.credit_card
-                    : Icons.account_balance_wallet_outlined,
-                size: 16,
-                color: selected ? colors.accent : colors.textSecondary,
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onSecondaryTapUp: (details) =>
+          _showContextMenu(context, details.globalPosition),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.accent.withValues(alpha: 0.16)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Up / Down order arrows
+              Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    account.name,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? colors.accent : colors.textPrimary,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: isFirstInGroup ? null : onMoveUp,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.keyboard_arrow_up,
+                        size: 14,
+                        color: isFirstInGroup
+                            ? colors.textMuted.withValues(alpha: 0.25)
+                            : colors.textSecondary.withValues(alpha: 0.65),
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 1.5),
-                  Text(
-                    account.type,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textMuted,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: isLastInGroup ? null : onMoveDown,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 14,
+                        color: isLastInGroup
+                            ? colors.textMuted.withValues(alpha: 0.25)
+                            : colors.textSecondary.withValues(alpha: 0.65),
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              brl(balanceCents),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: balanceCents >= 0 ? colors.income : colors.expense,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colors.accent.withValues(alpha: 0.15)
+                      : colors.borderGlass.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isCard
+                      ? Icons.credit_card
+                      : Icons.account_balance_wallet_outlined,
+                  size: 16,
+                  color: selected ? colors.accent : colors.textSecondary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        if (account.isInactive) ...[
+                          Icon(
+                            Icons.archive_outlined,
+                            size: 11,
+                            color: colors.textMuted,
+                          ),
+                          const SizedBox(width: 3),
+                        ],
+                        Expanded(
+                          child: Text(
+                            account.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              color: account.isInactive
+                                  ? colors.textPrimary.withValues(alpha: 0.65)
+                                  : (selected
+                                      ? colors.accent
+                                      : colors.textPrimary),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 1.5),
+                    Text(
+                      account.isInactive
+                          ? '${account.type} • Inativa'
+                          : account.type,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    brl(balanceCents),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: balanceCents >= 0 ? colors.income : colors.expense,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Prev: ${brl(predCents)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textMuted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
