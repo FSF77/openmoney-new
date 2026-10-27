@@ -202,7 +202,7 @@ else
     git commit -m "Release macOS v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
     git tag -f "v${VERSION}"
     echo "📤 Enviando release para o GitHub..."
-    git push origin main --tags
+    git push origin main "v${VERSION}" --force
 fi
 
 echo ""

@@ -124,7 +124,7 @@ if ([string]::IsNullOrWhiteSpace($GitStatus)) {
     & git commit -m "Release Windows v$Version (Build $BuildNum) - $ReleaseDate"
     & git tag -f "v$Version-windows"
     Write-Host "Enviando release para o GitHub..." -ForegroundColor Yellow
-    & git push origin main --tags
+    & git push origin main "v$Version-windows" --force
 }
 
 Write-Host ""
