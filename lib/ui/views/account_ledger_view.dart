@@ -899,21 +899,41 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               widget.store,
                               tx,
                             ),
-                            leading: IconButton(
-                              tooltip: tx.rec
-                                  ? 'Conciliado (Clique para desmarcar)'
-                                  : 'Pendente (Clique para conciliar)',
-                              icon: Icon(
-                                tx.rec
-                                    ? Icons.check_circle
-                                    : Icons.radio_button_unchecked,
-                                color: tx.rec
-                                    ? colors.income
-                                    : colors.textMuted,
-                                size: 20,
-                              ),
-                              onPressed: () =>
-                                  widget.store.toggleReconciled(tx.id),
+                            leading: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: tx.rec
+                                      ? 'Conciliado (Clique para desmarcar)'
+                                      : 'Pendente (Clique para conciliar)',
+                                  icon: Icon(
+                                    tx.rec
+                                        ? Icons.check_circle
+                                        : Icons.radio_button_unchecked,
+                                    color: tx.rec
+                                        ? colors.income
+                                        : colors.textMuted,
+                                    size: 20,
+                                  ),
+                                  onPressed: () =>
+                                      widget.store.toggleReconciled(tx.id),
+                                ),
+                                Container(
+                                  width: 26,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    tx.date.split('-').last,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.textSecondary,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             title: Row(
                               children: [

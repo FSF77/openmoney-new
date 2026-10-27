@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  15,
-    "version":  "2.0.15",
-    "notes":  "OpenMoney Flutter v2.0.15 para Windows - Versao oficial multiplataforma.",
-    "releaseDate":  "27/10/2026",
-    "windows":  {
-                    "build":  15,
-                    "version":  "2.0.15",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.15.zip",
-                    "sha256":  "937ae04f2366a5154c621f2757c8c47bc741f067ef9bc4b2e86705a3c7dbd362",
-                    "releaseDate":  "27/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.0.15",
-                  "build":  15,
-                  "releaseDate":  "27/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.15.zip",
-                  "sha256":  "5fc7a78657140a67fe4bd8ef2441143c6ff8aca67bcf43b73c6bbaa2050acfe0",
-                  "sizeMb":  10
-              },
-    "title":  "OpenMoney Flutter v2.0.15"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 16,
+  "version": "2.0.16",
+  "notes": "Release macOS v2.0.16 (Build 16) - Exibir dia do mês no grid de lançamentos",
+  "releaseDate": "27/10/2026",
+  "windows": {
+    "build": 15,
+    "version": "2.0.15",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.15.zip",
+    "sha256": "937ae04f2366a5154c621f2757c8c47bc741f067ef9bc4b2e86705a3c7dbd362",
+    "releaseDate": "27/10/2026"
+  },
+  "macos": {
+    "version": "2.0.16",
+    "build": 16,
+    "releaseDate": "27/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.16.zip",
+    "sha256": "2958e18231ac61a791c20f0824a76f9cf9eeb7212e694b5851ec12921f86a684",
+    "sizeMb": 10
+  },
+  "title": "OpenMoney Flutter v2.0.16"
 }
