@@ -449,34 +449,49 @@ exit 0
     final scriptPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.ps1';
 
     final scriptContent = '''# OpenMoney Silent Updater
-\$ErrorActionPreference = "SilentlyContinue"
+\$ErrorActionPreference = "Continue"
+
+\$logFile = "\$env:TEMP\\openmoney_updater.log"
+"--- Update started at \$(Get-Date) ---" | Out-File \$logFile -Force
 
 # 1. Aguarda o processo anterior encerrar (timeout maximo 10s para nunca congelar)
 try {
     \$proc = Get-Process -Id $currentPid -ErrorAction SilentlyContinue
     if (\$proc) {
+        "Waiting for PID $currentPid to exit..." | Out-File \$logFile -Append
         \$proc.WaitForExit(10000)
     }
-} catch {}
-Start-Sleep -Milliseconds 600
+} catch {
+    \$_ | Out-File \$logFile -Append
+}
+Start-Sleep -Milliseconds 800
 
-# 2. Copia os novos arquivos para o diretorio do aplicativo
+# 2. Forçar fechamento de qualquer instância restante do openmoney.exe
+Get-Process -Name "openmoney" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 400
+
+# 3. Copia os novos arquivos para o diretorio do aplicativo
 try {
-    & robocopy "$extractDir" "$targetDir" /e /r:3 /w:1 | Out-Null
+    "Copying from $extractDir to $targetDir ..." | Out-File \$logFile -Append
+    & robocopy "$extractDir" "$targetDir" /e /r:5 /w:1 /np | Out-File \$logFile -Append
     if (\$LASTEXITCODE -ge 8) {
-        Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force
+        "Robocopy exit code \$LASTEXITCODE >= 8, using Copy-Item fallback..." | Out-File \$logFile -Append
+        Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force -ErrorAction Stop
     }
 } catch {
-    Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force
+    "Error copying files: \$_" | Out-File \$logFile -Append
+    Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 3. Desbloqueia arquivos no destino contra bloqueios do Windows Defender
+# 4. Desbloqueia arquivos no destino contra bloqueios do Windows Defender
 Get-ChildItem -Path "$targetDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue
 
-# 4. Inicia o aplicativo atualizado
-Start-Process "$currentExe"
+# 5. Inicia o aplicativo atualizado
+"Starting updated application: $currentExe" | Out-File \$logFile -Append
+Start-Process -FilePath "$currentExe" -WorkingDirectory "$targetDir"
 
-# 5. Limpa a pasta temporaria e o script
+# 6. Limpa a pasta temporaria e o script
+Start-Sleep -Seconds 1
 Remove-Item -Path "${tempDir.path}" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Path \$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 ''';
