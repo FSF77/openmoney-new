@@ -64,7 +64,30 @@ if (Test-Path $ZipPath) {
 Write-Host "Compactando $ZipName..." -ForegroundColor Yellow
 Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $ZipPath -Force
 
-$FileHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
+function Get-Sha256Checksum([string]$FilePath) {
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+        try {
+            return (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash.ToLower()
+        } catch {}
+    }
+    try {
+        $stream = [System.IO.File]::OpenRead($FilePath)
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha.ComputeHash($stream)
+        $stream.Close()
+        return ([System.BitConverter]::ToString($hashBytes) -replace '-','').ToLower()
+    } catch {}
+    try {
+        $output = & certutil -hashfile $FilePath SHA256
+        $lines = $output -split "`r?`n"
+        if ($lines.Length -ge 2) {
+            return ($lines[1] -replace '\s','').ToLower()
+        }
+    } catch {}
+    return ""
+}
+
+$FileHash = Get-Sha256Checksum $ZipPath
 $FileSizeMb = [math]::Round(((Get-Item $ZipPath).Length / 1MB))
 
 Write-Host "Pacote gerado com sucesso: $ZipPath" -ForegroundColor Green
