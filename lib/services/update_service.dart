@@ -23,6 +23,10 @@ class OpenMoneyVersion {
   static Future<void> init() async {
     if (_initialized) return;
     try {
+      // No Windows, limpa eventuais arquivos .old_update deixados pela atualização in-place anterior
+      if (!kIsWeb && Platform.isWindows) {
+        _cleanupOldWindowsUpdateFiles();
+      }
       final info = await PackageInfo.fromPlatform();
       if (info.version.isNotEmpty) {
         final parsedBuild = int.tryParse(info.buildNumber);
@@ -42,6 +46,19 @@ class OpenMoneyVersion {
       }
     } catch (_) {}
     _initialized = true;
+  }
+
+  static void _cleanupOldWindowsUpdateFiles() {
+    try {
+      final appDir = File(Platform.resolvedExecutable).parent;
+      for (final entity in appDir.listSync(recursive: true)) {
+        if (entity is File && entity.path.endsWith('.old_update')) {
+          try {
+            entity.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 }
 
@@ -432,7 +449,10 @@ exit 0
     final extractDir = '${tempDir.path}\\extracted';
     Directory(extractDir).createSync(recursive: true);
 
-    // 1. Extração primária nativa via pacote Dart 'archive' (independente de tar/PowerShell)
+    // 1. Extração primária nativa em Dart via pacote 'archive'
+    // Vantagem para o Windows Defender: arquivos gravados direto pelo processo Dart
+    // não recebem a tag NTFS Zone.Identifier (Mark of the Web) de downloads externos,
+    // e apagamos o arquivo .zip logo após extrair para não acionar escaneamento de zip em Temp.
     bool extractedOk = false;
     try {
       final bytes = await zipFile.readAsBytes();
@@ -454,7 +474,7 @@ exit 0
       debugPrint('[UpdateService] Fallback para extração externa: $e');
     }
 
-    // 2. Fallbacks via tar ou PowerShell caso necessário
+    // 2. Fallback caso necessário
     if (!extractedOk) {
       var res = await Process.run('tar', ['-xf', zipFile.path, '-C', extractDir]);
       if (res.exitCode != 0) {
@@ -468,7 +488,14 @@ exit 0
       }
     }
 
-    // Verifica se há uma subpasta única contendo o openmoney.exe
+    // Remove o .zip baixado imediatamente para evitar falsos positivos do Defender sobre zips em %TEMP%
+    try {
+      if (zipFile.existsSync()) {
+        zipFile.deleteSync();
+      }
+    } catch (_) {}
+
+    // Localiza a pasta raiz dos arquivos extraídos
     String sourceDir = extractDir;
     if (!File('$sourceDir\\openmoney.exe').existsSync()) {
       final subDirs = Directory(extractDir)
@@ -490,82 +517,68 @@ exit 0
 
     final currentExe = Platform.resolvedExecutable;
     final targetDir = File(currentExe).parent.path;
-    final currentPid = pid;
-    final batPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.bat';
-    final vbsPath = '${Directory.systemTemp.path}\\openmoney_launcher_$currentPid.vbs';
 
-    // Script .bat nativo (zero restrição de política do PowerShell ou SmartScreen)
-    final batContent = '''@echo off
-setlocal EnableDelayedExpansion
-set "LOG_FILE=%TEMP%\\openmoney_updater.log"
-echo === OpenMoney Windows Updater started at %DATE% %TIME% === > "%LOG_FILE%"
-echo Source: "$sourceDir" >> "%LOG_FILE%"
-echo Target: "$targetDir" >> "%LOG_FILE%"
-echo Exe: "$currentExe" >> "%LOG_FILE%"
+    // 3. Substituição in-place diretamente em Dart ANTES de fechar o aplicativo!
+    // No Windows, um executável ou DLL em execução NÃO pode ser sobrescrito/deletado,
+    // MAS PODE SER RENOMEADO livremente pelo próprio processo!
+    // Fazemos isso diretamente no Dart sem precisar de scripts .vbs/.bat/.ps1 suspeitos para o Defender.
+    final oldFilesToCleanup = <String>[];
 
-:: 1. Aguarda encerramento gracioso e garante finalizacao do processo
-timeout /t 1 /nobreak >nul 2>&1
-taskkill /F /PID $currentPid >> "%LOG_FILE%" 2>&1
-taskkill /F /IM openmoney.exe >> "%LOG_FILE%" 2>&1
+    void replaceDirectoryContents(Directory src, String dstPath) {
+      Directory(dstPath).createSync(recursive: true);
+      for (final entity in src.listSync(recursive: false)) {
+        final name = entity.path.split(Platform.pathSeparator).last;
+        final targetEntityPath = '$dstPath${Platform.pathSeparator}$name';
 
-:: 2. Loop ate que openmoney.exe esteja destravado para escrita (max 15 tentativas)
-set /a RETRIES=0
-:WAIT_UNLOCK
-set /a RETRIES+=1
-if exist "$currentExe.old" del /f /q "$currentExe.old" >nul 2>&1
-ren "$currentExe" "openmoney.exe.old" >> "%LOG_FILE%" 2>&1
-if exist "$currentExe.old" (
-    ren "$currentExe.old" "openmoney.exe" >> "%LOG_FILE%" 2>&1
-    goto COPY_FILES
-)
-if %RETRIES% GEQ 15 goto COPY_FILES
-timeout /t 1 /nobreak >nul 2>&1
-goto WAIT_UNLOCK
-
-:COPY_FILES
-echo Copying files with robocopy... >> "%LOG_FILE%"
-robocopy "$sourceDir" "$targetDir" /E /IS /IT /IM /R:10 /W:1 /NP >> "%LOG_FILE%" 2>&1
-set "RC=%ERRORLEVEL%"
-echo Robocopy exit code: !RC! >> "%LOG_FILE%"
-if !RC! GEQ 8 (
-    echo Fallback to xcopy... >> "%LOG_FILE%"
-    xcopy /s /e /y /h /r "$sourceDir\\*" "$targetDir\\" >> "%LOG_FILE%" 2>&1
-)
-
-if exist "$targetDir\\openmoney.exe.old" del /f /q "$targetDir\\openmoney.exe.old" >nul 2>&1
-
-echo Launching updated application... >> "%LOG_FILE%"
-start "" /D "$targetDir" "$currentExe"
-
-timeout /t 2 /nobreak >nul 2>&1
-rd /s /q "${tempDir.path}" >nul 2>&1
-del /f /q "$vbsPath" >nul 2>&1
-del /f /q "%~f0" >nul 2>&1
-exit
-''';
-
-    File(batPath).writeAsStringSync(batContent, flush: true);
-
-    // Launcher VBScript para rodar o .bat de forma 100% invisivel (WindowStyle = 0) e desacoplado do Flutter
-    final vbsContent =
-        'CreateObject("WScript.Shell").Run """$batPath""", 0, False\r\n';
-    File(vbsPath).writeAsStringSync(vbsContent, flush: true);
-
-    try {
-      await Process.start(
-        'wscript.exe',
-        ['//B', '//NoLogo', vbsPath],
-        mode: ProcessStartMode.detached,
-      );
-    } catch (_) {
-      await Process.start(
-        'cmd.exe',
-        ['/c', 'start', '', '/min', batPath],
-        mode: ProcessStartMode.detached,
-      );
+        if (entity is Directory) {
+          replaceDirectoryContents(entity, targetEntityPath);
+        } else if (entity is File) {
+          final targetFile = File(targetEntityPath);
+          if (targetFile.existsSync()) {
+            try {
+              // Tenta sobrescrever diretamente primeiro (funciona para arquivos não travados)
+              entity.copySync(targetEntityPath);
+              continue;
+            } catch (_) {
+              // Se o arquivo estiver em uso (ex: openmoney.exe, flutter_windows.dll, app.so),
+              // renomeia o arquivo em uso para .old_update e copia o novo no lugar!
+              final oldPath = '$targetEntityPath.old_update';
+              try {
+                if (File(oldPath).existsSync()) {
+                  File(oldPath).deleteSync();
+                }
+              } catch (_) {}
+              try {
+                targetFile.renameSync(oldPath);
+                oldFilesToCleanup.add(oldPath);
+              } catch (e) {
+                debugPrint('[UpdateService] Falha ao renomear arquivo em uso $targetEntityPath: $e');
+              }
+            }
+          }
+          // Copia o arquivo novo para o caminho original
+          entity.copySync(targetEntityPath);
+        }
+      }
     }
 
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Executa a atualização in-place completa com verificação real em Dart
+    replaceDirectoryContents(Directory(sourceDir), targetDir);
+
+    // Limpa os arquivos temporários extraídos
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
+
+    // 4. Inicia a nova versão do executável (que já está atualizada no disco!)
+    await Process.start(
+      currentExe,
+      const [],
+      workingDirectory: targetDir,
+      mode: ProcessStartMode.detached,
+    );
+
+    await Future.delayed(const Duration(milliseconds: 300));
     exit(0);
   }
 
