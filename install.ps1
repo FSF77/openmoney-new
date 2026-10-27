@@ -26,10 +26,17 @@ $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $versionUrl = "https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json?t=$timestamp"
 
 try {
-    $versionJson = Invoke-RestMethod -Uri $versionUrl -Headers @{
+    $rawText = (Invoke-WebRequest -Uri $versionUrl -Headers @{
         "Cache-Control" = "no-cache"
         "Pragma" = "no-cache"
-    } -UseBasicParsing
+    } -UseBasicParsing).Content
+
+    # Remover eventual BOM e caracteres inválidos antes do primeiro '{'
+    $firstBrace = $rawText.IndexOf('{')
+    if ($firstBrace -ge 0) {
+        $rawText = $rawText.Substring($firstBrace)
+    }
+    $versionJson = $rawText | ConvertFrom-Json
 } catch {
     Write-Error "❌ Falha ao consultar informações de versão: $_"
     exit 1
@@ -38,11 +45,11 @@ try {
 $downloadUrl = ""
 $version = ""
 
-if ($versionJson.windows) {
+if ($versionJson.windows -and $versionJson.windows.downloadUrl) {
     $downloadUrl = $versionJson.windows.downloadUrl
     $version = $versionJson.windows.version
 }
-if (-not $downloadUrl) {
+if (-not $downloadUrl -and $versionJson.downloadUrl) {
     $downloadUrl = $versionJson.downloadUrl
     $version = $versionJson.version
 }
