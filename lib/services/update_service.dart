@@ -426,6 +426,9 @@ exit 0
     var res = await Process.run('tar', ['-xf', zipFile.path, '-C', extractDir]);
     if (res.exitCode != 0) {
       res = await Process.run('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
         '-Command',
         'Expand-Archive -Path "${zipFile.path}" -DestinationPath "$extractDir" -Force',
       ]);
@@ -433,6 +436,9 @@ exit 0
 
     // Remove quarentena / Mark of the Web (Zone.Identifier) que o Defender anexa a arquivos baixados
     await Process.run('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
       '-Command',
       'Get-ChildItem -Path "$extractDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue',
     ]);
@@ -440,47 +446,57 @@ exit 0
     final currentExe = Platform.resolvedExecutable;
     final targetDir = File(currentExe).parent.path;
     final currentPid = pid;
-    final scriptPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.bat';
+    final scriptPath = '${Directory.systemTemp.path}\\openmoney_updater_$currentPid.ps1';
 
-    final scriptContent = '''@echo off
-set PID=$currentPid
-set NEW_DIR=$extractDir
-set TARGET_DIR=$targetDir
-set TARGET_EXE=$currentExe
+    final scriptContent = '''# OpenMoney Silent Updater
+\$ErrorActionPreference = "SilentlyContinue"
 
-:waitloop
-tasklist /FI "PID eq %PID%" 2>NUL | find /I "%PID%">NUL
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
+# 1. Aguarda o processo anterior encerrar (timeout maximo 10s para nunca congelar)
+try {
+    \$proc = Get-Process -Id $currentPid -ErrorAction SilentlyContinue
+    if (\$proc) {
+        \$proc.WaitForExit(10000)
+    }
+} catch {}
+Start-Sleep -Milliseconds 600
 
-timeout /t 1 /nobreak >nul
+# 2. Copia os novos arquivos para o diretorio do aplicativo
+try {
+    & robocopy "$extractDir" "$targetDir" /e /r:3 /w:1 | Out-Null
+    if (\$LASTEXITCODE -ge 8) {
+        Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force
+    }
+} catch {
+    Copy-Item -Path "$extractDir\\*" -Destination "$targetDir" -Recurse -Force
+}
 
-:: Tenta copiar com robocopy (retenta caso o Defender esteja varrendo o arquivo)
-robocopy "%NEW_DIR%" "%TARGET_DIR%" /e /r:3 /w:1 >nul 2>&1
-if %ERRORLEVEL% GEQ 8 (
-    :: Fallback para xcopy se robocopy falhar
-    xcopy /s /e /y "%NEW_DIR%\\*" "%TARGET_DIR%\\" >nul 2>&1
-)
+# 3. Desbloqueia arquivos no destino contra bloqueios do Windows Defender
+Get-ChildItem -Path "$targetDir" -Recurse | Unblock-File -ErrorAction SilentlyContinue
 
-:: Desbloqueia arquivos no destino
-powershell -Command "Get-ChildItem -Path '%TARGET_DIR%' -Recurse | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
+# 4. Inicia o aplicativo atualizado
+Start-Process "$currentExe"
 
-start "" "%TARGET_EXE%"
-rd /s /q "${tempDir.path}" 2>nul
-del "%~f0"
-exit
+# 5. Limpa a pasta temporaria e o script
+Remove-Item -Path "${tempDir.path}" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path \$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 ''';
 
     File(scriptPath).writeAsStringSync(scriptContent, flush: true);
     await Process.start(
-      'cmd.exe',
-      ['/c', scriptPath],
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        scriptPath,
+      ],
       mode: ProcessStartMode.detached,
     );
 
-    await Future.delayed(const Duration(milliseconds: 250));
+    await Future.delayed(const Duration(milliseconds: 300));
     exit(0);
   }
 
