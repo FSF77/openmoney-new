@@ -25,6 +25,19 @@ if ($VersionLine -match "version:\s*([0-9\.]+)\+?([0-9]*)") {
     $BuildNum = "1"
 }
 
+# Obtem informacoes da release do macOS registradas no version.json
+$VersionJsonFile = "$RootDir\version.json"
+$MacReleaseNotes = ""
+if (Test-Path $VersionJsonFile) {
+    try {
+        $RawJson = Get-Content $VersionJsonFile -Raw -Encoding UTF8
+        $JsonObj = $RawJson | ConvertFrom-Json
+        if ($JsonObj.notes) {
+            $MacReleaseNotes = [string]$JsonObj.notes
+        }
+    } catch {}
+}
+
 # Sincroniza fallbackVersion e fallbackBuild em lib/services/update_service.dart
 $UpdateServiceFile = "$RootDir\lib\services\update_service.dart"
 if (Test-Path $UpdateServiceFile) {
@@ -35,7 +48,13 @@ if (Test-Path $UpdateServiceFile) {
     [System.IO.File]::WriteAllText($UpdateServiceFile, $UsContent, $Utf8NoBom)
 }
 
-$Notes = if ($CustomNotes) { $CustomNotes } else { "OpenMoney Flutter v$Version para Windows - Versao oficial multiplataforma." }
+$Notes = if ($CustomNotes) {
+    $CustomNotes
+} elseif ($MacReleaseNotes) {
+    $MacReleaseNotes
+} else {
+    "OpenMoney Flutter v$Version para Windows - Versao oficial multiplataforma."
+}
 $ReleaseDate = Get-Date -Format "dd/MM/yyyy"
 
 Write-Host "====================================================================" -ForegroundColor Cyan
