@@ -1,24 +1,24 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 18,
-  "version": "2.0.18",
-  "notes": "OpenMoney Flutter v2.0.18 - Filtro multiconta por checkbox, agrupador de Negócios (PF/PJ) no Fluxo de Caixa e Relatórios, conciliação inteligente de transferências e cópia de lançamentos.",
-  "releaseDate": "27/10/2026",
-  "windows": {
-    "build": 17,
-    "version": "2.0.17",
-    "sizeMb": 12,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.17.zip",
-    "sha256": "127a5a7c8877580d99a3c7b43687ffa3b6e10032feeff1c32b64a54806cac89d",
-    "releaseDate": "27/10/2026"
-  },
-  "macos": {
-    "version": "2.0.18",
-    "build": 18,
-    "releaseDate": "27/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.18.zip",
-    "sha256": "0ca360d8217225280e01fabf437448df6960f0c36b2fe9cd1e6e972d9e97dd9b",
-    "sizeMb": 11
-  },
-  "title": "OpenMoney Flutter v2.0.18"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "build":  18,
+    "version":  "2.0.18",
+    "notes":  "OpenMoney Flutter v2.0.18 - Filtro multiconta por checkbox, agrupador de Negócios (PF/PJ) no Fluxo de Caixa e Relatórios, conciliação inteligente de transferências e cópia de lançamentos.",
+    "releaseDate":  "27/10/2026",
+    "windows":  {
+                    "build":  18,
+                    "version":  "2.0.18",
+                    "sizeMb":  12,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.18.zip",
+                    "sha256":  "616ac0d0edfef8173f610f39109bd38a82779d6cda9fadc6680320ca4176a226",
+                    "releaseDate":  "27/10/2026"
+                },
+    "macos":  {
+                  "version":  "2.0.18",
+                  "build":  18,
+                  "releaseDate":  "27/10/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.18.zip",
+                  "sha256":  "0ca360d8217225280e01fabf437448df6960f0c36b2fe9cd1e6e972d9e97dd9b",
+                  "sizeMb":  11
+              },
+    "title":  "OpenMoney Flutter v2.0.18"
 }
