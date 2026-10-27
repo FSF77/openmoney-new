@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  11,
-    "version":  "2.0.11",
-    "notes":  "OpenMoney Flutter v2.0.11 para Windows - Versao oficial multiplataforma.",
-    "releaseDate":  "26/10/2026",
-    "windows":  {
-                    "build":  11,
-                    "version":  "2.0.11",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.11.zip",
-                    "sha256":  "757c97edef9ca794566bfb6dd79075a242b41245fa6d439abdd9636c396aac03",
-                    "releaseDate":  "26/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.0.11",
-                  "build":  11,
-                  "releaseDate":  "26/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.11.zip",
-                  "sha256":  "049610dbb06a302ca43658c4f28f022d0a7a87cd39883aa6178dead3d5bff87b",
-                  "sizeMb":  10
-              },
-    "title":  "OpenMoney Flutter v2.0.11"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 12,
+  "version": "2.0.12",
+  "notes": "OpenMoney Flutter v2.0.12 - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.",
+  "releaseDate": "27/10/2026",
+  "windows": {
+    "build": 11,
+    "version": "2.0.11",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.0.11.zip",
+    "sha256": "757c97edef9ca794566bfb6dd79075a242b41245fa6d439abdd9636c396aac03",
+    "releaseDate": "26/10/2026"
+  },
+  "macos": {
+    "version": "2.0.12",
+    "build": 12,
+    "releaseDate": "27/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.0.12.zip",
+    "sha256": "e55efc0669cfb91bcecb18a83bb6b7fa8afcecd958a8917dfd64a7d9207f4a8c",
+    "sizeMb": 10
+  },
+  "title": "OpenMoney Flutter v2.0.12"
 }
