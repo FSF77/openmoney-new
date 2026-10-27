@@ -26,6 +26,47 @@ Seus dados pertencem exclusivamente a você:
 
 ---
 
+## ⚡ Instalação Rápida (1-Click / Terminal)
+
+Você pode instalar ou atualizar para a versão mais recente do OpenMoney diretamente pelo terminal do seu sistema operacional com um único comando:
+
+### 🍏 No macOS (Terminal)
+Abra o **Terminal** e execute:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
+```
+
+> **O que o script faz no macOS:**
+> 1. Consulta o feed oficial (`version.json`) com bypass de cache para garantir que sempre baixará a versão mais recente.
+> 2. Baixa o pacote oficial `OpenMoney-macOS-<versão>.zip`.
+> 3. Instala em `/Applications/OpenMoney.app`.
+> 4. Remove quarentena de segurança do Gatekeeper (`xattr -cr`).
+> 5. Inicia o OpenMoney automaticamente.
+
+---
+
+### 🪟 No Windows (PowerShell)
+Abra o **PowerShell** (usuário padrão, não requer privilégios de Administrador) e execute:
+
+```powershell
+irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
+```
+
+> **Alternativa pelo Prompt de Comando (CMD):**
+> ```cmd
+> powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex"
+> ```
+>
+> **O que o script faz no Windows:**
+> 1. Fecha instâncias anteriores do aplicativo para evitar arquivos bloqueados.
+> 2. Consulta o feed oficial (`version.json`) com bypass de cache para obter a versão mais recente.
+> 3. Baixa e descompacta o pacote `OpenMoney-Windows-<versão>.zip` no diretório padrão do usuário (`%LOCALAPPDATA%\Programs\OpenMoney`).
+> 4. Cria automaticamente atalhos no **Menu Iniciar** e na **Área de Trabalho (Desktop)**.
+> 5. Inicia o OpenMoney automaticamente.
+
+---
+
 ## 💎 Principais Funcionalidades e Recursos
 
 ### 1. Gestão de Contas e Livro-Caixa (Extrato Inteligente)
@@ -169,6 +210,8 @@ Os pacotes e o feed residem diretamente no repositório principal:
 openmoney-new/
 ├── version.json                     # Feed oficial de versão (macOS e Windows)
 ├── install.sh                       # Script de instalação rápida no macOS (curl | bash)
+├── install.ps1                      # Script de instalação rápida no Windows (PowerShell)
+├── install.bat                      # Instalador rápido em lote para Windows (CMD)
 └── downloads/
     ├── macos/
     │   └── OpenMoney-macOS-<versao>.zip

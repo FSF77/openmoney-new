@@ -115,7 +115,7 @@ $UpdatedJson = $Data | ConvertTo-Json -Depth 5
 Write-Host "version.json atualizado com sucesso." -ForegroundColor Green
 
 # 4. Commit e Push no proprio repositorio openmoney-new
-& git add pubspec.yaml pubspec.lock version.json "downloads/windows/$ZipName"
+& git add pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {
