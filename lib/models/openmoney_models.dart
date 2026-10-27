@@ -855,14 +855,17 @@ class DueBillItem {
   final Transaction tx;
   final String accountName;
   final int daysUntilDue; // < 0: overdue, 0: today, > 0: upcoming
+  final String? dueDate;
 
   const DueBillItem({
     required this.tx,
     required this.accountName,
     required this.daysUntilDue,
+    this.dueDate,
   });
 
   String get id => tx.id;
+  String get effectiveDueDate => dueDate ?? tx.date;
   bool get isOverdue => daysUntilDue < 0;
   bool get isDueToday => daysUntilDue == 0;
   bool get isPayable => tx.amt < 0;

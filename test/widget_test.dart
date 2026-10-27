@@ -568,6 +568,106 @@ CX
         tempDir.deleteSync(recursive: true);
       } catch (_) {}
     });
+
+    test('11. Due bills view uses invoice due date for credit cards and only considers overdue if fatura vigente', () {
+      final store = MoneyStore(autoBoot: false);
+      final today = todayISO();
+
+      // 1. Regular checking account
+      store.saveAccount(
+        name: 'Conta Corrente',
+        type: 'Corrente',
+        openingCents: 100000,
+        closeDay: 1,
+        dueDay: 1,
+        payAccId: '',
+      );
+      final regularAcc = store.db.accounts.firstWhere((a) => a.type == 'Corrente');
+
+      // 2. Credit card account (Neo - closes on 23, due on 3)
+      store.saveAccount(
+        name: 'Neo',
+        type: kCardType,
+        openingCents: 0,
+        closeDay: 23,
+        dueDay: 3,
+        payAccId: regularAcc.id,
+      );
+      final cardAcc = store.db.accounts.firstWhere((a) => a.name == 'Neo');
+      final cardCfg = cardAcc.card!;
+      final currentIk = invKeyFor(cardCfg, today);
+      final pastIk = addMonthsYM(currentIk, -2);
+
+      // Past checking account expense (unreconciled) -> MUST be overdue
+      final pastDate = addDaysDate(today, -10);
+      store.db.txs.add(
+        Transaction(
+          id: 'tx_reg_overdue',
+          acc: regularAcc.id,
+          date: pastDate,
+          payee: 'Conta de Energia Atrasada',
+          cat: 'Moradia',
+          memo: '',
+          amt: -15000,
+          rec: false,
+        ),
+      );
+
+      // User's exact scenario: Purchase on 23/10/2026 on credit card Neo, invoice due date is next month (e.g. 03/12/2026)
+      // Must NOT be considered overdue because the invoice due date is far in the future
+      store.db.txs.add(
+        Transaction(
+          id: 'tx_card_neo_future_due',
+          acc: cardAcc.id,
+          date: addDaysDate(today, -4),
+          payee: 'Compra Recente Neo',
+          cat: 'Geral',
+          memo: '',
+          amt: -5000,
+          rec: false,
+          ik: currentIk,
+        ),
+      );
+
+      // Past credit card expense from an OLD invoice whose invoice due date was in the past -> MUST NOT be considered overdue
+      store.db.txs.add(
+        Transaction(
+          id: 'tx_card_old_inv',
+          acc: cardAcc.id,
+          date: addDaysDate(today, -60),
+          payee: 'Compra Fatura Antiga',
+          cat: 'Geral',
+          memo: '',
+          amt: -8000,
+          rec: false,
+          ik: pastIk,
+        ),
+      );
+
+      // A credit card transaction in the current invoice with custom invoice info where invoice due date passed
+      cardAcc.invoices ??= {};
+      final overdueIk = '2026-overdue-test';
+      cardAcc.invoices![overdueIk] = InvoiceInfo(
+        close: addDaysDate(today, -15),
+        due: addDaysDate(today, -5),
+        pay: regularAcc.id,
+      );
+
+      final items = store.dueBillItems(withinDays: 3);
+      final itemIds = items.map((i) => i.tx.id).toSet();
+
+      // The regular account overdue bill MUST be present
+      expect(itemIds.contains('tx_reg_overdue'), true);
+
+      // The user's credit card transaction (whose invoice due date is in the future) MUST NOT be in the due bills list
+      expect(itemIds.contains('tx_card_neo_future_due'), false);
+
+      // The credit card transaction from an OLD invoice MUST NOT be considered overdue
+      expect(itemIds.contains('tx_card_old_inv'), false);
+
+      final summary = store.dueBillsSummary(withinDays: 3);
+      expect(summary.overdueCount, 1);
+    });
   });
 
   testWidgets('5. Renders OpenMoneyApp shell cleanly on Desktop & Mobile', (WidgetTester tester) async {

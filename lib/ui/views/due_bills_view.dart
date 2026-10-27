@@ -60,15 +60,18 @@ class DueBillsView extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 170,
+                    width: 195,
                     child: DropdownButtonFormField<int>(
                       initialValue: const [1, 2, 3, 5, 7, 10, 15, 30]
                               .contains(store.reminderDaysAhead)
                           ? store.reminderDaysAhead
                           : 3,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Antecedência',
                         isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         border: OutlineInputBorder(),
                       ),
                       items: const [1, 2, 3, 5, 7, 10, 15, 30]
@@ -234,7 +237,9 @@ class DueBillsView extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${fmtDate(item.tx.date)} • ${item.accountName} • ${item.tx.cat}',
+                        (item.dueDate != null && item.dueDate != item.tx.date)
+                            ? 'Venc: ${fmtDate(item.effectiveDueDate)} (Compra: ${fmtDate(item.tx.date)}) • ${item.accountName} • ${item.tx.cat}'
+                            : '${fmtDate(item.effectiveDueDate)} • ${item.accountName} • ${item.tx.cat}',
                         style: TextStyle(
                           fontSize: 12,
                           color: colors.textSecondary,

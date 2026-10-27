@@ -2852,18 +2852,49 @@ class MoneyStore extends ChangeNotifier {
       if (accountId != null && accountId.isNotEmpty && tx.acc != accountId) {
         continue;
       }
-      final diff = daysBetween(today, tx.date);
+      final acc = accById(tx.acc);
+      final isCard = acc != null && acc.type == kCardType;
+      String targetDate = tx.date;
+      String? txIk;
+      if (isCard && acc.card != null) {
+        txIk = tx.ik ?? tx.inv ?? invKeyFor(acc.card!, tx.date);
+        final invInfo = acc.invoices?[txIk];
+        if (invInfo != null && invInfo.due.isNotEmpty) {
+          targetDate = invInfo.due;
+        } else {
+          targetDate = invDates(acc.card!, txIk).due;
+        }
+      }
+
+      final diff = daysBetween(today, targetDate);
       if (withinDays != null) {
         if (withinDays >= 0 && diff > withinDays) continue;
       } else {
         if (diff > horizon) continue;
       }
-      final accName = accById(tx.acc)?.name ?? 'Conta';
+      if (diff < 0) {
+        if (isCard) {
+          final currentIk = acc.card != null
+              ? invKeyFor(acc.card!, today)
+              : (today.length >= 7 ? today.substring(0, 7) : today);
+          final resolvedIk = txIk ??
+              tx.ik ??
+              tx.inv ??
+              (acc.card != null
+                  ? invKeyFor(acc.card!, tx.date)
+                  : (tx.date.length >= 7 ? tx.date.substring(0, 7) : tx.date));
+          if (resolvedIk != currentIk) {
+            continue;
+          }
+        }
+      }
+      final accName = acc?.name ?? 'Conta';
       items.add(
         DueBillItem(
           tx: tx,
           accountName: accName,
           daysUntilDue: diff,
+          dueDate: targetDate,
         ),
       );
     }
@@ -2872,7 +2903,7 @@ class MoneyStore extends ChangeNotifier {
       if (a.daysUntilDue != b.daysUntilDue) {
         return a.daysUntilDue.compareTo(b.daysUntilDue);
       }
-      final dc = a.tx.date.compareTo(b.tx.date);
+      final dc = a.effectiveDueDate.compareTo(b.effectiveDueDate);
       if (dc != 0) return dc;
       return a.tx.payee.compareTo(b.tx.payee);
     });
