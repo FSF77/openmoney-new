@@ -217,6 +217,26 @@ String? parseInvoiceKey(String raw) {
     }
   }
 
+  final mYMatch = RegExp(r'\b(\d{1,2})[\/\-.](\d{2,4})\b').firstMatch(clean);
+  if (mYMatch != null) {
+    final m = int.tryParse(mYMatch.group(1)!) ?? 0;
+    final yRaw = mYMatch.group(2)!;
+    final y = int.tryParse(yRaw) ?? 0;
+    if (m >= 1 && m <= 12) {
+      final fullY = yRaw.length == 2 ? 2000 + y : y;
+      return '${fullY.toString().padLeft(4, '0')}-${pad2(m)}';
+    }
+  }
+
+  final yMMatch = RegExp(r'\b(\d{4})[\/\-.](\d{1,2})\b').firstMatch(clean);
+  if (yMMatch != null) {
+    final y = int.tryParse(yMMatch.group(1)!) ?? 0;
+    final m = int.tryParse(yMMatch.group(2)!) ?? 0;
+    if (m >= 1 && m <= 12) {
+      return '${y.toString().padLeft(4, '0')}-${pad2(m)}';
+    }
+  }
+
   const months = {
     'jan': 1,
     'fev': 2,
@@ -549,8 +569,14 @@ class CSVImporter {
         if (accName.isEmpty || invalidAccountNames.contains(lower)) continue;
 
         if (!allAccounts.any((a) => cmpPt(a.name, accName) == 0)) {
+          bool hasInvoiceColValue = false;
+          if (colMap.invoice != null && colMap.invoice! < row.length) {
+            hasInvoiceColValue =
+                parseInvoiceKey(row[colMap.invoice!].trim()) != null;
+          }
           String accType;
-          if (lower.contains('cartao') ||
+          if (hasInvoiceColValue ||
+              lower.contains('cartao') ||
               lower.contains('card') ||
               lower.contains('credito')) {
             accType = kCardType;
@@ -607,6 +633,14 @@ class CSVImporter {
             final fv = removeDiacritics(row[colMap.accountFavorite!].trim()).toLowerCase();
             if (fv == 'sim' || fv == 'yes' || fv == 'true' || fv == '1') {
               existingAcc.favorite = true;
+            }
+          }
+          if (colMap.invoice != null &&
+              colMap.invoice! < row.length &&
+              newAccounts.contains(existingAcc) &&
+              existingAcc.type != kCardType) {
+            if (parseInvoiceKey(row[colMap.invoice!].trim()) != null) {
+              existingAcc.type = kCardType;
             }
           }
         }
@@ -740,6 +774,28 @@ class CSVImporter {
           break;
         }
       }
+
+      // Ignora lançamentos de pagamento automático/histórico de fatura vindos do CSV
+      // para que syncCards(settleCardInvoices: true) gere o par vinculado e conciliado
+      // na conta de pagamento padrão na data de vencimento da fatura.
+      final lowerPayee = removeDiacritics(payee).toLowerCase();
+      final lowerMemo = removeDiacritics(memo).toLowerCase();
+      final isAutoCardPayRow =
+          lowerPayee.startsWith('pagamento do cartao') ||
+          lowerPayee.startsWith('pagamento de fatura') ||
+          (lowerMemo.startsWith('fatura ') &&
+              cat.startsWith('Transferência:'));
+      if (isAutoCardPayRow) {
+        final targetsCard = allAccounts.any(
+          (a) =>
+              a.type == kCardType &&
+              cat.toLowerCase() == 'transferência: ${a.name.toLowerCase()}',
+        );
+        if (accItem?.type == kCardType || targetsCard) {
+          continue;
+        }
+      }
+
       if (accItem?.type == kCardType) {
         if (colMap.invoice != null && colMap.invoice! < row.length) {
           final rawInv = row[colMap.invoice!].trim();

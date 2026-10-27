@@ -251,9 +251,7 @@ class CategoryItem {
       return includeInReports!;
     }
     final norm = removeDiacritics(path).toLowerCase();
-    if (norm.contains('transferencia') ||
-        norm.contains('transferencias') ||
-        isHiddenFromPlanning(path)) {
+    if (norm.contains('transferencia') || norm.contains('transferencias')) {
       return false;
     }
     return true;
@@ -1155,20 +1153,6 @@ int byCatSort(CategoryItem a, CategoryItem b) {
   final tc = cmpPt(a.type, b.type);
   if (tc != 0) return tc;
   return cmpPath(a.path, b.path);
-}
-
-bool isHiddenFromPlanning(String catPath) {
-  final parts = catPath.split(kCategorySep);
-  for (final part in parts) {
-    final norm = part.trim().toUpperCase();
-    if (norm == 'ZZZ (D)' ||
-        norm == 'ZZZ (C)' ||
-        norm == 'ZZZ(D)' ||
-        norm == 'ZZZ(C)') {
-      return true;
-    }
-  }
-  return false;
 }
 
 bool isPredictionPayee(String payee) {

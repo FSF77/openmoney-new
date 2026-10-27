@@ -208,7 +208,7 @@ class MoneyStore extends ChangeNotifier {
     if (kIsWeb) {
       migrate();
       syncRecs();
-      syncCards();
+      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
       rebuildIndexes();
       notifyListeners();
       return;
@@ -283,7 +283,7 @@ class MoneyStore extends ChangeNotifier {
 
     migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
@@ -376,7 +376,7 @@ class MoneyStore extends ChangeNotifier {
       db = Database.fromJson(decoded);
       migrate();
       syncRecs();
-      syncCards();
+      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
       rebuildIndexes();
       _lastSavedModificationDate = f.lastModifiedSync();
       notifyListeners();
@@ -399,7 +399,7 @@ class MoneyStore extends ChangeNotifier {
       db = loaded;
       migrate();
       syncRecs();
-      syncCards();
+      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
       rebuildIndexes();
       if (db.accounts.isNotEmpty) {
         selectedAccountId = db.accounts.first.id;
@@ -431,7 +431,7 @@ class MoneyStore extends ChangeNotifier {
     }
     migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
@@ -745,7 +745,7 @@ class MoneyStore extends ChangeNotifier {
     db = loaded;
     migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
@@ -757,21 +757,49 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Migration & Sync
 
+  bool _shouldSettleImportedCardInvoicesOnLoad() {
+    final cardIds = db.accounts
+        .where((a) => a.type == kCardType)
+        .map((a) => a.id)
+        .toSet();
+    if (cardIds.isEmpty) return false;
+    bool hasInvPay = false;
+    bool hasReconciledCardTx = false;
+    for (final tx in db.txs) {
+      if (tx.xfer != null && tx.xfer!.startsWith('invpay:')) {
+        hasInvPay = true;
+        break;
+      }
+      if (cardIds.contains(tx.acc) && tx.auto != true && tx.rec) {
+        hasReconciledCardTx = true;
+      }
+    }
+    return !hasInvPay && hasReconciledCardTx;
+  }
+
   void migrate() {
     db.cats.sort(byCatSort);
     for (int i = 0; i < db.accounts.length; i++) {
       if (db.accounts[i].type == kCardType) {
+        final fallbackPay = db.accounts
+                .where((a) =>
+                    a.id != db.accounts[i].id && a.type != kCardType)
+                .firstOrNull
+                ?.id ??
+            db.accounts
+                .where((a) => a.id != db.accounts[i].id)
+                .firstOrNull
+                ?.id ??
+            '';
         if (db.accounts[i].card == null) {
-          final fallbackPay = db.accounts
-                  .where((a) => a.id != db.accounts[i].id)
-                  .firstOrNull
-                  ?.id ??
-              '';
           db.accounts[i].card = CardConfig(
             closeDay: 1,
             dueDay: 10,
             pay: fallbackPay,
           );
+        } else if (db.accounts[i].card!.pay.isEmpty ||
+            !db.accounts.any((a) => a.id == db.accounts[i].card!.pay)) {
+          db.accounts[i].card!.pay = fallbackPay;
         }
         db.accounts[i].invoices ??= {};
       }
@@ -898,34 +926,45 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
-  void syncCards() {
+  void syncCards({bool settleCardInvoices = false}) {
     final cards = {
       for (final a in db.accounts.where((a) => a.type == kCardType)) a.id: a
     };
     if (cards.isEmpty) {
-      db.txs.removeWhere((t) => t.auto == true && t.card != null);
+      db.txs.removeWhere(
+        (t) =>
+            (t.auto == true && t.card != null) ||
+            (t.xfer != null && t.xfer!.startsWith('invpay:')),
+      );
       return;
     }
 
     db.txs.removeWhere((t) {
-      if (t.auto != true) return false;
+      final isAutoCard = t.auto == true && t.card != null;
+      final isInvPay = t.xfer != null && t.xfer!.startsWith('invpay:');
+      if (!isAutoCard && !isInvPay) return false;
       if (t.card != null && !cards.containsKey(t.card)) return true;
       return false;
     });
 
     final today = todayISO();
     final cardTxIndices = <String, List<int>>{};
+    final autoTxMap = <String, int>{};
+    final invPayTxMap = <String, int>{};
+    final settledKeysByCard = <String, Set<String>>{};
+
     for (int idx = 0; idx < db.txs.length; idx++) {
       final tx = db.txs[idx];
-      if (cards.containsKey(tx.acc) && tx.auto != true) {
+      final isInvPay = tx.xfer != null && tx.xfer!.startsWith('invpay:');
+      if (tx.auto == true) {
+        autoTxMap[tx.id] = idx;
+      } else if (isInvPay) {
+        invPayTxMap[tx.id] = idx;
+        if (tx.card != null && tx.inv != null) {
+          settledKeysByCard.putIfAbsent(tx.card!, () => {}).add(tx.inv!);
+        }
+      } else if (cards.containsKey(tx.acc)) {
         cardTxIndices.putIfAbsent(tx.acc, () => []).add(idx);
-      }
-    }
-
-    final autoTxMap = <String, int>{};
-    for (int idx = 0; idx < db.txs.length; idx++) {
-      if (db.txs[idx].auto == true) {
-        autoTxMap[db.txs[idx].id] = idx;
       }
     }
 
@@ -947,7 +986,7 @@ class MoneyStore extends ChangeNotifier {
       for (final entry in invoices.entries.toList()) {
         final k = entry.key;
         final inv = entry.value;
-        if (inv.close.compareTo(today) >= 0 && inv.manual != true) {
+        if (inv.manual != true) {
           final d = invDates(cardCfg, k);
           if (d.close != inv.close ||
               d.due != inv.due ||
@@ -960,6 +999,15 @@ class MoneyStore extends ChangeNotifier {
             );
             invoicesModified = true;
           }
+        } else if (!db.accounts.any((a) => a.id == inv.pay) &&
+            cardCfg.pay.isNotEmpty) {
+          invoices[k] = InvoiceInfo(
+            close: inv.close,
+            due: inv.due,
+            pay: cardCfg.pay,
+            manual: inv.manual,
+          );
+          invoicesModified = true;
         }
       }
 
@@ -983,52 +1031,102 @@ class MoneyStore extends ChangeNotifier {
         sums[ik] = (sums[ik] ?? 0) + db.txs[tIdx].amt;
       }
 
+      final settledForCard = settledKeysByCard[cardId] ?? const <String>{};
       final allKeys = {...invoices.keys, ...sums.keys};
       for (final k in allKeys) {
         final total = sums[k] ?? 0;
-        final xid = 'inv:$cardId:$k';
+        final autoXid = 'inv:$cardId:$k';
+        final payXid = 'invpay:$cardId:$k';
         final inv = invoices[k];
         if (inv == null) continue;
         final payAccExists = db.accounts.any((a) => a.id == inv.pay);
 
         if (total >= 0 || !payAccExists) {
-          xidsToRemove.add(xid);
+          xidsToRemove.add(autoXid);
+          xidsToRemove.add(payXid);
           continue;
         }
 
         final amt = total.abs();
-        final label = 'Pagamento do Cartão "$cardName"';
+        final payAccName = accById(inv.pay)?.name ?? '';
         final cat = 'Transferência: $cardName';
-        final payCat = 'Transferência: ${accById(inv.pay)?.name ?? ""}';
+        final payCat = 'Transferência: $payAccName';
+        final isDueOnOrBeforeToday = inv.due.compareTo(today) <= 0;
+        final shouldSettle =
+            (settleCardInvoices || settledForCard.isNotEmpty) &&
+            isDueOnOrBeforeToday;
 
-        _upsertAutoTxFast(
-          autoTxMap: autoTxMap,
-          appended: newAutoTxs,
-          id: '$xid:c',
-          acc: cardId,
-          peer: inv.pay,
-          date: inv.due,
-          payee: label,
-          cat: payCat,
-          amt: amt,
-          xfer: xid,
-          card: cardId,
-          inv: k,
-        );
-        _upsertAutoTxFast(
-          autoTxMap: autoTxMap,
-          appended: newAutoTxs,
-          id: '$xid:p',
-          acc: inv.pay,
-          peer: cardId,
-          date: inv.due,
-          payee: label,
-          cat: cat,
-          amt: -amt,
-          xfer: xid,
-          card: cardId,
-          inv: k,
-        );
+        if (shouldSettle) {
+          xidsToRemove.add(autoXid);
+          final payCardLabel =
+              'Pagamento de Fatura${payAccName.isEmpty ? "" : " ($payAccName)"}';
+          final paySourceLabel = 'Pagamento de Fatura: $cardName';
+          final payMemo = 'Pagamento da Fatura ${fmtMonth(k)}';
+
+          _upsertInvPayTxFast(
+            invPayTxMap: invPayTxMap,
+            appended: newAutoTxs,
+            id: '$payXid:c',
+            acc: cardId,
+            peer: inv.pay,
+            date: inv.due,
+            payee: payCardLabel,
+            cat: payCat,
+            memo: payMemo,
+            amt: amt,
+            xfer: payXid,
+            card: cardId,
+            inv: k,
+            ik: k,
+          );
+          _upsertInvPayTxFast(
+            invPayTxMap: invPayTxMap,
+            appended: newAutoTxs,
+            id: '$payXid:p',
+            acc: inv.pay,
+            peer: cardId,
+            date: inv.due,
+            payee: paySourceLabel,
+            cat: cat,
+            memo: payMemo,
+            amt: -amt,
+            xfer: payXid,
+            card: cardId,
+            inv: k,
+            ik: null,
+          );
+        } else {
+          xidsToRemove.add(payXid);
+          final label = 'Pagamento do Cartão "$cardName"';
+          _upsertAutoTxFast(
+            autoTxMap: autoTxMap,
+            appended: newAutoTxs,
+            id: '$autoXid:c',
+            acc: cardId,
+            peer: inv.pay,
+            date: inv.due,
+            payee: label,
+            cat: payCat,
+            amt: amt,
+            xfer: autoXid,
+            card: cardId,
+            inv: k,
+          );
+          _upsertAutoTxFast(
+            autoTxMap: autoTxMap,
+            appended: newAutoTxs,
+            id: '$autoXid:p',
+            acc: inv.pay,
+            peer: cardId,
+            date: inv.due,
+            payee: label,
+            cat: cat,
+            amt: -amt,
+            xfer: autoXid,
+            card: cardId,
+            inv: k,
+          );
+        }
       }
 
       if (invoicesModified) {
@@ -1042,6 +1140,60 @@ class MoneyStore extends ChangeNotifier {
     }
     if (newAutoTxs.isNotEmpty) {
       db.txs.addAll(newAutoTxs);
+    }
+  }
+
+  void _upsertInvPayTxFast({
+    required Map<String, int> invPayTxMap,
+    required List<Transaction> appended,
+    required String id,
+    required String acc,
+    required String peer,
+    required String date,
+    required String payee,
+    required String cat,
+    required String memo,
+    required int amt,
+    required String xfer,
+    required String card,
+    required String inv,
+    required String? ik,
+  }) {
+    final idx = invPayTxMap[id];
+    if (idx != null) {
+      final t = db.txs[idx];
+      t.acc = acc;
+      t.peer = peer;
+      t.date = date;
+      t.payee = payee;
+      t.cat = cat;
+      t.memo = memo;
+      t.amt = amt;
+      t.rec = true;
+      t.xfer = xfer;
+      t.auto = null;
+      t.card = card;
+      t.inv = inv;
+      t.ik = ik;
+    } else {
+      final tx = Transaction(
+        id: id,
+        acc: acc,
+        peer: peer,
+        date: date,
+        payee: payee,
+        cat: cat,
+        memo: memo,
+        amt: amt,
+        rec: true,
+        xfer: xfer,
+        auto: null,
+        card: card,
+        inv: inv,
+        ik: ik,
+      );
+      appended.add(tx);
+      invPayTxMap[id] = db.txs.length + appended.length - 1;
     }
   }
 
@@ -1750,18 +1902,25 @@ class MoneyStore extends ChangeNotifier {
     if (idx == -1) return;
     final t = db.txs[idx];
 
-    if (t.auto == true) {
+    if (t.auto == true ||
+        (t.xfer != null && t.xfer!.startsWith('invpay:'))) {
       if (t.card != null && t.inv != null) {
         final cIdx = db.accounts.indexWhere((a) => a.id == t.card);
         if (cIdx != -1) {
           final inv = db.accounts[cIdx].invoices?[t.inv!];
           if (inv != null) {
             inv.due = newDate;
+            if (newAccId != null &&
+                newAccId != t.acc &&
+                t.acc != t.card) {
+              inv.pay = newAccId;
+            }
             inv.manual = true;
           }
         }
       }
       syncCards();
+      markIndexesDirty();
       save();
       return;
     }
@@ -2464,9 +2623,7 @@ class MoneyStore extends ChangeNotifier {
       }
     }
     final norm = removeDiacritics(catPath).toLowerCase();
-    if (norm.contains('transferencia') ||
-        norm.contains('transferencias') ||
-        isHiddenFromPlanning(catPath)) {
+    if (norm.contains('transferencia') || norm.contains('transferencias')) {
       return false;
     }
     return true;
@@ -2477,7 +2634,6 @@ class MoneyStore extends ChangeNotifier {
   MonthlyReportData buildMonthlyReport(String monthYM) {
     final txs = monthTransactions(monthYM).where((tx) {
       if (tx.xfer != null || tx.peer != null) return false;
-      if (isHiddenFromPlanning(tx.cat)) return false;
       if (!isCategoryIncludedInReports(tx.cat)) return false;
       return true;
     }).toList();
@@ -2580,8 +2736,9 @@ class MoneyStore extends ChangeNotifier {
     }
     db.cats.sort(byCatSort);
     db.txs.addAll(result.newTxs);
+    migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: true);
     rebuildIndexes();
     save(immediate: true);
 
@@ -2622,8 +2779,9 @@ class MoneyStore extends ChangeNotifier {
     }
     db.cats.sort(byCatSort);
     db.txs.addAll(result.newTxs);
+    migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: true);
     rebuildIndexes();
     save(immediate: true);
 
@@ -2684,8 +2842,9 @@ class MoneyStore extends ChangeNotifier {
     }
 
     db.txs.addAll(result.newTxs);
+    migrate();
     syncRecs();
-    syncCards();
+    syncCards(settleCardInvoices: true);
     rebuildIndexes();
     save(immediate: true);
 

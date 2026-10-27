@@ -668,6 +668,86 @@ CX
       final summary = store.dueBillsSummary(withinDays: 3);
       expect(summary.overdueCount, 1);
     });
+
+    test('16. CSV Import of Credit Card transactions creates reconciled invoice payment in default payment account on due date', () {
+      final store = MoneyStore(autoBoot: false);
+      store.db = Database(
+        accounts: [],
+        cats: List<CategoryItem>.from(kDefaultCats),
+        txs: [],
+        recs: [],
+        budgets: {},
+      );
+
+      // 1. Conta padrão Y para débito (Conta Corrente Y)
+      store.saveAccount(
+        name: 'Conta Padrão Y',
+        type: 'Corrente',
+        openingCents: 1000000, // R$ 10.000,00
+        closeDay: 1,
+        dueDay: 1,
+        payAccId: '',
+      );
+      final accY = store.db.accounts.firstWhere((a) => a.name == 'Conta Padrão Y');
+
+      // 2. Cartão de crédito X com vencimento no dia 05 e conta padrão Y
+      store.saveAccount(
+        name: 'Cartão X',
+        type: kCardType,
+        openingCents: 0,
+        closeDay: 28,
+        dueDay: 5,
+        payAccId: accY.id,
+      );
+      final cardX = store.db.accounts.firstWhere((a) => a.name == 'Cartão X');
+
+      // 3. Importa CSV com R$ 2.000,00 na fatura de janeiro/2026 e R$ 2.000,00 na fatura de novembro/2026
+      const csvContent = '''
+"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"
+"2025-12-15";"Cartão X";"Compra A";"Alimentação";"";"-1200,00";"Sim";"01/2026"
+"2025-12-20";"Cartão X";"Compra B";"Lazer";"";"-800,00";"Sim";"01/2026"
+"2026-10-18";"Cartão X";"Compra C";"Moradia";"";"-2000,00";"Sim";"11/2026"
+''';
+      final bytes = Uint8List.fromList(utf8.encode(csvContent));
+      final importRes = store.importCSVBytes(bytes);
+      expect(importRes.importedCount, 3);
+
+      // Verifica pagamento conciliado na Conta Padrão Y para a fatura passada 01/2026 no dia 05/01/2026 (<= hoje)
+      final payJan = store.db.txs.firstWhere(
+        (t) => t.acc == accY.id && t.inv == '2026-01' && t.card == cardX.id,
+      );
+      expect(payJan.date, '2026-01-05');
+      expect(payJan.amt, -200000); // -R$ 2.000,00
+      expect(payJan.rec, true);
+      expect(payJan.auto, isNull);
+
+      // Verifica que para a fatura futura 11/2026 (vencimento 05/11/2026 > hoje),
+      // o lançamento de pagamento na Conta Padrão Y NÃO fica conciliado (rec: false)
+      final payNov = store.db.txs.firstWhere(
+        (t) => t.acc == accY.id && t.inv == '2026-11' && t.card == cardX.id,
+      );
+      expect(payNov.date, '2026-11-05');
+      expect(payNov.amt, -200000); // -R$ 2.000,00
+      expect(payNov.rec, false);
+
+      // Verifica fatura 01/2026 liquidada no Cartão X
+      final summaryJan = store.invoiceSummary(cardX.id, '2026-01')!;
+      expect(summaryJan.chargesCents, 200000);
+      expect(summaryJan.paymentsCents, 200000);
+      expect(summaryJan.remainingCents, 0);
+      expect(summaryJan.isFullyPaid, true);
+
+      // Verifica fatura futura 11/2026 ainda em aberto (não liquidada antes do vencimento)
+      final summaryNov = store.invoiceSummary(cardX.id, '2026-11')!;
+      expect(summaryNov.chargesCents, 200000);
+      expect(summaryNov.paymentsCents, 0);
+      expect(summaryNov.remainingCents, 200000);
+      expect(summaryNov.isFullyPaid, false);
+
+      // Saldo conciliado da Conta Padrão Y desconta apenas a fatura vencida (01/2026):
+      // R$ 10.000,00 - R$ 2.000,00 = R$ 8.000,00
+      expect(store.balance(accY, predicted: false), 800000);
+    });
   });
 
   testWidgets('5. Renders OpenMoneyApp shell cleanly on Desktop & Mobile', (WidgetTester tester) async {

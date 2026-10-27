@@ -56,8 +56,7 @@ class BudgetView extends StatelessWidget {
       return t.amt < 0 &&
           t.xfer == null &&
           t.peer == null &&
-          t.auto != true &&
-          !isHiddenFromPlanning(t.cat);
+          t.auto != true;
     }).toList();
 
     final spentByPath = <String, int>{};
@@ -65,10 +64,7 @@ class BudgetView extends StatelessWidget {
       spentByPath[t.cat] = (spentByPath[t.cat] ?? 0) + t.amt.abs();
     }
 
-    final topExpenseCats = store
-        .topCategories(type: 'Despesa')
-        .where((c) => !isHiddenFromPlanning(c.path))
-        .toList();
+    final topExpenseCats = store.topCategories(type: 'Despesa');
 
     int totalPlanned = 0;
     int totalSpent = 0;

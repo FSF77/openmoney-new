@@ -328,9 +328,6 @@ class CashFlowEngine {
       if (!isSpecificAccount && isTransferTransaction(tx)) {
         return false;
       }
-      if (isHiddenFromPlanning(tx.cat)) {
-        return false;
-      }
       switch (statusFilter) {
         case CashFlowStatusFilter.all:
           break;
