@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  22,
-    "version":  "2.1.3",
-    "notes":  "Sistema de Auditoria e Logs de Alterações e melhorias gerais",
-    "releaseDate":  "28/10/2026",
-    "windows":  {
-                    "build":  22,
-                    "version":  "2.1.3",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.3.zip",
-                    "sha256":  "fc27f5a06014d7c29d3480361dbf5656987e859604a88cbd347892991d4f6347",
-                    "releaseDate":  "28/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.1.3",
-                  "build":  22,
-                  "releaseDate":  "28/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.3.zip",
-                  "sha256":  "4c0047c0073afed3d6a3240c66ad4a98bfea33e99d4238518da0d8adad26afda",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.1.3"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 23,
+  "version": "2.1.3",
+  "notes": "Sistema de Auditoria e Logs de Alterações e melhorias gerais",
+  "releaseDate": "28/10/2026",
+  "windows": {
+    "build": 22,
+    "version": "2.1.3",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.3.zip",
+    "sha256": "fc27f5a06014d7c29d3480361dbf5656987e859604a88cbd347892991d4f6347",
+    "releaseDate": "28/10/2026"
+  },
+  "macos": {
+    "version": "2.1.3",
+    "build": 23,
+    "releaseDate": "28/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.3.zip",
+    "sha256": "5a431b6ff4edcb2bdbab603ff31cab2c53729c856d2a1bdac395b42b3dcdbec9",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.1.3"
 }

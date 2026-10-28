@@ -439,10 +439,30 @@ Future<void> showDatabaseFileManagerModal(
                   ),
                   if (store.recentFiles.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text(
-                      'Arquivos Recentes:',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Arquivos Recentes:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: colors.expense,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                          label: const Text('Limpar Recentes', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            setModalState(() {
+                              store.clearRecentFiles();
+                            });
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     ...store.recentFiles.map((item) {
@@ -464,18 +484,32 @@ Future<void> showDatabaseFileManagerModal(
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: TextButton(
-                          onPressed: () {
-                            if (store.openDatabaseFromPath(item.path)) {
-                              Navigator.pop(ctx);
-                            } else {
-                              setModalState(() {
-                                feedback =
-                                    'Arquivo não encontrado: ${item.path}';
-                              });
-                            }
-                          },
-                          child: const Text('Abrir'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                if (store.openDatabaseFromPath(item.path)) {
+                                  Navigator.pop(ctx);
+                                } else {
+                                  setModalState(() {
+                                    feedback =
+                                        'Arquivo não encontrado: ${item.path}';
+                                  });
+                                }
+                              },
+                              child: const Text('Abrir'),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              tooltip: 'Remover da lista',
+                              onPressed: () {
+                                setModalState(() {
+                                  store.removeRecentFile(item.path);
+                                });
+                              },
+                            ),
+                          ],
                         ),
                       );
                     }),

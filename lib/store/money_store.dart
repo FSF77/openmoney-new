@@ -524,6 +524,14 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearRecentFiles() {
+    recentFiles.clear();
+    final cfg = _readConfig();
+    cfg['recentFiles'] = [];
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
   String exportDatabaseJson({bool pretty = true}) {
     if (pretty) {
       return const JsonEncoder.withIndent('  ').convert(db.toJson());
