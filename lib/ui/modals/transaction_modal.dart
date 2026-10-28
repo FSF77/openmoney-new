@@ -214,16 +214,18 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
 
     final catType = _isExpense ? 'Despesa' : 'Receita';
-    final catPaths = widget.store.allCategoryPaths(catType);
+    final catOptions = widget.store.allCategoryOptions(catType);
     final otherAccounts =
         widget.store.db.accounts.where((a) => a.id != _accId).toList();
 
     final dropdownItems = <DropdownMenuItem<String>>[
       if (_catSelection.isNotEmpty &&
-          !catPaths.contains(_catSelection) &&
+          !catOptions.any((c) => c.value == _catSelection) &&
           !_catSelection.startsWith('xfer:'))
         DropdownMenuItem(value: _catSelection, child: Text(_catSelection)),
-      ...catPaths.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+      ...catOptions.map(
+        (c) => DropdownMenuItem(value: c.value, child: Text(c.label)),
+      ),
       ...otherAccounts.map(
         (a) => DropdownMenuItem(
           value: 'xfer:${a.id}',
@@ -628,16 +630,18 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     final isXfer = _catSelection.startsWith('xfer:');
 
     final catType = _isExpense ? 'Despesa' : 'Receita';
-    final catPaths = widget.store.allCategoryPaths(catType);
+    final catOptions = widget.store.allCategoryOptions(catType);
     final otherAccounts =
         widget.store.activeAccounts.where((a) => a.id != _accId).toList();
 
     final dropdownItems = <DropdownMenuItem<String>>[
       if (_catSelection.isNotEmpty &&
-          !catPaths.contains(_catSelection) &&
+          !catOptions.any((c) => c.value == _catSelection) &&
           !_catSelection.startsWith('xfer:'))
         DropdownMenuItem(value: _catSelection, child: Text(_catSelection)),
-      ...catPaths.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+      ...catOptions.map(
+        (c) => DropdownMenuItem(value: c.value, child: Text(c.label)),
+      ),
       ...otherAccounts.map(
         (a) => DropdownMenuItem(
           value: 'xfer:${a.id}',

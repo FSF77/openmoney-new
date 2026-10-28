@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
+import '../services/audit_log_manager.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
 import '../services/importers_exporters.dart';
@@ -732,6 +733,7 @@ class MoneyStore extends ChangeNotifier {
       appSupportDirPath: _appSupportDirPath,
       databasePath: dbFile.path,
     );
+    AuditLogManager.instance.pruneOldLogs(dbPath: dbFile.path, retentionDays: 30);
   }
 
   Future<String?> createManualZipBackup() async {
@@ -760,6 +762,49 @@ class MoneyStore extends ChangeNotifier {
 
   void revealBackupsInFinder() {
     BackupManager.instance.revealInFinder(_appSupportDirPath);
+  }
+
+  String get logFilePath => AuditLogManager.instance.logFilePathForDatabase(dbPath);
+
+  Future<List<AuditLogEntry>> readRecentAuditLogs({int limit = 500}) async {
+    return await AuditLogManager.instance.readRecentLogs(
+      dbPath: dbPath,
+      limit: limit,
+    );
+  }
+
+  void revealLogFileInFinder() {
+    if (kIsWeb || dbPath.isEmpty) return;
+    final logPath = logFilePath;
+    if (logPath.isEmpty) return;
+    final f = File(logPath);
+    if (!f.existsSync()) {
+      f.writeAsStringSync('');
+    }
+    if (Platform.isMacOS) {
+      Process.run('open', ['-R', logPath]);
+    } else if (Platform.isWindows) {
+      Process.run('explorer.exe', ['/select,', logPath]);
+    } else if (Platform.isLinux) {
+      Process.run('xdg-open', [f.parent.path]);
+    }
+  }
+
+  void openLogFileInEditor() {
+    if (kIsWeb || dbPath.isEmpty) return;
+    final logPath = logFilePath;
+    if (logPath.isEmpty) return;
+    final f = File(logPath);
+    if (!f.existsSync()) {
+      f.writeAsStringSync('');
+    }
+    if (Platform.isMacOS) {
+      Process.run('open', [logPath]);
+    } else if (Platform.isWindows) {
+      Process.run('cmd.exe', ['/c', 'start', '', logPath]);
+    } else if (Platform.isLinux) {
+      Process.run('xdg-open', [logPath]);
+    }
   }
 
   Future<bool> restoreDatabaseFromZip(String zipPath) async {
@@ -1590,6 +1635,17 @@ class MoneyStore extends ChangeNotifier {
     return result;
   }
 
+  List<({String label, String value})> allCategoryOptions(String type) {
+    final result = <({String label, String value})>[];
+    for (final top in topCategories(type: type)) {
+      result.add((label: top.name, value: top.path));
+      for (final sub in subCategories(top.name, type: type)) {
+        result.add((label: '   ↳ ${sub.name}', value: sub.path));
+      }
+    }
+    return result;
+  }
+
   // MARK: - Account Actions
 
   String? saveAccount({
@@ -1624,6 +1680,7 @@ class MoneyStore extends ChangeNotifier {
     if (editingId != null) {
       final idx = db.accounts.indexWhere((a) => a.id == editingId);
       if (idx != -1) {
+        final oldName = db.accounts[idx].name;
         db.accounts[idx].name = trimmed;
         db.accounts[idx].type = type;
         db.accounts[idx].opening = type == kCardType ? 0 : openingCents;
@@ -1634,6 +1691,13 @@ class MoneyStore extends ChangeNotifier {
         if (type == kCardType && db.accounts[idx].invoices == null) {
           db.accounts[idx].invoices = {};
         }
+        AuditLogManager.instance.logAsync(
+          dbPath: dbPath,
+          action: AuditAction.update,
+          entity: AuditEntity.account,
+          id: editingId,
+          summary: 'Conta atualizada: "$trimmed" (tipo: $type, anterior: "$oldName")',
+        );
       }
     } else {
       final newId = uid();
@@ -1651,6 +1715,13 @@ class MoneyStore extends ChangeNotifier {
       db.accounts.add(acc);
       selectedAccountId = newId;
       activeModule = NavModule.account;
+      AuditLogManager.instance.logAsync(
+        dbPath: dbPath,
+        action: AuditAction.create,
+        entity: AuditEntity.account,
+        id: newId,
+        summary: 'Nova conta cadastrada: "$trimmed" (tipo: $type, saldo inicial: ${brl(openingCents)})',
+      );
     }
 
     syncCards();
@@ -1730,6 +1801,8 @@ class MoneyStore extends ChangeNotifier {
   bool deleteAccount(String id) {
     if (db.accounts.length <= 1) return false;
     if (transactionCount(id) > 0) return false;
+    final acc = accById(id);
+    final accName = acc?.name ?? id;
     db.accounts.removeWhere((a) => a.id == id);
     db.recs.removeWhere((r) => r.acc == id || r.peer == id);
     syncCards();
@@ -1738,6 +1811,13 @@ class MoneyStore extends ChangeNotifier {
     }
     markIndexesDirty();
     save();
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.delete,
+      entity: AuditEntity.account,
+      id: id,
+      summary: 'Conta excluída: "$accName"',
+    );
     return true;
   }
 
@@ -1924,6 +2004,18 @@ class MoneyStore extends ChangeNotifier {
     syncCards();
     markIndexesDirty();
     save();
+
+    final accName = curAcc?.name ?? accId;
+    final typeLabel = isXfer ? 'Transferência' : (signedAmt < 0 ? 'Despesa' : 'Receita');
+    final desc = mode == 'installment'
+        ? '$typeLabel parcelado ($count x): "$payee" em $accName, total: ${brl(signedAmt)}'
+        : '$typeLabel: "$payee" em $accName, ${brl(signedAmt)} ($catLabel)';
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.create,
+      entity: AuditEntity.transaction,
+      summary: desc,
+    );
   }
 
   void payInvoice({
@@ -2207,6 +2299,15 @@ class MoneyStore extends ChangeNotifier {
     syncCards();
     markIndexesDirty();
     save();
+
+    final accName = accById(newAccId ?? t.acc)?.name ?? t.acc;
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.update,
+      entity: AuditEntity.transaction,
+      id: txId,
+      summary: 'Lançamento alterado: "$newPayee" em $accName, ${brl(newSignedAmt)} ($newCatSelection)',
+    );
   }
 
   void deleteTransaction(String txId, ScopeChoice scope) {
@@ -2259,9 +2360,19 @@ class MoneyStore extends ChangeNotifier {
     syncCards();
     markIndexesDirty();
     save();
-  }
 
-  // MARK: - Batch Delete Transactions
+    final accName = accById(t.acc)?.name ?? t.acc;
+    final scopeLabel = scope == ScopeChoice.all
+        ? ' (todos do plano/recorrência)'
+        : (scope == ScopeChoice.forward ? ' (este e futuros)' : '');
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.delete,
+      entity: AuditEntity.transaction,
+      id: txId,
+      summary: 'Lançamento excluído: "${t.payee}" em $accName, ${brl(t.amt)}$scopeLabel',
+    );
+  }
 
   BatchDeletePreview previewBatchDelete({
     String? accountId,
@@ -2382,6 +2493,14 @@ class MoneyStore extends ChangeNotifier {
     markIndexesDirty();
     rebuildIndexes();
     save(immediate: true);
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.batchDelete,
+      entity: AuditEntity.transaction,
+      summary: 'Limpeza em lote: $deletedCount lançamentos excluídos '
+          '(Período: ${isAllTime ? "Todo o histórico" : "$cleanStart a $cleanEnd"})',
+    );
 
     return deletedCount;
   }
@@ -2649,6 +2768,18 @@ class MoneyStore extends ChangeNotifier {
 
     db.cats.sort(byCatSort);
     save();
+
+    final actionType = editingPath != null ? AuditAction.update : AuditAction.create;
+    final summaryStr = editingPath != null
+        ? 'Categoria alterada: "$newPath" (anterior: "$editingPath", tipo: $type)'
+        : 'Nova categoria criada: "$newPath" (tipo: $type)';
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: actionType,
+      entity: AuditEntity.category,
+      summary: summaryStr,
+    );
+
     return null;
   }
 
@@ -2707,6 +2838,13 @@ class MoneyStore extends ChangeNotifier {
     db.cats.removeWhere((c) => affected.contains(c.path));
     db.cats.sort(byCatSort);
     save();
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.delete,
+      entity: AuditEntity.category,
+      summary: 'Categoria excluída: "$path" (lançamentos movidos para "$replacement")',
+    );
   }
 
   void setBudget(String categoryPath, int cents) {
@@ -2870,6 +3008,13 @@ class MoneyStore extends ChangeNotifier {
       newAccountsCount: result.newAccounts.length,
     );
     lastImportSummary = summary;
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.importBatch,
+      entity: AuditEntity.transaction,
+      summary: 'Importação CSV: ${result.newTxs.length} lançamentos adicionados, '
+          '${result.skippedCount} duplicados ignorados',
+    );
     notifyListeners();
     return summary;
   }
@@ -2913,6 +3058,13 @@ class MoneyStore extends ChangeNotifier {
       newAccountsCount: result.newAccounts.length,
     );
     lastImportSummary = summary;
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.importBatch,
+      entity: AuditEntity.transaction,
+      summary: 'Importação QIF: ${result.newTxs.length} lançamentos adicionados, '
+          '${result.skippedCount} ignorados',
+    );
     notifyListeners();
     return summary;
   }
@@ -2999,6 +3151,13 @@ class MoneyStore extends ChangeNotifier {
       newCategoriesCount: result.newCats.length,
       newAccountsCount: 0,
       details: 'Origem: OpenMoney Coletor Mobile',
+    );
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.importBatch,
+      entity: AuditEntity.transaction,
+      summary: 'Importação Celular: ${result.newTxs.length} lançamentos adicionados, '
+          '${result.skippedCount} duplicados ignorados',
     );
     notifyListeners();
     return sheetResult;

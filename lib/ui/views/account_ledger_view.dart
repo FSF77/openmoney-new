@@ -613,16 +613,17 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       Builder(
                         builder: (context) {
                           final catType = _isExpense ? 'Despesa' : 'Receita';
-                          final paths = widget.store.allCategoryPaths(catType);
+                          final catOptions =
+                              widget.store.allCategoryOptions(catType);
                           final others = widget.store.activeAccounts
                               .where((a) => a.id != acc.id)
                               .toList();
                           final items = <DropdownMenuItem<String>>[
-                            ...paths.map(
-                              (p) => DropdownMenuItem(
-                                value: p,
+                            ...catOptions.map(
+                              (c) => DropdownMenuItem(
+                                value: c.value,
                                 child: Text(
-                                  p,
+                                  c.label,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
