@@ -628,83 +628,148 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
 
               const SizedBox(height: 14),
 
-              // 4. Módulos e Planejamento (Abaixo das Contas)
-              const _SidebarSectionHeader(title: 'MÓDULOS E PLANEJAMENTO'),
-              _SidebarNavTile(
-                icon: Icons.notifications_active_outlined,
-                label: 'Contas a Pagar & Receber',
-                selected: widget.store.activeModule == NavModule.dueBills,
-                badgeText: dueSummary.totalCount > 0
-                    ? '${dueSummary.totalCount}'
-                    : null,
-                badgeColor: dueSummary.overdueCount > 0
-                    ? colors.expense
-                    : colors.warning,
-                onTap: () => selectModule(NavModule.dueBills),
-              ),
-              _SidebarNavTile(
-                icon: Icons.grid_on_rounded,
-                label: 'Fluxo de Caixa Matricial',
-                selected: widget.store.activeModule == NavModule.cashFlow,
-                onTap: () => selectModule(NavModule.cashFlow),
-              ),
-              _SidebarNavTile(
-                icon: Icons.pie_chart_outline,
-                label: 'Relatórios Mensais',
-                selected: widget.store.activeModule == NavModule.reports,
-                onTap: () => selectModule(NavModule.reports),
-              ),
-              _SidebarNavTile(
-                icon: Icons.track_changes,
-                label: 'Orçamento (Budget)',
-                selected: widget.store.activeModule == NavModule.budget,
-                onTap: () => selectModule(NavModule.budget),
-              ),
-              _SidebarNavTile(
-                icon: Icons.category_outlined,
-                label: 'Categorias e Subcategorias',
-                selected: widget.store.activeModule == NavModule.categories,
-                onTap: () => selectModule(NavModule.categories),
-              ),
-              _SidebarNavTile(
-                icon: Icons.manage_search,
-                label: 'Pesquisa Global',
-                selected: widget.store.activeModule == NavModule.search,
-                onTap: () => selectModule(NavModule.search),
-              ),
-              _SidebarNavTile(
-                icon: Icons.phone_iphone,
-                label: 'Importar do Celular (.json)',
-                selected: false,
-                onTap: () => showMobileInboxImportFlow(context, widget.store),
-              ),
-              _SidebarNavTile(
-                icon: Icons.import_export,
-                label: 'Importar / Exportar (CSV / QIF)',
-                selected: false,
-                onTap: () => showCsvQifCenterModal(context, widget.store),
-              ),
-              _SidebarNavTile(
-                icon: Icons.cleaning_services_outlined,
-                label: 'Limpeza de Lançamentos em Lote',
-                selected: false,
-                onTap: () => showBatchDeleteModal(context, widget.store),
-              ),
-              _SidebarNavTile(
-                icon: Icons.archive_outlined,
-                label: 'Backups de Segurança (.zip)',
-                selected: false,
-                onTap: () => showBackupsHistoryModal(context, widget.store),
-              ),
-              _SidebarNavTile(
-                icon: Icons.system_update_alt,
-                label: 'Buscar Atualizações...',
-                selected: false,
-                onTap: () => UpdateService.showUpdateDialog(
-                  context,
-                  manual: true,
+              // 4. PLANEJAMENTO (colapsável e persistido)
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: widget.store.toggleSidebarPlanning,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.store.sidebarShowPlanning
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                        color: colors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'PLANEJAMENTO',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: colors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+              if (widget.store.sidebarShowPlanning) ...[
+                _SidebarNavTile(
+                  icon: Icons.notifications_active_outlined,
+                  label: 'Contas a Pagar & Receber',
+                  selected: widget.store.activeModule == NavModule.dueBills,
+                  badgeText: dueSummary.totalCount > 0
+                      ? '${dueSummary.totalCount}'
+                      : null,
+                  badgeColor: dueSummary.overdueCount > 0
+                      ? colors.expense
+                      : colors.warning,
+                  onTap: () => selectModule(NavModule.dueBills),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.grid_on_rounded,
+                  label: 'Fluxo de Caixa Matricial',
+                  selected: widget.store.activeModule == NavModule.cashFlow,
+                  onTap: () => selectModule(NavModule.cashFlow),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.pie_chart_outline,
+                  label: 'Relatórios Mensais',
+                  selected: widget.store.activeModule == NavModule.reports,
+                  onTap: () => selectModule(NavModule.reports),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.track_changes,
+                  label: 'Orçamento (Budget)',
+                  selected: widget.store.activeModule == NavModule.budget,
+                  onTap: () => selectModule(NavModule.budget),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.category_outlined,
+                  label: 'Categorias e Subcategorias',
+                  selected: widget.store.activeModule == NavModule.categories,
+                  onTap: () => selectModule(NavModule.categories),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.manage_search,
+                  label: 'Pesquisa Global',
+                  selected: widget.store.activeModule == NavModule.search,
+                  onTap: () => selectModule(NavModule.search),
+                ),
+              ],
+
+              const SizedBox(height: 10),
+
+              // 5. MÓDULOS (colapsável e persistido, por padrão recolhido)
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: widget.store.toggleSidebarModules,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.store.sidebarShowModules
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                        color: colors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'MÓDULOS',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: colors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (widget.store.sidebarShowModules) ...[
+                _SidebarNavTile(
+                  icon: Icons.archive_outlined,
+                  label: 'Backups de Segurança (.zip)',
+                  selected: false,
+                  onTap: () => showBackupsHistoryModal(context, widget.store),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.phone_iphone,
+                  label: 'Importar do Celular (.json)',
+                  selected: false,
+                  onTap: () => showMobileInboxImportFlow(context, widget.store),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.import_export,
+                  label: 'Importar / Exportar (CSV / QIF)',
+                  selected: false,
+                  onTap: () => showCsvQifCenterModal(context, widget.store),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.cleaning_services_outlined,
+                  label: 'Limpeza de Lançamentos em Lote',
+                  selected: false,
+                  onTap: () => showBatchDeleteModal(context, widget.store),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.system_update_alt,
+                  label: 'Buscar Atualizações...',
+                  selected: false,
+                  onTap: () => UpdateService.showUpdateDialog(
+                    context,
+                    manual: true,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -785,29 +850,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SidebarSectionHeader extends StatelessWidget {
-  final String title;
-  const _SidebarSectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = OpenMoneyColors(isDark);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-          color: colors.textMuted,
         ),
       ),
     );
@@ -1137,7 +1179,7 @@ class _SidebarAccountTile extends StatelessWidget {
                         return typeStr;
                       }(),
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 9.5,
                         fontWeight: FontWeight.w500,
                         color: colors.textMuted,
                       ),

@@ -78,6 +78,8 @@ class MoneyStore extends ChangeNotifier {
   bool sidebarShowFavorites = true;
   bool sidebarShowActiveAccounts = true;
   bool sidebarShowInactiveAccounts = false;
+  bool sidebarShowPlanning = true;
+  bool sidebarShowModules = false;
   bool showMissingDatabasePrompt = false;
   bool showWelcomeScreen = false;
   String missingDatabasePath = '';
@@ -241,6 +243,12 @@ class MoneyStore extends ChangeNotifier {
     if (cfg['sidebarShowInactiveAccounts'] is bool) {
       sidebarShowInactiveAccounts = cfg['sidebarShowInactiveAccounts'] as bool;
     }
+    if (cfg['sidebarShowPlanning'] is bool) {
+      sidebarShowPlanning = cfg['sidebarShowPlanning'] as bool;
+    }
+    if (cfg['sidebarShowModules'] is bool) {
+      sidebarShowModules = cfg['sidebarShowModules'] as bool;
+    }
 
     final configuredPath = (cfg['dbPath'] as String?)?.trim() ?? '';
     final hasConfiguredPath = configuredPath.isNotEmpty;
@@ -323,6 +331,22 @@ class MoneyStore extends ChangeNotifier {
     sidebarShowInactiveAccounts = !sidebarShowInactiveAccounts;
     final cfg = _readConfig();
     cfg['sidebarShowInactiveAccounts'] = sidebarShowInactiveAccounts;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleSidebarPlanning() {
+    sidebarShowPlanning = !sidebarShowPlanning;
+    final cfg = _readConfig();
+    cfg['sidebarShowPlanning'] = sidebarShowPlanning;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleSidebarModules() {
+    sidebarShowModules = !sidebarShowModules;
+    final cfg = _readConfig();
+    cfg['sidebarShowModules'] = sidebarShowModules;
     _writeConfig(cfg);
     notifyListeners();
   }

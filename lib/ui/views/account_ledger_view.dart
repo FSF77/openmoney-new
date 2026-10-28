@@ -694,7 +694,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       ),
                       SizedBox(
-                        width: 135,
+                        width: 140,
                         child: DropdownButtonFormField<String>(
                           initialValue: _mode,
                           isExpanded: true,
@@ -702,19 +702,23 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             labelText: 'Modalidade',
                             isDense: true,
                             border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                           ),
                           items: const [
                             DropdownMenuItem(
                               value: 'single',
-                              child: Text('Único'),
+                              child: Text('Único', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: 'installment',
-                              child: Text('Parcelado'),
+                              child: Text('Parcelado', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: 'recurring',
-                              child: Text('Recorrente'),
+                              child: Text('Recorrente', overflow: TextOverflow.ellipsis),
                             ),
                           ],
                           onChanged: (v) {
@@ -724,13 +728,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       ),
                       if (_mode == 'installment')
                         SizedBox(
-                          width: 95,
+                          width: 100,
                           child: DropdownButtonFormField<int>(
                             initialValue: _installments,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Parcelas',
                               isDense: true,
                               border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
                             ),
                             items: List.generate(
                               47,
@@ -746,19 +755,27 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       if (_mode == 'recurring')
                         SizedBox(
-                          width: 130,
+                          width: 145,
                           child: DropdownButtonFormField<String>(
                             initialValue: _freq,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Frequência',
                               isDense: true,
                               border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
                             ),
                             items: kRecurrenceFrequencyOptions
                                 .map(
                                   (o) => DropdownMenuItem(
                                     value: o.id,
-                                    child: Text(o.label),
+                                    child: Text(
+                                      o.label,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -1032,21 +1049,11 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 ],
                               ],
                             ),
-                            subtitle: (tx.memo.trim().isNotEmpty ||
-                                    (tx.ik != null &&
-                                        tx.ik!.isNotEmpty &&
-                                        tx.auto != true))
+                            subtitle: tx.memo.trim().isNotEmpty
                                 ? Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
-                                      [
-                                        if (tx.memo.trim().isNotEmpty)
-                                          tx.memo.trim(),
-                                        if (tx.ik != null &&
-                                            tx.ik!.isNotEmpty &&
-                                            tx.auto != true)
-                                          'Fatura ${formatInvoiceKeyForDisplay(tx.ik!)}',
-                                      ].join(' • '),
+                                      tx.memo.trim(),
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: colors.textSecondary,

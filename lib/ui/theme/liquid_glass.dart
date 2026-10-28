@@ -118,18 +118,23 @@ class StatusBadge extends StatelessWidget {
   final String text;
   final Color color;
   final IconData? icon;
+  final double? fontSize;
 
   const StatusBadge({
     super.key,
     required this.text,
     required this.color,
     this.icon,
+    this.fontSize,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveFontSize = fontSize ?? 10.0;
+    final effectiveIconSize = (effectiveFontSize + 1.0).clamp(9.0, 12.0);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
@@ -139,13 +144,13 @@ class StatusBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: color),
-            const SizedBox(width: 4),
+            Icon(icon, size: effectiveIconSize, color: color),
+            const SizedBox(width: 3.5),
           ],
           Text(
             text,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: effectiveFontSize,
               fontWeight: FontWeight.w700,
               color: color,
               letterSpacing: 0.3,
