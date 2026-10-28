@@ -566,7 +566,7 @@ class Database {
     List<Transaction>? txs,
     List<RecurrenceRule>? recs,
     Map<String, int>? budgets,
-    this.v = 6,
+    this.v = 7,
   })  : accounts = accounts ??
             [
               Account(
@@ -636,7 +636,7 @@ class Database {
       txs: parsedTxs ?? [],
       recs: parsedRecs ?? [],
       budgets: parsedBudgets,
-      v: (json['v'] as num?)?.toInt() ?? 6,
+      v: (json['v'] as num?)?.toInt() ?? 7,
     );
   }
 

@@ -10,22 +10,64 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT_DIR}"
 
-# Extrai versão do pubspec.yaml
-VERSION=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 1)
-BUILD_NUM=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 2)
+# Processamento de argumentos
+RELEASE_NOTES=""
+CUSTOM_VERSION=""
 
-if [ -z "$VERSION" ]; then
-    VERSION="2.0.0"
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h)
+            echo "Uso: ./scripts/publish_release_macos.sh [VERSÃO] [\"Notas da Versão\"]"
+            echo ""
+            echo "Exemplos:"
+            echo "  ./scripts/publish_release_macos.sh"
+            echo "  ./scripts/publish_release_macos.sh 2.1.1"
+            echo "  ./scripts/publish_release_macos.sh 2.1.1 \"Correções e melhorias gerais\""
+            exit 0
+            ;;
+        *)
+            if [[ "$arg" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+                CUSTOM_VERSION="$arg"
+            elif [ -z "$RELEASE_NOTES" ]; then
+                RELEASE_NOTES="$arg"
+            fi
+            ;;
+    esac
+done
+
+# Extrai versão atual do pubspec.yaml
+CURRENT_VERSION=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 1)
+CURRENT_BUILD=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 2)
+
+if [ -z "$CURRENT_VERSION" ]; then
+    CURRENT_VERSION="2.0.0"
 fi
-if [ -z "$BUILD_NUM" ]; then
-    BUILD_NUM="1"
+if [ -z "$CURRENT_BUILD" ]; then
+    CURRENT_BUILD="1"
 fi
+
+# Define a versão final
+if [ -n "$CUSTOM_VERSION" ]; then
+    VERSION="$CUSTOM_VERSION"
+else
+    VERSION="$CURRENT_VERSION"
+fi
+
+# Incrementa automaticamente o Build Number (+1)
+BUILD_NUM=$((CURRENT_BUILD + 1))
+
+# Atualiza pubspec.yaml com a nova versão e build number
+sed -i '' "s/^version: .*/version: ${VERSION}+${BUILD_NUM}/g" "${ROOT_DIR}/pubspec.yaml"
 
 # Sincroniza fallbackVersion e fallbackBuild em lib/services/update_service.dart
 sed -i '' "s/static const String fallbackVersion = '.*';/static const String fallbackVersion = '${VERSION}';/g" "${ROOT_DIR}/lib/services/update_service.dart"
 sed -i '' "s/static const int fallbackBuild = [0-9]*;/static const int fallbackBuild = ${BUILD_NUM};/g" "${ROOT_DIR}/lib/services/update_service.dart"
 
-NOTES="${1:-OpenMoney Flutter v${VERSION} - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad.}"
+if [ -z "$RELEASE_NOTES" ]; then
+    NOTES="OpenMoney Flutter v${VERSION} (Build ${BUILD_NUM}) - Versão oficial multiplataforma com suporte a macOS, Windows, iPhone e iPad."
+else
+    NOTES="$RELEASE_NOTES"
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🚀 OpenMoney Flutter macOS — Build & Publish v${VERSION}+${BUILD_NUM}"

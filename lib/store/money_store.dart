@@ -831,7 +831,63 @@ class MoneyStore extends ChangeNotifier {
     for (int i = 0; i < db.txs.length; i++) {
       db.txs[i].createdAt ??= 1000000.0 + i.toDouble();
     }
-    db.v = 6;
+
+    if (db.v < 7) {
+      // Migra chaves de faturas de cartão de crédito do padrão legado (mês de fechamento)
+      // para o padrão oficial de mercado (mês de vencimento da fatura).
+      for (int aIdx = 0; aIdx < db.accounts.length; aIdx++) {
+        final acc = db.accounts[aIdx];
+        if (acc.type != kCardType || acc.card == null) continue;
+        final cardCfg = acc.card!;
+        if (cardCfg.dueDay > cardCfg.closeDay) continue;
+
+        final cardId = acc.id;
+        final newInvoices = <String, InvoiceInfo>{};
+        final keyMigrationMap = <String, String>{};
+
+        if (acc.invoices != null) {
+          for (final entry in acc.invoices!.entries) {
+            final oldK = entry.key;
+            final info = entry.value;
+            final expectedDueMonth = addMonthsYM(oldK, 1);
+            if (info.due.startsWith(expectedDueMonth)) {
+              final newK = expectedDueMonth;
+              newInvoices[newK] = info;
+              keyMigrationMap[oldK] = newK;
+            } else {
+              newInvoices[oldK] = info;
+            }
+          }
+          acc.invoices = newInvoices;
+        }
+
+        if (keyMigrationMap.isNotEmpty) {
+          for (int tIdx = 0; tIdx < db.txs.length; tIdx++) {
+            final tx = db.txs[tIdx];
+            if (tx.acc == cardId && tx.ik != null) {
+              final newIk = keyMigrationMap[tx.ik!];
+              if (newIk != null) {
+                tx.ik = newIk;
+              }
+            }
+            if (tx.auto == true && tx.card == cardId && tx.inv != null) {
+              final oldInv = tx.inv!;
+              final newInv = keyMigrationMap[oldInv];
+              if (newInv != null) {
+                tx.inv = newInv;
+                tx.xfer = 'inv:$cardId:$newInv';
+                tx.memo = 'Fatura ${fmtMonth(newInv)}';
+                if (tx.id.startsWith('inv:$cardId:$oldInv:')) {
+                  final suffix = tx.id.length >= 2 ? tx.id.substring(tx.id.length - 2) : '';
+                  tx.id = 'inv:$cardId:$newInv$suffix';
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    db.v = 7;
   }
 
   void syncRecs() {

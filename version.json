@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  19,
-    "version":  "2.1.0",
-    "notes":  "OpenMoney Flutter v2.1.0 - Menus Planejamento e Módulos colapsáveis na barra lateral, redução da fonte do tipo/negócio da conta, badges de fatura e recorrência mais discretos e correção de overflow na inserção rápida.",
-    "releaseDate":  "27/10/2026",
-    "windows":  {
-                    "build":  19,
-                    "version":  "2.1.0",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.0.zip",
-                    "sha256":  "c32629cf5e0620639346ebdf49c983bb043ba7fe76c1fe38b6fd9be5575fdb96",
-                    "releaseDate":  "27/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.1.0",
-                  "build":  19,
-                  "releaseDate":  "27/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.0.zip",
-                  "sha256":  "a3dce6e00cf4a4542161e80dfb7ab2a3483a07e1ef9e3d568b64219e6c1b6e89",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.1.0"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 21,
+  "version": "2.1.2",
+  "notes": "Padronizar versão Swift e Flutter",
+  "releaseDate": "28/10/2026",
+  "windows": {
+    "build": 20,
+    "version": "2.1.1",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.1.zip",
+    "sha256": "",
+    "releaseDate": "28/10/2026"
+  },
+  "macos": {
+    "version": "2.1.2",
+    "build": 21,
+    "releaseDate": "28/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.2.zip",
+    "sha256": "002eea3e98f2257c898efe17145bc7e031840b1fc9ed5a7e841fb5c20caa18e3",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.1.2"
 }
