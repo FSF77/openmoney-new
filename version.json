@@ -1,24 +1,24 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 21,
-  "version": "2.1.2",
-  "notes": "Padronizar versão Swift e Flutter",
-  "releaseDate": "28/10/2026",
-  "windows": {
-    "build": 20,
-    "version": "2.1.1",
-    "sizeMb": 12,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.1.zip",
-    "sha256": "",
-    "releaseDate": "28/10/2026"
-  },
-  "macos": {
-    "version": "2.1.2",
-    "build": 21,
-    "releaseDate": "28/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.2.zip",
-    "sha256": "002eea3e98f2257c898efe17145bc7e031840b1fc9ed5a7e841fb5c20caa18e3",
-    "sizeMb": 11
-  },
-  "title": "OpenMoney Flutter v2.1.2"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "build":  21,
+    "version":  "2.1.2",
+    "notes":  "Padronizar versão Swift e Flutter",
+    "releaseDate":  "28/10/2026",
+    "windows":  {
+                    "build":  21,
+                    "version":  "2.1.2",
+                    "sizeMb":  12,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.2.zip",
+                    "sha256":  "1d84c3fddc0c46e9fe59a869f8cd236e49bf36e30c2e52bb735d141324a6fb39",
+                    "releaseDate":  "28/10/2026"
+                },
+    "macos":  {
+                  "version":  "2.1.2",
+                  "build":  21,
+                  "releaseDate":  "28/10/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.2.zip",
+                  "sha256":  "002eea3e98f2257c898efe17145bc7e031840b1fc9ed5a7e841fb5c20caa18e3",
+                  "sizeMb":  11
+              },
+    "title":  "OpenMoney Flutter v2.1.2"
 }
