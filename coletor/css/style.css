@@ -836,3 +836,146 @@ body.modal-open {
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
 }
+
+/* Modal Scan Receipt / Apple Live Text Styles */
+.scan-receipt-modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.btn-paste-clipboard {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.12));
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.15);
+}
+
+.btn-paste-clipboard:active {
+  transform: scale(0.98);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.22));
+}
+
+.btn-paste-icon {
+  font-size: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-paste-text .title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.btn-paste-text .sub {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.or-divider::before, .or-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.or-divider span {
+  padding: 0 10px;
+}
+
+.receipt-text-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.receipt-text-input:focus {
+  border-color: #3b82f6;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.scan-tip-box {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px dashed rgba(59, 130, 246, 0.25);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 8px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.shortcut-accordion-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.shortcut-tip-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.shortcut-tip-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.btn-shortcut-guide {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
+  color: #60a5fa;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-link-subtle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.btn-link-subtle:hover {
+  color: var(--text-secondary);
+}

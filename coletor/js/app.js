@@ -61,6 +61,18 @@ function initApp() {
   if (!structure) {
     openSetupModal();
   }
+
+  // Handle URL query parameters for Apple Shortcuts (?recibo=... or ?ocr_text=...)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const receiptParam = urlParams.get('recibo') || urlParams.get('ocr_text');
+    if (receiptParam) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      processReceiptText(receiptParam);
+    }
+  } catch (e) {
+    console.warn('URL param parse error:', e);
+  }
 }
 
 // Main Render Routine
@@ -389,20 +401,57 @@ function openTransactionForm(preset = null) {
   setTimeout(() => amtInput.focus(), 300);
 }
 
-// Handle Camera / Receipt Image Selection
+// Open Scan Receipt Modal (Apple Live Text & Options)
+function openScanReceiptModal() {
+  const structure = coletorStorage.getStructure();
+  if (!structure) {
+    openSetupModal();
+    return;
+  }
+  const modal = document.getElementById('modalScanReceipt');
+  const input = document.getElementById('scanReceiptTextInput');
+  if (input) input.value = '';
+  openModal(modal);
+}
+
+// Process Receipt Text (from Apple Live Text, Clipboard, or Apple Shortcut URL)
+function processReceiptText(rawText) {
+  if (!rawText || !rawText.trim()) return;
+  const structure = coletorStorage.getStructure();
+  const parsed = receiptScanner.parseReceiptText(rawText, structure);
+
+  closeAllModals();
+
+  openTransactionForm({
+    isScan: true,
+    payee: parsed.payee,
+    amt: parsed.amt,
+    date: parsed.date,
+    accId: parsed.accId,
+    cat: parsed.cat,
+    isExpense: true,
+    memo: `OCR: "${(parsed.payee || '').slice(0, 30)}"`
+  });
+
+  showToast('✓ Comprovante reconhecido com sucesso!');
+}
+
+// Handle Camera / Receipt Image Selection (Tesseract Fallback)
 async function handleReceiptImageSelected(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  const structure = coletorStorage.getStructure();
   const loadingModal = document.getElementById('modalOcrLoading');
   const statusEl = document.getElementById('ocrProgressStatus');
 
+  closeAllModals();
   openModal(loadingModal);
 
   try {
     const parsed = await receiptScanner.scanReceipt(file, (msg) => {
       if (statusEl) statusEl.textContent = msg;
-    });
+    }, structure);
 
     closeAllModals();
 
@@ -411,6 +460,8 @@ async function handleReceiptImageSelected(e) {
       payee: parsed.payee,
       amt: parsed.amt,
       date: parsed.date,
+      accId: parsed.accId,
+      cat: parsed.cat,
       thumbnail: parsed.thumbnail,
       isExpense: true,
       memo: 'Comprovante escaneado via OCR'
@@ -688,11 +739,18 @@ function setupEventListeners() {
     fileStructureInput.addEventListener('change', handleStructureFileSelected);
   }
 
-  // Action: Scan Receipt
+  // Action: Scan Receipt (Direct camera capture & OCR)
   const btnScanReceipt = document.getElementById('btnScanReceipt');
   const fileCameraInput = document.getElementById('fileCameraInput');
   if (btnScanReceipt && fileCameraInput) {
-    btnScanReceipt.addEventListener('click', () => fileCameraInput.click());
+    btnScanReceipt.addEventListener('click', () => {
+      const structure = coletorStorage.getStructure();
+      if (!structure) {
+        openSetupModal();
+        return;
+      }
+      fileCameraInput.click();
+    });
     fileCameraInput.addEventListener('change', handleReceiptImageSelected);
   }
 
