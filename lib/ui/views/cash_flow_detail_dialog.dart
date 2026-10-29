@@ -14,6 +14,7 @@ Future<void> showCashFlowDetailDialog(
   String? sub,
   Set<String>? accountFilterIds,
   CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
+  CashFlowKindFilter kindFilter = CashFlowKindFilter.all,
   CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
   String searchQuery = '',
 }) {
@@ -27,6 +28,7 @@ Future<void> showCashFlowDetailDialog(
     sub: sub,
     accountFilterIds: accountFilterIds,
     statusFilter: statusFilter,
+    kindFilter: kindFilter,
     dateMode: dateMode,
     searchQuery: searchQuery,
   );

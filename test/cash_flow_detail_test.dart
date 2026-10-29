@@ -45,4 +45,45 @@ void main() {
       expect(sum(all), sec.grandTotal);
     }
   });
+
+  test('CashFlowKindFilter filtra parcelados e recorrentes e zera saldo inicial', () {
+    final accounts = [
+      Account(id: 'a', name: 'Banco', type: 'Corrente', opening: 100000),
+    ];
+    final txs = [
+      Transaction(acc: 'a', date: '2026-01-05', payee: 'Parcelado 1', cat: 'Despesa', amt: -1000, pn: 1, pt: 3),
+      Transaction(acc: 'a', date: '2026-01-10', payee: 'Recorrente 1', cat: 'Despesa', amt: -2000, recId: 'r1'),
+      Transaction(acc: 'a', date: '2026-01-15', payee: 'Avulso', cat: 'Despesa', amt: -3000),
+    ];
+
+    final mAll = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      kindFilter: CashFlowKindFilter.all,
+    );
+    expect(mAll.expenseSection.grandTotal, 6000);
+    expect(mAll.priorBalanceGrandTotal, 100000);
+
+    final mInst = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      kindFilter: CashFlowKindFilter.installmentOnly,
+    );
+    expect(mInst.expenseSection.grandTotal, 1000);
+    expect(mInst.priorBalanceGrandTotal, 0);
+
+    final mRec = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      kindFilter: CashFlowKindFilter.recurringOnly,
+    );
+    expect(mRec.expenseSection.grandTotal, 2000);
+    expect(mRec.priorBalanceGrandTotal, 0);
+  });
 }

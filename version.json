@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  27,
-    "version":  "2.1.5",
-    "notes":  "Relatório de compras parceladas, inclusão de filtro por conta/negócio no relatório de contas a pagar e receber, Fluxo de Caixa dinâmico, Abatimento de previsões por mês atual ou por fatura",
-    "releaseDate":  "29/10/2026",
-    "windows":  {
-                    "build":  27,
-                    "version":  "2.1.5",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.5.zip",
-                    "sha256":  "d9365868e505292aed3ab20353cf0ec1157cf33269d0d0408341bf1c995060da",
-                    "releaseDate":  "29/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.1.5",
-                  "build":  27,
-                  "releaseDate":  "29/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.5.zip",
-                  "sha256":  "7a408734b3d3ee48a442e807a64360954eed41f41e01aa70fa497dfda36fbbde",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.1.5"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 28,
+  "version": "2.1.6",
+  "notes": "Relatório de compras parceladas, inclusão de filtro por conta/negócio no relatório de contas a pagar e receber, Fluxo de Caixa dinâmico com novos filtros, Abatimento de previsões por mês atual ou por fatura",
+  "releaseDate": "29/10/2026",
+  "windows": {
+    "build": 27,
+    "version": "2.1.5",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.5.zip",
+    "sha256": "d9365868e505292aed3ab20353cf0ec1157cf33269d0d0408341bf1c995060da",
+    "releaseDate": "29/10/2026"
+  },
+  "macos": {
+    "version": "2.1.6",
+    "build": 28,
+    "releaseDate": "29/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.6.zip",
+    "sha256": "430bbf109bceb63a100094f11c038be4cf20f158fe334539a91cf2eb67d5a010",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.1.6"
 }

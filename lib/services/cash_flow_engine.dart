@@ -20,6 +20,27 @@ enum CashFlowStatusFilter {
   const CashFlowStatusFilter(this.label, this.shortLabel);
 }
 
+enum CashFlowKindFilter {
+  all('Todos os lançamentos', 'Todos'),
+  installmentOnly('Apenas parcelados', 'Parcelados'),
+  recurringOnly('Apenas recorrentes', 'Recorrentes');
+
+  final String label;
+  final String shortLabel;
+  const CashFlowKindFilter(this.label, this.shortLabel);
+
+  bool matches(Transaction tx) {
+    switch (this) {
+      case CashFlowKindFilter.all:
+        return true;
+      case CashFlowKindFilter.installmentOnly:
+        return (tx.pt ?? 0) > 1;
+      case CashFlowKindFilter.recurringOnly:
+        return tx.recId != null;
+    }
+  }
+}
+
 enum CashFlowDateMode {
   transactionDate('Data do Lançamento', 'Data Lançamento'),
   paymentDate('Data de Pagamento (Fatura)', 'Data Pagamento');
@@ -92,6 +113,7 @@ class CashFlowMatrix {
   final int year;
   final String periodSubtitle;
   final CashFlowStatusFilter statusFilter;
+  final CashFlowKindFilter kindFilter;
   final CashFlowDateMode dateMode;
   final List<CashFlowColumnDef> columns;
   final CashFlowSection incomeSection;
@@ -108,6 +130,7 @@ class CashFlowMatrix {
     required this.year,
     required this.periodSubtitle,
     required this.statusFilter,
+    this.kindFilter = CashFlowKindFilter.all,
     required this.dateMode,
     required this.columns,
     required this.incomeSection,
@@ -217,6 +240,7 @@ class CashFlowEngine {
     List<Transaction> transactions, {
     required Set<String>? activeAccountFilter,
     required CashFlowStatusFilter statusFilter,
+    CashFlowKindFilter kindFilter = CashFlowKindFilter.all,
   }) {
     final isSpecificAccounts =
         activeAccountFilter != null && activeAccountFilter.isNotEmpty;
@@ -224,6 +248,7 @@ class CashFlowEngine {
       if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) {
         return false;
       }
+      if (!kindFilter.matches(tx)) return false;
       // Regra de transferências entre contas no Fluxo de Caixa:
       // 1. Quando estiver em "Todas as Contas", não devem aparecer e nem somar como receita ou despesa.
       // 2. Quando contas específicas estiverem selecionadas:
@@ -343,6 +368,7 @@ class CashFlowEngine {
     String? sub,
     Set<String>? accountFilterIds,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
+    CashFlowKindFilter kindFilter = CashFlowKindFilter.all,
     CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
     String searchQuery = '',
   }) {
@@ -352,7 +378,9 @@ class CashFlowEngine {
     final q = searchQuery.trim().toLowerCase();
     final items = <CashFlowDetailItem>[];
     for (final tx in filterTransactions(transactions,
-        activeAccountFilter: active, statusFilter: statusFilter)) {
+        activeAccountFilter: active,
+        statusFilter: statusFilter,
+        kindFilter: kindFilter)) {
       if (tx.amt == 0) continue;
       final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
       final colIdx = columns.indexWhere((c) => c.matchesDate(effDate));
@@ -396,6 +424,7 @@ class CashFlowEngine {
     String? accountFilterId,
     Set<String>? accountFilterIds,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
+    CashFlowKindFilter kindFilter = CashFlowKindFilter.all,
     CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
     String searchQuery = '',
   }) {
@@ -528,6 +557,7 @@ class CashFlowEngine {
       transactions,
       activeAccountFilter: activeAccountFilter,
       statusFilter: statusFilter,
+      kindFilter: kindFilter,
     );
 
     ({String top, String? sub}) parseCat(Transaction tx) =>
@@ -721,8 +751,10 @@ class CashFlowEngine {
       }
     });
 
-    final baseOpening =
-        (statusFilter == CashFlowStatusFilter.pendingOnly ? 0 : initialOpening);
+    final baseOpening = (statusFilter == CashFlowStatusFilter.pendingOnly ||
+            kindFilter != CashFlowKindFilter.all)
+        ? 0
+        : initialOpening;
     final priorDeltas = List<int>.filled(numCols, 0);
     final firstColStart = colStartDates.isNotEmpty ? colStartDates.first : '';
     final validAccountIds = accounts.map((a) => a.id).toSet();
@@ -730,6 +762,7 @@ class CashFlowEngine {
     for (final tx in transactions) {
       if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) continue;
       if (accounts.isNotEmpty && !validAccountIds.contains(tx.acc)) continue;
+      if (!kindFilter.matches(tx)) continue;
 
       switch (statusFilter) {
         case CashFlowStatusFilter.all:
@@ -776,6 +809,7 @@ class CashFlowEngine {
       year: year,
       periodSubtitle: periodSubtitle,
       statusFilter: statusFilter,
+      kindFilter: kindFilter,
       dateMode: dateMode,
       columns: columns,
       incomeSection: incomeSection,
@@ -795,7 +829,7 @@ class CashFlowEngine {
     lines.add('');
     lines.add(matrix.periodSubtitle);
     lines.add(
-      'Filtros: Status: ${matrix.statusFilter.label};Regime: ${matrix.dateMode.label}',
+      'Filtros: Status: ${matrix.statusFilter.label};Tipo: ${matrix.kindFilter.label};Regime: ${matrix.dateMode.label}',
     );
     lines.add('');
     lines.add('');

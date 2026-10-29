@@ -22,6 +22,7 @@ class _CashFlowViewState extends State<CashFlowView> {
   late int _year;
   Set<String> _selectedAccountIds = {};
   CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
+  CashFlowKindFilter _kindFilter = CashFlowKindFilter.all;
   CashFlowDateMode _dateMode = CashFlowDateMode.transactionDate;
   String _searchQuery = '';
   final Set<String> _collapsedGroups = {};
@@ -99,6 +100,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       statusFilter: _statusFilter,
+      kindFilter: _kindFilter,
       dateMode: _dateMode,
       searchQuery: _searchQuery,
     );
@@ -143,6 +145,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       statusFilter: _statusFilter,
+      kindFilter: _kindFilter,
       dateMode: _dateMode,
       searchQuery: _searchQuery,
     );
@@ -271,6 +274,27 @@ class _CashFlowViewState extends State<CashFlowView> {
                             .toList(),
                         onChanged: (v) {
                           if (v != null) setState(() => _statusFilter = v);
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 190,
+                      child: DropdownButtonFormField<CashFlowKindFilter>(
+                        initialValue: _kindFilter,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: CashFlowKindFilter.values
+                            .map((k) => DropdownMenuItem(
+                                  value: k,
+                                  child: Text(k.label),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _kindFilter = v);
                         },
                       ),
                     ),
