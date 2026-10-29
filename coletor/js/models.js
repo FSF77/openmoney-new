@@ -11,7 +11,7 @@ export function uid() {
   return result;
 }
 
-export function formatCurrency(cents, showSign = false) {
+export function formatCurrency(cents, showSign = false, includeSymbol = true) {
   if (typeof cents !== 'number' || isNaN(cents)) cents = 0;
   const isNegative = cents < 0;
   const absVal = Math.abs(cents);
@@ -20,7 +20,8 @@ export function formatCurrency(cents, showSign = false) {
   
   const formattedReals = reals.toLocaleString('pt-BR');
   const formattedCents = remainder.toString().padStart(2, '0');
-  const str = `R$ ${formattedReals},${formattedCents}`;
+  const prefix = includeSymbol ? 'R$ ' : '';
+  const str = `${prefix}${formattedReals},${formattedCents}`;
   
   if (isNegative) return `-${str}`;
   if (showSign && cents > 0) return `+${str}`;

@@ -111,7 +111,7 @@ function renderApp() {
       `;
     }
     if (accountsTotalBalance) {
-      accountsTotalBalance.textContent = 'R$ 0,00';
+      accountsTotalBalance.textContent = '0,00';
     }
   } else {
     // Calculate pending transactions for each account
@@ -133,12 +133,12 @@ function renderApp() {
 
       modalHtml += `
         <div class="account-row-card" data-acc-id="${a.id}">
-          <div class="account-row-left">
-            <span class="account-row-badge">${a.type || 'Conta'}</span>
+          <div class="account-row-info">
             <div class="account-row-name">${a.favorite ? '★ ' : ''}${a.name}</div>
+            <div class="account-row-type">${a.type || 'Conta'}</div>
           </div>
           <div class="account-row-balance ${isNeg ? 'text-negative' : 'text-positive'}">
-            ${formatCurrency(liveBalance)}
+            ${formatCurrency(liveBalance, false, false)}
           </div>
         </div>
       `;
@@ -149,7 +149,7 @@ function renderApp() {
     }
 
     if (accountsTotalBalance) {
-      accountsTotalBalance.textContent = formatCurrency(totalConsolidated);
+      accountsTotalBalance.textContent = formatCurrency(totalConsolidated, false, false);
       accountsTotalBalance.className = `total-amount ${totalConsolidated < 0 ? 'text-negative' : ''}`;
     }
 

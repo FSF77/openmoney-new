@@ -443,6 +443,7 @@ body.modal-open {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
@@ -452,31 +453,42 @@ body.modal-open {
   transform: scale(0.99);
 }
 
-.account-row-left {
+.account-row-info {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.account-row-badge {
-  font-size: 0.70rem;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  font-weight: 600;
+  flex-direction: column;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
 }
 
 .account-row-name {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+  margin-bottom: 3px;
+}
+
+.account-row-type {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .account-row-balance {
   font-size: 1.05rem;
   font-weight: 700;
   text-align: right;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* Legacy Summary Scroll Fallback */
