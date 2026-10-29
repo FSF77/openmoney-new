@@ -67,13 +67,17 @@
     <input type="file" id="fileCameraInput" accept="image/*" capture="environment" style="display:none;">
     <input type="file" id="fileStructureInput" accept=".json" style="display:none;">
 
-    <!-- Resumo de Contas Ativas (Carrossel Horizontal) -->
-    <div class="section-header">
-      <span class="section-title">Minhas Contas</span>
-    </div>
-    <div id="accountsScrollContainer" class="accounts-scroll">
-      <!-- Injetado dinamicamente -->
-    </div>
+    <!-- Botão de Acesso a Contas e Saldos -->
+    <button id="btnOpenAccountsModal" class="btn-accounts-toggle">
+      <div class="btn-accounts-content">
+        <span class="btn-accounts-icon">🏦</span>
+        <div class="btn-accounts-meta">
+          <span class="btn-accounts-title">Contas e Saldos</span>
+          <span id="accountsSummaryCount" class="btn-accounts-sub">Toque para ver saldos conciliados</span>
+        </div>
+      </div>
+      <span class="btn-accounts-chevron">›</span>
+    </button>
 
     <!-- Fila de Lançamentos Pendentes -->
     <div class="section-header">
@@ -230,7 +234,30 @@
     </div>
   </div>
 
+  <!-- MODAL: Lista de Contas e Saldos -->
+  <div id="modalAccountsList" class="modal-overlay">
+    <div class="sheet" style="max-height: 82vh;">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div class="sheet-title">🏦 Contas e Saldos</div>
+        <button class="sheet-close">&times;</button>
+      </div>
+
+      <!-- Card de Saldo Total Consolidado -->
+      <div id="accountsTotalCard" class="accounts-total-card">
+        <div class="total-label">Saldo Total das Contas</div>
+        <div id="accountsTotalBalance" class="total-amount">R$ 0,00</div>
+        <div class="total-sub">Atualizado com os lançamentos na fila</div>
+      </div>
+
+      <!-- Lista vertical com todas as contas -->
+      <div id="modalAccountsListContainer" class="modal-accounts-list">
+        <!-- Injetado dinamicamente -->
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
-  <script type="module" src="js/app.js?v=1.0.7"></script>
+  <script type="module" src="js/app.js?v=1.0.8"></script>
 </body>
 </html>

@@ -328,37 +328,160 @@ body.modal-open {
   white-space: nowrap;
 }
 
-/* Account Summary Scroll */
-.accounts-scroll {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  margin-bottom: 20px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.acc-mini-card {
-  min-width: 140px;
+/* Account Access Toggle Button */
+.btn-accounts-toggle {
+  width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 22px;
+  color: var(--text-primary);
+  transition: transform 0.15s ease, background 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.btn-accounts-toggle:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-accounts-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-accounts-icon {
+  font-size: 1.35rem;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(99, 102, 241, 0.15));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.acc-mini-name {
-  font-size: 0.78rem;
+.btn-accounts-meta {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.btn-accounts-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.btn-accounts-sub {
+  font-size: 0.74rem;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.btn-accounts-chevron {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  font-weight: 300;
+  padding-left: 6px;
+}
+
+/* Modal Accounts List & Consolidated Balance */
+.accounts-total-card {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(139, 92, 246, 0.12));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.accounts-total-card .total-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
   margin-bottom: 4px;
 }
 
-.acc-mini-balance {
-  font-size: 1rem;
+.accounts-total-card .total-amount {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.accounts-total-card .total-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.modal-accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 52vh;
+  padding-bottom: 8px;
+}
+
+.account-row-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.account-row-card:active {
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(0.99);
+}
+
+.account-row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-row-badge {
+  font-size: 0.70rem;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.account-row-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.account-row-balance {
+  font-size: 1.05rem;
   font-weight: 700;
+  text-align: right;
+}
+
+/* Legacy Summary Scroll Fallback */
+.accounts-scroll {
+  display: none;
 }
 
 /* Section Header */

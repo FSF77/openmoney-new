@@ -49,6 +49,7 @@ app.*.map.json
 /legacy_swift/
 /legacy_swift_upd/
 *.tmp
+/tmp
 
 # Widget Preview related
 .widget_preview/

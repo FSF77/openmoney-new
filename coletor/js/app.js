@@ -94,39 +94,76 @@ function renderApp() {
     }
   }
 
-  // 2. Accounts Carousel (Reconciled Balance + Pending local changes)
-  const accountsContainer = document.getElementById('accountsScrollContainer');
-  if (accountsContainer) {
-    if (!structure || !structure.accounts || structure.accounts.length === 0) {
-      accountsContainer.innerHTML = `
-        <div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0;">
-          Toque em <strong>Trocar Base</strong> acima para carregar suas contas e saldos conciliados.
+  // 2. Accounts Overview (Summary Button on Home Screen + Modal Details)
+  const accountsSummaryCount = document.getElementById('accountsSummaryCount');
+  const modalAccountsContainer = document.getElementById('modalAccountsListContainer');
+  const accountsTotalBalance = document.getElementById('accountsTotalBalance');
+
+  if (!structure || !structure.accounts || structure.accounts.length === 0) {
+    if (accountsSummaryCount) {
+      accountsSummaryCount.textContent = 'Toque para vincular suas contas';
+    }
+    if (modalAccountsContainer) {
+      modalAccountsContainer.innerHTML = `
+        <div style="font-size:0.85rem;color:var(--text-muted);padding:24px 16px;text-align:center;">
+          Nenhuma base de contas vinculada.<br><br>Toque no ícone ⚙️ acima para importar o <strong>openmoney.json</strong> gerado no seu Mac.
         </div>
       `;
-    } else {
-      // Calculate pending transactions for each account
-      const pendingByAcc = {};
-      for (const t of pending) {
-        if (t.rec !== false) {
-          pendingByAcc[t.acc] = (pendingByAcc[t.acc] || 0) + t.amt;
-        }
+    }
+    if (accountsTotalBalance) {
+      accountsTotalBalance.textContent = 'R$ 0,00';
+    }
+  } else {
+    // Calculate pending transactions for each account
+    const pendingByAcc = {};
+    for (const t of pending) {
+      if (t.rec !== false) {
+        pendingByAcc[t.acc] = (pendingByAcc[t.acc] || 0) + t.amt;
       }
+    }
 
-      let accHtml = '';
-      const activeAccs = structure.accounts.filter(a => !a.inactive);
-      for (const a of activeAccs) {
-        const liveBalance = a.balance + (pendingByAcc[a.id] || 0);
-        const isNeg = liveBalance < 0;
-        accHtml += `
-          <div class="acc-mini-card">
-            <div class="acc-mini-name">${a.favorite ? '★ ' : ''}${a.name}</div>
-            <div class="acc-mini-balance ${isNeg ? 'text-negative' : 'text-positive'}">
-              ${formatCurrency(liveBalance)}
-            </div>
+    const activeAccs = structure.accounts.filter(a => !a.inactive);
+    let totalConsolidated = 0;
+    let modalHtml = '';
+
+    for (const a of activeAccs) {
+      const liveBalance = a.balance + (pendingByAcc[a.id] || 0);
+      const isNeg = liveBalance < 0;
+      totalConsolidated += liveBalance;
+
+      modalHtml += `
+        <div class="account-row-card" data-acc-id="${a.id}">
+          <div class="account-row-left">
+            <span class="account-row-badge">${a.type || 'Conta'}</span>
+            <div class="account-row-name">${a.favorite ? '★ ' : ''}${a.name}</div>
           </div>
-        `;
-      }
-      accountsContainer.innerHTML = accHtml;
+          <div class="account-row-balance ${isNeg ? 'text-negative' : 'text-positive'}">
+            ${formatCurrency(liveBalance)}
+          </div>
+        </div>
+      `;
+    }
+
+    if (accountsSummaryCount) {
+      accountsSummaryCount.textContent = `${activeAccs.length} contas cadastradas · Toque para ver saldos`;
+    }
+
+    if (accountsTotalBalance) {
+      accountsTotalBalance.textContent = formatCurrency(totalConsolidated);
+      accountsTotalBalance.className = `total-amount ${totalConsolidated < 0 ? 'text-negative' : ''}`;
+    }
+
+    if (modalAccountsContainer) {
+      modalAccountsContainer.innerHTML = modalHtml;
+
+      // Allow tapping an account card to start a transaction in that account
+      modalAccountsContainer.querySelectorAll('.account-row-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const accId = card.getAttribute('data-acc-id');
+          closeAllModals();
+          openTransactionForm({ accId });
+        });
+      });
     }
   }
 
@@ -656,6 +693,19 @@ function setupEventListeners() {
   const headerBaseRow = document.getElementById('headerBaseRow');
   if (headerBaseRow) {
     headerBaseRow.addEventListener('click', openSetupModal);
+  }
+
+  // Open Accounts & Balances Modal
+  const btnOpenAccountsModal = document.getElementById('btnOpenAccountsModal');
+  if (btnOpenAccountsModal) {
+    btnOpenAccountsModal.addEventListener('click', () => {
+      const structure = coletorStorage.getStructure();
+      if (!structure) {
+        openSetupModal();
+        return;
+      }
+      openModal(document.getElementById('modalAccountsList'));
+    });
   }
 
   // Type Switcher Buttons
