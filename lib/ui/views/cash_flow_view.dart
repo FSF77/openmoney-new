@@ -6,6 +6,7 @@ import '../../services/cash_flow_engine.dart';
 import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
+import 'cash_flow_detail_dialog.dart';
 import '../theme/liquid_glass.dart';
 
 class CashFlowView extends StatefulWidget {
@@ -78,6 +79,55 @@ class _CashFlowViewState extends State<CashFlowView> {
         ),
       );
     }
+  }
+
+  void _showDetail(
+    CashFlowMatrix matrix, {
+    int? col,
+    bool? isIncome,
+    String? top,
+    String? sub,
+  }) {
+    showCashFlowDetailDialog(
+      context,
+      store: widget.store,
+      matrix: matrix,
+      columnIndex: col,
+      isIncome: isIncome,
+      top: top,
+      sub: sub,
+      accountFilterIds:
+          _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
+      statusFilter: _statusFilter,
+      dateMode: _dateMode,
+      searchQuery: _searchQuery,
+    );
+  }
+
+  Widget _clickable(Widget child, VoidCallback onTap) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+
+  void _toggleAllGroups(CashFlowMatrix matrix) {
+    final keys = <String>{
+      for (final sec in [matrix.incomeSection, matrix.expenseSection])
+        for (final g in sec.groups)
+          if (g.hasSubcategories) '${sec.title}:${g.name}',
+    };
+    setState(() {
+      if (_collapsedGroups.isEmpty) {
+        _collapsedGroups.addAll(keys);
+      } else {
+        _collapsedGroups.clear();
+      }
+    });
   }
 
   @override
@@ -170,6 +220,20 @@ class _CashFlowViewState extends State<CashFlowView> {
                           ),
                         ],
                       ),
+                    Tooltip(
+                      message: _collapsedGroups.isEmpty
+                          ? 'Recolher todas as categorias'
+                          : 'Expandir todas as categorias',
+                      child: OutlinedButton(
+                        onPressed: () => _toggleAllGroups(matrix),
+                        child: Icon(
+                          _collapsedGroups.isEmpty
+                              ? Icons.unfold_less
+                              : Icons.unfold_more,
+                          size: 18,
+                        ),
+                      ),
+                    ),
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.download, size: 16),
                       label: const Text('Exportar CSV'),
@@ -284,21 +348,28 @@ class _CashFlowViewState extends State<CashFlowView> {
                                 ),
                               ),
                             ),
-                            ...matrix.columns.map(
-                              (col) => SizedBox(
-                                width: 104,
-                                child: Text(
-                                  col.shortTitle,
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                    color: col.isCurrent
-                                        ? colors.accent
-                                        : colors.textPrimary,
+                            ...List.generate(
+                              matrix.columns.length,
+                              (i) {
+                                final col = matrix.columns[i];
+                                return SizedBox(
+                                  width: 104,
+                                  child: _clickable(
+                                    Text(
+                                      col.shortTitle,
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                        color: col.isCurrent
+                                            ? colors.accent
+                                            : colors.textPrimary,
+                                      ),
+                                    ),
+                                    () => _showDetail(matrix, col: i),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             ),
                             const SizedBox(
                               width: 104,
@@ -315,12 +386,14 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ),
                       ..._buildSectionRows(
+                        matrix,
                         matrix.incomeSection,
                         colors.income,
                         colors,
                       ),
                       const Divider(height: 1),
                       ..._buildSectionRows(
+                        matrix,
                         matrix.expenseSection,
                         colors.expense,
                         colors,
@@ -359,11 +432,13 @@ class _CashFlowViewState extends State<CashFlowView> {
   }
 
   List<Widget> _buildSectionRows(
+    CashFlowMatrix matrix,
     CashFlowSection section,
     Color sectionColor,
     OpenMoneyColors colors,
   ) {
     final rows = <Widget>[];
+    final isIncome = identical(section, matrix.incomeSection);
 
     rows.add(
       Container(
@@ -443,32 +518,41 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ],
                   ),
                 ),
-                ...group.periodTotals.map(
-                  (amt) => SizedBox(
+                ...List.generate(
+                  group.periodTotals.length,
+                  (i) => SizedBox(
                     width: 104,
-                    child: Text(
-                      fmtCashFlowCents(amt),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                        color: colors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    child: _clickable(
+                      Text(
+                        fmtCashFlowCents(group.periodTotals[i]),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
+                      () => _showDetail(matrix,
+                          col: i, isIncome: isIncome, top: group.name),
                     ),
                   ),
                 ),
                 SizedBox(
                   width: 104,
-                  child: Text(
-                    fmtCashFlowCents(group.grandTotal, showZero: true),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: sectionColor,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  child: _clickable(
+                    Text(
+                      fmtCashFlowCents(group.grandTotal, showZero: true),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: sectionColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
+                    () => _showDetail(matrix,
+                        isIncome: isIncome, top: group.name),
                   ),
                 ),
               ],
@@ -479,6 +563,9 @@ class _CashFlowViewState extends State<CashFlowView> {
 
       if (group.hasSubcategories && !isCollapsed) {
         for (final sub in group.subcategories) {
+          final subKey = sub.name.endsWith(' - Não-atribuído')
+              ? CashFlowEngine.directSubKey
+              : sub.name;
           rows.add(
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -498,31 +585,43 @@ class _CashFlowViewState extends State<CashFlowView> {
                       ),
                     ),
                   ),
-                  ...sub.periodAmounts.map(
-                    (amt) => SizedBox(
+                  ...List.generate(
+                    sub.periodAmounts.length,
+                    (i) => SizedBox(
                       width: 104,
-                      child: Text(
-                        fmtCashFlowCents(amt),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: colors.textSecondary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      child: _clickable(
+                        Text(
+                          fmtCashFlowCents(sub.periodAmounts[i]),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
+                        () => _showDetail(matrix,
+                            col: i,
+                            isIncome: isIncome,
+                            top: group.name,
+                            sub: subKey),
                       ),
                     ),
                   ),
                   SizedBox(
                     width: 104,
-                    child: Text(
-                      fmtCashFlowCents(sub.total, showZero: true),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11.5,
-                        color: colors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    child: _clickable(
+                      Text(
+                        fmtCashFlowCents(sub.total, showZero: true),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11.5,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
+                      () => _showDetail(matrix,
+                          isIncome: isIncome, top: group.name, sub: subKey),
                     ),
                   ),
                 ],
@@ -550,32 +649,39 @@ class _CashFlowViewState extends State<CashFlowView> {
                 ),
               ),
             ),
-            ...section.periodTotals.map(
-              (amt) => SizedBox(
+            ...List.generate(
+              section.periodTotals.length,
+              (i) => SizedBox(
                 width: 104,
-                child: Text(
-                  fmtCashFlowCents(amt, showZero: true),
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: sectionColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                child: _clickable(
+                  Text(
+                    fmtCashFlowCents(section.periodTotals[i], showZero: true),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: sectionColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
+                  () => _showDetail(matrix, col: i, isIncome: isIncome),
                 ),
               ),
             ),
             SizedBox(
               width: 104,
-              child: Text(
-                fmtCashFlowCents(section.grandTotal, showZero: true),
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12.5,
-                  color: sectionColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              child: _clickable(
+                Text(
+                  fmtCashFlowCents(section.grandTotal, showZero: true),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                    color: sectionColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
+                () => _showDetail(matrix, isIncome: isIncome),
               ),
             ),
           ],

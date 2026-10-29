@@ -197,7 +197,197 @@ String effectiveDateForTransaction(
   return tx.date;
 }
 
+class CashFlowDetailItem {
+  final Transaction tx;
+  final String effectiveDate;
+  final String top;
+  final String? sub;
+  final String accountName;
+  const CashFlowDetailItem({
+    required this.tx,
+    required this.effectiveDate,
+    required this.top,
+    required this.sub,
+    required this.accountName,
+  });
+}
+
 class CashFlowEngine {
+  static List<Transaction> filterTransactions(
+    List<Transaction> transactions, {
+    required Set<String>? activeAccountFilter,
+    required CashFlowStatusFilter statusFilter,
+  }) {
+    final isSpecificAccounts =
+        activeAccountFilter != null && activeAccountFilter.isNotEmpty;
+    return transactions.where((tx) {
+      if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) {
+        return false;
+      }
+      // Regra de transferências entre contas no Fluxo de Caixa:
+      // 1. Quando estiver em "Todas as Contas", não devem aparecer e nem somar como receita ou despesa.
+      // 2. Quando contas específicas estiverem selecionadas:
+      //    - Se a contraparte (peer/card) também estiver entre as contas selecionadas: IGNORAR (transferência interna ao grupo).
+      //    - Se a contraparte NÃO estiver entre as contas selecionadas: MOSTRAR (para conciliar o saldo do grupo).
+      if (isTransferTransaction(tx)) {
+        if (!isSpecificAccounts) {
+          return false;
+        }
+        final counterpartId = tx.peer ?? tx.card;
+        if (counterpartId != null &&
+            activeAccountFilter.contains(counterpartId)) {
+          return false;
+        }
+      }
+      switch (statusFilter) {
+        case CashFlowStatusFilter.all:
+          break;
+        case CashFlowStatusFilter.reconciledOnly:
+          if (!tx.rec) return false;
+          break;
+        case CashFlowStatusFilter.pendingOnly:
+          if (tx.rec) return false;
+          break;
+      }
+      return true;
+    }).toList();
+  }
+
+  static ({String top, String? sub}) parseCategory(
+      Transaction tx, List<Account> accounts) {
+      final isXfer = isTransferTransaction(tx);
+      final trimmed = tx.cat.trim();
+      if (trimmed.isEmpty) {
+        if (isXfer) {
+          String? peerName;
+          if (tx.peer != null) {
+            for (final a in accounts) {
+              if (a.id == tx.peer) {
+                peerName = a.name;
+                break;
+              }
+            }
+          }
+          if (peerName == null && tx.card != null) {
+            for (final a in accounts) {
+              if (a.id == tx.card) {
+                peerName = a.name;
+                break;
+              }
+            }
+          }
+          return (top: 'Transferência', sub: peerName);
+        }
+        return (top: 'Sem categoria', sub: null);
+      }
+
+      List<String> parts;
+      if (trimmed.contains(kCategorySep)) {
+        parts = trimmed.split(kCategorySep);
+      } else if (trimmed.contains(' : ')) {
+        parts = trimmed.split(' : ');
+      } else if (trimmed.contains(':')) {
+        parts = trimmed.split(':');
+      } else if (trimmed.contains(' / ')) {
+        parts = trimmed.split(' / ');
+      } else {
+        parts = [trimmed];
+      }
+
+      var top = parts[0].trim();
+      String? sub = parts.length > 1 ? parts[1].trim() : null;
+
+      final topNorm = removeDiacritics(top).toLowerCase();
+      if (topNorm == 'transferencia' ||
+          topNorm == 'transf' ||
+          topNorm == 'transfer') {
+        top = 'Transferência';
+      }
+
+      if ((sub == null || sub.isEmpty) && isXfer) {
+        if (tx.peer != null) {
+          for (final a in accounts) {
+            if (a.id == tx.peer) {
+              sub = a.name;
+              break;
+            }
+          }
+        } else if (tx.card != null) {
+          for (final a in accounts) {
+            if (a.id == tx.card) {
+              sub = a.name;
+              break;
+            }
+          }
+        }
+      }
+
+      return (
+        top: top.isEmpty ? 'Sem categoria' : top,
+        sub: (sub != null && sub.isEmpty) ? null : sub,
+      );
+    }
+
+  static const String directSubKey = '___DIRECT___';
+
+  /// Lançamentos que compõem uma célula da matriz (mesmos filtros/classificação do buildMatrix).
+  /// columnIndex null = todas as colunas; isIncome null = receitas e despesas;
+  /// top null = todas as categorias; sub null = todas as subcategorias (directSubKey = sem subcategoria).
+  static List<CashFlowDetailItem> detail({
+    required List<Transaction> transactions,
+    required List<Account> accounts,
+    required List<CashFlowColumnDef> columns,
+    int? columnIndex,
+    bool? isIncome,
+    String? top,
+    String? sub,
+    Set<String>? accountFilterIds,
+    CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
+    CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
+    String searchQuery = '',
+  }) {
+    final active = (accountFilterIds != null && accountFilterIds.isNotEmpty)
+        ? accountFilterIds
+        : null;
+    final q = searchQuery.trim().toLowerCase();
+    final items = <CashFlowDetailItem>[];
+    for (final tx in filterTransactions(transactions,
+        activeAccountFilter: active, statusFilter: statusFilter)) {
+      if (tx.amt == 0) continue;
+      final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
+      final colIdx = columns.indexWhere((c) => c.matchesDate(effDate));
+      if (colIdx < 0) continue;
+      if (columnIndex != null && columnIndex != colIdx) continue;
+      if (isIncome != null && isIncome != (tx.amt > 0)) continue;
+      final parsed = parseCategory(tx, accounts);
+      if (top != null && top != parsed.top) continue;
+      if (sub != null && sub != (parsed.sub ?? directSubKey)) continue;
+      if (q.isNotEmpty && !parsed.top.toLowerCase().contains(q)) {
+        final label = parsed.sub ?? '${parsed.top} - Não-atribuído';
+        if (!label.toLowerCase().contains(q)) continue;
+      }
+      String accName = 'Conta';
+      for (final a in accounts) {
+        if (a.id == tx.acc) {
+          accName = a.name;
+          break;
+        }
+      }
+      items.add(CashFlowDetailItem(
+        tx: tx,
+        effectiveDate: effDate,
+        top: parsed.top,
+        sub: parsed.sub,
+        accountName: accName,
+      ));
+    }
+    items.sort((a, b) {
+      final c = a.effectiveDate.compareTo(b.effectiveDate);
+      return c != 0 ? c : a.tx.id.compareTo(b.tx.id);
+    });
+    return items;
+  }
+
   static CashFlowMatrix buildMatrix({
     required List<Transaction> transactions,
     List<Account> accounts = const [],
@@ -334,111 +524,14 @@ class CashFlowEngine {
     final isSpecificAccounts =
         activeAccountFilter != null && activeAccountFilter.isNotEmpty;
 
-    final filteredTxs = transactions.where((tx) {
-      if (isSpecificAccounts && !activeAccountFilter.contains(tx.acc)) {
-        return false;
-      }
-      // Regra de transferências entre contas no Fluxo de Caixa:
-      // 1. Quando estiver em "Todas as Contas", não devem aparecer e nem somar como receita ou despesa.
-      // 2. Quando contas específicas estiverem selecionadas:
-      //    - Se a contraparte (peer/card) também estiver entre as contas selecionadas: IGNORAR (transferência interna ao grupo).
-      //    - Se a contraparte NÃO estiver entre as contas selecionadas: MOSTRAR (para conciliar o saldo do grupo).
-      if (isTransferTransaction(tx)) {
-        if (!isSpecificAccounts) {
-          return false;
-        }
-        final counterpartId = tx.peer ?? tx.card;
-        if (counterpartId != null &&
-            activeAccountFilter.contains(counterpartId)) {
-          return false;
-        }
-      }
-      switch (statusFilter) {
-        case CashFlowStatusFilter.all:
-          break;
-        case CashFlowStatusFilter.reconciledOnly:
-          if (!tx.rec) return false;
-          break;
-        case CashFlowStatusFilter.pendingOnly:
-          if (tx.rec) return false;
-          break;
-      }
-      return true;
-    }).toList();
+    final filteredTxs = filterTransactions(
+      transactions,
+      activeAccountFilter: activeAccountFilter,
+      statusFilter: statusFilter,
+    );
 
-    ({String top, String? sub}) parseCat(Transaction tx) {
-      final isXfer = isTransferTransaction(tx);
-      final trimmed = tx.cat.trim();
-      if (trimmed.isEmpty) {
-        if (isXfer) {
-          String? peerName;
-          if (tx.peer != null) {
-            for (final a in accounts) {
-              if (a.id == tx.peer) {
-                peerName = a.name;
-                break;
-              }
-            }
-          }
-          if (peerName == null && tx.card != null) {
-            for (final a in accounts) {
-              if (a.id == tx.card) {
-                peerName = a.name;
-                break;
-              }
-            }
-          }
-          return (top: 'Transferência', sub: peerName);
-        }
-        return (top: 'Sem categoria', sub: null);
-      }
-
-      List<String> parts;
-      if (trimmed.contains(kCategorySep)) {
-        parts = trimmed.split(kCategorySep);
-      } else if (trimmed.contains(' : ')) {
-        parts = trimmed.split(' : ');
-      } else if (trimmed.contains(':')) {
-        parts = trimmed.split(':');
-      } else if (trimmed.contains(' / ')) {
-        parts = trimmed.split(' / ');
-      } else {
-        parts = [trimmed];
-      }
-
-      var top = parts[0].trim();
-      String? sub = parts.length > 1 ? parts[1].trim() : null;
-
-      final topNorm = removeDiacritics(top).toLowerCase();
-      if (topNorm == 'transferencia' ||
-          topNorm == 'transf' ||
-          topNorm == 'transfer') {
-        top = 'Transferência';
-      }
-
-      if ((sub == null || sub.isEmpty) && isXfer) {
-        if (tx.peer != null) {
-          for (final a in accounts) {
-            if (a.id == tx.peer) {
-              sub = a.name;
-              break;
-            }
-          }
-        } else if (tx.card != null) {
-          for (final a in accounts) {
-            if (a.id == tx.card) {
-              sub = a.name;
-              break;
-            }
-          }
-        }
-      }
-
-      return (
-        top: top.isEmpty ? 'Sem categoria' : top,
-        sub: (sub != null && sub.isEmpty) ? null : sub,
-      );
-    }
+    ({String top, String? sub}) parseCat(Transaction tx) =>
+        parseCategory(tx, accounts);
 
     final incMap = <String, Map<String, List<int>>>{};
     final expMap = <String, Map<String, List<int>>>{};

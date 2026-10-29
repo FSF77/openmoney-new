@@ -2515,14 +2515,74 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Smart Predictions Adjustment
 
-  PredictionsAdjustResult adjustPredictions(String targetMonth) {
-    final monthTxs = db.txs
-        .where((t) => t.date.startsWith(targetMonth) && t.auto != true)
-        .toList();
-    final predTxs =
-        monthTxs.where((t) => isPredictionPayee(t.payee)).toList();
+  void setPredMode(String mode) {
+    if (db.predMode == mode) return;
+    db.predMode = mode;
+    save();
+    notifyListeners();
+  }
 
-    if (predTxs.isEmpty) {
+  PredictionsAdjustResult adjustPredictions(String targetMonth) {
+    final invoiceMode = db.predMode == 'invoice';
+    final months = invoiceMode
+        ? [targetMonth, addMonthsYM(targetMonth, 1), addMonthsYM(targetMonth, 2)]
+        : [targetMonth];
+
+    // Grupos de abatimento: previsões + lançamentos que as abatem
+    final groups = <({String cat, List<Transaction> preds, List<Transaction> spent, String label})>[];
+    var allPredCount = 0;
+    final cardCfgs = <String, CardConfig>{
+      for (final a in db.accounts)
+        if (a.card != null) a.id: a.card!,
+    };
+
+    for (final m in months) {
+      final monthTxs =
+          db.txs.where((t) => t.date.startsWith(m) && t.auto != true).toList();
+      final predTxs =
+          monthTxs.where((t) => isPredictionPayee(t.payee)).toList();
+      allPredCount += predTxs.length;
+
+      final monthPreds = <String, List<Transaction>>{};
+      final invPreds = <String, List<Transaction>>{};
+      for (final pt in predTxs) {
+        final cfg = cardCfgs[pt.acc];
+        if (invoiceMode && cfg != null) {
+          final pik = pt.ik ?? invKeyFor(cfg, pt.date);
+          invPreds.putIfAbsent('${pt.cat}|$pik', () => []).add(pt);
+        } else {
+          monthPreds.putIfAbsent(pt.cat, () => []).add(pt);
+        }
+      }
+      monthPreds.forEach((cat, preds) {
+        final spent = monthTxs
+            .where((t) =>
+                t.cat == cat && !isPredictionPayee(t.payee) && t.xfer == null)
+            .toList();
+        groups.add((cat: cat, preds: preds, spent: spent, label: ''));
+      });
+      invPreds.forEach((key, preds) {
+        final idx = key.lastIndexOf('|');
+        final cat = key.substring(0, idx);
+        final pik = key.substring(idx + 1);
+        // Somente lançamentos de cartão cuja fatura (ik) é a mesma da previsão
+        final spent = db.txs.where((t) {
+          final cfg = cardCfgs[t.acc];
+          if (cfg == null) return false;
+          if (t.auto == true || t.cat != cat || t.xfer != null) return false;
+          if (isPredictionPayee(t.payee)) return false;
+          return (t.ik ?? invKeyFor(cfg, t.date)) == pik;
+        }).toList();
+        groups.add((
+          cat: cat,
+          preds: preds,
+          spent: spent,
+          label: ' • Fatura ${fmtMonth(pik)}'
+        ));
+      });
+    }
+
+    if (allPredCount == 0) {
       final res = PredictionsAdjustResult(
         title: 'Ajustar Previsões',
         message:
@@ -2537,11 +2597,6 @@ class MoneyStore extends ChangeNotifier {
       return res;
     }
 
-    final predsByCategory = <String, List<Transaction>>{};
-    for (final pt in predTxs) {
-      predsByCategory.putIfAbsent(pt.cat, () => []).add(pt);
-    }
-
     final adjustedItems = <String>[];
     final exhaustedItems = <String>[];
     final unchangedItems = <String>[];
@@ -2549,14 +2604,10 @@ class MoneyStore extends ChangeNotifier {
     int totalDeductedCents = 0;
     final idsToDelete = <String>{};
 
-    for (final entry in predsByCategory.entries) {
-      final cat = entry.key;
-      final catPreds = entry.value;
-
-      final otherTxs = monthTxs
-          .where((t) =>
-              t.cat == cat && !isPredictionPayee(t.payee) && t.xfer == null)
-          .toList();
+    for (final group in groups) {
+      final cat = group.cat;
+      final catPreds = group.preds;
+      final otherTxs = group.spent;
 
       int netSpent = 0;
       for (final ot in otherTxs) {
@@ -2581,7 +2632,8 @@ class MoneyStore extends ChangeNotifier {
         totalDeductedCents += deduction;
 
         final accName = accById(pred.acc)?.name ?? 'Conta';
-        final catLabel = cat.isEmpty ? 'Sem categoria' : cat;
+        final catLabel =
+            (cat.isEmpty ? 'Sem categoria' : cat) + group.label;
 
         if (newRemaining > 0) {
           final sign = pred.amt < 0 ? -1 : 1;

@@ -344,6 +344,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           cents: widget.store.balance(acc, predicted: true),
                           colors: colors,
                         ),
+                        PopupMenuButton<String>(
+                          tooltip:
+                              'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
+                          icon: const Icon(Icons.tune, size: 18),
+                          padding: EdgeInsets.zero,
+                          initialValue: widget.store.db.predMode,
+                          onSelected: widget.store.setPredMode,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                                value: 'month', child: Text('Por mês')),
+                            PopupMenuItem(
+                                value: 'invoice',
+                                child: Text('Por fatura (cartão)')),
+                          ],
+                        ),
                         OutlinedButton.icon(
                           icon: const Icon(Icons.auto_fix_high, size: 16),
                           label: const Text('Ajustar Previsões'),

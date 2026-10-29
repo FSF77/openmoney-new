@@ -560,6 +560,9 @@ class Database {
   Map<String, int> budgets;
   int v;
 
+  /// Modo de abatimento de previsões: 'month' (padrão) ou 'invoice' (por fatura)
+  String predMode;
+
   Database({
     List<Account>? accounts,
     List<CategoryItem>? cats,
@@ -567,6 +570,7 @@ class Database {
     List<RecurrenceRule>? recs,
     Map<String, int>? budgets,
     this.v = 7,
+    this.predMode = 'month',
   })  : accounts = accounts ??
             [
               Account(
@@ -637,6 +641,7 @@ class Database {
       recs: parsedRecs ?? [],
       budgets: parsedBudgets,
       v: (json['v'] as num?)?.toInt() ?? 7,
+      predMode: json['predMode'] == 'invoice' ? 'invoice' : 'month',
     );
   }
 
@@ -647,6 +652,7 @@ class Database {
         'recs': recs.map((r) => r.toJson()).toList(),
         'budgets': budgets,
         'v': v,
+        if (predMode != 'month') 'predMode': predMode,
       };
 }
 
