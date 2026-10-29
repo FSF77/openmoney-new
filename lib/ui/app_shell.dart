@@ -17,6 +17,7 @@ import 'views/budget_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
 import 'views/due_bills_view.dart';
+import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
 import 'views/reports_view.dart';
 
@@ -227,6 +228,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
       case NavModule.account:
         return 0;
       case NavModule.dueBills:
+      case NavModule.installments:
         return 1;
       case NavModule.cashFlow:
         return 2;
@@ -262,6 +264,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         return CategoriesView(store: widget.store);
       case NavModule.dueBills:
         return DueBillsView(store: widget.store);
+      case NavModule.installments:
+        return InstallmentsView(store: widget.store);
       case NavModule.search:
         return GlobalSearchView(store: widget.store);
     }
@@ -679,6 +683,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       ? colors.expense
                       : colors.warning,
                   onTap: () => selectModule(NavModule.dueBills),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.credit_score,
+                  label: 'Compras Parceladas',
+                  selected: widget.store.activeModule == NavModule.installments,
+                  onTap: () => selectModule(NavModule.installments),
                 ),
                 _SidebarNavTile(
                   icon: Icons.grid_on_rounded,

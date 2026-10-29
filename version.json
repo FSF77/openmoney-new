@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  25,
-    "version":  "2.1.4",
-    "notes":  "Fluxo de Caixa dinâmico, Abatimento de previsões por mês atual ou por fatura",
-    "releaseDate":  "29/10/2026",
-    "windows":  {
-                    "build":  25,
-                    "version":  "2.1.4",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.4.zip",
-                    "sha256":  "2910e84aa7347b2e64bc9a9ca1f39076f35c2aa336d4a06a138fa1e3129c0779",
-                    "releaseDate":  "29/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.1.4",
-                  "build":  25,
-                  "releaseDate":  "29/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.4.zip",
-                  "sha256":  "fce84c04fa1957e821a3b6606bbecb79497922f2cf6351605e14f564e2979794",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.1.4"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 27,
+  "version": "2.1.5",
+  "notes": "Relatório de compras parceladas, inclusão de filtro por conta/negócio no relatório de contas a pagar e receber, Fluxo de Caixa dinâmico, Abatimento de previsões por mês atual ou por fatura",
+  "releaseDate": "29/10/2026",
+  "windows": {
+    "build": 25,
+    "version": "2.1.4",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.4.zip",
+    "sha256": "2910e84aa7347b2e64bc9a9ca1f39076f35c2aa336d4a06a138fa1e3129c0779",
+    "releaseDate": "29/10/2026"
+  },
+  "macos": {
+    "version": "2.1.5",
+    "build": 27,
+    "releaseDate": "29/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.5.zip",
+    "sha256": "7a408734b3d3ee48a442e807a64360954eed41f41e01aa70fa497dfda36fbbde",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.1.5"
 }

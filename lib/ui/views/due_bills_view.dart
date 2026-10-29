@@ -2,17 +2,29 @@ import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import '../modals/account_multi_select_filter.dart';
+import '../widgets/csv_export.dart';
 
-class DueBillsView extends StatelessWidget {
+class DueBillsView extends StatefulWidget {
   final MoneyStore store;
   const DueBillsView({super.key, required this.store});
+
+  @override
+  State<DueBillsView> createState() => _DueBillsViewState();
+}
+
+class _DueBillsViewState extends State<DueBillsView> {
+  Set<String> _selectedAccountIds = {};
+
+  MoneyStore get store => widget.store;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final items = store.dueBillItems();
-    final summary = store.dueBillsSummary();
+    final ids = _selectedAccountIds;
+    final items = store.dueBillItems(accountIds: ids);
+    final summary = store.dueBillsSummary(accountIds: ids);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
@@ -86,6 +98,27 @@ class DueBillsView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
+                  AccountMultiSelectFilter(
+                    store: store,
+                    selectedAccountIds: _selectedAccountIds,
+                    onSelectionChanged: (set) =>
+                        setState(() => _selectedAccountIds = set),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.download, size: 17),
+                    label: const Text('Exportar CSV'),
+                    onPressed: items.isEmpty
+                        ? null
+                        : () => exportCsvWithFeedback(
+                              context,
+                              csv: store.dueBillsCSVString(items),
+                              defaultName:
+                                  'openmoney-contas-a-pagar-receber.csv',
+                              title: 'Exportar Contas a Pagar e Receber (CSV)',
+                            ),
+                  ),
+                  const SizedBox(width: 10),
                   if (items.isNotEmpty)
                     FilledButton.icon(
                       icon: const Icon(Icons.done_all, size: 17),
@@ -105,7 +138,9 @@ class DueBillsView extends StatelessWidget {
                               ),
                               FilledButton(
                                 onPressed: () {
-                                  store.reconcileAllDueBills();
+                                  store.reconcileAllDueBills(
+                                    accountIds: ids,
+                                  );
                                   Navigator.pop(ctx);
                                 },
                                 child: const Text('Conciliar Todos'),

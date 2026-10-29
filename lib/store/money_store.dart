@@ -16,6 +16,7 @@ enum NavModule {
   categories,
   search,
   dueBills,
+  installments,
 }
 
 enum ScopeChoice {
@@ -3340,7 +3341,8 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Due & Reconciliation Engine (Contas a Pagar & Receber)
 
-  List<DueBillItem> dueBillItems({int? withinDays, String? accountId}) {
+  List<DueBillItem> dueBillItems(
+      {int? withinDays, String? accountId, Set<String>? accountIds}) {
     final horizon = withinDays ?? reminderDaysAhead;
     final today = todayISO();
     final items = <DueBillItem>[];
@@ -3348,6 +3350,11 @@ class MoneyStore extends ChangeNotifier {
     for (final tx in db.txs) {
       if (tx.rec) continue;
       if (accountId != null && accountId.isNotEmpty && tx.acc != accountId) {
+        continue;
+      }
+      if (accountIds != null &&
+          accountIds.isNotEmpty &&
+          !accountIds.contains(tx.acc)) {
         continue;
       }
       final acc = accById(tx.acc);
@@ -3418,8 +3425,10 @@ class MoneyStore extends ChangeNotifier {
     int netTotal,
     int overdueCount,
     int dueTodayCount,
-  }) dueBillsSummary({int? withinDays, String? accountId}) {
-    final items = dueBillItems(withinDays: withinDays, accountId: accountId);
+  }) dueBillsSummary(
+      {int? withinDays, String? accountId, Set<String>? accountIds}) {
+    final items = dueBillItems(
+        withinDays: withinDays, accountId: accountId, accountIds: accountIds);
     int payCount = 0;
     int payTotal = 0;
     int recCount = 0;
@@ -3451,6 +3460,65 @@ class MoneyStore extends ChangeNotifier {
     );
   }
 
+  /// Despesas parceladas em aberto (não conciliadas), sem limite de antecedência.
+  List<DueBillItem> installmentItems({Set<String>? accountIds}) {
+    final today = todayISO();
+    final items = <DueBillItem>[];
+    for (final tx in db.txs) {
+      if (tx.rec || tx.amt >= 0) continue;
+      if (tx.pt == null || tx.pt! <= 1) continue;
+      if (accountIds != null &&
+          accountIds.isNotEmpty &&
+          !accountIds.contains(tx.acc)) {
+        continue;
+      }
+      final acc = accById(tx.acc);
+      String target = tx.date;
+      if (acc != null && acc.type == kCardType && acc.card != null) {
+        final ik = tx.ik ?? tx.inv ?? invKeyFor(acc.card!, tx.date);
+        final info = acc.invoices?[ik];
+        target = (info != null && info.due.isNotEmpty)
+            ? info.due
+            : invDates(acc.card!, ik).due;
+      }
+      items.add(DueBillItem(
+        tx: tx,
+        accountName: acc?.name ?? 'Conta',
+        daysUntilDue: daysBetween(today, target),
+        dueDate: target,
+      ));
+    }
+    items.sort((a, b) {
+      final dc = a.effectiveDueDate.compareTo(b.effectiveDueDate);
+      return dc != 0 ? dc : a.tx.payee.compareTo(b.tx.payee);
+    });
+    return items;
+  }
+
+  /// CSV (`;`, BOM UTF-8, vírgula decimal) para itens de vencimento/parcelas.
+  String dueBillsCSVString(List<DueBillItem> items) {
+    String q(String v) => '"${v.replaceAll('"', '""')}"';
+    const header =
+        'Vencimento;Data da Compra;Conta;Negócio;Favorecido;Categoria;Parcela;Valor (R\$);Situação';
+    final rows = items.map((i) {
+      final t = i.tx;
+      final valor = (t.amt / 100.0).toStringAsFixed(2).replaceAll('.', ',');
+      final parcela = (t.pn != null && t.pt != null) ? '${t.pn}/${t.pt}' : '';
+      return [
+        fmtDate(i.effectiveDueDate),
+        fmtDate(t.date),
+        q(i.accountName),
+        q(accById(t.acc)?.business ?? ''),
+        q(t.payee),
+        q(t.cat),
+        parcela,
+        valor,
+        i.statusDescription,
+      ].join(';');
+    }).join('\r\n');
+    return '\uFEFF$header\r\n$rows';
+  }
+
   int pendingCountForAccount(String accountId) {
     return dueBillItems(
       withinDays: reminderDaysAhead,
@@ -3458,8 +3526,10 @@ class MoneyStore extends ChangeNotifier {
     ).length;
   }
 
-  void reconcileAllDueBills({int? withinDays}) {
-    final items = dueBillItems(withinDays: withinDays);
+  void reconcileAllDueBills(
+      {int? withinDays, Set<String>? accountIds}) {
+    final items =
+        dueBillItems(withinDays: withinDays, accountIds: accountIds);
     if (items.isEmpty) return;
     final ids = items.map((i) => i.tx.id).toSet();
     for (int i = 0; i < db.txs.length; i++) {
