@@ -32,6 +32,7 @@ class BankLogoRegistry {
     BankLogoItem(id: 'santander', name: 'Santander', filename: 'santander.png'),
     BankLogoItem(id: 'santander-private', name: 'Santander Private', filename: 'santander-private.png'),
     BankLogoItem(id: 'c6bank', name: 'C6 Bank', filename: 'c6bank.png'),
+    BankLogoItem(id: 'caixa', name: 'Caixa Econômica Federal', filename: 'caixa.png'),
     BankLogoItem(id: 'intermedium', name: 'Banco Inter', filename: 'intermedium.png'),
     BankLogoItem(id: 'interpj', name: 'Inter Empresas / PJ', filename: 'interpj.png'),
     BankLogoItem(id: 'btgpactual', name: 'BTG Pactual', filename: 'btgpactual.png'),
