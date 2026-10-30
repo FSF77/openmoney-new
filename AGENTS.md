@@ -16,6 +16,7 @@ Este documento registra as diretrizes, repositórios, versionamento e fluxos de 
 1. **Equivalência Funcional Estrita:**
    - O aplicativo em **Swift** é a fonte da verdade para fluxos, modelos, cálculos, regras de negócio e comportamento da interface.
    - Qualquer funcionalidade criada, ajustada ou corrigida no Swift deve ser replicada e rodar com o mesmo comportamento no Flutter/Dart.
+   - **Toda mudança deve ser aplicada em todas as plataformas:** Flutter (macOS, Windows, Web, Mobile), Swift macOS e Swift iOS. Nunca entregar uma funcionalidade, ajuste ou correção em apenas uma delas; se alguma plataforma não puder ser feita, avisar explicitamente.
 
 2. **Compatibilidade da Base de Dados (`openmoney.json`):**
    - Ambas as plataformas operam sobre a mesma base de dados.
