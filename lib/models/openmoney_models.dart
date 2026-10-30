@@ -121,6 +121,11 @@ class Account {
   bool? inactive;
   bool? favorite;
   String? business;
+  String? bankCode;
+  String? agency;
+  String? accountNumber;
+  String? comments;
+  int? minBalance;
 
   Account({
     required this.id,
@@ -132,6 +137,11 @@ class Account {
     this.inactive,
     this.favorite,
     this.business,
+    this.bankCode,
+    this.agency,
+    this.accountNumber,
+    this.comments,
+    this.minBalance,
   });
 
   bool get isInactive => inactive == true;
@@ -174,6 +184,11 @@ class Account {
       favorite: json['favorite'] as bool?,
       business:
           (trimmedBiz != null && trimmedBiz.isNotEmpty) ? trimmedBiz : null,
+      bankCode: json['bankCode'] as String?,
+      agency: json['agency'] as String?,
+      accountNumber: json['accountNumber'] as String?,
+      comments: json['comments'] as String?,
+      minBalance: (json['minBalance'] as num?)?.toInt(),
     );
   }
 
@@ -189,6 +204,15 @@ class Account {
         if (favorite != null) 'favorite': favorite,
         if (business != null && business!.trim().isNotEmpty)
           'business': business!.trim(),
+        if (bankCode != null && bankCode!.trim().isNotEmpty)
+          'bankCode': bankCode!.trim(),
+        if (agency != null && agency!.trim().isNotEmpty)
+          'agency': agency!.trim(),
+        if (accountNumber != null && accountNumber!.trim().isNotEmpty)
+          'accountNumber': accountNumber!.trim(),
+        if (comments != null && comments!.trim().isNotEmpty)
+          'comments': comments!.trim(),
+        if (minBalance != null) 'minBalance': minBalance,
       };
 
   Account copyWith({
@@ -201,6 +225,11 @@ class Account {
     bool? inactive,
     bool? favorite,
     String? business,
+    String? bankCode,
+    String? agency,
+    String? accountNumber,
+    String? comments,
+    int? minBalance,
   }) {
     return Account(
       id: id ?? this.id,
@@ -213,6 +242,11 @@ class Account {
       inactive: inactive ?? this.inactive,
       favorite: favorite ?? this.favorite,
       business: business ?? this.business,
+      bankCode: bankCode ?? this.bankCode,
+      agency: agency ?? this.agency,
+      accountNumber: accountNumber ?? this.accountNumber,
+      comments: comments ?? this.comments,
+      minBalance: minBalance ?? this.minBalance,
     );
   }
 }

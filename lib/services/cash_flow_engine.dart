@@ -1,6 +1,7 @@
 import '../models/openmoney_models.dart';
 
 enum CashFlowPeriodKind {
+  daily('Diário'),
   monthly('Mensal'),
   quarterly('Trimestral'),
   semiannual('Semestral'),
@@ -421,6 +422,7 @@ class CashFlowEngine {
     List<Account> accounts = const [],
     required CashFlowPeriodKind periodKind,
     required int year,
+    int? month,
     String? accountFilterId,
     Set<String>? accountFilterIds,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
@@ -435,7 +437,30 @@ class CashFlowEngine {
     late final List<CashFlowColumnDef> columns;
     late final String periodSubtitle;
 
+    final effectiveMonth = (month != null && month >= 1 && month <= 12)
+        ? month
+        : (int.tryParse(currentISO.substring(5, 7)) ?? 1);
+
     switch (periodKind) {
+      case CashFlowPeriodKind.daily:
+        final mStr = pad2(effectiveMonth);
+        final yStr = year.toString().padLeft(4, '0');
+        final daysInMonth = DateTime(year, effectiveMonth + 1, 0).day;
+        periodSubtitle = '01/$mStr/$yStr até ${pad2(daysInMonth)}/$mStr/$yStr';
+        columns = List.generate(daysInMonth, (idx) {
+          final day = idx + 1;
+          final dStr = pad2(day);
+          final fullDate = '$yStr-$mStr-$dStr';
+          return CashFlowColumnDef(
+            id: fullDate,
+            title: '$dStr/$mStr',
+            shortTitle: dStr,
+            isCurrent: fullDate == currentISO,
+            matchesDate: (d) => d == fullDate || d.startsWith(fullDate),
+          );
+        });
+        break;
+
       case CashFlowPeriodKind.monthly:
         periodSubtitle = '01/01/$year até 31/12/$year';
         const monthNames = [
@@ -510,19 +535,25 @@ class CashFlowEngine {
         break;
 
       case CashFlowPeriodKind.yearly:
-        final distinctYears = <int>{currentYearInt, year};
+        // Janela de no máximo 10 anos: 7 anos anteriores, atual e próximos 2 anos
+        final minAllowedYear = currentYearInt - 7;
+        final maxAllowedYear = currentYearInt + 2;
+        final distinctYears = <int>{currentYearInt};
+        if (year >= minAllowedYear && year <= maxAllowedYear) {
+          distinctYears.add(year);
+        }
         for (final tx in transactions) {
           final d = effectiveDateForTransaction(tx, accounts, dateMode);
           if (d.length >= 4) {
             final y = int.tryParse(d.substring(0, 4));
-            if (y != null && y >= 2000 && y <= 2100) {
+            if (y != null && y >= minAllowedYear && y <= maxAllowedYear) {
               distinctYears.add(y);
             }
           }
         }
         final sortedYears = distinctYears.toList()..sort();
-        final minYear = sortedYears.isNotEmpty ? sortedYears.first : year;
-        final maxYear = sortedYears.isNotEmpty ? sortedYears.last : year;
+        final minYear = sortedYears.first;
+        final maxYear = sortedYears.last;
         periodSubtitle = '01/01/$minYear até 31/12/$maxYear';
         columns = sortedYears.map((y) {
           final yStr = y.toString();
@@ -738,6 +769,8 @@ class CashFlowEngine {
 
     final colStartDates = List<String>.generate(numCols, (i) {
       switch (periodKind) {
+        case CashFlowPeriodKind.daily:
+          return columns[i].id;
         case CashFlowPeriodKind.monthly:
           return '${year.toString().padLeft(4, '0')}-${pad2(i + 1)}-01';
         case CashFlowPeriodKind.quarterly:

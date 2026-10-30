@@ -17,9 +17,22 @@ class CashFlowView extends StatefulWidget {
   State<CashFlowView> createState() => _CashFlowViewState();
 }
 
+class _CashFlowRowItem {
+  final Widget left;
+  final Widget right;
+  final double height;
+
+  const _CashFlowRowItem({
+    required this.left,
+    required this.right,
+    required this.height,
+  });
+}
+
 class _CashFlowViewState extends State<CashFlowView> {
   CashFlowPeriodKind _periodKind = CashFlowPeriodKind.monthly;
   late int _year;
+  late int _month;
   Set<String> _selectedAccountIds = {};
   CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   CashFlowKindFilter _kindFilter = CashFlowKindFilter.all;
@@ -27,11 +40,46 @@ class _CashFlowViewState extends State<CashFlowView> {
   String _searchQuery = '';
   final Set<String> _collapsedGroups = {};
 
+  late final ScrollController _headerHScrollController;
+  late final ScrollController _bodyHScrollController;
+  bool _isSyncingHScroll = false;
+
   @override
   void initState() {
     super.initState();
-    _year = int.tryParse(widget.store.month.substring(0, 4)) ??
-        DateTime.now().year;
+    final mParts = widget.store.month.split('-');
+    _year = int.tryParse(mParts[0]) ?? DateTime.now().year;
+    _month = mParts.length >= 2 ? (int.tryParse(mParts[1]) ?? DateTime.now().month) : DateTime.now().month;
+
+    _headerHScrollController = ScrollController();
+    _bodyHScrollController = ScrollController();
+
+    _headerHScrollController.addListener(() {
+      if (_isSyncingHScroll) return;
+      _isSyncingHScroll = true;
+      if (_bodyHScrollController.hasClients &&
+          _bodyHScrollController.offset != _headerHScrollController.offset) {
+        _bodyHScrollController.jumpTo(_headerHScrollController.offset);
+      }
+      _isSyncingHScroll = false;
+    });
+
+    _bodyHScrollController.addListener(() {
+      if (_isSyncingHScroll) return;
+      _isSyncingHScroll = true;
+      if (_headerHScrollController.hasClients &&
+          _headerHScrollController.offset != _bodyHScrollController.offset) {
+        _headerHScrollController.jumpTo(_bodyHScrollController.offset);
+      }
+      _isSyncingHScroll = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _headerHScrollController.dispose();
+    _bodyHScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _exportCsv(CashFlowMatrix matrix) async {
@@ -142,6 +190,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       accounts: widget.store.db.accounts,
       periodKind: _periodKind,
       year: _year,
+      month: _month,
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       statusFilter: _statusFilter,
@@ -202,12 +251,54 @@ class _CashFlowViewState extends State<CashFlowView> {
                       onSelectionChanged: (s) =>
                           setState(() => _periodKind = s.first),
                     ),
-                    if (_periodKind != CashFlowPeriodKind.yearly)
+                    if (_periodKind == CashFlowPeriodKind.daily)
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                             icon: const Icon(Icons.chevron_left),
+                            tooltip: 'Mês anterior',
+                            onPressed: () {
+                              setState(() {
+                                if (_month == 1) {
+                                  _month = 12;
+                                  _year -= 1;
+                                } else {
+                                  _month -= 1;
+                                }
+                              });
+                            },
+                          ),
+                          Text(
+                            '${_month.toString().padLeft(2, '0')}/$_year',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right),
+                            tooltip: 'Próximo mês',
+                            onPressed: () {
+                              setState(() {
+                                if (_month == 12) {
+                                  _month = 1;
+                                  _year += 1;
+                                } else {
+                                  _month += 1;
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      )
+                    else if (_periodKind != CashFlowPeriodKind.yearly)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left),
+                            tooltip: 'Ano anterior',
                             onPressed: () => setState(() => _year -= 1),
                           ),
                           Text(
@@ -219,6 +310,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.chevron_right),
+                            tooltip: 'Próximo ano',
                             onPressed: () => setState(() => _year += 1),
                           ),
                         ],
@@ -342,29 +434,33 @@ class _CashFlowViewState extends State<CashFlowView> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
             child: GlassCard(
               padding: EdgeInsets.zero,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: 210.0 + (matrix.columns.length + 1) * 104.0 + 32.0,
-                  child: ListView(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const catWidth = 230.0;
+                  final colWidth = _periodKind == CashFlowPeriodKind.daily ? 112.0 : 104.0;
+                  const totalWidth = 114.0;
+                  final gridWidth = (matrix.columns.length * colWidth) + totalWidth;
+                  final allRows = _buildAllRows(matrix, colors, colWidth, totalWidth);
+
+                  return Column(
                     children: [
-                      // Matrix Column Header
+                      // 1. CABEÇALHO FIXO VERTICALMENTE (Sticky Header Row)
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        height: 48,
                         decoration: BoxDecoration(
-                          color: colors.bgPrimary.withValues(alpha: 0.65),
+                          color: colors.bgPrimary.withValues(alpha: 0.85),
                           border: Border(
                             bottom: BorderSide(color: colors.borderGlass),
                           ),
                         ),
                         child: Row(
                           children: [
-                            const SizedBox(
-                              width: 210,
-                              child: Text(
+                            // Canto superior esquerdo: Fixo horizontal e verticalmente
+                            Container(
+                              width: catWidth,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              alignment: Alignment.centerLeft,
+                              child: const Text(
                                 'Categoria / Subcategoria',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
@@ -372,81 +468,130 @@ class _CashFlowViewState extends State<CashFlowView> {
                                 ),
                               ),
                             ),
-                            ...List.generate(
-                              matrix.columns.length,
-                              (i) {
-                                final col = matrix.columns[i];
-                                return SizedBox(
-                                  width: 104,
-                                  child: _clickable(
-                                    Text(
-                                      col.shortTitle,
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12,
-                                        color: col.isCurrent
-                                            ? colors.accent
-                                            : colors.textPrimary,
+                            // Colunas de Período (rolagem horizontal sincronizada com o corpo)
+                            Expanded(
+                              child: SingleChildScrollView(
+                                controller: _headerHScrollController,
+                                scrollDirection: Axis.horizontal,
+                                physics: const ClampingScrollPhysics(),
+                                child: SizedBox(
+                                  width: gridWidth,
+                                  child: Row(
+                                    children: [
+                                      ...List.generate(
+                                        matrix.columns.length,
+                                        (i) {
+                                          final col = matrix.columns[i];
+                                          return SizedBox(
+                                            width: colWidth,
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              child: _clickable(
+                                                Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      col.shortTitle,
+                                                      textAlign: TextAlign.right,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.w800,
+                                                        fontSize: 12,
+                                                        color: col.isCurrent
+                                                            ? colors.accent
+                                                            : colors.textPrimary,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      col.title,
+                                                      textAlign: TextAlign.right,
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: colors.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                () => _showDetail(matrix, col: i),
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
-                                    ),
-                                    () => _showDetail(matrix, col: i),
+                                      const SizedBox(
+                                        width: totalWidth,
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 4),
+                                          child: Align(
+                                            alignment: Alignment.centerRight,
+                                            child: Text(
+                                              'Total',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
-                            const SizedBox(
-                              width: 104,
-                              child: Text(
-                                'Total',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      ..._buildSectionRows(
-                        matrix,
-                        matrix.incomeSection,
-                        colors.income,
-                        colors,
-                      ),
-                      const Divider(height: 1),
-                      ..._buildSectionRows(
-                        matrix,
-                        matrix.expenseSection,
-                        colors.expense,
-                        colors,
-                      ),
-                      const Divider(height: 2),
-                      _buildSummaryRow(
-                        label: 'Rendimento menos Despesas',
-                        periodAmounts: matrix.netPeriodTotals,
-                        grandTotal: matrix.netGrandTotal,
-                        colors: colors,
-                        highlight: true,
-                      ),
-                      _buildSummaryRow(
-                        label: 'Saldo Anterior Acumulado',
-                        periodAmounts: matrix.priorBalancePeriodTotals,
-                        grandTotal: matrix.priorBalanceGrandTotal,
-                        colors: colors,
-                        highlight: false,
-                      ),
-                      _buildSummaryRow(
-                        label: 'Saldo Final Acumulado',
-                        periodAmounts: matrix.endingBalancePeriodTotals,
-                        grandTotal: matrix.endingBalanceGrandTotal,
-                        colors: colors,
-                        highlight: true,
+
+                      // 2. CORPO DA MATRIZ (Rolagem Vertical Única com Coluna de Categorias Fixa Horizontalmente)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          physics: const ClampingScrollPhysics(),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Coluna inicial das Categorias (Fixa na horizontal)
+                              Container(
+                                width: catWidth,
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    right: BorderSide(
+                                      color: colors.borderGlass.withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: allRows
+                                      .map((r) => SizedBox(height: r.height, child: r.left))
+                                      .toList(),
+                                ),
+                              ),
+                              // Grid de dados (Rolagem horizontal sincronizada)
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: _bodyHScrollController,
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const ClampingScrollPhysics(),
+                                  child: SizedBox(
+                                    width: gridWidth,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: allRows
+                                          .map((r) => SizedBox(height: r.height, child: r.right))
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -455,33 +600,135 @@ class _CashFlowViewState extends State<CashFlowView> {
     );
   }
 
-  List<Widget> _buildSectionRows(
+  List<_CashFlowRowItem> _buildAllRows(
+    CashFlowMatrix matrix,
+    OpenMoneyColors colors,
+    double colWidth,
+    double totalWidth,
+  ) {
+    final rows = <_CashFlowRowItem>[];
+
+    // Saldo Anterior Acumulado (Top)
+    rows.add(
+      _buildSummaryRow(
+        label: 'Saldo Anterior Acumulado',
+        periodAmounts: matrix.priorBalancePeriodTotals,
+        grandTotal: matrix.priorBalanceGrandTotal,
+        colors: colors,
+        colWidth: colWidth,
+        totalWidth: totalWidth,
+        highlight: false,
+      ),
+    );
+
+    // Section 1: Rendimento / Receitas
+    rows.addAll(_buildSectionRowItems(
+      matrix,
+      matrix.incomeSection,
+      colors.income,
+      colors,
+      colWidth,
+      totalWidth,
+    ));
+
+    // Separator
+    rows.add(_buildSeparator(colors));
+
+    // Section 2: Despesas
+    rows.addAll(_buildSectionRowItems(
+      matrix,
+      matrix.expenseSection,
+      colors.expense,
+      colors,
+      colWidth,
+      totalWidth,
+    ));
+
+    // Separator
+    rows.add(_buildSeparator(colors));
+
+    // Summary Rows: Net Result, Prior Balance, Ending Balance
+    rows.add(
+      _buildSummaryRow(
+        label: 'Rendimento menos Despesas',
+        periodAmounts: matrix.netPeriodTotals,
+        grandTotal: matrix.netGrandTotal,
+        colors: colors,
+        colWidth: colWidth,
+        totalWidth: totalWidth,
+        highlight: true,
+      ),
+    );
+
+    rows.add(
+      _buildSummaryRow(
+        label: 'Saldo Anterior Acumulado',
+        periodAmounts: matrix.priorBalancePeriodTotals,
+        grandTotal: matrix.priorBalanceGrandTotal,
+        colors: colors,
+        colWidth: colWidth,
+        totalWidth: totalWidth,
+        highlight: false,
+      ),
+    );
+
+    rows.add(
+      _buildSummaryRow(
+        label: 'Saldo Final Acumulado',
+        periodAmounts: matrix.endingBalancePeriodTotals,
+        grandTotal: matrix.endingBalanceGrandTotal,
+        colors: colors,
+        colWidth: colWidth,
+        totalWidth: totalWidth,
+        highlight: true,
+      ),
+    );
+
+    return rows;
+  }
+
+  _CashFlowRowItem _buildSeparator(OpenMoneyColors colors) {
+    return _CashFlowRowItem(
+      height: 8,
+      left: Container(
+        color: colors.bgPrimary.withValues(alpha: 0.15),
+      ),
+      right: Container(
+        color: colors.bgPrimary.withValues(alpha: 0.15),
+      ),
+    );
+  }
+
+  List<_CashFlowRowItem> _buildSectionRowItems(
     CashFlowMatrix matrix,
     CashFlowSection section,
     Color sectionColor,
     OpenMoneyColors colors,
+    double colWidth,
+    double totalWidth,
   ) {
-    final rows = <Widget>[];
+    final rows = <_CashFlowRowItem>[];
     final isIncome = identical(section, matrix.incomeSection);
 
+    // Section Banner
     rows.add(
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: sectionColor.withValues(alpha: 0.12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 210,
-              child: Text(
-                section.title.toUpperCase(),
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  color: sectionColor,
-                ),
-              ),
+      _CashFlowRowItem(
+        height: 32,
+        left: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.centerLeft,
+          color: sectionColor.withValues(alpha: 0.14),
+          child: Text(
+            section.title.toUpperCase(),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              color: sectionColor,
             ),
-          ],
+          ),
+        ),
+        right: Container(
+          color: sectionColor.withValues(alpha: 0.14),
         ),
       ),
     );
@@ -490,93 +737,105 @@ class _CashFlowViewState extends State<CashFlowView> {
       final groupKey = '${section.title}:${group.name}';
       final isCollapsed = _collapsedGroups.contains(groupKey);
 
+      // Category Header Row
       rows.add(
-        InkWell(
-          onTap: group.hasSubcategories
-              ? () {
-                  setState(() {
-                    if (isCollapsed) {
-                      _collapsedGroups.remove(groupKey);
-                    } else {
-                      _collapsedGroups.add(groupKey);
-                    }
-                  });
-                }
-              : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        _CashFlowRowItem(
+          height: 36,
+          left: InkWell(
+            onTap: group.hasSubcategories
+                ? () {
+                    setState(() {
+                      if (isCollapsed) {
+                        _collapsedGroups.remove(groupKey);
+                      } else {
+                        _collapsedGroups.add(groupKey);
+                      }
+                    });
+                  }
+                : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: colors.borderGlass.withValues(alpha: 0.35),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  if (group.hasSubcategories)
+                    Icon(
+                      isCollapsed ? Icons.chevron_right : Icons.expand_more,
+                      size: 16,
+                      color: colors.textSecondary,
+                    )
+                  else
+                    const SizedBox(width: 16),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      group.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          right: Container(
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: colors.borderGlass.withValues(alpha: 0.4),
+                  color: colors.borderGlass.withValues(alpha: 0.35),
                 ),
               ),
             ),
             child: Row(
               children: [
-                SizedBox(
-                  width: 210,
-                  child: Row(
-                    children: [
-                      if (group.hasSubcategories)
-                        Icon(
-                          isCollapsed
-                              ? Icons.chevron_right
-                              : Icons.expand_more,
-                          size: 16,
-                          color: colors.textSecondary,
-                        )
-                      else
-                        const SizedBox(width: 16),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          group.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 ...List.generate(
                   group.periodTotals.length,
                   (i) => SizedBox(
-                    width: 104,
-                    child: _clickable(
-                      Text(
-                        fmtCashFlowCents(group.periodTotals[i]),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                    width: colWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _clickable(
+                        Text(
+                          fmtCashFlowCents(group.periodTotals[i]),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: colors.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
+                        () => _showDetail(matrix, col: i, isIncome: isIncome, top: group.name),
                       ),
-                      () => _showDetail(matrix,
-                          col: i, isIncome: isIncome, top: group.name),
                     ),
                   ),
                 ),
                 SizedBox(
-                  width: 104,
-                  child: _clickable(
-                    Text(
-                      fmtCashFlowCents(group.grandTotal, showZero: true),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        color: sectionColor,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                  width: totalWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _clickable(
+                      Text(
+                        fmtCashFlowCents(group.grandTotal, showZero: true),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          color: sectionColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
+                      () => _showDetail(matrix, isIncome: isIncome, top: group.name),
                     ),
-                    () => _showDetail(matrix,
-                        isIncome: isIncome, top: group.name),
                   ),
                 ),
               ],
@@ -585,67 +844,79 @@ class _CashFlowViewState extends State<CashFlowView> {
         ),
       );
 
+      // Subcategories Rows
       if (group.hasSubcategories && !isCollapsed) {
         for (final sub in group.subcategories) {
           final subKey = sub.name.endsWith(' - Não-atribuído')
               ? CashFlowEngine.directSubKey
               : sub.name;
+
           rows.add(
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 210,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 24),
-                      child: Text(
-                        sub.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+            _CashFlowRowItem(
+              height: 32,
+              left: Container(
+                padding: const EdgeInsets.only(left: 32, right: 12),
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  sub.name,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: colors.textSecondary,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              right: Row(
+                children: [
                   ...List.generate(
                     sub.periodAmounts.length,
                     (i) => SizedBox(
-                      width: 104,
-                      child: _clickable(
-                        Text(
-                          fmtCashFlowCents(sub.periodAmounts[i]),
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: colors.textSecondary,
-                            fontFeatures: const [FontFeature.tabularFigures()],
+                      width: colWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _clickable(
+                          Text(
+                            fmtCashFlowCents(sub.periodAmounts[i]),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: colors.textSecondary,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
                           ),
-                        ),
-                        () => _showDetail(matrix,
+                          () => _showDetail(
+                            matrix,
                             col: i,
                             isIncome: isIncome,
                             top: group.name,
-                            sub: subKey),
+                            sub: subKey,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                   SizedBox(
-                    width: 104,
-                    child: _clickable(
-                      Text(
-                        fmtCashFlowCents(sub.total, showZero: true),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11.5,
-                          color: colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                    width: totalWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _clickable(
+                        Text(
+                          fmtCashFlowCents(sub.total, showZero: true),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                            color: colors.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        () => _showDetail(
+                          matrix,
+                          isIncome: isIncome,
+                          top: group.name,
+                          sub: subKey,
                         ),
                       ),
-                      () => _showDetail(matrix,
-                          isIncome: isIncome, top: group.name, sub: subKey),
                     ),
                   ),
                 ],
@@ -656,59 +927,70 @@ class _CashFlowViewState extends State<CashFlowView> {
       }
     }
 
+    // Section Total Row
     rows.add(
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: sectionColor.withValues(alpha: 0.08),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 210,
-              child: Text(
-                'Total ${section.title}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12.5,
-                  color: sectionColor,
-                ),
-              ),
+      _CashFlowRowItem(
+        height: 38,
+        left: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.centerLeft,
+          color: sectionColor.withValues(alpha: 0.10),
+          child: Text(
+            'Total ${section.title}',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+              color: sectionColor,
             ),
-            ...List.generate(
-              section.periodTotals.length,
-              (i) => SizedBox(
-                width: 104,
-                child: _clickable(
-                  Text(
-                    fmtCashFlowCents(section.periodTotals[i], showZero: true),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: sectionColor,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        right: Container(
+          color: sectionColor.withValues(alpha: 0.10),
+          child: Row(
+            children: [
+              ...List.generate(
+                section.periodTotals.length,
+                (i) => SizedBox(
+                  width: colWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _clickable(
+                      Text(
+                        fmtCashFlowCents(section.periodTotals[i], showZero: true),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          color: sectionColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      () => _showDetail(matrix, col: i, isIncome: isIncome),
                     ),
                   ),
-                  () => _showDetail(matrix, col: i, isIncome: isIncome),
                 ),
               ),
-            ),
-            SizedBox(
-              width: 104,
-              child: _clickable(
-                Text(
-                  fmtCashFlowCents(section.grandTotal, showZero: true),
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12.5,
-                    color: sectionColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+              SizedBox(
+                width: totalWidth,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _clickable(
+                    Text(
+                      fmtCashFlowCents(section.grandTotal, showZero: true),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12.5,
+                        color: sectionColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    () => _showDetail(matrix, isIncome: isIncome),
                   ),
                 ),
-                () => _showDetail(matrix, isIncome: isIncome),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -716,61 +998,75 @@ class _CashFlowViewState extends State<CashFlowView> {
     return rows;
   }
 
-  Widget _buildSummaryRow({
+  _CashFlowRowItem _buildSummaryRow({
     required String label,
     required List<int> periodAmounts,
     required int grandTotal,
     required OpenMoneyColors colors,
+    required double colWidth,
+    required double totalWidth,
     required bool highlight,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      color: highlight
-          ? colors.accent.withValues(alpha: 0.12)
-          : Colors.transparent,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 210,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 12.5,
-                color: colors.textPrimary,
-              ),
-            ),
+    final bgColor = highlight
+        ? colors.accent.withValues(alpha: 0.12)
+        : colors.bgPrimary.withValues(alpha: 0.05);
+
+    return _CashFlowRowItem(
+      height: 38,
+      left: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.centerLeft,
+        color: bgColor,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 12.5,
+            color: colors.textPrimary,
           ),
-          ...periodAmounts.map((amt) {
-            final c = amt >= 0 ? colors.income : colors.expense;
-            return SizedBox(
-              width: 104,
-              child: Text(
-                fmtCashFlowCents(amt, showZero: true),
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  color: c,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+      right: Container(
+        color: bgColor,
+        child: Row(
+          children: [
+            ...periodAmounts.map((amt) {
+              final c = amt >= 0 ? colors.income : colors.expense;
+              return SizedBox(
+                width: colWidth,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    fmtCashFlowCents(amt, showZero: true),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: c,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              );
+            }),
+            SizedBox(
+              width: totalWidth,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  fmtCashFlowCents(grandTotal, showZero: true),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                    color: grandTotal >= 0 ? colors.income : colors.expense,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            );
-          }),
-          SizedBox(
-            width: 104,
-            child: Text(
-              fmtCashFlowCents(grandTotal, showZero: true),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 12.5,
-                color: grandTotal >= 0 ? colors.income : colors.expense,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

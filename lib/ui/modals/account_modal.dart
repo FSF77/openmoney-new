@@ -34,6 +34,11 @@ class _AccountDialogState extends State<_AccountDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _openingCtrl;
   late final TextEditingController _businessCtrl;
+  late final TextEditingController _bankCodeCtrl;
+  late final TextEditingController _agencyCtrl;
+  late final TextEditingController _accountNumberCtrl;
+  late final TextEditingController _minBalanceCtrl;
+  late final TextEditingController _commentsCtrl;
   late String _type;
   late int _closeDay;
   late int _dueDay;
@@ -51,6 +56,13 @@ class _AccountDialogState extends State<_AccountDialog> {
       text: acc != null ? formatInputCents(acc.opening) : '0,00',
     );
     _businessCtrl = TextEditingController(text: acc?.business ?? '');
+    _bankCodeCtrl = TextEditingController(text: acc?.bankCode ?? '');
+    _agencyCtrl = TextEditingController(text: acc?.agency ?? '');
+    _accountNumberCtrl = TextEditingController(text: acc?.accountNumber ?? '');
+    _minBalanceCtrl = TextEditingController(
+      text: acc?.minBalance != null ? formatInputCents(acc!.minBalance!) : '',
+    );
+    _commentsCtrl = TextEditingController(text: acc?.comments ?? '');
     _type = acc?.type ?? 'Corrente';
     _closeDay = acc?.card?.closeDay ?? 1;
     _dueDay = acc?.card?.dueDay ?? 10;
@@ -75,6 +87,11 @@ class _AccountDialogState extends State<_AccountDialog> {
     _nameCtrl.dispose();
     _openingCtrl.dispose();
     _businessCtrl.dispose();
+    _bankCodeCtrl.dispose();
+    _agencyCtrl.dispose();
+    _accountNumberCtrl.dispose();
+    _minBalanceCtrl.dispose();
+    _commentsCtrl.dispose();
     super.dispose();
   }
 
@@ -83,6 +100,13 @@ class _AccountDialogState extends State<_AccountDialog> {
     final isNeg = rawOpening.startsWith('-');
     final parsedAbs = parseCents(rawOpening) ?? 0;
     final openingCents = isNeg ? -parsedAbs.abs() : parsedAbs;
+
+    final rawMinBal = _minBalanceCtrl.text.trim();
+    final int? minBalanceCents = rawMinBal.isEmpty
+        ? null
+        : (rawMinBal.startsWith('-')
+            ? -(parseCents(rawMinBal)?.abs() ?? 0)
+            : parseCents(rawMinBal));
 
     final err = widget.store.saveAccount(
       editingId: widget.editingAccount?.id,
@@ -95,6 +119,11 @@ class _AccountDialogState extends State<_AccountDialog> {
       inactive: _inactive,
       favorite: _favorite,
       business: _businessCtrl.text,
+      bankCode: _bankCodeCtrl.text,
+      agency: _agencyCtrl.text,
+      accountNumber: _accountNumberCtrl.text,
+      comments: _commentsCtrl.text,
+      minBalance: minBalanceCents,
     );
 
     if (err != null) {
@@ -389,6 +418,87 @@ class _AccountDialogState extends State<_AccountDialog> {
                     },
                   ),
               ],
+              const SizedBox(height: 14),
+              const Divider(),
+              const SizedBox(height: 6),
+              Text(
+                'DADOS BANCÁRIOS & CONTROLE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: colors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: _bankCodeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Cód. Banco',
+                        hintText: 'Ex: 001, 260',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: _agencyCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Agência',
+                        hintText: 'Ex: 0001',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 5,
+                    child: TextField(
+                      controller: _accountNumberCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nº Conta',
+                        hintText: 'Ex: 12345-6',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _minBalanceCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Saldo Mínimo / Limite da Conta (R\$)',
+                  hintText: '0,00',
+                  prefixText: 'R\$ ',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _commentsCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Comentários / Observações',
+                  hintText: 'Anotações sobre a conta, chave PIX, gerente...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

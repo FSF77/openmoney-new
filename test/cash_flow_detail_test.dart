@@ -86,4 +86,71 @@ void main() {
     expect(mRec.expenseSection.grandTotal, 2000);
     expect(mRec.priorBalanceGrandTotal, 0);
   });
+
+  test('Visão Diária do Fluxo de Caixa gera colunas corretas para o mês', () {
+    final accounts = [
+      Account(
+        id: 'a',
+        name: 'Banco',
+        type: 'Corrente',
+        opening: 50000,
+        bankCode: '341',
+        agency: '0001',
+        accountNumber: '12345-6',
+        comments: 'Conta principal',
+        minBalance: 10000,
+      ),
+    ];
+
+    // Testa serialização dos novos campos da Account
+    final json = accounts.first.toJson();
+    expect(json['bankCode'], '341');
+    expect(json['agency'], '0001');
+    expect(json['accountNumber'], '12345-6');
+    expect(json['comments'], 'Conta principal');
+    expect(json['minBalance'], 10000);
+
+    final fromJson = Account.fromJson(json);
+    expect(fromJson.bankCode, '341');
+    expect(fromJson.minBalance, 10000);
+
+    // Testa matriz diária em Outubro (31 dias)
+    final txs = [
+      Transaction(acc: 'a', date: '2026-10-01', payee: 'T1', cat: 'Alimentação', amt: -1000),
+      Transaction(acc: 'a', date: '2026-10-15', payee: 'T2', cat: 'Alimentação', amt: -2500),
+      Transaction(acc: 'a', date: '2026-10-31', payee: 'T3', cat: 'Alimentação', amt: -3000),
+    ];
+
+    final mDaily = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.daily,
+      year: 2026,
+      month: 10,
+    );
+
+    expect(mDaily.columns.length, 31);
+    expect(mDaily.columns.first.id, '2026-10-01');
+    expect(mDaily.columns.last.id, '2026-10-31');
+    expect(mDaily.expenseSection.grandTotal, 6500);
+
+    // Testa restrição de no máximo 10 anos na visão anual
+    final mYearly = CashFlowEngine.buildMatrix(
+      transactions: [
+        Transaction(acc: 'a', date: '1990-01-01', payee: 'Antigo', cat: 'X', amt: -100),
+        Transaction(acc: 'a', date: '2026-05-01', payee: 'Atual', cat: 'X', amt: -200),
+        Transaction(acc: 'a', date: '2040-01-01', payee: 'Distante', cat: 'X', amt: -300),
+      ],
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.yearly,
+      year: 2026,
+    );
+
+    final currentYear = DateTime.now().year;
+    for (final col in mYearly.columns) {
+      final y = int.parse(col.id);
+      expect(y >= currentYear - 7 && y <= currentYear + 2, isTrue,
+          reason: 'Ano $y fora da janela permitida');
+    }
+  });
 }

@@ -1668,6 +1668,11 @@ class MoneyStore extends ChangeNotifier {
     bool inactive = false,
     bool favorite = false,
     String? business,
+    String? bankCode,
+    String? agency,
+    String? accountNumber,
+    String? comments,
+    int? minBalance,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da conta.';
@@ -1697,6 +1702,11 @@ class MoneyStore extends ChangeNotifier {
         db.accounts[idx].inactive = inactive ? true : null;
         db.accounts[idx].favorite = favorite ? true : null;
         db.accounts[idx].business = cleanBiz;
+        db.accounts[idx].bankCode = bankCode?.trim().isEmpty == true ? null : bankCode?.trim();
+        db.accounts[idx].agency = agency?.trim().isEmpty == true ? null : agency?.trim();
+        db.accounts[idx].accountNumber = accountNumber?.trim().isEmpty == true ? null : accountNumber?.trim();
+        db.accounts[idx].comments = comments?.trim().isEmpty == true ? null : comments?.trim();
+        db.accounts[idx].minBalance = minBalance;
         if (type == kCardType && db.accounts[idx].invoices == null) {
           db.accounts[idx].invoices = {};
         }
@@ -1720,6 +1730,11 @@ class MoneyStore extends ChangeNotifier {
         inactive: inactive ? true : null,
         favorite: favorite ? true : null,
         business: cleanBiz,
+        bankCode: bankCode?.trim().isEmpty == true ? null : bankCode?.trim(),
+        agency: agency?.trim().isEmpty == true ? null : agency?.trim(),
+        accountNumber: accountNumber?.trim().isEmpty == true ? null : accountNumber?.trim(),
+        comments: comments?.trim().isEmpty == true ? null : comments?.trim(),
+        minBalance: minBalance,
       );
       db.accounts.add(acc);
       selectedAccountId = newId;
