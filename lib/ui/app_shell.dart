@@ -21,6 +21,7 @@ import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
 import 'views/reports_view.dart';
+import 'widgets/zoom_control_pill.dart';
 
 class OpenMoneyAppShell extends StatefulWidget {
   final MoneyStore store;
@@ -97,6 +98,43 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 meta: true, shift: true): () {
               showAuditLogsModal(context, widget.store);
             },
+            // Atalhos de Zoom / Acessibilidade de Fontes
+            const SingleActivator(LogicalKeyboardKey.equal, meta: true): () {
+              widget.store.zoomIn();
+            },
+            const SingleActivator(LogicalKeyboardKey.equal, control: true): () {
+              widget.store.zoomIn();
+            },
+            const SingleActivator(LogicalKeyboardKey.add, meta: true): () {
+              widget.store.zoomIn();
+            },
+            const SingleActivator(LogicalKeyboardKey.add, control: true): () {
+              widget.store.zoomIn();
+            },
+            const SingleActivator(LogicalKeyboardKey.minus, meta: true): () {
+              widget.store.zoomOut();
+            },
+            const SingleActivator(LogicalKeyboardKey.minus, control: true): () {
+              widget.store.zoomOut();
+            },
+            const SingleActivator(LogicalKeyboardKey.numpadSubtract, meta: true): () {
+              widget.store.zoomOut();
+            },
+            const SingleActivator(LogicalKeyboardKey.numpadSubtract, control: true): () {
+              widget.store.zoomOut();
+            },
+            const SingleActivator(LogicalKeyboardKey.digit0, meta: true): () {
+              widget.store.resetZoom();
+            },
+            const SingleActivator(LogicalKeyboardKey.digit0, control: true): () {
+              widget.store.resetZoom();
+            },
+            const SingleActivator(LogicalKeyboardKey.numpad0, meta: true): () {
+              widget.store.resetZoom();
+            },
+            const SingleActivator(LogicalKeyboardKey.numpad0, control: true): () {
+              widget.store.resetZoom();
+            },
           },
           child: Focus(
             autofocus: true,
@@ -114,6 +152,13 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                       actions: [
+                        Center(
+                          child: ZoomControlPill(
+                            store: widget.store,
+                            colors: colors,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
                         IconButton(
                           tooltip: 'Sincronizar Base (.json)',
                           icon: const Icon(Icons.cloud_sync_outlined),
@@ -796,6 +841,30 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ),
                 ),
               ],
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: colors.borderGlass)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.format_size, size: 16, color: colors.textSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Fontes',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+              ZoomControlPill(store: widget.store, colors: colors),
             ],
           ),
         ),

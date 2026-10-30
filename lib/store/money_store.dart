@@ -77,6 +77,8 @@ class MoneyStore extends ChangeNotifier {
   String selectedAccountId = 'a1';
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
+  static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
+  double fontScale = 1.0;
   bool sidebarShowFavorites = true;
   bool sidebarShowActiveAccounts = true;
   bool sidebarShowInactiveAccounts = false;
@@ -236,6 +238,12 @@ class MoneyStore extends ChangeNotifier {
     if (cfg['isDarkMode'] is bool) {
       isDarkMode = cfg['isDarkMode'] as bool;
     }
+    if (cfg['fontScale'] is num) {
+      final s = (cfg['fontScale'] as num).toDouble();
+      if (s >= 0.80 && s <= 1.80) {
+        fontScale = s;
+      }
+    }
     if (cfg['sidebarShowFavorites'] is bool) {
       sidebarShowFavorites = cfg['sidebarShowFavorites'] as bool;
     }
@@ -311,6 +319,44 @@ class MoneyStore extends ChangeNotifier {
     cfg['isDarkMode'] = isDarkMode;
     _writeConfig(cfg);
     notifyListeners();
+  }
+
+  String get fontScaleLabel {
+    final pct = (fontScale * 100).round();
+    if ((fontScale - 1.0).abs() < 0.01) return '100% (Padrão)';
+    return '$pct%';
+  }
+
+  void setFontScale(double scale) {
+    final clamped = (scale * 100).round() / 100.0;
+    fontScale = clamped.clamp(0.85, 1.60);
+    final cfg = _readConfig();
+    cfg['fontScale'] = fontScale;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void zoomIn() {
+    for (final s in kFontScales) {
+      if (s > fontScale + 0.02) {
+        setFontScale(s);
+        return;
+      }
+    }
+  }
+
+  void zoomOut() {
+    for (int i = kFontScales.length - 1; i >= 0; i--) {
+      final s = kFontScales[i];
+      if (s < fontScale - 0.02) {
+        setFontScale(s);
+        return;
+      }
+    }
+  }
+
+  void resetZoom() {
+    setFontScale(1.0);
   }
 
   void toggleSidebarFavorites() {

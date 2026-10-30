@@ -46,6 +46,15 @@ class OpenMoneyApp extends StatelessWidget {
             scaffoldBackgroundColor: const Color(0xFF0A0E17),
             fontFamily: '-apple-system',
           ),
+          builder: (context, child) {
+            if (child == null) return const SizedBox.shrink();
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(store.fontScale),
+              ),
+              child: child,
+            );
+          },
           home: Scaffold(
             backgroundColor: colors.bgPrimary,
             body: OpenMoneyAppShell(store: store),

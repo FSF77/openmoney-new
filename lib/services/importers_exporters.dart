@@ -422,6 +422,25 @@ class _ColumnMapping {
   }
 }
 
+String _normalizeImportCategoryString(String raw) {
+  var s = raw.trim();
+  if (s.isEmpty) return s;
+  final seps = [kCategorySep, ' › ', ' > ', ' / ', ' : ', ':', '/', '>'];
+  for (final sep in seps) {
+    if (s.contains(sep)) {
+      final parts = s.split(sep);
+      if (parts.length >= 2) {
+        final p = parts.first.trim();
+        final rest = parts.sublist(1).join(kCategorySep).trim();
+        if (p.isNotEmpty && rest.isNotEmpty) {
+          return '$p$kCategorySep$rest';
+        }
+      }
+    }
+  }
+  return s;
+}
+
 class CSVImporter {
   static ({
     List<Transaction> newTxs,
@@ -717,29 +736,38 @@ class CSVImporter {
         cat = parsedAmt < 0 ? 'Outros' : 'Outras Rendas';
       }
       if (!cat.startsWith('Transferência:')) {
-        cat = cat
-            .replaceAll(' : ', kCategorySep)
-            .replaceAll(':', kCategorySep)
-            .replaceAll(' / ', kCategorySep)
-            .replaceAll('/', kCategorySep);
+        cat = _normalizeImportCategoryString(cat);
       }
 
-      if (!knownCatPaths.contains(cat)) {
-        knownCatPaths.add(cat);
+      if (cat.isNotEmpty && !cat.startsWith('Transferência:')) {
         final catType = parsedAmt < 0 ? 'Despesa' : 'Receita';
         final parts = cat.split(kCategorySep);
-        final CategoryItem newCatItem;
         if (parts.length > 1) {
-          newCatItem = CategoryItem(
-            name: parts.last.trim(),
-            parent: parts.first.trim(),
-            type: catType,
-          );
+          final parent = parts.first.trim();
+          final sub = parts.last.trim();
+          if (!knownCatPaths.contains(parent)) {
+            final parentCat =
+                CategoryItem(name: parent, parent: null, type: catType);
+            newCats.add(parentCat);
+            allCats.add(parentCat);
+            knownCatPaths.add(parent);
+          }
+          if (!knownCatPaths.contains(cat)) {
+            final subCat =
+                CategoryItem(name: sub, parent: parent, type: catType);
+            newCats.add(subCat);
+            allCats.add(subCat);
+            knownCatPaths.add(cat);
+          }
         } else {
-          newCatItem = CategoryItem(name: cat, parent: null, type: catType);
+          if (!knownCatPaths.contains(cat)) {
+            final topCat =
+                CategoryItem(name: cat, parent: null, type: catType);
+            newCats.add(topCat);
+            allCats.add(topCat);
+            knownCatPaths.add(cat);
+          }
         }
-        newCats.add(newCatItem);
-        allCats.add(newCatItem);
       }
 
       final memo = (colMap.memo != null && colMap.memo! < row.length)
@@ -1407,27 +1435,39 @@ class QIFImporter {
             if (finalCat.isEmpty) {
               finalCat = qAmt < 0 ? 'Outros' : 'Outras Rendas';
             }
+            if (!isTransfer) {
+              finalCat = _normalizeImportCategoryString(finalCat);
+            }
 
-            if (!isTransfer && !knownCatPaths.contains(finalCat)) {
-              knownCatPaths.add(finalCat);
+            if (!isTransfer && finalCat.isNotEmpty) {
               final catType = qAmt < 0 ? 'Despesa' : 'Receita';
               final parts = finalCat.split(kCategorySep);
-              final CategoryItem newCatItem;
               if (parts.length > 1) {
-                newCatItem = CategoryItem(
-                  name: parts.last.trim(),
-                  parent: parts.first.trim(),
-                  type: catType,
-                );
+                final parent = parts.first.trim();
+                final sub = parts.last.trim();
+                if (!knownCatPaths.contains(parent)) {
+                  final parentCat =
+                      CategoryItem(name: parent, parent: null, type: catType);
+                  newCats.add(parentCat);
+                  allCats.add(parentCat);
+                  knownCatPaths.add(parent);
+                }
+                if (!knownCatPaths.contains(finalCat)) {
+                  final subCat =
+                      CategoryItem(name: sub, parent: parent, type: catType);
+                  newCats.add(subCat);
+                  allCats.add(subCat);
+                  knownCatPaths.add(finalCat);
+                }
               } else {
-                newCatItem = CategoryItem(
-                  name: finalCat,
-                  parent: null,
-                  type: catType,
-                );
+                if (!knownCatPaths.contains(finalCat)) {
+                  final topCat =
+                      CategoryItem(name: finalCat, parent: null, type: catType);
+                  newCats.add(topCat);
+                  allCats.add(topCat);
+                  knownCatPaths.add(finalCat);
+                }
               }
-              newCats.add(newCatItem);
-              allCats.add(newCatItem);
             }
 
             final dupKey =
@@ -1499,7 +1539,7 @@ class QIFImporter {
             qMemo = value;
             break;
           case 'L':
-            qCat = value.replaceAll(':', kCategorySep);
+            qCat = _normalizeImportCategoryString(value);
             break;
           case 'C':
             final uVal = value.toUpperCase();
@@ -1700,12 +1740,8 @@ class MobileInboxImporter {
       final finalAccId = targetAcc?.id ?? item.acc;
 
       var catPath = item.cat.trim();
-      if (catPath.contains(':') && !catPath.contains(kCategorySep)) {
-        catPath = catPath
-            .split(':')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .join(kCategorySep);
+      if (!catPath.startsWith('Transferência:')) {
+        catPath = _normalizeImportCategoryString(catPath);
       }
 
       if (catPath.isNotEmpty && !knownCatPaths.contains(catPath.toLowerCase())) {

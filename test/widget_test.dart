@@ -979,4 +979,77 @@ CX
     expect(find.text('OpenMoney'), findsWidgets);
     expect(find.text('Conta Corrente'), findsWidgets);
   });
+
+  test('19. Font scale and Accessibility zoom controls operate correctly', () {
+    final store = MoneyStore(autoBoot: false);
+    expect(store.fontScale, 1.0);
+    expect(store.fontScaleLabel, '100% (Padrão)');
+
+    store.zoomIn();
+    expect(store.fontScale, 1.15);
+    expect(store.fontScaleLabel, '115%');
+
+    store.zoomIn();
+    expect(store.fontScale, 1.30);
+    expect(store.fontScaleLabel, '130%');
+
+    store.zoomIn();
+    expect(store.fontScale, 1.45);
+    expect(store.fontScaleLabel, '145%');
+
+    // Should not exceed maximum
+    store.zoomIn();
+    expect(store.fontScale, 1.45);
+
+    store.zoomOut();
+    expect(store.fontScale, 1.30);
+
+    store.resetZoom();
+    expect(store.fontScale, 1.0);
+    expect(store.fontScaleLabel, '100% (Padrão)');
+
+    store.zoomOut();
+    expect(store.fontScale, 0.90);
+    expect(store.fontScaleLabel, '90%');
+
+    // Should not go below minimum
+    store.zoomOut();
+    expect(store.fontScale, 0.90);
+
+    store.resetZoom();
+    expect(store.fontScale, 1.0);
+  });
+
+  test('20. Category import hierarchical creation and slash/separator handling', () {
+    final existingCats = [
+      CategoryItem(name: 'Transporte', parent: null, type: 'Despesa'),
+      CategoryItem(name: 'Automóvel', parent: 'Transporte', type: 'Despesa'),
+    ];
+
+    // CSV line with "Compra / Automóvel" or "Compra > Automóvel"
+    const csvContent = '''
+Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
+2026-10-15;Carteira;Posto;Compra / Automóvel;;-150,00;Sim
+2026-10-16;Carteira;Padaria;Alimentação > Lanche;;-25,00;Sim
+''';
+
+    final result = CSVImporter.parse(
+      content: csvContent,
+      existingAccounts: [Account(id: 'acc1', name: 'Carteira', type: 'Dinheiro', opening: 0)],
+      existingCats: existingCats,
+      existingTxs: [],
+    );
+
+    // Should create Compra as parent and Automóvel under Compra
+    expect(result.newCats.any((c) => c.name == 'Compra' && c.parent == null), isTrue);
+    expect(result.newCats.any((c) => c.name == 'Automóvel' && c.parent == 'Compra'), isTrue);
+
+    // Should create Alimentação as parent and Lanche under Alimentação
+    expect(result.newCats.any((c) => c.name == 'Alimentação' && c.parent == null), isTrue);
+    expect(result.newCats.any((c) => c.name == 'Lanche' && c.parent == 'Alimentação'), isTrue);
+
+    // Verify imported transactions have normalized path
+    expect(result.newTxs[0].cat, 'Compra › Automóvel');
+    expect(result.newTxs[1].cat, 'Alimentação › Lanche');
+  });
 }

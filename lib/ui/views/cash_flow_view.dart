@@ -180,6 +180,11 @@ class _CashFlowViewState extends State<CashFlowView> {
     });
   }
 
+  double _rowHeight(double base) {
+    if (widget.store.fontScale <= 1.0) return base;
+    return (base * (1.0 + (widget.store.fontScale - 1.0) * 0.75)).roundToDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -436,9 +441,10 @@ class _CashFlowViewState extends State<CashFlowView> {
               padding: EdgeInsets.zero,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  const catWidth = 230.0;
-                  final colWidth = _periodKind == CashFlowPeriodKind.daily ? 112.0 : 104.0;
-                  const totalWidth = 114.0;
+                  final scaleBonus = widget.store.fontScale > 1.0 ? (widget.store.fontScale - 1.0) : 0.0;
+                  final catWidth = 230.0 + (scaleBonus * 35.0);
+                  final colWidth = (_periodKind == CashFlowPeriodKind.daily ? 112.0 : 104.0) + (scaleBonus * 20.0);
+                  final totalWidth = 114.0 + (scaleBonus * 20.0);
                   final gridWidth = (matrix.columns.length * colWidth) + totalWidth;
                   final allRows = _buildAllRows(matrix, colors, colWidth, totalWidth);
 
@@ -446,7 +452,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     children: [
                       // 1. CABEÇALHO FIXO VERTICALMENTE (Sticky Header Row)
                       Container(
-                        height: 48,
+                        height: _rowHeight(48),
                         decoration: BoxDecoration(
                           color: colors.bgPrimary.withValues(alpha: 0.85),
                           border: Border(
@@ -518,9 +524,9 @@ class _CashFlowViewState extends State<CashFlowView> {
                                           );
                                         },
                                       ),
-                                      const SizedBox(
+                                      SizedBox(
                                         width: totalWidth,
-                                        child: Padding(
+                                        child: const Padding(
                                           padding: EdgeInsets.symmetric(horizontal: 4),
                                           child: Align(
                                             alignment: Alignment.centerRight,
@@ -713,7 +719,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     // Section Banner
     rows.add(
       _CashFlowRowItem(
-        height: 32,
+        height: _rowHeight(32),
         left: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
@@ -740,7 +746,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       // Category Header Row
       rows.add(
         _CashFlowRowItem(
-          height: 36,
+          height: _rowHeight(36),
           left: InkWell(
             onTap: group.hasSubcategories
                 ? () {
@@ -853,7 +859,7 @@ class _CashFlowViewState extends State<CashFlowView> {
 
           rows.add(
             _CashFlowRowItem(
-              height: 32,
+              height: _rowHeight(32),
               left: Container(
                 padding: const EdgeInsets.only(left: 32, right: 12),
                 alignment: Alignment.centerLeft,
@@ -930,7 +936,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     // Section Total Row
     rows.add(
       _CashFlowRowItem(
-        height: 38,
+        height: _rowHeight(38),
         left: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
@@ -1012,7 +1018,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         : colors.bgPrimary.withValues(alpha: 0.05);
 
     return _CashFlowRowItem(
-      height: 38,
+      height: _rowHeight(38),
       left: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,

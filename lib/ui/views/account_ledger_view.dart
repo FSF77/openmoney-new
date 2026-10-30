@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
+import '../../services/importers_exporters.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_modal.dart';
 import '../modals/batch_delete_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/csv_export.dart';
 
 class AccountLedgerView extends StatefulWidget {
   final MoneyStore store;
@@ -365,6 +367,34 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             final res = widget.store
                                 .adjustPredictions(widget.store.month);
                             showPredictionsAdjustModal(context, res);
+                          },
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Exportar CSV'),
+                          onPressed: () {
+                            final exportTxs = isCard
+                                ? widget.store.invoiceTransactions(
+                                    acc.id,
+                                    widget.store.month,
+                                  )
+                                : monthData.transactions;
+                            final safeAccName = acc.name
+                                .toLowerCase()
+                                .replaceAll(' ', '-')
+                                .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                            final defaultName =
+                                'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                            final csvContent = CSVExporter.generateCSV(
+                              transactions: exportTxs,
+                              accounts: widget.store.db.accounts,
+                            );
+                            exportCsvWithFeedback(
+                              context,
+                              csv: csvContent,
+                              defaultName: defaultName,
+                              title: 'Exportar Lançamentos de "${acc.name}" (CSV)',
+                            );
                           },
                         ),
                         FilledButton.tonalIcon(
