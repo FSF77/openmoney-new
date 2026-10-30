@@ -42,7 +42,10 @@ class _CashFlowViewState extends State<CashFlowView> {
 
   late final ScrollController _headerHScrollController;
   late final ScrollController _bodyHScrollController;
+  late final ScrollController _catVScrollController;
+  late final ScrollController _dataVScrollController;
   bool _isSyncingHScroll = false;
+  bool _isSyncingVScroll = false;
 
   @override
   void initState() {
@@ -53,6 +56,8 @@ class _CashFlowViewState extends State<CashFlowView> {
 
     _headerHScrollController = ScrollController();
     _bodyHScrollController = ScrollController();
+    _catVScrollController = ScrollController();
+    _dataVScrollController = ScrollController();
 
     _headerHScrollController.addListener(() {
       if (_isSyncingHScroll) return;
@@ -73,12 +78,34 @@ class _CashFlowViewState extends State<CashFlowView> {
       }
       _isSyncingHScroll = false;
     });
+
+    _catVScrollController.addListener(() {
+      if (_isSyncingVScroll) return;
+      _isSyncingVScroll = true;
+      if (_dataVScrollController.hasClients &&
+          _dataVScrollController.offset != _catVScrollController.offset) {
+        _dataVScrollController.jumpTo(_catVScrollController.offset);
+      }
+      _isSyncingVScroll = false;
+    });
+
+    _dataVScrollController.addListener(() {
+      if (_isSyncingVScroll) return;
+      _isSyncingVScroll = true;
+      if (_catVScrollController.hasClients &&
+          _catVScrollController.offset != _dataVScrollController.offset) {
+        _catVScrollController.jumpTo(_dataVScrollController.offset);
+      }
+      _isSyncingVScroll = false;
+    });
   }
 
   @override
   void dispose() {
     _headerHScrollController.dispose();
     _bodyHScrollController.dispose();
+    _catVScrollController.dispose();
+    _dataVScrollController.dispose();
     super.dispose();
   }
 
@@ -549,24 +576,25 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ),
 
-                      // 2. CORPO DA MATRIZ (Rolagem Vertical Única com Coluna de Categorias Fixa Horizontalmente)
+                      // 2. CORPO DA MATRIZ (Freeze Panes com Barra de Rolagem Horizontal no Rodapé Visível)
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          physics: const ClampingScrollPhysics(),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Coluna inicial das Categorias (Fixa na horizontal)
-                              Container(
-                                width: catWidth,
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    right: BorderSide(
-                                      color: colors.borderGlass.withValues(alpha: 0.5),
-                                    ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Coluna inicial das Categorias (Fixa na horizontal, com rolagem vertical sincronizada)
+                            Container(
+                              width: catWidth,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  right: BorderSide(
+                                    color: colors.borderGlass.withValues(alpha: 0.5),
                                   ),
                                 ),
+                              ),
+                              child: SingleChildScrollView(
+                                controller: _catVScrollController,
+                                scrollDirection: Axis.vertical,
+                                physics: const ClampingScrollPhysics(),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: allRows
@@ -574,29 +602,43 @@ class _CashFlowViewState extends State<CashFlowView> {
                                       .toList(),
                                 ),
                               ),
-                              // Grid de dados (Rolagem horizontal sincronizada)
-                              Expanded(
+                            ),
+                            // Grid de dados (Rolagem horizontal EXTERNA com barra visível no rodapé e rolagem vertical INTERNA)
+                            Expanded(
+                              child: Scrollbar(
+                                controller: _bodyHScrollController,
+                                thumbVisibility: true,
+                                trackVisibility: true,
                                 child: SingleChildScrollView(
                                   controller: _bodyHScrollController,
                                   scrollDirection: Axis.horizontal,
                                   physics: const ClampingScrollPhysics(),
                                   child: SizedBox(
                                     width: gridWidth,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: allRows
-                                          .map((r) => SizedBox(height: r.height, child: r.right))
-                                          .toList(),
+                                    child: Scrollbar(
+                                      controller: _dataVScrollController,
+                                      thumbVisibility: true,
+                                      child: SingleChildScrollView(
+                                        controller: _dataVScrollController,
+                                        scrollDirection: Axis.vertical,
+                                        physics: const ClampingScrollPhysics(),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: allRows
+                                              .map((r) => SizedBox(height: r.height, child: r.right))
+                                              .toList(),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  );
+                  ],
+                );
                 },
               ),
             ),
