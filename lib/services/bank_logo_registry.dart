@@ -147,6 +147,8 @@ class AccountLogoWidget extends StatelessWidget {
     final logoItem = BankLogoRegistry.findByIdOrFilename(account.logo);
 
     if (logoItem != null) {
+      final innerRadius = (cornerRadius - 2.0).clamp(2.0, cornerRadius);
+      final pad = size >= 40 ? 3.5 : 2.0;
       return Container(
         width: size,
         height: size,
@@ -158,14 +160,17 @@ class AccountLogoWidget extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: EdgeInsets.all(size >= 40 ? 4.0 : 2.5),
-          child: Image.asset(
-            logoItem.assetPath,
-            width: size >= 40 ? size - 8 : size - 5,
-            height: size >= 40 ? size - 8 : size - 5,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildFallbackIcon(colors, isCard),
+          padding: EdgeInsets.all(pad),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(innerRadius),
+            child: Image.asset(
+              logoItem.assetPath,
+              width: size - (pad * 2),
+              height: size - (pad * 2),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) =>
+                  _buildFallbackIcon(colors, isCard),
+            ),
           ),
         ),
       );

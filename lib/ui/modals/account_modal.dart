@@ -205,11 +205,14 @@ class _AccountDialogState extends State<_AccountDialog> {
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Image.asset(
-                                    item.assetPath,
-                                    width: 44,
-                                    height: 44,
-                                    fit: BoxFit.contain,
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.asset(
+                                      item.assetPath,
+                                      width: 44,
+                                      height: 44,
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
@@ -400,18 +403,21 @@ class _AccountDialogState extends State<_AccountDialog> {
                       child: _logo != null
                           ? Padding(
                               padding: const EdgeInsets.all(2.5),
-                              child: Image.asset(
-                                BankLogoRegistry.findByIdOrFilename(_logo)
-                                        ?.assetPath ??
-                                    'logo/$_logo',
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Icon(
-                                  _type == kCardType
-                                      ? Icons.credit_card
-                                      : Icons.account_balance_wallet_outlined,
-                                  color: colors.accent,
-                                  size: 20,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.asset(
+                                  BankLogoRegistry.findByIdOrFilename(_logo)
+                                          ?.assetPath ??
+                                      'logo/$_logo',
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Icon(
+                                    _type == kCardType
+                                        ? Icons.credit_card
+                                        : Icons.account_balance_wallet_outlined,
+                                    color: colors.accent,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             )
