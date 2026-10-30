@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/bank_logo_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -45,12 +46,14 @@ class _AccountDialogState extends State<_AccountDialog> {
   late String _payAccId;
   late bool _inactive;
   late bool _favorite;
+  String? _logo;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
     final acc = widget.editingAccount;
+    _logo = acc?.logo;
     _nameCtrl = TextEditingController(text: acc?.name ?? '');
     _openingCtrl = TextEditingController(
       text: acc != null ? formatInputCents(acc.opening) : '0,00',
@@ -124,6 +127,7 @@ class _AccountDialogState extends State<_AccountDialog> {
       accountNumber: _accountNumberCtrl.text,
       comments: _commentsCtrl.text,
       minBalance: minBalanceCents,
+      logo: _logo,
     );
 
     if (err != null) {
@@ -131,6 +135,119 @@ class _AccountDialogState extends State<_AccountDialog> {
       return;
     }
     Navigator.of(context).pop();
+  }
+
+  void _openLogoPicker(BuildContext context) {
+    final colors =
+        OpenMoneyColors(Theme.of(context).brightness == Brightness.dark);
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String search = '';
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final filtered = BankLogoRegistry.items.where((i) {
+              if (search.trim().isEmpty) return true;
+              return i.name.toLowerCase().contains(search.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: colors.bgPrimary,
+              title: const Text('Escolher Logo do Banco'),
+              content: SizedBox(
+                width: 420,
+                height: 400,
+                child: Column(
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar banco...',
+                        prefixIcon: Icon(Icons.search, size: 20),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (val) => setModalState(() => search = val),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.95,
+                        ),
+                        itemCount: filtered.length,
+                        itemBuilder: (ctx, idx) {
+                          final item = filtered[idx];
+                          final isSelected = _logo == item.filename;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(() => _logo = item.filename);
+                              Navigator.of(ctx).pop();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? colors.accent.withValues(alpha: 0.18)
+                                    : colors.surfaceGlass,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? colors.accent
+                                      : colors.borderGlass,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Image.asset(
+                                    item.assetPath,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    item.name,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: isSelected
+                                          ? colors.accent
+                                          : colors.textPrimary,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancelar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _handleDeleteAttempt() {
@@ -258,6 +375,105 @@ class _AccountDialogState extends State<_AccountDialog> {
                   labelText: 'Nome da Conta',
                   hintText: 'Ex.: Itaú Uniclass, Nubank Ultravioleta...',
                   border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Bloco de Logo do Banco
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: colors.surfaceGlass,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: colors.borderGlass),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: colors.borderGlass.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _logo != null
+                          ? Padding(
+                              padding: const EdgeInsets.all(2.5),
+                              child: Image.asset(
+                                BankLogoRegistry.findByIdOrFilename(_logo)
+                                        ?.assetPath ??
+                                    'logo/$_logo',
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(
+                                  _type == kCardType
+                                      ? Icons.credit_card
+                                      : Icons.account_balance_wallet_outlined,
+                                  color: colors.accent,
+                                  size: 20,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              _type == kCardType
+                                  ? Icons.credit_card
+                                  : Icons.account_balance_wallet_outlined,
+                              color: colors.accent,
+                              size: 20,
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _logo != null
+                                ? (BankLogoRegistry.findByIdOrFilename(_logo)
+                                        ?.name ??
+                                    _logo!)
+                                : 'Ícone Padrão (${_type == kCardType ? "Cartão" : "Carteira"})',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            _logo != null
+                                ? 'Logo pré-definido selecionado'
+                                : 'Nenhum logo associado',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.account_balance, size: 14),
+                      label: Text(_logo != null ? 'Trocar...' : 'Escolher...'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        textStyle: const TextStyle(fontSize: 11.5),
+                      ),
+                      onPressed: () => _openLogoPicker(context),
+                    ),
+                    if (_logo != null) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: 'Remover Logo (Usar Padrão)',
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () => setState(() => _logo = null),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: 14),

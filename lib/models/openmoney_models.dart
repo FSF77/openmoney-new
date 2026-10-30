@@ -126,6 +126,7 @@ class Account {
   String? accountNumber;
   String? comments;
   int? minBalance;
+  String? logo;
 
   Account({
     required this.id,
@@ -142,6 +143,7 @@ class Account {
     this.accountNumber,
     this.comments,
     this.minBalance,
+    this.logo,
   });
 
   bool get isInactive => inactive == true;
@@ -189,6 +191,7 @@ class Account {
       accountNumber: json['accountNumber'] as String?,
       comments: json['comments'] as String?,
       minBalance: (json['minBalance'] as num?)?.toInt(),
+      logo: json['logo'] as String?,
     );
   }
 
@@ -213,6 +216,7 @@ class Account {
         if (comments != null && comments!.trim().isNotEmpty)
           'comments': comments!.trim(),
         if (minBalance != null) 'minBalance': minBalance,
+        if (logo != null && logo!.trim().isNotEmpty) 'logo': logo!.trim(),
       };
 
   Account copyWith({
@@ -230,6 +234,7 @@ class Account {
     String? accountNumber,
     String? comments,
     int? minBalance,
+    String? logo,
   }) {
     return Account(
       id: id ?? this.id,
@@ -247,6 +252,7 @@ class Account {
       accountNumber: accountNumber ?? this.accountNumber,
       comments: comments ?? this.comments,
       minBalance: minBalance ?? this.minBalance,
+      logo: logo ?? this.logo,
     );
   }
 }
@@ -692,27 +698,17 @@ class Database {
 
 final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Alimentação', parent: null, type: 'Despesa'),
-  CategoryItem(
-      name: 'Bares e Restaurantes', parent: 'Alimentação', type: 'Despesa'),
+  CategoryItem(name: 'Bares e Restaurantes', parent: 'Alimentação', type: 'Despesa'),
   CategoryItem(name: 'Mercado', parent: 'Alimentação', type: 'Despesa'),
   CategoryItem(name: 'Assinaturas e Serviços', parent: null, type: 'Despesa'),
-  CategoryItem(
-      name: 'Apple', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(
-      name: 'Games', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(
-      name: 'Google', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Apple', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Games', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Google', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'IA', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(
-      name: 'Microsoft', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(
-      name: 'Nintendo', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(
-      name: 'Sites e Domínios',
-      parent: 'Assinaturas e Serviços',
-      type: 'Despesa'),
-  CategoryItem(
-      name: 'Streaming', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Microsoft', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Nintendo', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Sites e Domínios', parent: 'Assinaturas e Serviços', type: 'Despesa'),
+  CategoryItem(name: 'Streaming', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'Casa', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Água, Esgoto', parent: 'Casa', type: 'Despesa'),
   CategoryItem(name: 'Condomínio', parent: 'Casa', type: 'Despesa'),
@@ -726,8 +722,7 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Compras', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Automóveis', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Eletrodomésticos', parent: 'Compras', type: 'Despesa'),
-  CategoryItem(
-      name: 'Eletrônicos e Informática', parent: 'Compras', type: 'Despesa'),
+  CategoryItem(name: 'Eletrônicos e Informática', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Móveis', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Músicas & Filmes', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Softwares', parent: 'Compras', type: 'Despesa'),
@@ -737,16 +732,10 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Família', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Festas', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Impostos e Taxas', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'IRRF', parent: 'Impostos e Taxas', type: 'Despesa'),
-  CategoryItem(
-      name: 'Simples Nacional', parent: 'Impostos e Taxas', type: 'Despesa'),
-  CategoryItem(
-      name: 'Taxas bancárias', parent: 'Impostos e Taxas', type: 'Despesa'),
   CategoryItem(name: 'Investimentos (D)', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Lazer e hobbies', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Academia', parent: 'Lazer e hobbies', type: 'Despesa'),
-  CategoryItem(
-      name: 'Cinema, Teatro', parent: 'Lazer e hobbies', type: 'Despesa'),
+  CategoryItem(name: 'Cinema, Teatro', parent: 'Lazer e hobbies', type: 'Despesa'),
   CategoryItem(name: 'Diversão', parent: 'Lazer e hobbies', type: 'Despesa'),
   CategoryItem(name: 'Saúde', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Medicamentos', parent: 'Saúde', type: 'Despesa'),
@@ -757,37 +746,28 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Transporte', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Combustível', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Documentação', parent: 'Transporte', type: 'Despesa'),
-  CategoryItem(
-      name: 'Estacionamento, Pedágio', parent: 'Transporte', type: 'Despesa'),
-  CategoryItem(
-      name: 'Manutenção, Serviços', parent: 'Transporte', type: 'Despesa'),
-  CategoryItem(
-      name: 'Metro, Ônibus, Taxi', parent: 'Transporte', type: 'Despesa'),
+  CategoryItem(name: 'Estacionamento, Pedágio', parent: 'Transporte', type: 'Despesa'),
+  CategoryItem(name: 'Manutenção, Serviços', parent: 'Transporte', type: 'Despesa'),
+  CategoryItem(name: 'Metro, Ônibus, Taxi', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Multas', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Seguro Auto', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Viagem', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'ZZZ (D)', parent: null, type: 'Despesa'),
   CategoryItem(name: 'Cashback', parent: null, type: 'Receita'),
   CategoryItem(name: 'Investimentos (C)', parent: null, type: 'Receita'),
   CategoryItem(name: 'Renda', parent: null, type: 'Receita'),
-  CategoryItem(
-      name: 'Distribuição de Lucros', parent: 'Renda', type: 'Receita'),
+  CategoryItem(name: 'Distribuição de Lucros', parent: 'Renda', type: 'Receita'),
   CategoryItem(name: 'Pró-labore', parent: 'Renda', type: 'Receita'),
   CategoryItem(name: 'Outras Rendas', parent: null, type: 'Receita'),
   CategoryItem(name: 'Benefícios', parent: 'Outras Rendas', type: 'Receita'),
-  CategoryItem(
-      name: 'Devolução de impostos', parent: 'Outras Rendas', type: 'Receita'),
-  CategoryItem(
-      name: 'Prestação de Serviços', parent: 'Outras Rendas', type: 'Receita'),
+  CategoryItem(name: 'Devolução de impostos', parent: 'Outras Rendas', type: 'Receita'),
+  CategoryItem(name: 'Prestação de Serviços', parent: 'Outras Rendas', type: 'Receita'),
   CategoryItem(name: 'Reembolso', parent: 'Outras Rendas', type: 'Receita'),
   CategoryItem(name: 'Rendimentos', parent: null, type: 'Receita'),
   CategoryItem(name: 'Vendas', parent: null, type: 'Receita'),
   CategoryItem(name: 'Automóveis', parent: 'Vendas', type: 'Receita'),
   CategoryItem(name: 'Eletrodomésticos', parent: 'Vendas', type: 'Receita'),
-  CategoryItem(
-      name: 'Eletrônicos e Informática', parent: 'Vendas', type: 'Receita'),
+  CategoryItem(name: 'Eletrônicos e Informática', parent: 'Vendas', type: 'Receita'),
   CategoryItem(name: 'Móveis', parent: 'Vendas', type: 'Receita'),
-  CategoryItem(name: 'ZZZ (C)', parent: null, type: 'Receita'),
 ];
 
 // MARK: - Auxiliary Models
@@ -1073,7 +1053,7 @@ int daysBetween(String fromISO, String toISO) {
   return utc2.difference(utc1).inDays;
 }
 
-String brl(int cents) {
+String brl(int cents, {bool showSymbol = true}) {
   final isNegative = cents < 0;
   final absCents = cents.abs();
   final intPart = absCents ~/ 100;
@@ -1087,7 +1067,11 @@ String brl(int cents) {
     }
     buffer.write(intStr[i]);
   }
-  final formatted = 'R\$ ${buffer.toString()},$decPart';
+  final numStr = '${buffer.toString()},$decPart';
+  if (!showSymbol) {
+    return isNegative ? '-$numStr' : numStr;
+  }
+  final formatted = 'R\$ $numStr';
   return isNegative ? '-$formatted' : formatted;
 }
 

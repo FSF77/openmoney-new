@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/openmoney_models.dart';
+import '../services/bank_logo_registry.dart';
 import '../services/native_file_picker.dart';
 import '../services/update_service.dart';
 import '../store/money_store.dart';
@@ -1087,7 +1088,6 @@ class _SidebarAccountTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCard = account.type == kCardType;
     return GestureDetector(
       onSecondaryTapUp: (details) =>
           _showContextMenu(context, details.globalPosition),
@@ -1141,21 +1141,11 @@ class _SidebarAccountTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? colors.accent.withValues(alpha: 0.15)
-                      : colors.borderGlass.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  isCard
-                      ? Icons.credit_card
-                      : Icons.account_balance_wallet_outlined,
-                  size: 16,
-                  color: selected ? colors.accent : colors.textSecondary,
-                ),
+              AccountLogoWidget(
+                account: account,
+                size: 28,
+                cornerRadius: 8,
+                selected: selected,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1174,19 +1164,23 @@ class _SidebarAccountTile extends StatelessWidget {
                           const SizedBox(width: 3),
                         ],
                         Expanded(
-                          child: Text(
-                            account.name,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  selected ? FontWeight.w700 : FontWeight.w500,
-                              color: account.isInactive
-                                  ? colors.textPrimary.withValues(alpha: 0.65)
-                                  : (selected
-                                      ? colors.accent
-                                      : colors.textPrimary),
+                          child: Tooltip(
+                            message: account.name,
+                            waitDuration: const Duration(milliseconds: 400),
+                            child: Text(
+                              account.name,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    selected ? FontWeight.w700 : FontWeight.w500,
+                                color: account.isInactive
+                                    ? colors.textPrimary.withValues(alpha: 0.65)
+                                    : (selected
+                                        ? colors.accent
+                                        : colors.textPrimary),
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -1204,7 +1198,7 @@ class _SidebarAccountTile extends StatelessWidget {
                         return typeStr;
                       }(),
                       style: TextStyle(
-                        fontSize: 9.5,
+                        fontSize: 9,
                         fontWeight: FontWeight.w500,
                         color: colors.textMuted,
                       ),
@@ -1219,24 +1213,26 @@ class _SidebarAccountTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    brl(balanceCents),
+                    brl(balanceCents, showSymbol: false),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                       color: balanceCents >= 0 ? colors.income : colors.expense,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  const SizedBox(height: 1),
-                  Text(
-                    'Prev: ${brl(predCents)}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textMuted,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  if (predCents != balanceCents && predCents != 0) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      'Prev: ${brl(predCents, showSymbol: false)}',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textMuted,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/bank_logo_registry.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_modal.dart';
@@ -226,14 +227,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          isCard
-                              ? Icons.credit_card
-                              : Icons.account_balance_wallet_outlined,
-                          color: colors.accent,
-                          size: 22,
+                        AccountLogoWidget(
+                          account: acc,
+                          size: 48,
+                          cornerRadius: 10,
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 14),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

@@ -1,24 +1,24 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  29,
-    "version":  "2.1.7",
-    "notes":  "Fluxo de Caixa dinâmico com nova visão diária, Relatório de compras parceladas, inclusão de filtro por conta/negócio no relatório de contas a pagar e receber, Abatimento de previsões por mês atual ou por fatura",
-    "releaseDate":  "29/10/2026",
-    "windows":  {
-                    "build":  29,
-                    "version":  "2.1.7",
-                    "sizeMb":  12,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.7.zip",
-                    "sha256":  "c3a31d733da57ed3f21cd4bcea23c27f7130693d6efe8f335c94912ca7338664",
-                    "releaseDate":  "29/10/2026"
-                },
-    "macos":  {
-                  "version":  "2.1.7",
-                  "build":  29,
-                  "releaseDate":  "29/10/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.7.zip",
-                  "sha256":  "fae5ceeb87eb481386d88d508249fe7de373bcd6e0044b8f82d3535c7b1ff81c",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.1.7"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 30,
+  "version": "2.1.8",
+  "notes": "Inclusão de logo no cadastro de conta, melhorias visuais, Fluxo de Caixa dinâmico com nova visão diária, Relatório de compras parceladas, inclusão de filtro por conta/negócio no relatório de contas a pagar e receber, Abatimento de previsões por mês atual ou por fatura",
+  "releaseDate": "30/10/2026",
+  "windows": {
+    "build": 29,
+    "version": "2.1.7",
+    "sizeMb": 12,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.7.zip",
+    "sha256": "c3a31d733da57ed3f21cd4bcea23c27f7130693d6efe8f335c94912ca7338664",
+    "releaseDate": "29/10/2026"
+  },
+  "macos": {
+    "version": "2.1.8",
+    "build": 30,
+    "releaseDate": "30/10/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.8.zip",
+    "sha256": "3c5f3b3b5a61fda1b5750ceccd09792181fa7f43ef6b69ff851709b4bae9fc70",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.1.8"
 }

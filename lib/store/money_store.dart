@@ -1673,6 +1673,7 @@ class MoneyStore extends ChangeNotifier {
     String? accountNumber,
     String? comments,
     int? minBalance,
+    String? logo,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da conta.';
@@ -1680,6 +1681,8 @@ class MoneyStore extends ChangeNotifier {
     final trimmedBiz = business?.trim();
     final cleanBiz =
         (trimmedBiz != null && trimmedBiz.isNotEmpty) ? trimmedBiz : null;
+
+    final cleanLogo = (logo != null && logo.trim().isNotEmpty) ? logo.trim() : null;
 
     CardConfig? cardCfg;
     if (type == kCardType) {
@@ -1707,6 +1710,7 @@ class MoneyStore extends ChangeNotifier {
         db.accounts[idx].accountNumber = accountNumber?.trim().isEmpty == true ? null : accountNumber?.trim();
         db.accounts[idx].comments = comments?.trim().isEmpty == true ? null : comments?.trim();
         db.accounts[idx].minBalance = minBalance;
+        db.accounts[idx].logo = cleanLogo;
         if (type == kCardType && db.accounts[idx].invoices == null) {
           db.accounts[idx].invoices = {};
         }
@@ -1735,6 +1739,7 @@ class MoneyStore extends ChangeNotifier {
         accountNumber: accountNumber?.trim().isEmpty == true ? null : accountNumber?.trim(),
         comments: comments?.trim().isEmpty == true ? null : comments?.trim(),
         minBalance: minBalance,
+        logo: cleanLogo,
       );
       db.accounts.add(acc);
       selectedAccountId = newId;
