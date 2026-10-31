@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/cash_flow_engine.dart';
 import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
@@ -11,8 +12,13 @@ import 'transaction_modal.dart';
 Future<void> showCategoryDrillDownModal(
   BuildContext context,
   MoneyStore store,
-  String categoryPath, {
+  String? categoryPath, {
   bool initialCurrentMonthOnly = false,
+  String? targetMonth,
+  String? categoryTypeFilter,
+  String? titleOverride,
+  Set<String>? accountFilterIds,
+  CashFlowDateMode? dateMode,
 }) async {
   await showDialog(
     context: context,
@@ -20,19 +26,34 @@ Future<void> showCategoryDrillDownModal(
       store: store,
       categoryPath: categoryPath,
       initialCurrentMonthOnly: initialCurrentMonthOnly,
+      targetMonth: targetMonth,
+      categoryTypeFilter: categoryTypeFilter,
+      titleOverride: titleOverride,
+      accountFilterIds: accountFilterIds,
+      dateMode: dateMode,
     ),
   );
 }
 
 class _CategoryDrillDownDialog extends StatefulWidget {
   final MoneyStore store;
-  final String categoryPath;
+  final String? categoryPath;
   final bool initialCurrentMonthOnly;
+  final String? targetMonth;
+  final String? categoryTypeFilter;
+  final String? titleOverride;
+  final Set<String>? accountFilterIds;
+  final CashFlowDateMode? dateMode;
 
   const _CategoryDrillDownDialog({
     required this.store,
-    required this.categoryPath,
+    this.categoryPath,
     required this.initialCurrentMonthOnly,
+    this.targetMonth,
+    this.categoryTypeFilter,
+    this.titleOverride,
+    this.accountFilterIds,
+    this.dateMode,
   });
 
   @override
@@ -53,19 +74,41 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   }
 
   List<Transaction> _buildFilteredTransactions() {
-    final monthYM = widget.store.month;
-    final affected = widget.store.affectedCategoryPaths(widget.categoryPath);
-    final prefix = '${widget.categoryPath}$kCategorySep';
+    final monthYM = widget.targetMonth ?? widget.store.month;
+    final catPath = widget.categoryPath;
+    final hasCat = catPath != null && catPath.isNotEmpty;
+    final affected = hasCat ? widget.store.affectedCategoryPaths(catPath) : const <String>{};
+    final prefix = hasCat ? '$catPath$kCategorySep' : '';
 
     final list = widget.store.db.txs.where((t) {
       if (t.auto == true) return false;
-      final matchesCat = affected.contains(t.cat) ||
-          t.cat == widget.categoryPath ||
-          t.cat.startsWith(prefix);
-      if (!matchesCat) return false;
 
-      if (_filterCurrentMonthOnly && !t.date.startsWith(monthYM)) {
+      if (widget.accountFilterIds != null &&
+          widget.accountFilterIds!.isNotEmpty &&
+          !widget.accountFilterIds!.contains(t.acc)) {
         return false;
+      }
+
+      if (hasCat) {
+        final matchesCat = affected.contains(t.cat) ||
+            t.cat == catPath ||
+            t.cat.startsWith(prefix);
+        if (!matchesCat) return false;
+      } else if (widget.categoryTypeFilter != null) {
+        if (t.xfer != null) return false;
+        final isInc = t.amt > 0;
+        if (widget.categoryTypeFilter == 'Receita' && !isInc) return false;
+        if (widget.categoryTypeFilter == 'Despesa' && isInc) return false;
+      }
+
+      if (_filterCurrentMonthOnly) {
+        final effDate = widget.dateMode != null
+            ? effectiveDateForTransaction(
+                t, widget.store.db.accounts, widget.dateMode!)
+            : t.date;
+        if (!effDate.startsWith(monthYM)) {
+          return false;
+        }
       }
 
       if (_searchQuery.isNotEmpty) {
@@ -115,12 +158,15 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
     final csv = '\uFEFF$header\r\n$rows';
 
     if (!kIsWeb) {
-      final safeCat = widget.categoryPath
+      final rawCat = widget.categoryPath ??
+          widget.categoryTypeFilter ??
+          'lancamentos';
+      final safeCat = rawCat
           .replaceAll(':', '-')
           .replaceAll('/', '-')
           .replaceAll(' ', '_');
       final savePath = await NativeFilePicker.saveFile(
-        title: 'Exportar Lançamentos da Categoria (CSV)',
+        title: 'Exportar Lançamentos (CSV)',
         defaultName: 'Categoria-$safeCat.csv',
         allowedExtensions: ['csv'],
       );
@@ -166,9 +212,16 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final monthYM = widget.store.month;
+    final monthYM = widget.targetMonth ?? widget.store.month;
     final txs = _buildFilteredTransactions();
     final totalCents = txs.fold<int>(0, (s, t) => s + t.amt);
+    final hasCat = widget.categoryPath != null && widget.categoryPath!.isNotEmpty;
+    final displayTitle = widget.titleOverride ??
+        (hasCat
+            ? 'Auditoria de Lançamentos: ${widget.categoryPath}'
+            : (widget.categoryTypeFilter != null
+                ? 'Auditoria: ${widget.categoryTypeFilter}'
+                : 'Auditoria de Lançamentos'));
 
     return Dialog(
       backgroundColor: colors.bgSecondary,
@@ -194,7 +247,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Auditoria de Lançamentos: ${widget.categoryPath}',
+                          displayTitle,
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,

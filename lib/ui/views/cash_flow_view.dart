@@ -2,11 +2,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../models/openmoney_models.dart';
 import '../../services/cash_flow_engine.dart';
 import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
-import 'cash_flow_detail_dialog.dart';
+import '../modals/category_drill_down_modal.dart';
 import '../theme/liquid_glass.dart';
 
 class CashFlowView extends StatefulWidget {
@@ -164,20 +165,44 @@ class _CashFlowViewState extends State<CashFlowView> {
     String? top,
     String? sub,
   }) {
-    showCashFlowDetailDialog(
+    final column = col != null && col >= 0 && col < matrix.columns.length
+        ? matrix.columns[col]
+        : null;
+    final targetMonth = column?.id;
+
+    String? categoryPath;
+    final catType = isIncome == null ? null : (isIncome ? 'Receita' : 'Despesa');
+    String? title;
+
+    if (top != null) {
+      if (sub != null &&
+          sub != CashFlowEngine.directSubKey &&
+          !sub.endsWith(' - Não-atribuído')) {
+        categoryPath = '$top$kCategorySep$sub';
+        title = '$top › $sub${column != null ? ' · ${column.title}' : ' · Todos os períodos'}';
+      } else {
+        categoryPath = top;
+        title = '$top${column != null ? ' · ${column.title}' : ' · Todos os períodos'}';
+      }
+    } else if (isIncome != null) {
+      title = 'Total ${isIncome ? "Rendimento" : "Despesas"}${column != null ? ' · ${column.title}' : ' · Todos os períodos'}';
+    } else if (column != null) {
+      title = 'Fluxo de Caixa · ${column.title}';
+    } else {
+      title = 'Fluxo de Caixa · Todos os períodos';
+    }
+
+    showCategoryDrillDownModal(
       context,
-      store: widget.store,
-      matrix: matrix,
-      columnIndex: col,
-      isIncome: isIncome,
-      top: top,
-      sub: sub,
+      widget.store,
+      categoryPath,
+      initialCurrentMonthOnly: targetMonth != null,
+      targetMonth: targetMonth,
+      categoryTypeFilter: catType,
+      titleOverride: title,
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
-      statusFilter: _statusFilter,
-      kindFilter: _kindFilter,
       dateMode: _dateMode,
-      searchQuery: _searchQuery,
     );
   }
 
