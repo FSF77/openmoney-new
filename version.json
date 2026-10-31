@@ -1,24 +1,24 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 41,
-  "version": "2.1.9",
-  "notes": "Opção de zoom nas telas e relatórios para os cegos como eu, ajustes na rotina de importação que não importava categorias corretamente, opção de exportar csv na tela de lançamentos, inclusão de logo no cadastro de conta, melhorias visuais, melhorias no detalhamento do Fluxo de Caixa",
-  "releaseDate": "30/10/2026",
-  "windows": {
-    "build": 39,
-    "version": "2.1.9",
-    "sizeMb": 12,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.9.zip",
-    "sha256": "2dd38638e37900567399140fb7c972362cc825229acb0f39a89392566873a360",
-    "releaseDate": "30/10/2026"
-  },
-  "macos": {
-    "version": "2.1.9",
-    "build": 41,
-    "releaseDate": "30/10/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.9.zip",
-    "sha256": "0e68d5756faf7e8692efcf16f3b87b5d1394f0f11b238737e34e5b0dc77c6a86",
-    "sizeMb": 11
-  },
-  "title": "OpenMoney Flutter v2.1.9"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "build":  41,
+    "version":  "2.1.9",
+    "notes":  "Opção de zoom nas telas e relatórios para os cegos como eu, ajustes na rotina de importação que não importava categorias corretamente, opção de exportar csv na tela de lançamentos, inclusão de logo no cadastro de conta, melhorias visuais, melhorias no detalhamento do Fluxo de Caixa",
+    "releaseDate":  "30/10/2026",
+    "windows":  {
+                    "build":  41,
+                    "version":  "2.1.9",
+                    "sizeMb":  12,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.1.9.zip",
+                    "sha256":  "04686f7f0639a08e691246793b4eab5c4cdf70d25b7e3ab913277774c2a4d2b5",
+                    "releaseDate":  "30/10/2026"
+                },
+    "macos":  {
+                  "version":  "2.1.9",
+                  "build":  41,
+                  "releaseDate":  "30/10/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.1.9.zip",
+                  "sha256":  "0e68d5756faf7e8692efcf16f3b87b5d1394f0f11b238737e34e5b0dc77c6a86",
+                  "sizeMb":  11
+              },
+    "title":  "OpenMoney Flutter v2.1.9"
 }
