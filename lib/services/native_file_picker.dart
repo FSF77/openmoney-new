@@ -91,13 +91,18 @@ class NativeFilePicker {
             .map((e) => '*.${e.toLowerCase().replaceAll(RegExp(r'^\.+'), '')}')
             .join(';');
         final powershellCmd =
-            '[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null; '
+            'Add-Type -AssemblyName System.Windows.Forms; '
             '\$dlg = New-Object System.Windows.Forms.OpenFileDialog; '
             '\$dlg.Title = "$title"; '
             '\$dlg.Filter = "Arquivos ($filter)|$filter|Todos os Arquivos (*.*)|*.*"; '
             'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.FileName }';
-        final res =
-            await Process.run('powershell', ['-Command', powershellCmd]);
+        final res = await Process.run('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Sta',
+          '-Command',
+          powershellCmd,
+        ]);
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
           if (out.isNotEmpty) return out;
@@ -143,14 +148,19 @@ class NativeFilePicker {
             .map((e) => '*.${e.toLowerCase().replaceAll(RegExp(r'^\.+'), '')}')
             .join(';');
         final powershellCmd =
-            '[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null; '
+            'Add-Type -AssemblyName System.Windows.Forms; '
             '\$dlg = New-Object System.Windows.Forms.SaveFileDialog; '
             '\$dlg.Title = "$title"; '
             '\$dlg.FileName = "$defaultName"; '
             '\$dlg.Filter = "Arquivos ($filter)|$filter|Todos os Arquivos (*.*)|*.*"; '
             'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.FileName }';
-        final res =
-            await Process.run('powershell', ['-Command', powershellCmd]);
+        final res = await Process.run('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Sta',
+          '-Command',
+          powershellCmd,
+        ]);
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
           if (out.isNotEmpty) return out;
