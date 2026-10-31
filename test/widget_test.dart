@@ -719,7 +719,7 @@ CX
       expect(payJan.date, '2026-01-05');
       expect(payJan.amt, -200000); // -R$ 2.000,00
       expect(payJan.rec, true);
-      expect(payJan.auto, isNull);
+      expect(payJan.auto, true);
 
       // Verifica que para a fatura futura 11/2026 (vencimento 05/11/2026 > hoje),
       // o lançamento de pagamento na Conta Padrão Y NÃO fica conciliado (rec: false)

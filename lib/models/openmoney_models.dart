@@ -883,31 +883,37 @@ class InvoiceSummary {
 class DueBillItem {
   final Transaction tx;
   final String accountName;
-  final int daysUntilDue; // < 0: overdue, 0: today, > 0: upcoming
-  final String? dueDate;
+  final int daysUntilDue; // < 0: atrasado/passado, 0: hoje, > 0: a vencer em N dias
+  final bool isOverdue;
+  final String effectiveDueDate;
 
-  const DueBillItem({
+  DueBillItem({
     required this.tx,
     required this.accountName,
     required this.daysUntilDue,
-    this.dueDate,
-  });
+    bool? isOverdue,
+    String? dueDate,
+    String? effectiveDueDate,
+  })  : isOverdue = isOverdue ?? (daysUntilDue < 0),
+        effectiveDueDate = effectiveDueDate ?? dueDate ?? tx.date;
 
   String get id => tx.id;
-  String get effectiveDueDate => dueDate ?? tx.date;
-  bool get isOverdue => daysUntilDue < 0;
+  String? get dueDate => effectiveDueDate;
   bool get isDueToday => daysUntilDue == 0;
   bool get isPayable => tx.amt < 0;
   bool get isReceivable => tx.amt > 0;
 
   String get statusDescription {
-    if (daysUntilDue < 0) {
+    if (isOverdue) {
       final absDays = daysUntilDue.abs();
       return absDays == 1 ? 'Atrasado há 1 dia' : 'Atrasado há $absDays dias';
     } else if (daysUntilDue == 0) {
       return 'Vence Hoje';
     } else if (daysUntilDue == 1) {
       return 'Vence Amanhã';
+    } else if (daysUntilDue < 0) {
+      final absDays = daysUntilDue.abs();
+      return absDays == 1 ? 'Há 1 dia' : 'Há $absDays dias';
     } else {
       return 'Vence em $daysUntilDue dias';
     }
@@ -1326,6 +1332,39 @@ String invKeyFor(CardConfig card, String date) {
     close: '$closeKey-${dayIn(cy, cm, card.closeDay)}',
     due: '$key-${dayIn(y, m, card.dueDay)}',
   );
+}
+
+/// Retorna se a fatura especificada (chave 'YYYY-MM') é considerada vigente para o cartão na data de referência (hoje).
+/// Para contas de cartão de crédito, a fatura vigente é:
+/// 1) A fatura aberta do ciclo atual (onde caem os novos lançamentos realizados hoje: invKeyFor(card, today)); OU
+/// 2) A fatura que fechou recentemente mas cujo vencimento ainda não ocorreu (closeDate <= today && dueDate >= today).
+/// Faturas com vencimento já decorrido no passado (dueDate < today) são consideradas faturas anteriores/passadas e não vigentes.
+bool isVigenteInvoice({
+  required CardConfig cardCfg,
+  required String invoiceKey,
+  Account? account,
+  String? today,
+}) {
+  final refToday = today ?? todayISO();
+  final currentOpenKey = invKeyFor(cardCfg, refToday);
+  if (invoiceKey == currentOpenKey) {
+    return true;
+  }
+
+  final invInfo = account?.invoices?[invoiceKey];
+  final dueDate = (invInfo != null && invInfo.due.isNotEmpty)
+      ? invInfo.due
+      : invDates(cardCfg, invoiceKey).due;
+  final closeDate = (invInfo != null && invInfo.close.isNotEmpty)
+      ? invInfo.close
+      : invDates(cardCfg, invoiceKey).close;
+
+  // Fatura fechada recentemente aguardando quitação até a data de vencimento
+  if (closeDate.compareTo(refToday) <= 0 && dueDate.compareTo(refToday) >= 0) {
+    return true;
+  }
+
+  return false;
 }
 
 List<({String key, String label})> invoiceOptions({

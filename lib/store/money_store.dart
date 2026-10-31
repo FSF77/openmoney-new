@@ -626,10 +626,10 @@ class MoneyStore extends ChangeNotifier {
 
       final cardAcc = cardAccounts[tx.acc];
       if (cardAcc != null) {
-        // Conta tipo Cartão de crédito: não duplica pagamento automático de fatura no previsto
-        // e compras consideram a chave/mês da fatura (ik)
-        if (tx.auto != true) {
-          final ik = tx.ik ?? invKeyFor(cardAcc.card!, tx.date);
+        // Para cartão de crédito: lançamentos normais entram se ik <= _month;
+        // Lançamentos automáticos de quitação só abatem a previsão se conciliados (tx.rec)
+        if (tx.auto != true || tx.rec) {
+          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
           if (ik.compareTo(_month) <= 0) {
             predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
           }
@@ -718,8 +718,10 @@ class MoneyStore extends ChangeNotifier {
     for (final tx in db.txs) {
       final cardAcc = cardAccounts[tx.acc];
       if (cardAcc != null) {
-        if (tx.auto != true) {
-          final ik = tx.ik ?? invKeyFor(cardAcc.card!, tx.date);
+        // Para cartão de crédito: lançamentos normais entram se ik <= _month;
+        // Lançamentos automáticos de quitação só abatem a previsão se conciliados (tx.rec)
+        if (tx.auto != true || tx.rec) {
+          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
           if (ik.compareTo(_month) <= 0) {
             predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
           }
@@ -1130,17 +1132,13 @@ class MoneyStore extends ChangeNotifier {
     final today = todayISO();
     final cardTxIndices = <String, List<int>>{};
     final autoTxMap = <String, int>{};
-    final invPayTxMap = <String, int>{};
     final settledKeysByCard = <String, Set<String>>{};
 
     for (int idx = 0; idx < db.txs.length; idx++) {
       final tx = db.txs[idx];
-      final isInvPay = tx.xfer != null && tx.xfer!.startsWith('invpay:');
       if (tx.auto == true) {
         autoTxMap[tx.id] = idx;
-      } else if (isInvPay) {
-        invPayTxMap[tx.id] = idx;
-        if (tx.card != null && tx.inv != null) {
+        if (tx.card != null && tx.inv != null && tx.rec) {
           settledKeysByCard.putIfAbsent(tx.card!, () => {}).add(tx.inv!);
         }
       } else if (cards.containsKey(tx.acc)) {
@@ -1227,86 +1225,51 @@ class MoneyStore extends ChangeNotifier {
           continue;
         }
 
+        // Limpa invpay legado se existir para esta fatura
+        xidsToRemove.add(payXid);
+
         final amt = total.abs();
         final payAccName = accById(inv.pay)?.name ?? '';
+        final label = 'Pagamento do Cartão "$cardName"';
         final cat = 'Transferência: $cardName';
         final payCat = 'Transferência: $payAccName';
         final isDueOnOrBeforeToday = inv.due.compareTo(today) <= 0;
-        final shouldSettle =
-            (settleCardInvoices || settledForCard.isNotEmpty) &&
+        final shouldSettle = (settleCardInvoices || settledForCard.contains(k)) &&
             isDueOnOrBeforeToday;
+        final isReconciled = shouldSettle;
 
-        if (shouldSettle) {
-          xidsToRemove.add(autoXid);
-          final payCardLabel =
-              'Pagamento de Fatura${payAccName.isEmpty ? "" : " ($payAccName)"}';
-          final paySourceLabel = 'Pagamento de Fatura: $cardName';
-          final payMemo = 'Pagamento da Fatura ${fmtMonth(k)}';
-
-          _upsertInvPayTxFast(
-            invPayTxMap: invPayTxMap,
-            appended: newAutoTxs,
-            id: '$payXid:c',
-            acc: cardId,
-            peer: inv.pay,
-            date: inv.due,
-            payee: payCardLabel,
-            cat: payCat,
-            memo: payMemo,
-            amt: amt,
-            xfer: payXid,
-            card: cardId,
-            inv: k,
-            ik: k,
-          );
-          _upsertInvPayTxFast(
-            invPayTxMap: invPayTxMap,
-            appended: newAutoTxs,
-            id: '$payXid:p',
-            acc: inv.pay,
-            peer: cardId,
-            date: inv.due,
-            payee: paySourceLabel,
-            cat: cat,
-            memo: payMemo,
-            amt: -amt,
-            xfer: payXid,
-            card: cardId,
-            inv: k,
-            ik: null,
-          );
-        } else {
-          xidsToRemove.add(payXid);
-          final label = 'Pagamento do Cartão "$cardName"';
-          _upsertAutoTxFast(
-            autoTxMap: autoTxMap,
-            appended: newAutoTxs,
-            id: '$autoXid:c',
-            acc: cardId,
-            peer: inv.pay,
-            date: inv.due,
-            payee: label,
-            cat: payCat,
-            amt: amt,
-            xfer: autoXid,
-            card: cardId,
-            inv: k,
-          );
-          _upsertAutoTxFast(
-            autoTxMap: autoTxMap,
-            appended: newAutoTxs,
-            id: '$autoXid:p',
-            acc: inv.pay,
-            peer: cardId,
-            date: inv.due,
-            payee: label,
-            cat: cat,
-            amt: -amt,
-            xfer: autoXid,
-            card: cardId,
-            inv: k,
-          );
-        }
+        _upsertAutoTxFast(
+          autoTxMap: autoTxMap,
+          appended: newAutoTxs,
+          id: '$autoXid:c',
+          acc: cardId,
+          peer: inv.pay,
+          date: inv.due,
+          payee: label,
+          cat: payCat,
+          amt: amt,
+          rec: isReconciled,
+          xfer: autoXid,
+          card: cardId,
+          inv: k,
+          ik: k,
+        );
+        _upsertAutoTxFast(
+          autoTxMap: autoTxMap,
+          appended: newAutoTxs,
+          id: '$autoXid:p',
+          acc: inv.pay,
+          peer: cardId,
+          date: inv.due,
+          payee: label,
+          cat: cat,
+          amt: -amt,
+          rec: isReconciled,
+          xfer: autoXid,
+          card: cardId,
+          inv: k,
+          ik: null,
+        );
       }
 
       if (invoicesModified) {
@@ -1317,63 +1280,11 @@ class MoneyStore extends ChangeNotifier {
     if (xidsToRemove.isNotEmpty) {
       db.txs.removeWhere(
           (t) => t.xfer != null && xidsToRemove.contains(t.xfer!));
+      markIndexesDirty();
     }
     if (newAutoTxs.isNotEmpty) {
       db.txs.addAll(newAutoTxs);
-    }
-  }
-
-  void _upsertInvPayTxFast({
-    required Map<String, int> invPayTxMap,
-    required List<Transaction> appended,
-    required String id,
-    required String acc,
-    required String peer,
-    required String date,
-    required String payee,
-    required String cat,
-    required String memo,
-    required int amt,
-    required String xfer,
-    required String card,
-    required String inv,
-    required String? ik,
-  }) {
-    final idx = invPayTxMap[id];
-    if (idx != null) {
-      final t = db.txs[idx];
-      t.acc = acc;
-      t.peer = peer;
-      t.date = date;
-      t.payee = payee;
-      t.cat = cat;
-      t.memo = memo;
-      t.amt = amt;
-      t.rec = true;
-      t.xfer = xfer;
-      t.auto = null;
-      t.card = card;
-      t.inv = inv;
-      t.ik = ik;
-    } else {
-      final tx = Transaction(
-        id: id,
-        acc: acc,
-        peer: peer,
-        date: date,
-        payee: payee,
-        cat: cat,
-        memo: memo,
-        amt: amt,
-        rec: true,
-        xfer: xfer,
-        auto: null,
-        card: card,
-        inv: inv,
-        ik: ik,
-      );
-      appended.add(tx);
-      invPayTxMap[id] = db.txs.length + appended.length - 1;
+      markIndexesDirty();
     }
   }
 
@@ -1390,6 +1301,8 @@ class MoneyStore extends ChangeNotifier {
     required String xfer,
     required String card,
     required String inv,
+    String? ik,
+    bool rec = false,
   }) {
     final idx = autoTxMap[id];
     if (idx != null) {
@@ -1400,9 +1313,11 @@ class MoneyStore extends ChangeNotifier {
       t.payee = payee;
       t.cat = cat;
       t.amt = amt;
+      t.rec = rec;
       t.xfer = xfer;
       t.card = card;
       t.inv = inv;
+      t.ik = ik;
       t.auto = true;
     } else {
       final tx = Transaction(
@@ -1414,11 +1329,12 @@ class MoneyStore extends ChangeNotifier {
         cat: cat,
         memo: 'Fatura ${fmtMonth(inv)}',
         amt: amt,
-        rec: false,
+        rec: rec,
         xfer: xfer,
         auto: true,
         card: card,
         inv: inv,
+        ik: ik,
       );
       appended.add(tx);
       autoTxMap[id] = db.txs.length + appended.length - 1;
@@ -1563,8 +1479,8 @@ class MoneyStore extends ChangeNotifier {
     int charges = 0;
     int payments = 0;
     for (final t in cardTxs) {
-      if (t.auto == true) continue;
-      final ik = t.ik ?? invKeyFor(cardCfg, t.date);
+      if (t.auto == true && !t.rec) continue;
+      final ik = t.ik ?? t.inv ?? invKeyFor(cardCfg, t.date);
       if (ik == key) {
         if (t.amt < 0) {
           charges += t.amt.abs();
@@ -1607,8 +1523,8 @@ class MoneyStore extends ChangeNotifier {
     final invTxs = <Transaction>[];
 
     for (final t in cardTxs) {
-      if (t.auto == true) continue;
-      final ik = t.ik ?? invKeyFor(cardCfg, t.date);
+      if (t.auto == true && !t.rec) continue;
+      final ik = t.ik ?? t.inv ?? invKeyFor(cardCfg, t.date);
       if (ik.compareTo(key) < 0) {
         if (t.rec) priorReal += t.amt;
         priorPred += t.amt;
@@ -1647,7 +1563,7 @@ class MoneyStore extends ChangeNotifier {
     final cardTxs = _cachedTxsByAccount[cardId] ?? [];
     final list = cardTxs.where((t) {
       if (t.auto == true) return false;
-      final ik = t.ik ?? invKeyFor(cardCfg, t.date);
+      final ik = t.ik ?? t.inv ?? invKeyFor(cardCfg, t.date);
       return ik == key;
     }).toList();
     list.sort((a, b) {
@@ -3411,6 +3327,13 @@ class MoneyStore extends ChangeNotifier {
       {int? withinDays, String? accountId, Set<String>? accountIds}) {
     final horizon = withinDays ?? reminderDaysAhead;
     final today = todayISO();
+    final cardConfigs = <String, ({CardConfig cfg, Account acc})>{};
+    for (final a in db.accounts) {
+      if (a.type == kCardType && a.card != null) {
+        cardConfigs[a.id] = (cfg: a.card!, acc: a);
+      }
+    }
+
     final items = <DueBillItem>[];
 
     for (final tx in db.txs) {
@@ -3423,49 +3346,59 @@ class MoneyStore extends ChangeNotifier {
           !accountIds.contains(tx.acc)) {
         continue;
       }
-      final acc = accById(tx.acc);
-      final isCard = acc != null && acc.type == kCardType;
-      String targetDate = tx.date;
-      String? txIk;
-      if (isCard && acc.card != null) {
-        txIk = tx.ik ?? tx.inv ?? invKeyFor(acc.card!, tx.date);
-        final invInfo = acc.invoices?[txIk];
-        if (invInfo != null && invInfo.due.isNotEmpty) {
-          targetDate = invInfo.due;
+
+      final String effectiveDueDate;
+      final bool isOverdue;
+
+      final cardInfo = cardConfigs[tx.acc];
+      if (cardInfo != null) {
+        final ik = tx.ik ?? invKeyFor(cardInfo.cfg, tx.date);
+        final dueDate = cardInfo.acc.invoices?[ik]?.due ??
+            invDates(cardInfo.cfg, ik).due;
+        effectiveDueDate = dueDate;
+        final isVigente = isVigenteInvoice(
+          cardCfg: cardInfo.cfg,
+          invoiceKey: ik,
+          account: cardInfo.acc,
+          today: today,
+        );
+        final cardDiff = daysBetween(today, effectiveDueDate);
+        isOverdue = (cardDiff < 0) && isVigente;
+      } else {
+        effectiveDueDate = tx.date;
+        final accDiff = daysBetween(today, effectiveDueDate);
+        isOverdue = accDiff < 0;
+      }
+
+      final diff = daysBetween(today, effectiveDueDate);
+
+      if (withinDays != null) {
+        if (withinDays >= 0) {
+          if (diff < 0) {
+            // Na janela finita (ex: reminderDaysAhead), itens com data passada só entram se forem atrasados
+            if (withinDays < 9000 && !isOverdue) {
+              continue;
+            }
+          } else {
+            if (diff > withinDays) continue;
+          }
+        }
+      } else {
+        if (diff < 0) {
+          if (!isOverdue) continue;
         } else {
-          targetDate = invDates(acc.card!, txIk).due;
+          if (diff > horizon) continue;
         }
       }
 
-      final diff = daysBetween(today, targetDate);
-      if (withinDays != null) {
-        if (withinDays >= 0 && diff > withinDays) continue;
-      } else {
-        if (diff > horizon) continue;
-      }
-      if (diff < 0) {
-        if (isCard) {
-          final currentIk = acc.card != null
-              ? invKeyFor(acc.card!, today)
-              : (today.length >= 7 ? today.substring(0, 7) : today);
-          final resolvedIk = txIk ??
-              tx.ik ??
-              tx.inv ??
-              (acc.card != null
-                  ? invKeyFor(acc.card!, tx.date)
-                  : (tx.date.length >= 7 ? tx.date.substring(0, 7) : tx.date));
-          if (resolvedIk != currentIk) {
-            continue;
-          }
-        }
-      }
-      final accName = acc?.name ?? 'Conta';
+      final accName = accById(tx.acc)?.name ?? 'Conta';
       items.add(
         DueBillItem(
           tx: tx,
           accountName: accName,
           daysUntilDue: diff,
-          dueDate: targetDate,
+          isOverdue: isOverdue,
+          effectiveDueDate: effectiveDueDate,
         ),
       );
     }
@@ -3476,6 +3409,8 @@ class MoneyStore extends ChangeNotifier {
       }
       final dc = a.effectiveDueDate.compareTo(b.effectiveDueDate);
       if (dc != 0) return dc;
+      final dt = a.tx.date.compareTo(b.tx.date);
+      if (dt != 0) return dt;
       return a.tx.payee.compareTo(b.tx.payee);
     });
 
@@ -3540,18 +3475,27 @@ class MoneyStore extends ChangeNotifier {
       }
       final acc = accById(tx.acc);
       String target = tx.date;
+      bool? overdue;
       if (acc != null && acc.type == kCardType && acc.card != null) {
         final ik = tx.ik ?? tx.inv ?? invKeyFor(acc.card!, tx.date);
         final info = acc.invoices?[ik];
         target = (info != null && info.due.isNotEmpty)
             ? info.due
             : invDates(acc.card!, ik).due;
+        overdue = daysBetween(today, target) < 0 &&
+            isVigenteInvoice(
+              cardCfg: acc.card!,
+              invoiceKey: ik,
+              account: acc,
+              today: today,
+            );
       }
       items.add(DueBillItem(
         tx: tx,
         accountName: acc?.name ?? 'Conta',
         daysUntilDue: daysBetween(today, target),
-        dueDate: target,
+        isOverdue: overdue,
+        effectiveDueDate: target,
       ));
     }
     items.sort((a, b) {
