@@ -393,7 +393,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               context,
                               csv: csvContent,
                               defaultName: defaultName,
-                              title: 'Exportar Lançamentos de "${acc.name}" (CSV)',
+                              title: 'Exportar Lançamentos de ${acc.name} (CSV)',
                             );
                           },
                         ),

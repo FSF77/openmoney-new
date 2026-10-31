@@ -22,6 +22,14 @@ class NativeFilePicker {
     return text.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
   }
 
+  static String _escapePowerShellString(String text) {
+    return text
+        .replaceAll('`', '``')
+        .replaceAll('"', '`"')
+        .replaceAll('\$', '`\$')
+        .replaceAll("'", "''");
+  }
+
   /// Converte extensões comuns em tipos e UTIs reconhecidos pelo macOS.
   /// No macOS, o parâmetro `of type` do AppleScript espera UTIs (ex: 'public.json')
   /// ou códigos OSType clássicos de 4 caracteres. Se passar 'json', o sistema trata
@@ -90,10 +98,11 @@ class NativeFilePicker {
         final filter = allowedExtensions
             .map((e) => '*.${e.toLowerCase().replaceAll(RegExp(r'^\.+'), '')}')
             .join(';');
+        final escapedTitle = _escapePowerShellString(title);
         final powershellCmd =
             'Add-Type -AssemblyName System.Windows.Forms; '
             '\$dlg = New-Object System.Windows.Forms.OpenFileDialog; '
-            '\$dlg.Title = "$title"; '
+            '\$dlg.Title = "$escapedTitle"; '
             '\$dlg.Filter = "Arquivos ($filter)|$filter|Todos os Arquivos (*.*)|*.*"; '
             'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.FileName }';
         final res = await Process.run('powershell', [
@@ -147,11 +156,13 @@ class NativeFilePicker {
         final filter = allowedExtensions
             .map((e) => '*.${e.toLowerCase().replaceAll(RegExp(r'^\.+'), '')}')
             .join(';');
+        final escapedTitle = _escapePowerShellString(title);
+        final escapedDefault = _escapePowerShellString(defaultName);
         final powershellCmd =
             'Add-Type -AssemblyName System.Windows.Forms; '
             '\$dlg = New-Object System.Windows.Forms.SaveFileDialog; '
-            '\$dlg.Title = "$title"; '
-            '\$dlg.FileName = "$defaultName"; '
+            '\$dlg.Title = "$escapedTitle"; '
+            '\$dlg.FileName = "$escapedDefault"; '
             '\$dlg.Filter = "Arquivos ($filter)|$filter|Todos os Arquivos (*.*)|*.*"; '
             'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.FileName }';
         final res = await Process.run('powershell', [
