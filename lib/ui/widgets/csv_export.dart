@@ -12,21 +12,32 @@ Future<void> exportCsvWithFeedback(
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   if (!kIsWeb) {
-    final path = await NativeFilePicker.saveFile(
-      title: title,
-      defaultName: defaultName,
-      allowedExtensions: ['csv'],
-    );
-    if (path == null || path.isEmpty) return;
     try {
+      final path = await NativeFilePicker.saveFile(
+        title: title,
+        defaultName: defaultName,
+        allowedExtensions: ['csv'],
+      );
+      if (path == null || path.isEmpty) return;
       final f = File(path);
       f.parent.createSync(recursive: true);
       f.writeAsStringSync(csv, flush: true);
+
+      if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', path]);
+      }
+
       messenger.showSnackBar(
-          SnackBar(content: Text('✓ CSV exportado com sucesso em:\n$path')));
+        SnackBar(
+          content: Text('✓ CSV exportado com sucesso em:\n$path'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } catch (e) {
       messenger.showSnackBar(SnackBar(
-        content: Text('Erro ao salvar CSV: $e'),
+        content: Text('Erro ao exportar CSV: $e'),
         backgroundColor: Colors.redAccent,
       ));
     }
