@@ -200,7 +200,32 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     }
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
+    final isReconciledPast =
+        widget.tx.rec && widget.tx.date.compareTo(todayISO()) < 0;
+    if (isReconciledPast) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Lançamento Já Conciliado'),
+          content: Text(
+            'Este lançamento já está conciliado e possui data anterior a hoje (${fmtDate(widget.tx.date)}).\n\nDeseja realmente salvar as alterações?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Salvar Alterações'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+    }
+
     final isoDate = _resolveIsoDate();
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     final signedAmt = _isExpense ? -absCents : absCents;
@@ -216,7 +241,9 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       scope: _scope,
       newIk: _customIk,
     );
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override

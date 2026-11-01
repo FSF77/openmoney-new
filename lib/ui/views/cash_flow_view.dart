@@ -283,7 +283,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Fluxo de Caixa Matricial (${_periodKind.label})',
+                              'Fluxo de Caixa (${_periodKind.label})',
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,

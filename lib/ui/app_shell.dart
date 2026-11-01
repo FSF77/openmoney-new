@@ -755,7 +755,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.grid_on_rounded,
-                  label: 'Fluxo de Caixa Matricial',
+                  label: 'Fluxo de Caixa',
                   selected: widget.store.activeModule == NavModule.cashFlow,
                   onTap: () => selectModule(NavModule.cashFlow),
                 ),
