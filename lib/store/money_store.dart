@@ -99,6 +99,7 @@ class MoneyStore extends ChangeNotifier {
   bool isDarkMode = true;
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
   double fontScale = 1.0;
+  bool isSidebarVisible = true;
   bool sidebarShowFavorites = true;
   bool sidebarShowActiveAccounts = true;
   bool sidebarShowInactiveAccounts = false;
@@ -264,6 +265,9 @@ class MoneyStore extends ChangeNotifier {
         fontScale = s;
       }
     }
+    if (cfg['isSidebarVisible'] is bool) {
+      isSidebarVisible = cfg['isSidebarVisible'] as bool;
+    }
     if (cfg['sidebarShowFavorites'] is bool) {
       sidebarShowFavorites = cfg['sidebarShowFavorites'] as bool;
     }
@@ -380,6 +384,14 @@ class MoneyStore extends ChangeNotifier {
 
   void resetZoom() {
     setFontScale(1.0);
+  }
+
+  void toggleSidebar() {
+    isSidebarVisible = !isSidebarVisible;
+    final cfg = _readConfig();
+    cfg['isSidebarVisible'] = isSidebarVisible;
+    _writeConfig(cfg);
+    notifyListeners();
   }
 
   void toggleSidebarFavorites() {

@@ -136,6 +136,13 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             const SingleActivator(LogicalKeyboardKey.numpad0, control: true): () {
               widget.store.resetZoom();
             },
+            // Alternar menu lateral
+            const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () {
+              widget.store.toggleSidebar();
+            },
+            const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
+              widget.store.toggleSidebar();
+            },
           },
           child: Focus(
             autofocus: true,
@@ -242,7 +249,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               body: SafeArea(
                 child: Row(
                   children: [
-                    if (isDesktopOrTablet)
+                    if (isDesktopOrTablet && widget.store.isSidebarVisible)
                       Container(
                         width: 285,
                         decoration: BoxDecoration(
@@ -258,7 +265,55 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                     Expanded(
-                      child: _buildActiveMainView(context),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: _buildActiveMainView(context),
+                          ),
+                          if (isDesktopOrTablet && !widget.store.isSidebarVisible)
+                            Positioned(
+                              top: 12,
+                              left: 12,
+                              child: Material(
+                                color: colors.bgSecondary.withValues(alpha: 0.92),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: colors.borderGlass),
+                                ),
+                                elevation: 4,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: widget.store.toggleSidebar,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.menu,
+                                          size: 16,
+                                          color: colors.textPrimary,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Menu',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: colors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -405,6 +460,13 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                         onPressed: widget.store.toggleThemeMode,
                       ),
+                      if (!closeDrawerOnSelect)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Ocultar Menu Lateral (Ctrl/Cmd+B)',
+                          icon: const Icon(Icons.menu_open, size: 18),
+                          onPressed: widget.store.toggleSidebar,
+                        ),
                     ],
                   ),
                 ],
