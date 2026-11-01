@@ -77,7 +77,7 @@ class _ReportsViewState extends State<ReportsView> {
                     children: [
                       Text(
                         isAnnual
-                            ? 'Relatório Anual'
+                            ? 'Relatório Anual $_selectedYear'
                             : 'Relatório',
                         style: TextStyle(
                           fontSize: 18,
