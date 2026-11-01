@@ -289,15 +289,36 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             runSpacing: 6,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              OutlinedButton.icon(
-                                icon: const Icon(Icons.auto_fix_high, size: 15),
-                                label: const Text('Ajustar Previsões',
-                                    style: TextStyle(fontSize: 11.5)),
-                                onPressed: () {
-                                  final res = widget.store
-                                      .adjustPredictions(widget.store.month);
-                                  showPredictionsAdjustModal(context, res);
-                                },
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  OutlinedButton.icon(
+                                    icon: const Icon(Icons.auto_fix_high, size: 15),
+                                    label: const Text('Ajustar Previsões',
+                                        style: TextStyle(fontSize: 11.5)),
+                                    onPressed: () {
+                                      final res = widget.store
+                                          .adjustPredictions(widget.store.month);
+                                      showPredictionsAdjustModal(context, res);
+                                    },
+                                  ),
+                                  const SizedBox(width: 2),
+                                  PopupMenuButton<String>(
+                                    tooltip:
+                                        'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
+                                    icon: const Icon(Icons.tune, size: 18),
+                                    padding: EdgeInsets.zero,
+                                    initialValue: widget.store.db.predMode,
+                                    onSelected: widget.store.setPredMode,
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                          value: 'month', child: Text('Por mês')),
+                                      PopupMenuItem(
+                                          value: 'invoice',
+                                          child: Text('Por fatura (cartão)')),
+                                    ],
+                                  ),
+                                ],
                               ),
                               OutlinedButton.icon(
                                 icon: const Icon(Icons.download, size: 15),
@@ -385,22 +406,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               : 'Previsto Final do Mês',
                           cents: widget.store.balance(acc, predicted: true),
                           colors: colors,
-                        ),
-                        const SizedBox(width: 4),
-                        PopupMenuButton<String>(
-                          tooltip:
-                              'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
-                          icon: const Icon(Icons.tune, size: 18),
-                          padding: EdgeInsets.zero,
-                          initialValue: widget.store.db.predMode,
-                          onSelected: widget.store.setPredMode,
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                                value: 'month', child: Text('Por mês')),
-                            PopupMenuItem(
-                                value: 'invoice',
-                                child: Text('Por fatura (cartão)')),
-                          ],
                         ),
                       ],
                     ),
