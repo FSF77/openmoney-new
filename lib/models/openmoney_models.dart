@@ -263,6 +263,7 @@ class PayeeSuggestion {
   final bool isExpense;
   final int count;
   final String lastDate;
+  final String accountId;
 
   String get id => name.toLowerCase();
 
@@ -272,6 +273,7 @@ class PayeeSuggestion {
     required this.isExpense,
     this.count = 1,
     this.lastDate = '',
+    this.accountId = '',
   });
 }
 

@@ -3,6 +3,20 @@ import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
+Future<void> showTransactionCreateModal(
+  BuildContext context,
+  MoneyStore store, {
+  String? initialAccountId,
+}) async {
+  await showDialog(
+    context: context,
+    builder: (ctx) => _TransactionCreateDialog(
+      store: store,
+      initialAccountId: initialAccountId,
+    ),
+  );
+}
+
 Future<void> showTransactionEditModal(
   BuildContext context,
   MoneyStore store,
@@ -448,6 +462,577 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
           icon: const Icon(Icons.check, size: 18),
           label: const Text('Salvar Alterações'),
           onPressed: _handleSave,
+        ),
+      ],
+    );
+  }
+}
+
+class _TransactionCreateDialog extends StatefulWidget {
+  final MoneyStore store;
+  final String? initialAccountId;
+
+  const _TransactionCreateDialog({
+    required this.store,
+    this.initialAccountId,
+  });
+
+  @override
+  State<_TransactionCreateDialog> createState() =>
+      _TransactionCreateDialogState();
+}
+
+class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
+  late String _accId;
+  late final TextEditingController _dateCtrl;
+  late final TextEditingController _payeeCtrl;
+  late final TextEditingController _memoCtrl;
+  late final TextEditingController _amtCtrl;
+  late final TextEditingController _endDateCtrl;
+  late bool _isExpense;
+  late String _catSelection;
+  late String? _customIk;
+
+  String _mode = 'single';
+  String _freq = 'monthly';
+  int _installments = 2;
+  bool _hasEndDate = false;
+
+  List<PayeeSuggestion> _suggestions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _accId = widget.initialAccountId ?? widget.store.lastUsedAccountId;
+    final available = _availableAccounts();
+    if (!available.any((a) => a.id == _accId)) {
+      _accId = available.isNotEmpty ? available.first.id : 'a1';
+    }
+
+    _dateCtrl = TextEditingController(text: fmtDate(todayISO()));
+    _payeeCtrl = TextEditingController();
+    _memoCtrl = TextEditingController();
+    _amtCtrl = TextEditingController();
+    _isExpense = true;
+
+    final catPaths = widget.store.allCategoryPaths('Despesa');
+    _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+
+    final oneYearAhead = DateTime.now().add(const Duration(days: 365));
+    _endDateCtrl =
+        TextEditingController(text: fmtDate(isoFromDate(oneYearAhead)));
+
+    final curAcc = widget.store.accById(_accId);
+    if (curAcc?.type == kCardType && curAcc?.card != null) {
+      _customIk = invKeyFor(curAcc!.card!, todayISO());
+    } else {
+      _customIk = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _dateCtrl.dispose();
+    _payeeCtrl.dispose();
+    _memoCtrl.dispose();
+    _amtCtrl.dispose();
+    _endDateCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Account> _availableAccounts() {
+    return List<Account>.from(widget.store.activeAccounts);
+  }
+
+  String _resolveIsoDate(String raw, {String? fallback}) {
+    final trimmed = raw.trim();
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) return trimmed;
+    final parts = trimmed.split('/');
+    if (parts.length == 3) {
+      return '${parts[2].padLeft(4, '0')}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+    }
+    return fallback ?? todayISO();
+  }
+
+  Future<void> _pickDate(TextEditingController ctrl,
+      {DateTime? firstDate}) async {
+    final curIso = _resolveIsoDate(ctrl.text);
+    final initialDate = dateFromISO(curIso);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate ?? DateTime(2000),
+      lastDate: DateTime(2099, 12, 31),
+    );
+    if (picked != null) {
+      setState(() {
+        ctrl.text = fmtDate(isoFromDate(picked));
+        final targetAcc = widget.store.accById(_accId);
+        if (targetAcc?.type == kCardType && targetAcc?.card != null) {
+          _customIk = invKeyFor(targetAcc!.card!, isoFromDate(picked));
+        }
+      });
+    }
+  }
+
+  void _onPayeeChanged(String val) {
+    final clean = val.trim();
+    final list = widget.store.payeeSuggestions(val);
+    final match = widget.store.lastCategoryAndType(clean);
+
+    setState(() {
+      _suggestions = list;
+      if (match != null) {
+        _isExpense = match.isExpense;
+        if (match.category.isNotEmpty) {
+          _catSelection = match.category;
+        }
+        if (match.accountId.isNotEmpty) {
+          final matchedAcc = widget.store.accById(match.accountId);
+          if (matchedAcc != null && !matchedAcc.isInactive) {
+            _accId = match.accountId;
+            if (matchedAcc.type == kCardType && matchedAcc.card != null) {
+              _customIk = invKeyFor(
+                  matchedAcc.card!, _resolveIsoDate(_dateCtrl.text));
+            } else {
+              _customIk = null;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  void _applySuggestion(PayeeSuggestion s) {
+    setState(() {
+      _payeeCtrl.text = s.name;
+      _isExpense = s.isExpense;
+      if (s.category.isNotEmpty) {
+        _catSelection = s.category;
+      }
+      if (s.accountId.isNotEmpty) {
+        final matchedAcc = widget.store.accById(s.accountId);
+        if (matchedAcc != null && !matchedAcc.isInactive) {
+          _accId = s.accountId;
+          if (matchedAcc.type == kCardType && matchedAcc.card != null) {
+            _customIk = invKeyFor(
+                matchedAcc.card!, _resolveIsoDate(_dateCtrl.text));
+          } else {
+            _customIk = null;
+          }
+        }
+      }
+      _suggestions = [];
+    });
+  }
+
+  void _commitCreate() {
+    final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+    if (absCents <= 0) return;
+
+    final isXfer = _catSelection.startsWith('xfer:');
+    final signedAmt = isXfer ? -absCents : (_isExpense ? -absCents : absCents);
+
+    final rawPayee = _payeeCtrl.text.trim();
+    final finalPayee = rawPayee.isEmpty
+        ? (isXfer ? 'Transferência' : 'Sem descrição')
+        : rawPayee;
+
+    final trimmedMemo = _memoCtrl.text.trim();
+    final dateStr = _resolveIsoDate(_dateCtrl.text);
+    final endStr = (_mode == 'recurring' && _hasEndDate)
+        ? _resolveIsoDate(_endDateCtrl.text)
+        : null;
+
+    final targetAcc = widget.store.accById(_accId);
+    final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
+    final ik = (isCard && _customIk != null && _customIk!.isNotEmpty)
+        ? _customIk
+        : null;
+
+    widget.store.addTransaction(
+      accId: _accId,
+      date: dateStr,
+      payee: finalPayee,
+      catSelection: _catSelection,
+      memo: trimmedMemo,
+      signedAmt: signedAmt,
+      mode: isXfer && _mode == 'installment' ? 'single' : _mode,
+      freq: _freq,
+      installments: _installments,
+      endDate: endStr,
+      customIk: ik,
+    );
+
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+    final availableAccs = _availableAccounts();
+    final targetAcc = widget.store.accById(_accId);
+    final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
+    final isXfer = _catSelection.startsWith('xfer:');
+
+    final catType = _isExpense ? 'Despesa' : 'Receita';
+    final catOptions = widget.store.allCategoryOptions(catType);
+    final otherAccounts =
+        widget.store.activeAccounts.where((a) => a.id != _accId).toList();
+
+    final dropdownItems = <DropdownMenuItem<String>>[
+      if (_catSelection.isNotEmpty &&
+          !catOptions.any((c) => c.value == _catSelection) &&
+          !_catSelection.startsWith('xfer:'))
+        DropdownMenuItem(value: _catSelection, child: Text(_catSelection)),
+      ...catOptions.map(
+        (c) => DropdownMenuItem(value: c.value, child: Text(c.label)),
+      ),
+      ...otherAccounts.map(
+        (a) => DropdownMenuItem(
+          value: 'xfer:${a.id}',
+          child: Text('⇄ Transferência: ${a.name}'),
+        ),
+      ),
+    ];
+
+    final effectiveCat = dropdownItems.any((i) => i.value == _catSelection)
+        ? _catSelection
+        : (dropdownItems.isNotEmpty ? dropdownItems.first.value! : '');
+
+    return AlertDialog(
+      backgroundColor: colors.bgSecondary,
+      title: Row(
+        children: [
+          Icon(Icons.add_circle, color: colors.accent, size: 20),
+          const SizedBox(width: 8),
+          const Text('Novo Lançamento'),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Conta do Lançamento
+              DropdownButtonFormField<String>(
+                initialValue: _accId,
+                decoration: const InputDecoration(
+                  labelText: 'Conta',
+                  border: OutlineInputBorder(),
+                ),
+                items: availableAccs
+                    .map((a) => DropdownMenuItem(
+                          value: a.id,
+                          child: Text(
+                            a.name +
+                                (a.type == kCardType
+                                    ? ' (Cartão)'
+                                    : ' (${a.type})'),
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _accId = v;
+                      final newAcc = widget.store.accById(v);
+                      if (newAcc?.type == kCardType && newAcc?.card != null) {
+                        _customIk = invKeyFor(
+                            newAcc!.card!, _resolveIsoDate(_dateCtrl.text));
+                      } else {
+                        _customIk = null;
+                      }
+                      if (_catSelection.startsWith('xfer:$v')) {
+                        _catSelection = '';
+                      }
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Tipo & Data
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _dateCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Data (DD/MM/AAAA)',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_month, size: 20),
+                          tooltip: 'Escolher data no calendário',
+                          onPressed: () => _pickDate(_dateCtrl),
+                        ),
+                      ),
+                      onChanged: (_) {
+                        if (isCard &&
+                            targetAcc != null &&
+                            targetAcc.card != null) {
+                          setState(() {
+                            _customIk = invKeyFor(
+                              targetAcc.card!,
+                              _resolveIsoDate(_dateCtrl.text),
+                            );
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  if (!isXfer) ...[
+                    const SizedBox(width: 12),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('− Despesa')),
+                        ButtonSegment(value: false, label: Text('+ Receita')),
+                      ],
+                      selected: {_isExpense},
+                      onSelectionChanged: (s) {
+                        setState(() {
+                          _isExpense = s.first;
+                          final paths = widget.store.allCategoryPaths(
+                            _isExpense ? 'Despesa' : 'Receita',
+                          );
+                          if (!paths.contains(_catSelection) &&
+                              !_catSelection.startsWith('xfer:')) {
+                            _catSelection =
+                                paths.isNotEmpty ? paths.first : '';
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Competência da Fatura se cartão
+              if (isCard && targetAcc != null && targetAcc.card != null) ...[
+                Builder(
+                  builder: (context) {
+                    final d = _resolveIsoDate(_dateCtrl.text);
+                    final opts = invoiceOptions(
+                      card: targetAcc.card!,
+                      aroundDate: d,
+                      existingKeys:
+                          _customIk != null ? [_customIk!] : const [],
+                    );
+                    final defaultIk = invKeyFor(targetAcc.card!, d);
+                    final selIk = (_customIk == null || _customIk!.isEmpty)
+                        ? defaultIk
+                        : _customIk!;
+                    return DropdownButtonFormField<String>(
+                      initialValue: opts.any((o) => o.key == selIk)
+                          ? selIk
+                          : opts.first.key,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Fatura do Cartão (Competência)',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: opts
+                          .map((o) => DropdownMenuItem(
+                                value: o.key,
+                                child: Text(o.key == defaultIk
+                                    ? '${o.label} [Padrão]'
+                                    : o.label),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _customIk = v),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Favorecido / Descrição com Autocompletar inteligente
+              TextField(
+                controller: _payeeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Favorecido / Descrição',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: _onPayeeChanged,
+              ),
+              if (_suggestions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _suggestions.map((s) {
+                    final accName = widget.store.accById(s.accountId)?.name;
+                    return ActionChip(
+                      avatar: Icon(
+                        s.isExpense
+                            ? Icons.trending_down
+                            : Icons.trending_up,
+                        size: 14,
+                        color: s.isExpense ? colors.expense : colors.income,
+                      ),
+                      label: Text(
+                        '${s.name} • ${s.category}${accName != null ? ' • $accName' : ''}',
+                      ),
+                      onPressed: () => _applySuggestion(s),
+                    );
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 12),
+
+              // Categoria ou Transferência
+              if (dropdownItems.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: effectiveCat,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Categoria ou Transferência',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: dropdownItems,
+                  onChanged: (v) {
+                    if (v != null) setState(() => _catSelection = v);
+                  },
+                ),
+              const SizedBox(height: 12),
+
+              // Valor & Observação
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _amtCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Valor (R\$)',
+                        prefixText: 'R\$ ',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _memoCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nota / Observação',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Modo Flexível: Único, Recorrente, Parcelado
+              if (!isXfer) ...[
+                const Text(
+                  'Modo do Lançamento:',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'single', label: Text('Único')),
+                    ButtonSegment(
+                        value: 'recurring', label: Text('Recorrente')),
+                    ButtonSegment(
+                        value: 'installment', label: Text('Parcelado')),
+                  ],
+                  selected: {_mode},
+                  onSelectionChanged: (s) => setState(() => _mode = s.first),
+                ),
+                const SizedBox(height: 12),
+
+                if (_mode == 'recurring') ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _freq,
+                          decoration: const InputDecoration(
+                            labelText: 'Frequência',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: kRecurrenceFrequencyOptions
+                              .map((o) => DropdownMenuItem(
+                                    value: o.id,
+                                    child: Text(o.label),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _freq = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Definir Data de Término'),
+                    value: _hasEndDate,
+                    onChanged: (v) => setState(() => _hasEndDate = v ?? false),
+                  ),
+                  if (_hasEndDate) ...[
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _endDateCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Data de Término (DD/MM/AAAA)',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_month, size: 20),
+                          tooltip: 'Escolher data de término',
+                          onPressed: () {
+                            final baseD = dateFromISO(
+                                _resolveIsoDate(_dateCtrl.text));
+                            _pickDate(_endDateCtrl, firstDate: baseD);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ] else if (_mode == 'installment') ...[
+                  DropdownButtonFormField<int>(
+                    initialValue: _installments,
+                    decoration: const InputDecoration(
+                      labelText: 'Número de Parcelas',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: List.generate(
+                      119,
+                      (i) => DropdownMenuItem(
+                        value: i + 2,
+                        child: Text('${i + 2}x'),
+                      ),
+                    ),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _installments = v);
+                    },
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Salvar Lançamento'),
+          onPressed: _commitCreate,
         ),
       ],
     );

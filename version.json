@@ -1,9 +1,9 @@
 {
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 42,
+  "build": 43,
   "version": "2.2.0",
   "notes": "Melhorias e adequação do plano de auditoria realizado entre as versões Swift e Flutter, 100% das regras iguais  >> Anteriores: Opção de zoom nas telas e relatórios para os cegos como eu, ajustes na rotina de importação que não importava categorias corretamente, opção de exportar csv na tela de lançamentos, inclusão de logo no cadastro de conta, melhorias visuais, Fluxo de Caixa dinâmico…",
-  "releaseDate": "31/10/2026",
+  "releaseDate": "01/11/2026",
   "windows": {
     "build": 41,
     "version": "2.1.9",
@@ -14,10 +14,10 @@
   },
   "macos": {
     "version": "2.2.0",
-    "build": 42,
-    "releaseDate": "31/10/2026",
+    "build": 43,
+    "releaseDate": "01/11/2026",
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.2.0.zip",
-    "sha256": "c90460e913a473587da4a3e05f51bbaae5d1723c553ff5e561dd88407ff47e1d",
+    "sha256": "57ef238085564da3e17611d00528da3ec09ad9f9a483fa2df564f52b81a7f6e8",
     "sizeMb": 11
   },
   "title": "OpenMoney Flutter v2.2.0"

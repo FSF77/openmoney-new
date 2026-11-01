@@ -237,6 +237,8 @@ class _CashFlowViewState extends State<CashFlowView> {
     return (base * (1.0 + (widget.store.fontScale - 1.0) * 0.75)).roundToDouble();
   }
 
+  static const double _scrollbarSpacer = 20.0;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -494,10 +496,10 @@ class _CashFlowViewState extends State<CashFlowView> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final scaleBonus = widget.store.fontScale > 1.0 ? (widget.store.fontScale - 1.0) : 0.0;
-                  final catWidth = 230.0 + (scaleBonus * 35.0);
-                  final colWidth = (_periodKind == CashFlowPeriodKind.daily ? 112.0 : 104.0) + (scaleBonus * 20.0);
-                  final totalWidth = 114.0 + (scaleBonus * 20.0);
-                  final gridWidth = (matrix.columns.length * colWidth) + totalWidth;
+                  final catWidth = 230.0 + (scaleBonus * 40.0);
+                  final colWidth = ((_periodKind == CashFlowPeriodKind.daily ? 124.0 : 130.0) * widget.store.fontScale).roundToDouble();
+                  final totalWidth = (145.0 * widget.store.fontScale).roundToDouble();
+                  final gridWidth = (matrix.columns.length * colWidth) + totalWidth + _scrollbarSpacer;
                   final allRows = _buildAllRows(matrix, colors, colWidth, totalWidth);
 
                   return Column(
@@ -592,6 +594,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                                           ),
                                         ),
                                       ),
+                                      const SizedBox(width: _scrollbarSpacer),
                                     ],
                                   ),
                                 ),
@@ -880,6 +883,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                         Text(
                           fmtCashFlowCents(group.periodTotals[i]),
                           textAlign: TextAlign.right,
+                          maxLines: 1,
+                          softWrap: false,
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
@@ -900,6 +905,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                       Text(
                         fmtCashFlowCents(group.grandTotal, showZero: true),
                         textAlign: TextAlign.right,
+                        maxLines: 1,
+                        softWrap: false,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
@@ -911,6 +918,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                   ),
                 ),
+                const SizedBox(width: _scrollbarSpacer),
               ],
             ),
           ),
@@ -951,6 +959,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                           Text(
                             fmtCashFlowCents(sub.periodAmounts[i]),
                             textAlign: TextAlign.right,
+                            maxLines: 1,
+                            softWrap: false,
                             style: TextStyle(
                               fontSize: 11.5,
                               color: colors.textSecondary,
@@ -976,6 +986,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                         Text(
                           fmtCashFlowCents(sub.total, showZero: true),
                           textAlign: TextAlign.right,
+                          maxLines: 1,
+                          softWrap: false,
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 11.5,
@@ -992,6 +1004,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: _scrollbarSpacer),
                 ],
               ),
             ),
@@ -1031,6 +1044,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                       Text(
                         fmtCashFlowCents(section.periodTotals[i], showZero: true),
                         textAlign: TextAlign.right,
+                        maxLines: 1,
+                        softWrap: false,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
@@ -1051,6 +1066,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                     Text(
                       fmtCashFlowCents(section.grandTotal, showZero: true),
                       textAlign: TextAlign.right,
+                      maxLines: 1,
+                      softWrap: false,
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 12.5,
@@ -1062,6 +1079,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                   ),
                 ),
               ),
+              const SizedBox(width: _scrollbarSpacer),
             ],
           ),
         ),
@@ -1112,6 +1130,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                   child: Text(
                     fmtCashFlowCents(amt, showZero: true),
                     textAlign: TextAlign.right,
+                    maxLines: 1,
+                    softWrap: false,
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -1129,6 +1149,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                 child: Text(
                   fmtCashFlowCents(grandTotal, showZero: true),
                   textAlign: TextAlign.right,
+                  maxLines: 1,
+                  softWrap: false,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 12.5,
@@ -1138,6 +1160,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                 ),
               ),
             ),
+            const SizedBox(width: _scrollbarSpacer),
           ],
         ),
       ),

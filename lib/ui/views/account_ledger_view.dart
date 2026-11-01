@@ -103,9 +103,17 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   }
 
   void _onPayeeChanged(String val) {
+    final clean = val.trim();
     final list = widget.store.payeeSuggestions(val);
+    final match = widget.store.lastCategoryAndType(clean);
     setState(() {
       _suggestions = list;
+      if (match != null) {
+        _isExpense = match.isExpense;
+        if (match.category.isNotEmpty) {
+          _catSelection = match.category;
+        }
+      }
     });
   }
 
@@ -220,70 +228,295 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                // Linha Superior: Info da Conta & Ações à Esquerda | Saldos à Direita (como no Swift)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    AccountLogoWidget(
+                      account: acc,
+                      size: 48,
+                      cornerRadius: 10,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                acc.name,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                              if (acc.isFavorite)
+                                const Icon(Icons.star,
+                                    size: 16, color: Colors.amber),
+                              if (acc.isInactive)
+                                StatusBadge(
+                                  text: 'INATIVA',
+                                  color: colors.warning,
+                                ),
+                              Text(
+                                acc.type,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Editar Conta',
+                                icon: const Icon(Icons.settings_outlined,
+                                    size: 18),
+                                onPressed: () => showAccountModal(
+                                  context,
+                                  widget.store,
+                                  editingAccount: acc,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.auto_fix_high, size: 15),
+                                label: const Text('Ajustar Previsões',
+                                    style: TextStyle(fontSize: 11.5)),
+                                onPressed: () {
+                                  final res = widget.store
+                                      .adjustPredictions(widget.store.month);
+                                  showPredictionsAdjustModal(context, res);
+                                },
+                              ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.download, size: 15),
+                                label: const Text('Exportar CSV',
+                                    style: TextStyle(fontSize: 11.5)),
+                                onPressed: () {
+                                  final exportTxs = isCard
+                                      ? widget.store.invoiceTransactions(
+                                          acc.id,
+                                          widget.store.month,
+                                        )
+                                      : monthData.transactions;
+                                  final safeAccName = acc.name
+                                      .toLowerCase()
+                                      .replaceAll(' ', '-')
+                                      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                                  final defaultName =
+                                      'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                                  final csvContent = CSVExporter.generateCSV(
+                                    transactions: exportTxs,
+                                    accounts: widget.store.db.accounts,
+                                  );
+                                  exportCsvWithFeedback(
+                                    context,
+                                    csv: csvContent,
+                                    defaultName: defaultName,
+                                    title:
+                                        'Exportar Lançamentos de ${acc.name} (CSV)',
+                                  );
+                                },
+                              ),
+                              FilledButton.tonalIcon(
+                                icon: const Icon(Icons.picture_as_pdf, size: 15),
+                                label: Text(
+                                  isCard
+                                      ? 'Exportar Fatura PDF'
+                                      : 'Exportar Extrato PDF',
+                                  style: const TextStyle(fontSize: 11.5),
+                                ),
+                                onPressed: () {
+                                  final exportTxs = isCard
+                                      ? widget.store.invoiceTransactions(
+                                          acc.id,
+                                          widget.store.month,
+                                        )
+                                      : monthData.transactions;
+                                  final pdfBytes =
+                                      PdfReportGenerator.buildStatementOrInvoicePdfBytes(
+                                    store: widget.store,
+                                    account: acc,
+                                    monthYM: widget.store.month,
+                                    transactions: exportTxs,
+                                    invoiceSummary: invSummary,
+                                  );
+                                  final defaultName = isCard
+                                      ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                                      : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                                  PdfReportGenerator.saveAndOpenPdfBytes(
+                                    context,
+                                    pdfBytes: pdfBytes,
+                                    defaultFileName: defaultName,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Lado direito: Saldo Conciliado (Real) e Previsto
                     Row(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        AccountLogoWidget(
-                          account: acc,
-                          size: 48,
-                          cornerRadius: 10,
+                        _HeaderBalancePill(
+                          label: 'Saldo Conciliado (Real)',
+                          cents: widget.store.balance(acc, predicted: false),
+                          colors: colors,
                         ),
                         const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  acc.name,
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                                if (acc.isFavorite) ...[
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.star,
-                                      size: 16, color: Colors.amber),
-                                ],
-                                if (acc.isInactive) ...[
-                                  const SizedBox(width: 8),
-                                  StatusBadge(
-                                    text: 'INATIVA',
-                                    color: colors.warning,
-                                  ),
-                                ],
-                              ],
-                            ),
-                            Text(
-                              acc.type,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
+                        _HeaderBalancePill(
+                          label: isCard
+                              ? 'Previsto (Fatura)'
+                              : 'Previsto Final do Mês',
+                          cents: widget.store.balance(acc, predicted: true),
+                          colors: colors,
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          tooltip: 'Editar Conta',
-                          icon: const Icon(Icons.settings_outlined, size: 18),
-                          onPressed: () => showAccountModal(
-                            context,
-                            widget.store,
-                            editingAccount: acc,
-                          ),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          tooltip:
+                              'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
+                          icon: const Icon(Icons.tune, size: 18),
+                          padding: EdgeInsets.zero,
+                          initialValue: widget.store.db.predMode,
+                          onSelected: widget.store.setPredMode,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                                value: 'month', child: Text('Por mês')),
+                            PopupMenuItem(
+                                value: 'invoice',
+                                child: Text('Por fatura (cartão)')),
+                          ],
                         ),
                       ],
                     ),
+                  ],
+                ),
+                if (invSummary != null) ...[
+                  const Divider(height: 18),
+                  // Linha 1 da Fatura: Nome da fatura, quando fecha, quando vence, onde debita | Ações da fatura
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Fatura ${fmtMonth(invSummary.key)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '• Fecha: ${fmtDate(invSummary.closeDate)} • Vence: ${fmtDate(invSummary.dueDate)} • Débito: ${invSummary.payAccountName}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          FilterChip(
+                            label: Text(
+                              _filterCardByInvoice
+                                  ? 'Exibindo Fatura (${invTxs.length} lanç.)'
+                                  : 'Exibindo Mês Civil (${monthData.transactions.length} lanç.)',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                            selected: _filterCardByInvoice,
+                            onSelected: (v) =>
+                                setState(() => _filterCardByInvoice = v),
+                          ),
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.payments_outlined, size: 16),
+                            label: const Text('Pagar / Adiantar Fatura',
+                                style: TextStyle(fontSize: 11.5)),
+                            onPressed: () => showInvoicePaymentModal(
+                              context,
+                              widget.store,
+                              cardAccount: acc,
+                              summary: invSummary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Linha 2 da Fatura: Valores na nova linha com fonte equalizada (12px)
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Compras: ${brl(invSummary.chargesCents)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: colors.expense,
+                        ),
+                      ),
+                      if (invSummary.paymentsCents > 0)
+                        Text(
+                          'Pago: ${brl(invSummary.paymentsCents)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.income,
+                          ),
+                        ),
+                      Text(
+                        'Em Aberto: ${brl(invSummary.remainingCents)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: invSummary.remainingCents > 0
+                              ? colors.expense
+                              : colors.textPrimary,
+                        ),
+                      ),
+                      if (invSummary.isFullyPaid)
+                        StatusBadge(
+                          text: 'LIQUIDADA',
+                          color: colors.income,
+                          icon: Icons.verified,
+                        ),
+                    ],
+                  ),
+                ],
+                const Divider(height: 18),
+                // Linha de Navegação no Mês & Busca Justificada à Esquerda
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     MonthYearPickerBar(
                       currentMonthYM: widget.store.month,
                       availableYears: widget.store.allYearsInDatabase(),
@@ -331,193 +564,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
-                    Wrap(
-                      spacing: 12,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _HeaderBalancePill(
-                          label: 'Saldo Conciliado (Real)',
-                          cents: widget.store.balance(acc, predicted: false),
-                          colors: colors,
-                        ),
-                        _HeaderBalancePill(
-                          label: 'Previsto Final do Mês',
-                          cents: widget.store.balance(acc, predicted: true),
-                          colors: colors,
-                        ),
-                        PopupMenuButton<String>(
-                          tooltip:
-                              'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
-                          icon: const Icon(Icons.tune, size: 18),
-                          padding: EdgeInsets.zero,
-                          initialValue: widget.store.db.predMode,
-                          onSelected: widget.store.setPredMode,
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                                value: 'month', child: Text('Por mês')),
-                            PopupMenuItem(
-                                value: 'invoice',
-                                child: Text('Por fatura (cartão)')),
-                          ],
-                        ),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.auto_fix_high, size: 16),
-                          label: const Text('Ajustar Previsões'),
-                          onPressed: () {
-                            final res = widget.store
-                                .adjustPredictions(widget.store.month);
-                            showPredictionsAdjustModal(context, res);
-                          },
-                        ),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.download, size: 16),
-                          label: const Text('Exportar CSV'),
-                          onPressed: () {
-                            final exportTxs = isCard
-                                ? widget.store.invoiceTransactions(
-                                    acc.id,
-                                    widget.store.month,
-                                  )
-                                : monthData.transactions;
-                            final safeAccName = acc.name
-                                .toLowerCase()
-                                .replaceAll(' ', '-')
-                                .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-                            final defaultName =
-                                'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
-                            final csvContent = CSVExporter.generateCSV(
-                              transactions: exportTxs,
-                              accounts: widget.store.db.accounts,
-                            );
-                            exportCsvWithFeedback(
-                              context,
-                              csv: csvContent,
-                              defaultName: defaultName,
-                              title: 'Exportar Lançamentos de ${acc.name} (CSV)',
-                            );
-                          },
-                        ),
-                        FilledButton.tonalIcon(
-                          icon: const Icon(Icons.picture_as_pdf, size: 16),
-                          label: Text(isCard ? 'Exportar Fatura PDF' : 'Exportar Extrato PDF'),
-                          onPressed: () {
-                            final exportTxs = isCard
-                                ? widget.store.invoiceTransactions(
-                                    acc.id,
-                                    widget.store.month,
-                                  )
-                                : monthData.transactions;
-                            final pdfBytes = PdfReportGenerator.buildStatementOrInvoicePdfBytes(
-                              store: widget.store,
-                              account: acc,
-                              monthYM: widget.store.month,
-                              transactions: exportTxs,
-                              invoiceSummary: invSummary,
-                            );
-                            final defaultName = isCard
-                                ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
-                                : 'Extrato-${acc.name}-${widget.store.month}.pdf';
-                            PdfReportGenerator.saveAndOpenPdfBytes(
-                              context,
-                              pdfBytes: pdfBytes,
-                              defaultFileName: defaultName,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
                   ],
                 ),
-                if (invSummary != null) ...[
-                  const Divider(height: 20),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Wrap(
-                        spacing: 14,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Fatura ${fmtMonth(invSummary.key)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            'Vence: ${fmtDate(invSummary.dueDate)} • Fechamento: ${fmtDate(invSummary.closeDate)} • Débito: ${invSummary.payAccountName}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          Text(
-                            'Compras: ${brl(invSummary.chargesCents)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: colors.expense,
-                            ),
-                          ),
-                          if (invSummary.paymentsCents > 0)
-                            Text(
-                              'Pago: ${brl(invSummary.paymentsCents)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: colors.income,
-                              ),
-                            ),
-                          Text(
-                            'Em Aberto: ${brl(invSummary.remainingCents)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (invSummary.isFullyPaid)
-                            StatusBadge(
-                              text: 'LIQUIDADA',
-                              color: colors.income,
-                              icon: Icons.verified,
-                            ),
-                        ],
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          FilterChip(
-                            label: Text(
-                              _filterCardByInvoice
-                                  ? 'Exibindo Fatura (${invTxs.length} lanç.)'
-                                  : 'Exibindo Mês Civil (${monthData.transactions.length} lanç.)',
-                              style: const TextStyle(fontSize: 11.5),
-                            ),
-                            selected: _filterCardByInvoice,
-                            onSelected: (v) =>
-                                setState(() => _filterCardByInvoice = v),
-                          ),
-                          FilledButton.tonalIcon(
-                            icon: const Icon(Icons.payments_outlined, size: 16),
-                            label: const Text('Pagar / Adiantar Fatura'),
-                            onPressed: () => showInvoicePaymentModal(
-                              context,
-                              widget.store,
-                              cardAccount: acc,
-                              summary: invSummary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
                 if (pendingCount > 0) ...[
                   const SizedBox(height: 10),
                   InkWell(

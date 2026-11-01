@@ -60,6 +60,7 @@ class _PayeeCacheEntry {
   bool isExpense;
   int count;
   String lastDate;
+  String accId;
 
   _PayeeCacheEntry({
     required this.name,
@@ -67,6 +68,7 @@ class _PayeeCacheEntry {
     required this.isExpense,
     required this.count,
     required this.lastDate,
+    this.accId = '',
   });
 }
 
@@ -75,6 +77,24 @@ class MoneyStore extends ChangeNotifier {
   String dbPath = '';
   NavModule activeModule = NavModule.account;
   String selectedAccountId = 'a1';
+  String _lastUsedAccountId = '';
+  String get lastUsedAccountId {
+    if (_lastUsedAccountId.isNotEmpty && accById(_lastUsedAccountId)?.isInactive == false) {
+      return _lastUsedAccountId;
+    }
+    if (selectedAccountId.isNotEmpty && accById(selectedAccountId)?.isInactive == false) {
+      return selectedAccountId;
+    }
+    return activeAccounts.firstOrNull?.id ?? db.accounts.firstOrNull?.id ?? 'a1';
+  }
+
+  void setLastUsedAccount(String accId) {
+    _lastUsedAccountId = accId;
+    final cfg = _readConfig();
+    cfg['lastUsedAccountId'] = accId;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
@@ -258,6 +278,9 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['sidebarShowModules'] is bool) {
       sidebarShowModules = cfg['sidebarShowModules'] as bool;
+    }
+    if (cfg['lastUsedAccountId'] is String) {
+      _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
     }
 
     final configuredPath = (cfg['dbPath'] as String?)?.trim() ?? '';
@@ -660,6 +683,7 @@ class MoneyStore extends ChangeNotifier {
                 entry.lastDate = tx.date;
                 entry.cat = tx.cat;
                 entry.isExpense = tx.amt < 0;
+                entry.accId = tx.acc;
               }
             } else {
               payeeMap[key] = _PayeeCacheEntry(
@@ -668,6 +692,7 @@ class MoneyStore extends ChangeNotifier {
                 isExpense: tx.amt < 0,
                 count: 1,
                 lastDate: tx.date,
+                accId: tx.acc,
               );
             }
           }
@@ -1834,6 +1859,7 @@ class MoneyStore extends ChangeNotifier {
             isExpense: v.isExpense,
             count: v.count,
             lastDate: v.lastDate,
+            accountId: v.accId,
           ),
         );
       } else if (nameFolded.contains(qFolded)) {
@@ -1844,6 +1870,7 @@ class MoneyStore extends ChangeNotifier {
             isExpense: v.isExpense,
             count: v.count,
             lastDate: v.lastDate,
+            accountId: v.accId,
           ),
         );
       }
@@ -1861,13 +1888,13 @@ class MoneyStore extends ChangeNotifier {
     return combined.length > limit ? combined.sublist(0, limit) : combined;
   }
 
-  ({String category, bool isExpense})? lastCategoryAndType(String payee) {
+  ({String category, bool isExpense, String accountId})? lastCategoryAndType(String payee) {
     final cleanQ = payee.trim().toLowerCase();
     if (cleanQ.isEmpty) return null;
     rebuildIndexesIfNeeded();
     final v = _cachedPayeeSuggestions[cleanQ];
-    if (v != null && v.cat.isNotEmpty) {
-      return (category: v.cat, isExpense: v.isExpense);
+    if (v != null) {
+      return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
     }
     return null;
   }
@@ -1887,6 +1914,7 @@ class MoneyStore extends ChangeNotifier {
     String? endDate,
     String? customIk,
   }) {
+    setLastUsedAccount(accId);
     final isXfer = catSelection.startsWith('xfer:');
     final peerId = isXfer ? catSelection.substring(5) : null;
     final peerAcc = accById(peerId);

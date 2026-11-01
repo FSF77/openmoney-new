@@ -11,6 +11,7 @@ import 'modals/backups_history_modal.dart';
 import 'modals/batch_delete_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/mobile_inbox_modal.dart';
+import 'modals/transaction_modal.dart';
 import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
 import 'views/account_ledger_view.dart';
@@ -349,45 +350,24 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [colors.accent, colors.accentIndigo],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance,
-                            color: Colors.white,
-                            size: 18,
+                        Text(
+                          'OpenMoney',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: colors.textPrimary,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'OpenMoney',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                  color: colors.textPrimary,
-                                ),
-                              ),
-                              Text(
-                                widget.store.databaseDisplayName,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          widget.store.databaseDisplayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.textSecondary,
                           ),
                         ),
                       ],
@@ -482,6 +462,43 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             children: [
+              // Botão para inclusão de novos lançamentos
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 4, 2, 10),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.add_circle, size: 16),
+                    label: const Text(
+                      'Novo Lançamento',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      elevation: 1,
+                    ),
+                    onPressed: () {
+                      if (closeDrawerOnSelect) {
+                        Navigator.of(context).pop();
+                      }
+                      showTransactionCreateModal(context, widget.store);
+                    },
+                  ),
+                ),
+              ),
+
               // 1. Contas Favoritas (se houver)
               if (favAccounts.isNotEmpty) ...[
                 InkWell(
