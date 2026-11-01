@@ -2955,8 +2955,12 @@ class MoneyStore extends ChangeNotifier {
   MonthlyReportData buildMonthlyReport(
     String monthYM, {
     Set<String>? accountFilterIds,
+    bool isAnnual = false,
   }) {
-    final txs = monthTransactions(monthYM).where((tx) {
+    final rawTxs = isAnnual
+        ? db.txs.where((t) => t.date.startsWith('${monthYM.substring(0, 4)}-')).toList()
+        : monthTransactions(monthYM);
+    final txs = rawTxs.where((tx) {
       if (accountFilterIds != null &&
           accountFilterIds.isNotEmpty &&
           !accountFilterIds.contains(tx.acc)) {

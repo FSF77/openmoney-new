@@ -948,6 +948,14 @@ class CategoryGroupStat {
   });
 }
 
+enum ReportPeriodKind {
+  monthly('Mês'),
+  annual('Ano');
+
+  final String label;
+  const ReportPeriodKind(this.label);
+}
+
 class MonthlyReportData {
   final String monthYM;
   final List<CategoryGroupStat> incomeGroups;
@@ -956,6 +964,9 @@ class MonthlyReportData {
   final int totalExpense;
   final int netTotal;
   final int savingsRate;
+
+  bool get isAnnual => monthYM.length == 4;
+  String get periodTitle => isAnnual ? 'Ano $monthYM' : fmtMonth(monthYM);
 
   const MonthlyReportData({
     required this.monthYM,

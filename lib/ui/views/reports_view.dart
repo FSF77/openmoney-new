@@ -16,17 +16,30 @@ class ReportsView extends StatefulWidget {
 
 class _ReportsViewState extends State<ReportsView> {
   Set<String> _selectedAccountIds = {};
+  ReportPeriodKind _periodKind = ReportPeriodKind.monthly;
+  late int _selectedYear;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedYear = int.tryParse(widget.store.month.split('-')[0]) ?? DateTime.now().year;
+  }
 
   void _showCategoryDrillDown(
     BuildContext context,
     String categoryPath,
-    String monthYM,
+    String periodKey,
+    bool isAnnual,
   ) {
     showCategoryDrillDownModal(
       context,
       widget.store,
       categoryPath,
-      initialCurrentMonthOnly: true,
+      initialCurrentMonthOnly: !isAnnual,
+      targetMonth: isAnnual ? null : periodKey,
+      titleOverride: isAnnual ? '$categoryPath · Ano $_selectedYear' : null,
+      accountFilterIds:
+          _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
     );
   }
 
@@ -34,10 +47,13 @@ class _ReportsViewState extends State<ReportsView> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
+    final isAnnual = _periodKind == ReportPeriodKind.annual;
+    final periodKey = isAnnual ? '$_selectedYear' : widget.store.month;
     final data = widget.store.buildMonthlyReport(
-      widget.store.month,
+      periodKey,
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
+      isAnnual: isAnnual,
     );
 
     return ListView(
@@ -60,7 +76,9 @@ class _ReportsViewState extends State<ReportsView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Relatório Analítico Mensal',
+                        isAnnual
+                            ? 'Relatório Anual'
+                            : 'Relatório',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -82,31 +100,77 @@ class _ReportsViewState extends State<ReportsView> {
                 spacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  SegmentedButton<ReportPeriodKind>(
+                    segments: const [
+                      ButtonSegment(
+                          value: ReportPeriodKind.monthly,
+                          label: Text('Mês')),
+                      ButtonSegment(
+                          value: ReportPeriodKind.annual,
+                          label: Text('Ano')),
+                    ],
+                    selected: {_periodKind},
+                    onSelectionChanged: (s) =>
+                        setState(() => _periodKind = s.first),
+                  ),
                   AccountMultiSelectFilter(
                     store: widget.store,
                     selectedAccountIds: _selectedAccountIds,
                     onSelectionChanged: (set) =>
                         setState(() => _selectedAccountIds = set),
                   ),
-                  MonthYearPickerBar(
-                    currentMonthYM: widget.store.month,
-                    availableYears: widget.store.allYearsInDatabase(),
-                    onMonthChanged: (ym) => widget.store.month = ym,
-                  ),
+                  if (!isAnnual)
+                    MonthYearPickerBar(
+                      currentMonthYM: widget.store.month,
+                      availableYears: widget.store.allYearsInDatabase(),
+                      onMonthChanged: (ym) => widget.store.month = ym,
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left),
+                          tooltip: 'Ano anterior',
+                          onPressed: () => setState(() => _selectedYear--),
+                        ),
+                        Text(
+                          '$_selectedYear',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right),
+                          tooltip: 'Próximo ano',
+                          onPressed: () => setState(() => _selectedYear++),
+                        ),
+                        const SizedBox(width: 4),
+                        OutlinedButton(
+                          onPressed: () => setState(
+                              () => _selectedYear = DateTime.now().year),
+                          child: const Text('Ano Atual'),
+                        ),
+                      ],
+                    ),
                   FilledButton.icon(
                     icon: const Icon(Icons.picture_as_pdf, size: 16),
-                    label: const Text('Exportar PDF A4'),
+                    label: Text(
+                        isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4'),
                     onPressed: () {
                       final pdfBytes =
                           PdfReportGenerator.buildMonthlyReportPdfBytes(
                         store: widget.store,
-                        monthYM: widget.store.month,
+                        monthYM: periodKey,
                         data: data,
                       );
                       PdfReportGenerator.saveAndOpenPdfBytes(
                         context,
                         pdfBytes: pdfBytes,
-                        defaultFileName: 'Relatorio-${widget.store.month}.pdf',
+                        defaultFileName: isAnnual
+                            ? 'Relatorio-Ano-$_selectedYear.pdf'
+                            : 'Relatorio-${widget.store.month}.pdf',
                       );
                     },
                   ),
@@ -130,7 +194,7 @@ class _ReportsViewState extends State<ReportsView> {
                 SizedBox(
                   width: cardWidth,
                   child: KpiMetricCard(
-                    label: 'Receitas do Mês',
+                    label: isAnnual ? 'Receitas do Ano' : 'Receitas do Mês',
                     value: brl(data.totalIncome),
                     valueColor: colors.income,
                     icon: Icons.trending_up,
@@ -139,7 +203,7 @@ class _ReportsViewState extends State<ReportsView> {
                 SizedBox(
                   width: cardWidth,
                   child: KpiMetricCard(
-                    label: 'Despesas do Mês',
+                    label: isAnnual ? 'Despesas do Ano' : 'Despesas do Mês',
                     value: brl(data.totalExpense),
                     valueColor: colors.expense,
                     icon: Icons.trending_down,
@@ -148,7 +212,7 @@ class _ReportsViewState extends State<ReportsView> {
                 SizedBox(
                   width: cardWidth,
                   child: KpiMetricCard(
-                    label: 'Resultado Líquido',
+                    label: isAnnual ? 'Saldo do Ano' : 'Resultado Líquido',
                     value: brl(data.netTotal),
                     valueColor:
                         data.netTotal >= 0 ? colors.income : colors.expense,
@@ -160,7 +224,7 @@ class _ReportsViewState extends State<ReportsView> {
                   child: KpiMetricCard(
                     label: 'Taxa de Poupança',
                     value: '${data.savingsRate}%',
-                    subtitle: 'Renda poupada no mês',
+                    subtitle: isAnnual ? 'Renda poupada no ano' : 'Renda poupada no mês',
                     valueColor: colors.accent,
                     icon: Icons.savings_outlined,
                   ),
@@ -189,6 +253,8 @@ class _ReportsViewState extends State<ReportsView> {
                     grandTotal: data.totalIncome,
                     barColor: colors.income,
                     colors: colors,
+                    periodKey: periodKey,
+                    isAnnual: isAnnual,
                   ),
                 ),
                 SizedBox(
@@ -200,6 +266,8 @@ class _ReportsViewState extends State<ReportsView> {
                     grandTotal: data.totalExpense,
                     barColor: colors.expense,
                     colors: colors,
+                    periodKey: periodKey,
+                    isAnnual: isAnnual,
                   ),
                 ),
               ],
@@ -217,6 +285,8 @@ class _ReportsViewState extends State<ReportsView> {
     required int grandTotal,
     required Color barColor,
     required OpenMoneyColors colors,
+    required String periodKey,
+    required bool isAnnual,
   }) {
     return GlassCard(
       child: Column(
@@ -265,7 +335,7 @@ class _ReportsViewState extends State<ReportsView> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => _showCategoryDrillDown(
-                          context, g.name, widget.store.month),
+                          context, g.name, periodKey, isAnnual),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Column(
@@ -335,7 +405,8 @@ class _ReportsViewState extends State<ReportsView> {
                           onTap: () => _showCategoryDrillDown(
                             context,
                             fullPath,
-                            widget.store.month,
+                            periodKey,
+                            isAnnual,
                           ),
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),

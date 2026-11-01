@@ -281,8 +281,12 @@ class PdfReportGenerator {
       g: 0.52,
       b: 0.78,
     );
+    final isAnnual = data.isAnnual || monthYM.length == 4;
+    final reportTitle = isAnnual
+        ? 'Relatório Analítico Anual — Ano $monthYM'
+        : 'Relatório Analítico Mensal — ${fmtMonth(monthYM)}';
     doc.drawText(
-      'Relatório Analítico Mensal — ${fmtMonth(monthYM)}',
+      reportTitle,
       margin,
       52,
       fontSize: 11,
@@ -359,8 +363,8 @@ class PdfReportGenerator {
       );
     }
 
-    drawKpi(0, 'Receitas do Mês', brl(data.totalIncome), 0.02, 0.59, 0.40);
-    drawKpi(1, 'Despesas do Mês', brl(data.totalExpense), 0.88, 0.11, 0.28);
+    drawKpi(0, isAnnual ? 'Receitas do Ano' : 'Receitas do Mês', brl(data.totalIncome), 0.02, 0.59, 0.40);
+    drawKpi(1, isAnnual ? 'Despesas do Ano' : 'Despesas do Mês', brl(data.totalExpense), 0.88, 0.11, 0.28);
     drawKpi(
       2,
       'Resultado Líquido',

@@ -231,7 +231,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                         NavigationDestination(
                           icon: Icon(Icons.pie_chart_outline),
-                          label: 'Relatórios',
+                          label: 'Relatório',
                         ),
                         NavigationDestination(
                           icon: Icon(Icons.search),
@@ -761,7 +761,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.pie_chart_outline,
-                  label: 'Relatórios Mensais',
+                  label: 'Relatório',
                   selected: widget.store.activeModule == NavModule.reports,
                   onTap: () => selectModule(NavModule.reports),
                 ),

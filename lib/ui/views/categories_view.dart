@@ -187,7 +187,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                   const SizedBox(height: 10),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Incluir nos Relatórios Mensais'),
+                    title: const Text('Incluir nos Relatórios'),
                     value: includeInReports,
                     onChanged: (v) =>
                         setModalState(() => includeInReports = v),
