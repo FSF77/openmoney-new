@@ -7,6 +7,7 @@ import '../services/audit_log_manager.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
 import '../services/importers_exporters.dart';
+import '../services/native_file_picker.dart';
 
 enum NavModule {
   account,
@@ -100,6 +101,8 @@ class MoneyStore extends ChangeNotifier {
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
   double fontScale = 1.0;
   bool isSidebarVisible = true;
+  bool isGeminiAiEnabled = false;
+  String geminiApiKey = '';
   bool sidebarShowFavorites = true;
   bool sidebarShowActiveAccounts = true;
   bool sidebarShowInactiveAccounts = false;
@@ -180,6 +183,9 @@ class MoneyStore extends ChangeNotifier {
     } else if (Platform.isMacOS) {
       final home = Platform.environment['HOME'] ?? '.';
       baseDir = '$home/Library/Application Support';
+    } else if (Platform.isIOS) {
+      final home = Platform.environment['HOME'] ?? '.';
+      baseDir = '$home/Documents';
     } else {
       final home = Platform.environment['HOME'] ?? '.';
       baseDir = '$home/.local/share';
@@ -265,6 +271,12 @@ class MoneyStore extends ChangeNotifier {
         fontScale = s;
       }
     }
+    if (cfg['isGeminiAiEnabled'] is bool) {
+      isGeminiAiEnabled = cfg['isGeminiAiEnabled'] as bool;
+    }
+    if (cfg['geminiApiKey'] is String) {
+      geminiApiKey = cfg['geminiApiKey'] as String;
+    }
     if (cfg['isSidebarVisible'] is bool) {
       isSidebarVisible = cfg['isSidebarVisible'] as bool;
     }
@@ -285,6 +297,21 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
+    }
+
+    if (Platform.isIOS && cfg['bookmarkData'] is String) {
+      final b64 = cfg['bookmarkData'] as String;
+      NativeFilePicker.resolveIosBookmark(b64).then((res) {
+        if (res != null) {
+          if (res.path.isNotEmpty && res.path != cfg['dbPath']) {
+            cfg['dbPath'] = res.path;
+          }
+          if (res.bookmark != null && res.bookmark!.isNotEmpty) {
+            cfg['bookmarkData'] = res.bookmark;
+          }
+          _writeConfig(cfg);
+        }
+      });
     }
 
     final configuredPath = (cfg['dbPath'] as String?)?.trim() ?? '';
@@ -384,6 +411,16 @@ class MoneyStore extends ChangeNotifier {
 
   void resetZoom() {
     setFontScale(1.0);
+  }
+
+  void setGeminiConfig({required bool enabled, required String apiKey}) {
+    isGeminiAiEnabled = enabled;
+    geminiApiKey = apiKey.trim();
+    final cfg = _readConfig();
+    cfg['isGeminiAiEnabled'] = isGeminiAiEnabled;
+    cfg['geminiApiKey'] = geminiApiKey;
+    _writeConfig(cfg);
+    notifyListeners();
   }
 
   void toggleSidebar() {
@@ -490,7 +527,7 @@ class MoneyStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  bool openDatabaseFromPath(String path) {
+  bool openDatabaseFromPath(String path, {String? bookmarkData}) {
     if (kIsWeb || path.isEmpty) return false;
     try {
       final f = File(path);
@@ -515,6 +552,9 @@ class MoneyStore extends ChangeNotifier {
 
       final cfg = _readConfig();
       cfg['dbPath'] = path;
+      if (bookmarkData != null && bookmarkData.isNotEmpty) {
+        cfg['bookmarkData'] = bookmarkData;
+      }
       _writeConfig(cfg);
 
       save(immediate: true);
@@ -546,7 +586,7 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void createNewDatabaseAtPath(String path) {
+  void createNewDatabaseAtPath(String path, {String? bookmarkData}) {
     db = Database(
       accounts: [
         Account(id: 'a1', name: 'Conta Corrente', type: 'Corrente', opening: 0),
@@ -555,11 +595,14 @@ class MoneyStore extends ChangeNotifier {
       txs: [],
       recs: [],
       budgets: {},
-      v: 6,
+      v: 7,
     );
     dbPath = path;
     final cfg = _readConfig();
     cfg['dbPath'] = path;
+    if (bookmarkData != null && bookmarkData.isNotEmpty) {
+      cfg['bookmarkData'] = bookmarkData;
+    }
     _writeConfig(cfg);
     rebuildIndexes();
     selectedAccountId = 'a1';
@@ -1907,6 +1950,19 @@ class MoneyStore extends ChangeNotifier {
     final v = _cachedPayeeSuggestions[cleanQ];
     if (v != null) {
       return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
+    }
+
+    // Fuzzy match por palavras com 4+ letras
+    final searchWords = cleanQ.split(' ').where((w) => w.length >= 4).toList();
+    for (final entry in _cachedPayeeSuggestions.entries) {
+      final key = entry.key;
+      if (cleanQ.contains(key) || key.contains(cleanQ)) {
+        return (category: entry.value.cat, isExpense: entry.value.isExpense, accountId: entry.value.accId);
+      }
+      final keyWords = key.split(' ').where((w) => w.length >= 4).toList();
+      if (searchWords.any((w) => keyWords.contains(w))) {
+        return (category: entry.value.cat, isExpense: entry.value.isExpense, accountId: entry.value.accId);
+      }
     }
     return null;
   }

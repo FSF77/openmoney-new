@@ -13,6 +13,7 @@ import 'modals/batch_delete_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/help_modal.dart';
 import 'modals/mobile_inbox_modal.dart';
+import 'modals/receipt_ocr_import_modal.dart';
 import 'modals/transaction_modal.dart';
 import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
@@ -894,6 +895,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Logs de Alterações',
                   selected: false,
                   onTap: () => showAuditLogsModal(context, widget.store),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.document_scanner_outlined,
+                  label: 'Importar Comprovantes (OCR)',
+                  selected: false,
+                  onTap: () => showReceiptOcrImportModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.phone_iphone,

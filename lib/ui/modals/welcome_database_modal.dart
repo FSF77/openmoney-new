@@ -26,13 +26,16 @@ class _WelcomeDatabaseSelectionScreenState
     });
 
     try {
-      final selectedPath = await NativeFilePicker.pickFile(
+      final res = await NativeFilePicker.pickFileWithMetadata(
         title: 'Selecione sua base de dados OpenMoney (.json)',
         allowedExtensions: ['json'],
       );
 
-      if (selectedPath != null && selectedPath.isNotEmpty) {
-        final success = widget.store.openDatabaseFromPath(selectedPath);
+      if (res != null && res.path.isNotEmpty) {
+        final success = widget.store.openDatabaseFromPath(
+          res.path,
+          bookmarkData: res.bookmark,
+        );
         if (!success) {
           setState(() {
             _errorMessage =
@@ -58,13 +61,16 @@ class _WelcomeDatabaseSelectionScreenState
     });
 
     try {
-      final savePath = await NativeFilePicker.saveFile(
+      final res = await NativeFilePicker.saveFileWithMetadata(
         title: 'Escolha onde salvar sua nova base de dados',
         defaultName: 'openmoney.json',
       );
 
-      if (savePath != null && savePath.isNotEmpty) {
-        widget.store.createNewDatabaseAtPath(savePath);
+      if (res != null && res.path.isNotEmpty) {
+        widget.store.createNewDatabaseAtPath(
+          res.path,
+          bookmarkData: res.bookmark,
+        );
       }
     } catch (e) {
       setState(() {

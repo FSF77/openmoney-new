@@ -1,6 +1,17 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
+
+class NativeFilePickerResult {
+  final String path;
+  final String? bookmark;
+
+  const NativeFilePickerResult({required this.path, this.bookmark});
+}
 
 class NativeFilePicker {
+  static const MethodChannel _iosChannel =
+      MethodChannel('openmoney/native_file_picker');
+
   static String _normalizeMacPosixPath(String raw) {
     var p = raw.trim();
     if (p.isEmpty) return '';
@@ -31,11 +42,6 @@ class NativeFilePicker {
   }
 
   /// Converte extensões comuns em tipos e UTIs reconhecidos pelo macOS.
-  /// No macOS, o parâmetro `of type` do AppleScript espera UTIs (ex: 'public.json')
-  /// ou códigos OSType clássicos de 4 caracteres. Se passar 'json', o sistema trata
-  /// como OSType 'json' inexistente, deixando arquivos .json desabilitados (cinza claro)
-  /// e exigindo duplo-clique. Ao usar 'public.json', os arquivos .json são habilitados
-  /// com texto preto e selecionados com 1 clique único imediato.
   static List<String> _resolveMacTypes(List<String> allowedExtensions) {
     final types = <String>{};
     for (final raw in allowedExtensions) {
@@ -80,8 +86,35 @@ class NativeFilePicker {
     String title = 'Escolher Arquivo',
     List<String> allowedExtensions = const ['json'],
   }) async {
+    final res = await pickFileWithMetadata(
+      title: title,
+      allowedExtensions: allowedExtensions,
+    );
+    return res?.path;
+  }
+
+  /// Abre seletor com suporte a metadata (como bookmark de segurança no iOS/iPadOS)
+  static Future<NativeFilePickerResult?> pickFileWithMetadata({
+    String title = 'Escolher Arquivo',
+    List<String> allowedExtensions = const ['json'],
+  }) async {
     try {
-      if (Platform.isMacOS) {
+      if (Platform.isIOS) {
+        final res = await _iosChannel.invokeMethod<Map>('pickFile', {
+          'title': title,
+          'allowedExtensions': allowedExtensions,
+        });
+        if (res != null && res['path'] is String) {
+          final p = (res['path'] as String).trim();
+          if (p.isNotEmpty) {
+            return NativeFilePickerResult(
+              path: p,
+              bookmark: res['bookmark'] as String?,
+            );
+          }
+        }
+        return null;
+      } else if (Platform.isMacOS) {
         final macTypes = _resolveMacTypes(allowedExtensions);
         final ofTypeClause = macTypes.isNotEmpty
             ? ' of type {${macTypes.map((t) => '"${_escapeAppleScript(t)}"').join(', ')}}'
@@ -92,7 +125,9 @@ class NativeFilePicker {
         final res = await Process.run('osascript', ['-e', script]);
         if (res.exitCode == 0) {
           final posixPath = _normalizeMacPosixPath(res.stdout.toString());
-          if (posixPath.isNotEmpty) return posixPath;
+          if (posixPath.isNotEmpty) {
+            return NativeFilePickerResult(path: posixPath);
+          }
         }
       } else if (Platform.isWindows) {
         final filter = allowedExtensions
@@ -114,7 +149,9 @@ class NativeFilePicker {
         ]);
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
-          if (out.isNotEmpty) return out;
+          if (out.isNotEmpty) {
+            return NativeFilePickerResult(path: out);
+          }
         }
       }
     } catch (_) {}
@@ -127,8 +164,38 @@ class NativeFilePicker {
     String defaultName = 'openmoney.json',
     List<String> allowedExtensions = const ['json'],
   }) async {
+    final res = await saveFileWithMetadata(
+      title: title,
+      defaultName: defaultName,
+      allowedExtensions: allowedExtensions,
+    );
+    return res?.path;
+  }
+
+  /// Abre salvamento com suporte a metadata (como bookmark de segurança no iOS/iPadOS)
+  static Future<NativeFilePickerResult?> saveFileWithMetadata({
+    String title = 'Salvar Arquivo',
+    String defaultName = 'openmoney.json',
+    List<String> allowedExtensions = const ['json'],
+  }) async {
     try {
-      if (Platform.isMacOS) {
+      if (Platform.isIOS) {
+        final res = await _iosChannel.invokeMethod<Map>('saveFile', {
+          'title': title,
+          'defaultName': defaultName,
+          'allowedExtensions': allowedExtensions,
+        });
+        if (res != null && res['path'] is String) {
+          final p = (res['path'] as String).trim();
+          if (p.isNotEmpty) {
+            return NativeFilePickerResult(
+              path: p,
+              bookmark: res['bookmark'] as String?,
+            );
+          }
+        }
+        return null;
+      } else if (Platform.isMacOS) {
         final escapedTitle = _escapeAppleScript(title);
         final escapedDefault = _escapeAppleScript(defaultName);
         final script =
@@ -149,7 +216,7 @@ class NativeFilePicker {
             if (!hasAllowedExt) {
               posixPath += '.$expectedExt';
             }
-            return posixPath;
+            return NativeFilePickerResult(path: posixPath);
           }
         }
       } else if (Platform.isWindows) {
@@ -174,10 +241,78 @@ class NativeFilePicker {
         ]);
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
+          if (out.isNotEmpty) {
+            return NativeFilePickerResult(path: out);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Abre janela nativa do sistema para escolher uma pasta (diretório)
+  static Future<String?> pickFolder({
+    String title = 'Selecionar Pasta de Comprovantes',
+  }) async {
+    try {
+      if (Platform.isMacOS) {
+        final escapedTitle = _escapeAppleScript(title);
+        final script =
+            'activate\nPOSIX path of (choose folder with prompt "$escapedTitle")';
+        final res = await Process.run('osascript', ['-e', script]);
+        if (res.exitCode == 0) {
+          final posixPath = _normalizeMacPosixPath(res.stdout.toString());
+          if (posixPath.isNotEmpty) return posixPath;
+        }
+      } else if (Platform.isWindows) {
+        final escapedTitle = _escapePowerShellString(title);
+        final powershellCmd =
+            'Add-Type -AssemblyName System.Windows.Forms; '
+            '\$dlg = New-Object System.Windows.Forms.FolderBrowserDialog; '
+            '\$dlg.Description = "$escapedTitle"; '
+            '\$dlg.ShowNewFolderButton = \$false; '
+            'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.SelectedPath }';
+        final res = await Process.run('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Sta',
+          '-Command',
+          powershellCmd,
+        ]);
+        if (res.exitCode == 0) {
+          final out = res.stdout.toString().trim();
           if (out.isNotEmpty) return out;
         }
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Restaura acesso a um arquivo via Security-Scoped Bookmark no iOS
+  static Future<NativeFilePickerResult?> resolveIosBookmark(String bookmarkB64) async {
+    if (!Platform.isIOS || bookmarkB64.isEmpty) return null;
+    try {
+      final res = await _iosChannel.invokeMethod<Map>('resolveBookmark', {
+        'bookmark': bookmarkB64,
+      });
+      if (res != null && res['path'] is String) {
+        final p = (res['path'] as String).trim();
+        if (p.isNotEmpty) {
+          return NativeFilePickerResult(
+            path: p,
+            bookmark: res['bookmark'] as String?,
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Garante acesso security-scoped no iOS a partir do caminho se necessário
+  static Future<void> startAccessingPath(String path) async {
+    if (!Platform.isIOS || path.isEmpty) return;
+    try {
+      await _iosChannel.invokeMethod('startAccessingPath', {'path': path});
+    } catch (_) {}
   }
 }
