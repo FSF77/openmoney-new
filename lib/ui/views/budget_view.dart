@@ -18,7 +18,7 @@ class BudgetView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Meta Mensal — $categoryPath'),
+        title: Text('Limite de Gastos — $categoryPath'),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -40,7 +40,7 @@ class BudgetView extends StatelessWidget {
               store.setBudget(categoryPath, cents);
               Navigator.pop(ctx);
             },
-            child: const Text('Salvar Meta'),
+            child: const Text('Salvar Limite'),
           ),
         ],
       ),
@@ -89,7 +89,7 @@ class BudgetView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Planejamento Financeiro: Orçamento Mensal (Budget)',
+                        'Planejamento Financeiro: Limite de Gastos',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -165,7 +165,7 @@ class BudgetView extends StatelessWidget {
                             if (isOver) ...[
                               const SizedBox(width: 8),
                               StatusBadge(
-                                text: 'ACIMA DA META',
+                                text: 'ACIMA DO LIMITE',
                                 color: colors.expense,
                               ),
                             ],
@@ -173,7 +173,7 @@ class BudgetView extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Realizado: ${brl(effectiveTopSpent)} / Meta: ${brl(effectiveTopBudget)}',
+                        'Realizado: ${brl(effectiveTopSpent)} / Limite: ${brl(effectiveTopBudget)}',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
@@ -220,7 +220,7 @@ class BudgetView extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir meta"}',
+                              '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -248,11 +248,11 @@ class BudgetView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Consolidado do Mês (Total Planejado vs. Realizado)',
+                'Consolidado do Mês (Limite Total vs. Realizado)',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
               ),
               Text(
-                'Realizado: ${brl(totalSpent)} • Planejado: ${brl(totalPlanned)}',
+                'Realizado: ${brl(totalSpent)} • Limite: ${brl(totalPlanned)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,

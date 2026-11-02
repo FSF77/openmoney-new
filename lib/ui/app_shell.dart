@@ -11,6 +11,7 @@ import 'modals/audit_logs_modal.dart';
 import 'modals/backups_history_modal.dart';
 import 'modals/batch_delete_modal.dart';
 import 'modals/csv_qif_modal.dart';
+import 'modals/help_modal.dart';
 import 'modals/mobile_inbox_modal.dart';
 import 'modals/transaction_modal.dart';
 import 'modals/welcome_database_modal.dart';
@@ -143,6 +144,16 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             },
             const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
               widget.store.toggleSidebar();
+            },
+            // Ajuda e Manual do OpenMoney
+            const SingleActivator(LogicalKeyboardKey.f1): () {
+              showHelpModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.slash, meta: true, shift: true): () {
+              showHelpModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.slash, control: true, shift: true): () {
+              showHelpModal(context, widget.store);
             },
           },
           child: Focus(
@@ -448,6 +459,15 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         onPressed: () => UpdateService.showUpdateDialog(
                           context,
                           manual: true,
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Ajuda e Manual do OpenMoney (F1)',
+                        icon: const Icon(Icons.help_outline, size: 18),
+                        onPressed: () => showHelpModal(
+                          context,
+                          widget.store,
                         ),
                       ),
                       IconButton(
@@ -830,7 +850,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.track_changes,
-                  label: 'Orçamento (Budget)',
+                  label: 'Limite de Gastos',
                   selected: widget.store.activeModule == NavModule.budget,
                   onTap: () => selectModule(NavModule.budget),
                 ),
@@ -919,6 +939,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     context,
                     manual: true,
                   ),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.help_outline,
+                  label: 'Ajuda e Manual (README.md)',
+                  selected: false,
+                  onTap: () => showHelpModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.info_outline,

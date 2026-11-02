@@ -435,7 +435,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                                   text: '$topCount lanç.',
                                   color: colors.accent,
                                 ),
-                                if (!top.effectiveIncludeInReports) ...[
+                                if (!widget.store.isCategoryIncludedInReports(top.path)) ...[
                                   const SizedBox(width: 6),
                                   StatusBadge(
                                     text: 'OCULTA DE RELATÓRIOS',
@@ -511,6 +511,13 @@ class _CategoriesViewState extends State<CategoriesView> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
+                                      if (!widget.store.isCategoryIncludedInReports(sub.path)) ...[
+                                        const SizedBox(width: 6),
+                                        StatusBadge(
+                                          text: 'OCULTA DE RELATÓRIOS',
+                                          color: colors.textMuted,
+                                        ),
+                                      ],
                                       const SizedBox(width: 4),
                                       Icon(
                                         Icons.open_in_new,

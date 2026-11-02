@@ -2,7 +2,7 @@ name: openmoney
 description: "OpenMoney - Gestão Financeira Pessoal Multiplataforma (macOS, Windows, iOS, iPadOS)."
 publish_to: 'none'
 
-version: 2.2.2+50
+version: 2.2.2+51
 
 environment:
   sdk: ^3.13.7
@@ -47,6 +47,7 @@ flutter:
 
   assets:
     - logo/
+    - README.md
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
