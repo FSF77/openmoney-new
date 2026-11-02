@@ -124,28 +124,52 @@ function renderApp() {
 
     const activeAccs = structure.accounts.filter(a => !a.inactive);
     let totalConsolidated = 0;
-    let modalHtml = '';
+    const activeAccsWithBalance = [];
 
     for (const a of activeAccs) {
-      const liveBalance = a.balance + (pendingByAcc[a.id] || 0);
-      const isNeg = liveBalance < 0;
+      const liveBalance = (a.balance || 0) + (pendingByAcc[a.id] || 0);
       totalConsolidated += liveBalance;
+      activeAccsWithBalance.push({
+        ...a,
+        liveBalance
+      });
+    }
 
-      modalHtml += `
-        <div class="account-row-card" data-acc-id="${a.id}">
-          <div class="account-row-info">
-            <div class="account-row-name">${a.favorite ? '★ ' : ''}${a.name}</div>
-            <div class="account-row-type">${a.type || 'Conta'}</div>
-          </div>
-          <div class="account-row-balance ${isNeg ? 'text-negative' : 'text-positive'}">
-            ${formatCurrency(liveBalance, false, false)}
-          </div>
+    // Ordenação igual ao app: Favoritas primeiro, depois Ativas.
+    // Ocultar contas inativas ou com saldo 0,00.
+    const visibleAccs = activeAccsWithBalance
+      .filter(a => a.liveBalance !== 0)
+      .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
+
+    let modalHtml = '';
+
+    if (visibleAccs.length === 0) {
+      modalHtml = `
+        <div style="font-size:0.85rem;color:var(--text-muted);padding:28px 16px;text-align:center;">
+          Nenhuma conta ativa com saldo no momento.
         </div>
       `;
+    } else {
+      for (const a of visibleAccs) {
+        const isNeg = a.liveBalance < 0;
+
+        modalHtml += `
+          <div class="account-row-card" data-acc-id="${a.id}">
+            <div class="account-row-info">
+              <div class="account-row-name">${a.favorite ? '★ ' : ''}${a.name}</div>
+              <div class="account-row-type">${a.type || 'Conta'}</div>
+            </div>
+            <div class="account-row-balance ${isNeg ? 'text-negative' : 'text-positive'}">
+              ${formatCurrency(a.liveBalance, false, false)}
+            </div>
+          </div>
+        `;
+      }
     }
 
     if (accountsSummaryCount) {
-      accountsSummaryCount.textContent = `${activeAccs.length} contas cadastradas · Toque para ver saldos`;
+      const count = visibleAccs.length;
+      accountsSummaryCount.textContent = `${count} ${count === 1 ? 'conta com saldo' : 'contas com saldo'} · Toque para ver`;
     }
 
     if (accountsTotalBalance) {
@@ -356,10 +380,13 @@ function openTransactionForm(preset = null) {
 
   if (dropdown) dropdown.classList.remove('show');
 
-  // Fill accounts dropdown
+  // Fill accounts dropdown (Favorites first, then other Actives)
   let accOpts = '';
-  for (const a of structure.accounts.filter(acc => !acc.inactive)) {
-    accOpts += `<option value="${a.id}">${a.name} (${a.type})</option>`;
+  const formAccs = structure.accounts
+    .filter(acc => !acc.inactive)
+    .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
+  for (const a of formAccs) {
+    accOpts += `<option value="${a.id}">${a.favorite ? '★ ' : ''}${a.name} (${a.type})</option>`;
   }
   accSelect.innerHTML = accOpts;
 
