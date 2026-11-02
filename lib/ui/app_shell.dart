@@ -5,6 +5,7 @@ import '../services/bank_logo_registry.dart';
 import '../services/native_file_picker.dart';
 import '../services/update_service.dart';
 import '../store/money_store.dart';
+import 'modals/about_modal.dart';
 import 'modals/account_modal.dart';
 import 'modals/audit_logs_modal.dart';
 import 'modals/backups_history_modal.dart';
@@ -918,6 +919,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     context,
                     manual: true,
                   ),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.info_outline,
+                  label: 'Sobre o OpenMoney',
+                  selected: false,
+                  onTap: () => showAboutOpenMoneyModal(context, colors),
                 ),
               ],
             ],

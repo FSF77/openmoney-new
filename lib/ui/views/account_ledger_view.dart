@@ -682,7 +682,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                           ),
                           child: Text(
-                            _isExpense ? '− Débito' : '+ Crédito',
+                            _isExpense ? '− Despesa' : '+ Receita',
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
@@ -883,8 +883,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                         ),
                       FilledButton.icon(
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Lançar'),
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('Salvar'),
                         onPressed: _submitQuickEntry,
                       ),
                     ],

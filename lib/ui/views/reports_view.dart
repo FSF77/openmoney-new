@@ -37,6 +37,8 @@ class _ReportsViewState extends State<ReportsView> {
       categoryPath,
       initialCurrentMonthOnly: !isAnnual,
       targetMonth: isAnnual ? null : periodKey,
+      targetYear: _selectedYear,
+      isAnnual: isAnnual,
       titleOverride: isAnnual ? '$categoryPath · Ano $_selectedYear' : null,
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,

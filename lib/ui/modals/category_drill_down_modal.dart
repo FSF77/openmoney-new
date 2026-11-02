@@ -9,12 +9,16 @@ import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'transaction_modal.dart';
 
+enum CategoryDrillDownScope { all, year, month }
+
 Future<void> showCategoryDrillDownModal(
   BuildContext context,
   MoneyStore store,
   String? categoryPath, {
   bool initialCurrentMonthOnly = false,
   String? targetMonth,
+  int? targetYear,
+  bool isAnnual = false,
   String? categoryTypeFilter,
   String? titleOverride,
   Set<String>? accountFilterIds,
@@ -27,6 +31,8 @@ Future<void> showCategoryDrillDownModal(
       categoryPath: categoryPath,
       initialCurrentMonthOnly: initialCurrentMonthOnly,
       targetMonth: targetMonth,
+      targetYear: targetYear,
+      isAnnual: isAnnual,
       categoryTypeFilter: categoryTypeFilter,
       titleOverride: titleOverride,
       accountFilterIds: accountFilterIds,
@@ -40,6 +46,8 @@ class _CategoryDrillDownDialog extends StatefulWidget {
   final String? categoryPath;
   final bool initialCurrentMonthOnly;
   final String? targetMonth;
+  final int? targetYear;
+  final bool isAnnual;
   final String? categoryTypeFilter;
   final String? titleOverride;
   final Set<String>? accountFilterIds;
@@ -50,6 +58,8 @@ class _CategoryDrillDownDialog extends StatefulWidget {
     this.categoryPath,
     required this.initialCurrentMonthOnly,
     this.targetMonth,
+    this.targetYear,
+    this.isAnnual = false,
     this.categoryTypeFilter,
     this.titleOverride,
     this.accountFilterIds,
@@ -62,7 +72,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
 }
 
 class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
-  late bool _filterCurrentMonthOnly;
+  late CategoryDrillDownScope _scope;
   String _searchQuery = '';
   String _sortField = 'date'; // 'date', 'payee', 'amount'
   bool _sortAsc = false;
@@ -70,10 +80,21 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   @override
   void initState() {
     super.initState();
-    _filterCurrentMonthOnly = widget.initialCurrentMonthOnly;
+    if (widget.isAnnual) {
+      _scope = CategoryDrillDownScope.year;
+    } else if (widget.initialCurrentMonthOnly) {
+      _scope = CategoryDrillDownScope.month;
+    } else {
+      _scope = CategoryDrillDownScope.all;
+    }
   }
 
   List<Transaction> _buildFilteredTransactions() {
+    final effectiveYear = (widget.targetYear ??
+            int.tryParse(widget.targetMonth?.split('-')[0] ?? '') ??
+            int.tryParse(widget.store.month.split('-')[0]) ??
+            DateTime.now().year)
+        .toString();
     final monthYM = widget.targetMonth ?? widget.store.month;
     final catPath = widget.categoryPath;
     final hasCat = catPath != null && catPath.isNotEmpty;
@@ -101,7 +122,15 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
         if (widget.categoryTypeFilter == 'Despesa' && isInc) return false;
       }
 
-      if (_filterCurrentMonthOnly) {
+      if (_scope == CategoryDrillDownScope.year) {
+        final effDate = widget.dateMode != null
+            ? effectiveDateForTransaction(
+                t, widget.store.db.accounts, widget.dateMode!)
+            : t.date;
+        if (!effDate.startsWith(effectiveYear)) {
+          return false;
+        }
+      } else if (_scope == CategoryDrillDownScope.month) {
         final effDate = widget.dateMode != null
             ? effectiveDateForTransaction(
                 t, widget.store.db.accounts, widget.dateMode!)
@@ -208,10 +237,52 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
     }
   }
 
+  Widget _buildScopeButton({
+    required String label,
+    required CategoryDrillDownScope scope,
+    required OpenMoneyColors colors,
+    bool isFirst = false,
+    bool isLast = false,
+  }) {
+    final isSelected = (_scope == scope);
+    return InkWell(
+      borderRadius: BorderRadius.horizontal(
+        left: isFirst ? const Radius.circular(7) : Radius.zero,
+        right: isLast ? const Radius.circular(7) : Radius.zero,
+      ),
+      onTap: () => setState(() => _scope = scope),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colors.accent.withValues(alpha: 0.2)
+              : Colors.transparent,
+          borderRadius: BorderRadius.horizontal(
+            left: isFirst ? const Radius.circular(7) : Radius.zero,
+            right: isLast ? const Radius.circular(7) : Radius.zero,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+            color: isSelected ? colors.accent : colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
+    final effectiveYear = (widget.targetYear ??
+            int.tryParse(widget.targetMonth?.split('-')[0] ?? '') ??
+            int.tryParse(widget.store.month.split('-')[0]) ??
+            DateTime.now().year)
+        .toString();
     final monthYM = widget.targetMonth ?? widget.store.month;
     final txs = _buildFilteredTransactions();
     final totalCents = txs.fold<int>(0, (s, t) => s + t.amt);
@@ -272,7 +343,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                     onPressed: () => _exportCsv(txs),
                   ),
                   const SizedBox(width: 8),
-                  // Botões de escopo temporal (sem SegmentedButton dentro de IntrinsicWidth)
+                  // Botões de escopo temporal
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
@@ -281,72 +352,28 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        InkWell(
-                          borderRadius: const BorderRadius.horizontal(
-                            left: Radius.circular(7),
-                          ),
-                          onTap: () =>
-                              setState(() => _filterCurrentMonthOnly = false),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: !_filterCurrentMonthOnly
-                                  ? colors.accent.withValues(alpha: 0.2)
-                                  : Colors.transparent,
-                              borderRadius: const BorderRadius.horizontal(
-                                left: Radius.circular(7),
-                              ),
-                            ),
-                            child: Text(
-                              'Todo o Histórico',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: !_filterCurrentMonthOnly
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                                color: !_filterCurrentMonthOnly
-                                    ? colors.accent
-                                    : colors.textSecondary,
-                              ),
-                            ),
-                          ),
+                        _buildScopeButton(
+                          label: 'Todo o Histórico',
+                          scope: CategoryDrillDownScope.all,
+                          colors: colors,
+                          isFirst: true,
+                          isLast: false,
                         ),
-                        InkWell(
-                          borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(7),
-                          ),
-                          onTap: () =>
-                              setState(() => _filterCurrentMonthOnly = true),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _filterCurrentMonthOnly
-                                  ? colors.accent.withValues(alpha: 0.2)
-                                  : Colors.transparent,
-                              borderRadius: const BorderRadius.horizontal(
-                                right: Radius.circular(7),
-                              ),
-                            ),
-                            child: Text(
-                              fmtMonth(monthYM),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: _filterCurrentMonthOnly
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                                color: _filterCurrentMonthOnly
-                                    ? colors.accent
-                                    : colors.textSecondary,
-                              ),
-                            ),
-                          ),
+                        _buildScopeButton(
+                          label: 'Ano $effectiveYear',
+                          scope: CategoryDrillDownScope.year,
+                          colors: colors,
+                          isFirst: false,
+                          isLast: widget.isAnnual,
                         ),
+                        if (!widget.isAnnual)
+                          _buildScopeButton(
+                            label: fmtMonth(monthYM),
+                            scope: CategoryDrillDownScope.month,
+                            colors: colors,
+                            isFirst: false,
+                            isLast: true,
+                          ),
                       ],
                     ),
                   ),
