@@ -1,11 +1,13 @@
 // OpenMoney Coletor - Gemini Multimodal AI Service (ADR 007 - BYOK)
 
 const CANDIDATE_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-latest',
   'gemini-2.0-flash',
-  'gemini-1.5-flash'
+  'gemini-1.5-flash',
+  'gemini-flash-latest'
 ];
 
 const SYSTEM_PROMPT = `Você é um especialista contábil em leitura de comprovantes fiscais e recibos bancários brasileiros (cupons fiscais NFC-e, extratos, comprovantes de máquina POS e Pix).
@@ -22,7 +24,7 @@ Analise a imagem do comprovante e extraia rigorosamente um JSON com as chaves:
 5. "detected_bank": O nome do banco ou emissor do cartão (ex: "Nubank", "Itaú", "Bradesco", "Santander", "Inter", "C6", "Caixa", "Banco do Brasil", "PagBank", "Mercado Pago", etc.) se identificado, ou string vazia se não houver.`;
 
 class GeminiReceiptService {
-  // Test if an API key is valid
+  // Test if an API key is valid using ListModels endpoint (dynamic & resilient)
   async testApiKey(apiKey) {
     const cleanKey = (apiKey || '').trim();
     if (!cleanKey) {
@@ -30,17 +32,20 @@ class GeminiReceiptService {
     }
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Responda apenas: OK' }] }]
-        })
-      });
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
+      const res = await fetch(url);
 
       if (res.ok) {
-        return { success: true };
+        const data = await res.json().catch(() => ({}));
+        let availableModels = [];
+        if (Array.isArray(data.models)) {
+          availableModels = data.models
+            .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+            .map(m => m.name.replace(/^models\//, ''))
+            .filter(name => name.includes('flash') || name.includes('gemini'));
+        }
+        const bestModel = availableModels.find(m => m.includes('3.8') || m.includes('3.5')) || availableModels[0] || 'gemini-3.8-flash';
+        return { success: true, models: availableModels, bestModel };
       }
 
       const errData = await res.json().catch(() => ({}));
@@ -86,9 +91,29 @@ class GeminiReceiptService {
       }
     };
 
+    // Build model list: dynamic account discovery merged with fallback candidates
+    let modelsToTry = [...CANDIDATE_MODELS];
+    try {
+      const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`);
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        if (Array.isArray(listData.models)) {
+          const accountModels = listData.models
+            .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+            .map(m => m.name.replace(/^models\//, ''))
+            .filter(name => name.includes('flash'));
+
+          if (accountModels.length > 0) {
+            // Put account's active models in front
+            modelsToTry = Array.from(new Set([...accountModels, ...CANDIDATE_MODELS]));
+          }
+        }
+      }
+    } catch (_) {}
+
     let lastError = null;
 
-    for (const model of CANDIDATE_MODELS) {
+    for (const model of modelsToTry) {
       if (onProgress) {
         onProgress(`Consultando IA Gemini (${model})...`);
       }

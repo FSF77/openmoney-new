@@ -905,7 +905,8 @@ function setupEventListeners() {
       const testRes = await geminiReceiptService.testApiKey(key);
       if (testRes.success) {
         geminiKeyStatus.className = 'gemini-status-success';
-        geminiKeyStatus.textContent = '✓ Conexão bem-sucedida! IA pronta para uso.';
+        const modelNote = testRes.bestModel ? ` (${testRes.bestModel})` : '';
+        geminiKeyStatus.textContent = `✓ Conexão bem-sucedida! IA pronta para uso${modelNote}.`;
         if (toggleGeminiAi && !toggleGeminiAi.checked) {
           toggleGeminiAi.checked = true;
           cfg.enabled = true;
