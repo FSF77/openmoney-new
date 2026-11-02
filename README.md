@@ -71,6 +71,90 @@ O **OpenMoney** une o rigor contábil, a previsibilidade e a robustez do lendár
 
 ---
 
+## 📐 Regras de Negócio e Governança Financeira
+
+Esta seção consolida as regras fundamentais que regem o cálculo, a integridade e a operação do OpenMoney:
+
+### 1. Contas e Integridade Histórica
+- **Impossibilidade de Exclusão de Contas com Lançamentos**: Para proteger a rastreabilidade patrimonial e os relatórios fiscais/contábeis, o OpenMoney **não permite a exclusão física** de contas que possuam lançamentos vinculados. Caso o usuário tente excluir uma conta com movimentações, o sistema bloqueia a operação, informa o total de lançamentos e sugere a desativação da conta com 1 clique.
+- **Desativação (Arquivamento) de Contas**: Contas inativas mantêm todo o seu histórico intacto em relatórios, fluxos de caixa e evolução patrimonial, mas deixam de aceitar novos lançamentos ou transferências. Podem ser reativadas a qualquer momento.
+- **Exclusão de Contas Sem Uso**: Somente contas com **0 lançamentos** podem ser excluídas definitivamente, mediante confirmação expressa do usuário.
+
+### 2. Cartão de Crédito e Faturas
+- **Ciclo de Fechamento e Vencimento**: Cada cartão de crédito possui configuração do dia de fechamento (`closeDay`), dia de vencimento (`dueDay`) e conta de débito padrão (`pay`).
+- **Identificação da Fatura pelo Vencimento (Padrão de Mercado)**:
+  - Faturas de cartão de crédito são nomeadas e identificadas pela competência da sua **data de vencimento** (`dueDay`).
+  - *Exemplo*: Um cartão com fechamento no dia 23 e vencimento no dia 03 do mês seguinte tem as compras realizadas de 24/09 a 23/10 vinculadas à **Fatura de Novembro** (vencimento em 03/11). Compras a partir de 24/10 integram a **Fatura de Dezembro** (vencimento em 03/12).
+- **Navegação no Seletor de Mês e Tela de Lançamentos**:
+  - No seletor de mês superior da tela de lançamentos de uma conta de cartão de crédito, ao selecionar **Novembro**, o sistema exibe os lançamentos da **Fatura de Novembro** (vencimento em Novembro), independentemente de terem ocorrido no final de setembro ou em outubro.
+  - O cabeçalho exibe o detalhamento completo do ciclo: `Fatura Novembro de 2026 · Fecha dia 23 (23/10/2026) · Vence dia 3 (03/11/2026) · Débito em ...`.
+- **Saldo Previsto por Competência de Vencimento**:
+  - O **saldo previsto** de contas do tipo cartão de crédito (exibido na barra lateral e nos resumos da conta) considera rigorosamente a data de vencimento da fatura.
+  - Ao selecionar Novembro, o valor previsto totaliza as compras da fatura que vence em Novembro, garantindo que compras já pertencentes à fatura seguinte (Dezembro) não antecipem ou onerem indevidamente a previsão financeira de Novembro.
+- **Seleção Manual de Fatura (Override)**: Embora o sistema calcule a fatura padrão com base no ciclo de fechamento/vencimento, o usuário pode **escolher manualmente outra fatura** para qualquer lançamento (ex.: postergar ou antecipar uma compra de fechamento tardio). Essa opção está disponível tanto no macOS quanto no Windows/Web/Mobile.
+- **Pagamento Parcial e Adiantamento de Fatura**:
+  - O usuário pode registrar pagamentos totais ou parciais em qualquer data antes ou depois do vencimento (ex.: fatura de R$ 1.000 em Novembro com vencimento em 03/11; pagamento de R$ 500 no dia 15/10).
+  - **Abatimento Automático no Vencimento**: A rotina automática de conciliação de faturas (`syncCards`) monitora todos os pagamentos parciais e despesas vinculadas à chave da fatura (`ik`). No vencimento, o sistema gera o agendamento de cobrança cobrando **apenas o saldo remanescente**.
+  - **Fatura Liquidada**: Se os pagamentos cobrirem 100% da fatura (saldo restante $\le 0$), a cobrança automática no vencimento é cancelada e a fatura recebe o status **LIQUIDADA**.
+- **Migração Automática e Transparente da Base (v7)**:
+  - Bases legadas criadas em versões anteriores com chave de fatura baseada no mês de fechamento são automaticamente migradas para a competência de vencimento na abertura do app (`db.v = 7`), mantendo histórico, tags, memos e vínculos de pagamentos intactos.
+- **Exportação e Importação CSV**:
+  - A coluna **Fatura** exporta a competência oficial de vencimento no formato amigável `MM/AAAA` (ex.: `11/2026`) e reconhece esse formato durante a importação.
+
+### 3. Edição, Cópia e Migração de Lançamentos entre Contas
+- **Copiar Lançamento como Novo**:
+  - **Acesso**: Botão dedicado de cópia com ícone de dois documentos posicionado nas ações de cada linha de lançamento, no menu de contexto (botão direito) e nas ações de deslizar.
+  - **Dados Pré-preenchidos**: Traz preenchidos automaticamente a descrição (com remoção inteligente de sufixos de parcelas anteriores `(x/y)`), a categoria ou transferência correspondente, a nota/observação e o valor original.
+  - **Data Atual Automática**: O campo de data é inicializado por padrão com a **data atual (hoje)**, permitindo alteração rápida via seletor de data.
+  - **Flexibilidade Total de Conta e Fatura**: Permite selecionar qualquer conta ativa do sistema. Ao selecionar uma conta de cartão de crédito, o sistema calcula e associa automaticamente a fatura correspondente.
+  - **Definição de Repetição**: Permite escolher livremente se a nova movimentação será um lançamento **Único**, **Recorrente** (com periodicidade diária, semanal, mensal ou anual, com ou sem data de término) ou **Parcelado** (de 2x a 120x).
+  - **Integridade do Registro Original**: Executa `store.addTransaction(...)`, gerando identificadores e séries 100% novas, sem alterar em nada o lançamento de origem.
+- **Mover Lançamento de Conta**: Na tela de edição de lançamentos, é possível alterar a conta do lançamento.
+- **Adequação Automática de Cartão de Crédito**:
+  - Ao mover uma compra para um cartão de crédito, o sistema calcula e associa a chave da fatura correspondente (`ik`), permitindo ajuste manual.
+  - Ao mover de um cartão para uma conta corrente ou dinheiro, a associação de fatura é removida (`ik = nil`).
+- **Séries Recorrentes e Parceladas**: Caso o lançamento faça parte de um parcelamento ou recorrência e a edição seja aplicada para lançamentos futuros, todas as parcelas futuras não conciliadas são transferidas para a nova conta de destino.
+- **Transferências**: Ao mover uma perna de uma transferência para outra conta, a contraparte par da transferência tem sua referência (`peer`) e sua descrição atualizadas de forma atômica e consistente.
+
+### 4. Confirmações de Exclusão (Prevenção de Perda Acidental)
+- **Lançamentos Avulsos**: Ao excluir, o sistema exige confirmação com os dados do lançamento (beneficiário, valor e data).
+- **Lançamentos em Série (Parcelados / Recorrentes)**: Abre o diálogo de escopo para escolha entre excluir apenas o lançamento selecionado ou todos os futuros da série (lançamentos já conciliados nunca são excluídos).
+- **Exclusão de Lançamentos em Lote (Por Período e/ou Conta)**:
+  - Rotina acessível na barra lateral em **Ferramentas › Limpeza de Lançamentos em Lote**.
+  - **Escopo Flexível de Contas**: Permite executar a limpeza em uma conta individual ou em todas as contas da base de dados simultaneamente.
+  - **Escopo Flexível de Período**: Suporta remoção de "Todo o Histórico" ou de um "Período Específico" delimitado por Data Inicial e Data Final (com atalhos: Ano Atual, Ano Anterior, Mês Atual, Últimos 12M e Até Hoje).
+  - **Preservação Estrita de Contas e Categorias**: Contas cadastradas, seus tipos, saldos iniciais de abertura (`opening`), categorias, subcategorias, regras de recorrência e limites de gastos planejados são **100% preservados**. Apenas as movimentações de lançamentos selecionadas são excluídas.
+  - **Tratamento de Transferências Vinculadas**: Opção configurável para excluir automaticamente a contrapartida de transferências em outras contas (evitando lançamentos órfãos) ou desvincular a contrapartida mantendo-a avulsa.
+  - **Aviso Obrigatório de Risco e Confirmação**: Apresenta painel visual de alerta de ação definitiva com contadores estatísticos em tempo real. Exige confirmação explícita via checkbox antes de liberar o botão de exclusão.
+  - **Geração Compulsória de Arquivo de Backup**: Antes de efetivar qualquer remoção, o sistema obriga a exportação de uma cópia de segurança em `.zip`. Caso o usuário cancele o diálogo de backup, **a exclusão é abortada imediatamente**.
+- **Categorias Sem Uso**: Categorias sem lançamentos vinculados exigem confirmação explícita antes de serem removidas.
+- **Categorias Em Uso**: Categorias que possuam lançamentos vinculados não podem ser excluídas diretamente; o sistema exige a indicação de uma categoria de substituição para reclassificar os registros.
+
+### 5. Hierarquia de Planejamento e Responsividade
+- **Ordem Unificada do Módulo Planejamento**:
+  1. **Fluxo de Caixa**
+  2. **Relatórios**
+  3. **Limite de Gastos**
+  4. **Categorias**
+- **Escala Visual Responsiva**: Telas com grandes matrizes de dados (como Fluxo de Caixa e Relatórios) adaptam proporcionalmente seus elementos para exibir todos os 12 meses simultaneamente sem cortes horizontais.
+- **Ocultação do Menu Lateral**: Pressione `Cmd + B` (macOS) ou `Ctrl + B` (Windows) para recolher o menu lateral e maximizar a área de visualização.
+
+### 6. Relatórios vs. Fluxo de Caixa (Tratamento de Transferências e Categorias)
+- **Filtro Estrito nos Relatórios Mensais de Receitas/Despesas**:
+  - Transferências entre contas (`xfer != null` ou `peer != null`) e lançamentos de categorias com a opção "Considerar nos Relatórios" desmarcada **não aparecem nem são somados** nos totais de receitas e despesas da tela de Relatórios.
+  - Cada categoria possui no seu cadastro/edição a opção configurável **"Considerar nos relatórios"** (`includeInReports`). Categorias fora dos relatórios recebem o badge visual `"OCULTA DE RELATÓRIOS"`.
+  - **Filtro de Contas e Negócios nos Relatórios**: A tela de Relatórios conta com seletor de contas, permitindo escolher "Todas as Contas", selecionar múltiplas contas por checkbox ou filtrar por Negócio (ex.: **PF** ou **PJ**).
+- **Preservação Integral do Fluxo de Caixa**:
+  - Essa exclusão de relatórios **NÃO se aplica ao Fluxo de Caixa**. O motor do Fluxo de Caixa (`CashFlowEngine`) processa rigorosamente todas as contas, transferências e categorias para assegurar a exatidão matemática do saldo anterior, do resultado financeiro e do saldo final em caixa/bancos.
+
+### 7. Performance com Grandes Volumes de Dados
+- **Indexação em Memória $O(1)$**: Caches estruturados por conta e por mês.
+- **Gravação Assíncrona Não-Bloqueante**: O salvamento da base JSON é executado com *debounce*, garantindo resposta instantânea mesmo em bases com mais de 30.000 lançamentos e arquivos de 5 MB+.
+
+---
+
+---
+
 ## 💎 Funcionalidades e Recursos Detalhados
 
 ### 1. Gestão de Contas e Livro-Caixa (Extrato Inteligente)
@@ -187,7 +271,7 @@ O **OpenMoney** une o rigor contábil, a previsibilidade e a robustez do lendár
 
 ---
 
-### 8. Orçamento Mensal Planejado (Budget)
+### 8. Planejamento Financeiro: Limite de Gastos Mensal
 - Definição de limites de gastos mensais por categoria.
 - Totalizadores automáticos com acúmulo de subcategorias na categoria principal.
 - Barras de progresso com gradiente de alerta visual conforme o consumo se aproxima ou ultrapassa o limite planejado.
@@ -229,6 +313,7 @@ O **OpenMoney** une o rigor contábil, a previsibilidade e a robustez do lendár
 
 ### 12. Coletor Mobile Web / PWA (`coletor/`)
 - Módulo PWA independente para registrar despesas e receitas rapidamente no smartphone (offline-first).
+- **Acesso Online**: [https://fsf77.github.io/openmoney-new/coletor/](https://fsf77.github.io/openmoney-new/coletor/)
 - Recursos do coletor:
   - Registro de lançamentos rápidos com autocompletar de favorecidos da base.
   - Suporte a leitura de comprovantes via **OCR de câmera** e inserção rápida por voz.

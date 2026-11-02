@@ -56,7 +56,8 @@ class BudgetView extends StatelessWidget {
       return t.amt < 0 &&
           t.xfer == null &&
           t.peer == null &&
-          t.auto != true;
+          t.auto != true &&
+          store.isCategoryIncludedInReports(t.cat);
     }).toList();
 
     final spentByPath = <String, int>{};
@@ -64,7 +65,10 @@ class BudgetView extends StatelessWidget {
       spentByPath[t.cat] = (spentByPath[t.cat] ?? 0) + t.amt.abs();
     }
 
-    final topExpenseCats = store.topCategories(type: 'Despesa');
+    final topExpenseCats = store
+        .topCategories(type: 'Despesa')
+        .where((top) => store.isCategoryIncludedInReports(top.path))
+        .toList();
 
     int totalPlanned = 0;
     int totalSpent = 0;
@@ -117,7 +121,10 @@ class BudgetView extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         ...topExpenseCats.map((top) {
-          final subs = store.subCategories(top.name, type: 'Despesa');
+          final subs = store
+              .subCategories(top.name, type: 'Despesa')
+              .where((sub) => store.isCategoryIncludedInReports(sub.path))
+              .toList();
           int topBudget = store.db.budgets[top.path] ?? 0;
           int topSpent = spentByPath[top.path] ?? 0;
 
@@ -202,34 +209,68 @@ class BudgetView extends StatelessWidget {
                     final sb = store.db.budgets[sub.path] ?? 0;
                     final ss = spentByPath[sub.path] ?? 0;
                     final subOver = sb > 0 && ss > sb;
+                    final subRatio =
+                        sb > 0 ? (ss / sb).clamp(0.0, 1.0) : 0.0;
                     return InkWell(
                       onTap: () => _editBudget(context, sub.path, sb),
+                      borderRadius: BorderRadius.circular(6),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 5,
+                          vertical: 6,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              '↳ ${sub.name}',
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                color: colors.textSecondary,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      '↳ ${sub.name}',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                    if (subOver) ...[
+                                      const SizedBox(width: 6),
+                                      StatusBadge(
+                                        text: 'ACIMA DO LIMITE',
+                                        color: colors.expense,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                Text(
+                                  '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: subOver
+                                        ? colors.expense
+                                        : colors.textSecondary,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: subOver
-                                    ? colors.expense
-                                    : colors.textSecondary,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ],
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: subRatio,
+                                minHeight: 5,
+                                backgroundColor: colors.borderGlass,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  subOver
+                                      ? colors.expense
+                                      : colors.accent.withValues(alpha: 0.85),
+                                ),
                               ),
                             ),
                           ],

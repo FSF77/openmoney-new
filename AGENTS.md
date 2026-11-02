@@ -8,6 +8,7 @@ Este documento registra as diretrizes, repositórios, versionamento e fluxos de 
 | :--- | :--- | :--- | :--- |
 | **Swift (Principal / Nativo macOS & iOS)** | `/Users/fabiano/Developer/OpenMoneySwift` | [FSF77/openmoney](https://github.com/FSF77/openmoney) *(Privado)* | Versão de referência de todas as regras de negócio, modelos e telas. Repositório auxiliar de releases e downloads: [FSF77/openmoney-releases](https://github.com/FSF77/openmoney-releases). |
 | **Flutter / Dart (Multiplataforma macOS, Windows, Web, Mobile)** | `/Users/fabiano/Developer/OpenMoneyFlutter` | [FSF77/openmoney-new](https://github.com/FSF77/openmoney-new) *(Público)* | Versão convertida em Flutter/Dart. Deve replicar fielmente o comportamento da versão Swift. |
+| **Documentação Central (Arquitetura, ADRs, Docs)** | `/Users/fabiano/Developer/OpenMoneyDocs` | *(Local / Hub)* | Raiz única oficial de documentação do ecossistema, ADRs, auditorias técnicas e especificações. |
 
 ---
 
