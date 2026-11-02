@@ -25,10 +25,21 @@ Future<void> showReceiptOcrImportModal(
   final selectedFolder = await NativeFilePicker.pickFolder(
     title: 'Selecionar Pasta de Comprovantes (PDFs e Imagens)',
   );
-  if (selectedFolder == null || selectedFolder.isEmpty) return;
+  if (selectedFolder == null || selectedFolder.trim().isEmpty) return;
 
-  final dir = Directory(selectedFolder);
-  if (!dir.existsSync()) return;
+  final cleanPath = selectedFolder.trim();
+  final dir = Directory(cleanPath);
+  if (!dir.existsSync()) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('A pasta selecionada não foi encontrada ou não está acessível: $cleanPath'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+    return;
+  }
 
   if (context.mounted) {
     await showDialog(
@@ -36,7 +47,7 @@ Future<void> showReceiptOcrImportModal(
       barrierDismissible: false,
       builder: (ctx) => _ReceiptOcrReviewDialog(
         store: store,
-        folderPath: selectedFolder,
+        folderPath: cleanPath,
       ),
     );
   }

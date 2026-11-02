@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -266,19 +267,23 @@ class NativeFilePicker {
         }
       } else if (Platform.isWindows) {
         final escapedTitle = _escapePowerShellString(title);
+        // Usa System.Windows.Forms e System.IO com codificação UTF-8 explícita
         final powershellCmd =
+            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; '
             'Add-Type -AssemblyName System.Windows.Forms; '
             '\$dlg = New-Object System.Windows.Forms.FolderBrowserDialog; '
             '\$dlg.Description = "$escapedTitle"; '
             '\$dlg.ShowNewFolderButton = \$false; '
-            'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$dlg.SelectedPath }';
+            'if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK -and [System.IO.Directory]::Exists(\$dlg.SelectedPath)) { '
+            '  [Console]::Out.Write(\$dlg.SelectedPath) '
+            '}';
         final res = await Process.run('powershell', [
           '-NoProfile',
           '-NonInteractive',
           '-Sta',
           '-Command',
           powershellCmd,
-        ]);
+        ], stdoutEncoding: utf8);
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
           if (out.isNotEmpty) return out;
