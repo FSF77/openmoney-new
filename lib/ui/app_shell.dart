@@ -454,24 +454,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
-                        tooltip: 'Verificar Atualizações',
-                        icon: const Icon(Icons.system_update_alt, size: 18),
-                        onPressed: () => UpdateService.showUpdateDialog(
-                          context,
-                          manual: true,
-                        ),
-                      ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Ajuda e Manual do OpenMoney (F1)',
-                        icon: const Icon(Icons.help_outline, size: 18),
-                        onPressed: () => showHelpModal(
-                          context,
-                          widget.store,
-                        ),
-                      ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
                         tooltip: 'Alternar Tema Claro / Escuro',
                         icon: Icon(
                           widget.store.isDarkMode
@@ -903,13 +885,13 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               if (widget.store.sidebarShowModules) ...[
                 _SidebarNavTile(
                   icon: Icons.archive_outlined,
-                  label: 'Backups de Segurança (.zip)',
+                  label: 'Backups de Segurança',
                   selected: false,
                   onTap: () => showBackupsHistoryModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.history_edu_outlined,
-                  label: 'Logs de Alterações (.log)',
+                  label: 'Logs de Alterações',
                   selected: false,
                   onTap: () => showAuditLogsModal(context, widget.store),
                 ),
@@ -921,19 +903,19 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.import_export,
-                  label: 'Importar / Exportar (CSV / QIF)',
+                  label: 'Importar / Exportar (CSV)',
                   selected: false,
                   onTap: () => showCsvQifCenterModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.cleaning_services_outlined,
-                  label: 'Limpeza de Lançamentos em Lote',
+                  label: 'Excluir Lançamentos',
                   selected: false,
                   onTap: () => showBatchDeleteModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.system_update_alt,
-                  label: 'Buscar Atualizações...',
+                  label: 'Buscar Atualizações',
                   selected: false,
                   onTap: () => UpdateService.showUpdateDialog(
                     context,
@@ -942,7 +924,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.help_outline,
-                  label: 'Ajuda e Manual (README.md)',
+                  label: 'Ajuda e Manual',
                   selected: false,
                   onTap: () => showHelpModal(context, widget.store),
                 ),
