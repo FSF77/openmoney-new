@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=1.1.0">
+  <link rel="stylesheet" href="css/style.css?v=1.2.0">
 </head>
 <body>
 
@@ -107,25 +107,64 @@
 
   <!-- MODAL: Configurar / Vincular Base Inicial -->
   <div id="modalSetup" class="modal-overlay">
-    <div class="sheet">
+    <div class="sheet" style="max-height: 88vh; overflow-y: auto;">
       <div class="sheet-handle"></div>
       <div class="sheet-header">
-        <div class="sheet-title">Configurar Contas</div>
+        <div class="sheet-title">Configurações & Base</div>
         <button class="sheet-close">&times;</button>
       </div>
 
-      <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.5;margin-bottom:18px;">
+      <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.5;margin-bottom:16px;">
         Para o coletor saber suas contas, saldos de referência e categorias, selecione o arquivo <strong>openmoney.json</strong> do seu iCloud Drive uma única vez.
       </p>
 
-      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-md);padding:14px;margin-bottom:18px;">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-md);padding:14px;margin-bottom:14px;">
         <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">Base vinculada:</div>
         <div id="setupCurrentBaseInfo" style="font-size:0.8rem;color:var(--text-muted);">Nenhuma base vinculada ainda.</div>
       </div>
 
-      <button id="btnChooseStructureFile" class="btn-submit">
+      <button id="btnChooseStructureFile" class="btn-submit" style="margin-bottom: 20px;">
         📁 Selecionar openmoney.json no iCloud Drive
       </button>
+
+      <!-- Divisor -->
+      <div style="height:1px;background:var(--border-glass);margin-bottom:20px;"></div>
+
+      <!-- Configuração de IA Gemini (BYOK - ADR 007) -->
+      <div class="setup-section-gemini">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-weight:700;font-size:0.95rem;display:flex;align-items:center;gap:6px;">
+            <span>✨</span> Reconhecimento por IA (Gemini)
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleGeminiAi">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.45;margin-bottom:14px;">
+          Usa a visão multimodal do Google Gemini Flash para reconhecer lojas, totais e bancos com rigor contábil (ADR 007).
+        </p>
+
+        <div id="geminiConfigFields">
+          <label for="inputGeminiApiKey" style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;font-weight:500;">
+            Sua Chave de API Gemini (Gratuita - BYOK):
+          </label>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <input type="password" id="inputGeminiApiKey" class="form-input" placeholder="AIzaSy..." style="flex:1;font-family:monospace;font-size:0.85rem;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button type="button" id="btnToggleApiKeyVisibility" class="btn-input-addon" title="Mostrar/Ocultar Chave">👁️</button>
+          </div>
+          
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem;color:var(--om-blue);text-decoration:none;font-weight:500;">
+              🔗 Obter chave gratuita no Google AI Studio &rarr;
+            </a>
+            <button type="button" id="btnTestGeminiKey" class="btn-text-action" style="font-size:0.75rem;color:var(--om-green);background:none;border:none;cursor:pointer;font-weight:600;">
+              ⚡ Testar Chave
+            </button>
+          </div>
+          <div id="geminiKeyStatus" style="font-size:0.75rem;margin-top:8px;display:none;padding:6px 10px;border-radius:6px;"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -145,8 +184,8 @@
       <div id="receiptPreviewWrap" style="display:none;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-md);padding:8px 12px;margin-bottom:14px;">
         <img id="receiptPreviewImg" src="" alt="Comprovante" style="width:50px;height:50px;object-fit:cover;border-radius:6px;">
         <div>
-          <div style="font-size:0.82rem;font-weight:700;color:var(--om-green);">✓ Comprovante Escaneado</div>
-          <div style="font-size:0.72rem;color:var(--text-muted);">Dados extraídos via OCR local</div>
+          <div id="receiptScanStatusTitle" style="font-size:0.82rem;font-weight:700;color:var(--om-green);">✓ Comprovante Escaneado</div>
+          <div id="receiptScanStatusSubtitle" style="font-size:0.72rem;color:var(--text-muted);">Dados extraídos via OCR local</div>
         </div>
       </div>
 
@@ -258,6 +297,6 @@
   </div>
 
   <!-- Scripts -->
-  <script type="module" src="js/app.js?v=1.1.0"></script>
+  <script type="module" src="js/app.js?v=1.2.0"></script>
 </body>
 </html>

@@ -1,5 +1,32 @@
-// OpenMoney Coletor - Receipt OCR & Scanner Engine (Apple Live Text & Tesseract Fallback)
+// OpenMoney Coletor - Receipt OCR & Multimodal AI Scanner Engine (ADR 007)
 import { parseCurrencyToCents, todayISO, normalizeStr } from './models.js';
+import { geminiReceiptService } from './gemini.js';
+import { coletorStorage } from './db.js';
+
+const CATEGORY_KEYWORDS = [
+  { words: ['almoco', 'almoço', 'jantar', 'refeicao', 'refeição', 'restaurante', 'mcdonalds', 'burguer', 'burger', 'pizza', 'ifood', 'lanche', 'bar', 'churrascaria', 'cafe', 'café'], catContains: ['Restaurante', 'Alimentação'] },
+  { words: ['supermercado', 'mercado', 'compras', 'acougue', 'açougue', 'hortifruti', 'atacadista', 'hipermercado', 'assai', 'carrefour', 'pao de acucar'], catContains: ['Supermercado', 'Alimentação'] },
+  { words: ['posto', 'gasolina', 'combustivel', 'combustível', 'etanol', 'abastecer', 'auto posto', 'ipiranga', 'shell', 'br'], catContains: ['Combustível', 'Transporte'] },
+  { words: ['farmacia', 'farmácia', 'drogaria', 'remedio', 'remédio', 'medicamento', 'drogasil', 'raia', 'pague menos'], catContains: ['Farmácia', 'Saúde'] },
+  { words: ['padaria', 'pao', 'pão', 'confeitaria', 'panificadora'], catContains: ['Padaria', 'Alimentação'] },
+  { words: ['uber', 'taxi', 'táxi', 'corrida', 'estacionamento', 'pedagio', 'pedágio', 'sem parar', 'veloe'], catContains: ['Transporte'] },
+  { words: ['cinema', 'filme', 'teatro', 'show', 'ingresso', 'lazer'], catContains: ['Lazer'] }
+];
+
+function detectCategoryByKeywords(text, cats) {
+  if (!text || !Array.isArray(cats)) return '';
+  const norm = normalizeStr(text);
+  for (const rule of CATEGORY_KEYWORDS) {
+    if (rule.words.some(w => norm.includes(normalizeStr(w)))) {
+      const found = cats.find(c => {
+        const p = normalizeStr(c.path || c.name || '');
+        return rule.catContains.some(kw => p.includes(normalizeStr(kw)));
+      });
+      if (found) return found.path || found.name;
+    }
+  }
+  return '';
+}
 
 class ReceiptScanner {
   constructor() {
@@ -93,12 +120,44 @@ class ReceiptScanner {
     });
   }
 
-  // Scan receipt image with Tesseract (fallback)
+  // Scan receipt image: Multimodal Gemini AI (BYOK - ADR 007) with Local OCR Fallback
   async scanReceipt(imageFile, onProgress = null, structure = null) {
     if (onProgress) onProgress('Preparando imagem...');
     const processed = await this.processImage(imageFile);
 
-    if (onProgress) onProgress('Iniciando reconhecimento ótico (OCR)...');
+    // 1. Try Gemini Multimodal AI if enabled
+    const geminiCfg = coletorStorage.getGeminiConfig();
+    if (geminiCfg.enabled && geminiCfg.apiKey) {
+      try {
+        if (onProgress) onProgress('Analisando comprovante com IA Gemini Flash...');
+        const aiRes = await geminiReceiptService.analyzeReceipt(
+          processed.dataUrl,
+          geminiCfg.apiKey,
+          onProgress
+        );
+
+        if (aiRes) {
+          const associated = this.associateAiResult(aiRes, structure);
+          return {
+            payee: aiRes.payee,
+            amt: aiRes.amountCents,
+            date: aiRes.date || todayISO(),
+            cat: associated.cat,
+            accId: associated.accId,
+            thumbnail: processed.thumbUrl,
+            rawText: `Análise por IA Gemini (${aiRes.model}):\n${aiRes.rawJson}`,
+            isAi: true,
+            model: aiRes.model
+          };
+        }
+      } catch (aiErr) {
+        console.warn('Gemini AI failed, falling back to local OCR:', aiErr);
+        if (onProgress) onProgress('IA indisponível, iniciando OCR local...');
+      }
+    }
+
+    // 2. Fallback to Local OCR (Tesseract.js)
+    if (onProgress) onProgress('Iniciando reconhecimento ótico local (OCR)...');
     const Tesseract = await this.loadTesseract();
 
     const worker = await Tesseract.createWorker('por', 1, {
@@ -119,8 +178,61 @@ class ReceiptScanner {
     const parsed = this.parseReceiptText(fullText, structure);
     parsed.thumbnail = processed.thumbUrl;
     parsed.rawText = fullText;
+    parsed.isAi = false;
 
     return parsed;
+  }
+
+  // Cross-reference AI result with user's linked database (structure)
+  associateAiResult(aiRes, structure) {
+    let matchedCat = '';
+    let matchedAccId = null;
+
+    if (!structure) {
+      return { cat: '', accId: null };
+    }
+
+    const normPayee = normalizeStr(aiRes.payee || '');
+    const normBank = normalizeStr(aiRes.detectedBank || '');
+
+    // 1. Check frequent payees for category association
+    if (Array.isArray(structure.frequentPayees) && normPayee) {
+      for (const p of structure.frequentPayees) {
+        const normP = normalizeStr(p.payee);
+        if (normP && (normPayee.includes(normP) || normP.includes(normPayee))) {
+          matchedCat = p.cat || '';
+          break;
+        }
+      }
+    }
+
+    // 2. Fallback to keyword category if still empty
+    if (!matchedCat && Array.isArray(structure.cats)) {
+      matchedCat = detectCategoryByKeywords(aiRes.payee, structure.cats);
+    }
+
+    // 3. Match Account from detected bank or card
+    if (Array.isArray(structure.accounts)) {
+      const activeAccs = structure.accounts.filter(a => !a.inactive);
+
+      if (normBank) {
+        for (const acc of activeAccs) {
+          const normAccName = normalizeStr(acc.name);
+          if (normAccName && (normAccName.includes(normBank) || normBank.includes(normAccName))) {
+            matchedAccId = acc.id;
+            break;
+          }
+        }
+      }
+
+      // If no bank match, select favorite account or first active
+      if (!matchedAccId) {
+        const fav = activeAccs.find(a => a.favorite);
+        matchedAccId = fav ? fav.id : (activeAccs[0]?.id || null);
+      }
+    }
+
+    return { cat: matchedCat, accId: matchedAccId };
   }
 
   // High-accuracy parsing of receipt text (Live Text Apple or Tesseract)
@@ -211,30 +323,8 @@ class ReceiptScanner {
     }
 
     // 4. Keyword Category Fallback
-    const CATEGORY_KEYWORDS = [
-      { words: ['almoco', 'almoço', 'jantar', 'refeicao', 'refeição', 'restaurante', 'mcdonalds', 'burguer', 'burger', 'pizza', 'ifood', 'lanche', 'bar', 'churrascaria'], catContains: ['Restaurante', 'Alimentação'] },
-      { words: ['supermercado', 'mercado', 'compras', 'acougue', 'açougue', 'hortifruti', 'atacadista', 'hipermercado'], catContains: ['Supermercado', 'Alimentação'] },
-      { words: ['posto', 'gasolina', 'combustivel', 'combustível', 'etanol', 'abastecer', 'auto posto'], catContains: ['Combustível', 'Transporte'] },
-      { words: ['farmacia', 'farmácia', 'drogaria', 'remedio', 'remédio', 'medicamento', 'drogasil', 'raia'], catContains: ['Farmácia', 'Saúde'] },
-      { words: ['padaria', 'pao', 'pão', 'cafe', 'café', 'confeitaria'], catContains: ['Padaria', 'Alimentação'] },
-      { words: ['uber', 'taxi', 'táxi', 'corrida', 'estacionamento', 'pedagio', 'pedágio'], catContains: ['Transporte'] },
-      { words: ['cinema', 'filme', 'teatro', 'show', 'ingresso', 'lazer'], catContains: ['Lazer'] }
-    ];
-
     if (!matchedCat && structure && Array.isArray(structure.cats)) {
-      for (const rule of CATEGORY_KEYWORDS) {
-        const hasWord = rule.words.some(w => normFull.includes(normalizeStr(w)));
-        if (hasWord) {
-          const found = structure.cats.find(c => {
-            const p = normalizeStr(c.path || c.name || '');
-            return rule.catContains.some(kw => p.includes(normalizeStr(kw)));
-          });
-          if (found) {
-            matchedCat = found.path || found.name;
-            break;
-          }
-        }
-      }
+      matchedCat = detectCategoryByKeywords(normFull, structure.cats);
     }
 
     // 5. Account Detection (Card, Cash or Bank Name)

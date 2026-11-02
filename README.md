@@ -1,7 +1,7 @@
 # OpenMoney (Multiplataforma: macOS, Windows, iPhone e iPad)
 
 <p align="center">
-  <strong>Aplicativo financeiro moderno, multiplataforma (Flutter / Dart) e open source para macOS, Windows, iOS (iPhone) e iPadOS (iPad), inspirado no clássico Microsoft Money 99.</strong>
+  <strong>Aplicativo financeiro moderno, multiplataforma (Flutter / Dart) e open source para macOS, Windows.</strong>
 </p>
 
 <p align="center">
@@ -316,10 +316,27 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Acesso Online**: [https://fsf77.github.io/openmoney-new/coletor/](https://fsf77.github.io/openmoney-new/coletor/)
 - Recursos do coletor:
   - Registro de lançamentos rápidos com autocompletar de favorecidos da base.
-  - Suporte a leitura de comprovantes via **OCR de câmera** e inserção rápida por voz.
+  - Suporte a leitura de comprovantes via **IA Multimodal Google Gemini (BYOK - ADR 007)** com fallback para OCR local de câmera.
+  - Inserção rápida por comando de voz.
   - Exportação do lote em `openmoney_inbox.json`.
 - **Importação Desktop**:
   - No OpenMoney Desktop, abra o importador Mobile Inbox para validar, auditar e importar os lançamentos pendentes com prevenção contra duplicidades e alocação automática de faturas.
+
+---
+
+### 13. Importação Inteligente de Comprovantes via OCR & IA Multimodal (`receipt_ocr_import_modal.dart`)
+- **Varredura em Lote de Pastas**: Suporte a seleção de pastas contendo comprovantes em PDF, PNG, JPG, JPEG e HEIC.
+- **OCR Nativo Local**:
+  - **macOS**: Apple Vision Framework (`VNRecognizeTextRequest`) + `PDFKit`.
+  - **Windows**: API nativa WinRT `Windows.Media.Ocr.OcrEngine` com suporte ao português (`pt-BR`).
+- **Inteligência Artificial Multimodal (Google Gemini - Modelo BYOK)**:
+  - Suporte ao Gemini Flash com chave própria gratuita do Google AI Studio.
+  - Extração precisa de Favorecido/Loja (descartando marcas de maquininhas como Cielo/Rede/Stone/Laranjinha e rótulos fiscais).
+  - Identificação do Valor Líquido Total Pago (descartando tributos da Lei 12.741 e parcelas individuais).
+  - Sugestão automática de Conta e Categoria com base no histórico do usuário.
+- **Conferência em Split View & Arquivamento**:
+  - Painel lateral com lista de comprovantes e formulário de conferência em tempo real.
+  - Movimentação automática e atômica dos arquivos conferidos para a subpasta `processados/`.
 
 ---
 
@@ -449,4 +466,4 @@ O projeto conta com ativos gráficos oficiais de alta definição:
 
 Distribuído sob a licença **MIT**. Consulte o arquivo [`LICENSE`](file:///Users/fabiano/Developer/OpenMoneyFlutter/LICENSE) para mais detalhes.
 
-*OpenMoney é um projeto independente de código aberto desenvolvido para a comunidade. Não possui afiliação, vínculo comercial ou endosso da Microsoft Corporation.*
+*OpenMoney é um projeto independente de código aberto, concebido por entusiastas de finanças pessoais. - FSF Consultoria*

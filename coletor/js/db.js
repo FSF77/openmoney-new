@@ -20,6 +20,30 @@ class ColetorStorage {
     localStorage.setItem(STORAGE_KEY_STRUCTURE, JSON.stringify(structure));
   }
 
+  // Gemini AI Config (BYOK - Bring Your Own Key)
+  getGeminiConfig() {
+    try {
+      const raw = localStorage.getItem('om_coletor_gemini_config');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          enabled: Boolean(parsed.enabled),
+          apiKey: (parsed.apiKey || '').trim()
+        };
+      }
+    } catch (_) {}
+    return { enabled: false, apiKey: '' };
+  }
+
+  saveGeminiConfig(cfg) {
+    const data = {
+      enabled: Boolean(cfg?.enabled),
+      apiKey: (cfg?.apiKey || '').trim()
+    };
+    localStorage.setItem('om_coletor_gemini_config', JSON.stringify(data));
+    return data;
+  }
+
   // Live Autocomplete for Payee (as user types)
   searchPayees(query) {
     if (!query) return [];

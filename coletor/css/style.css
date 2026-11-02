@@ -134,6 +134,15 @@
   .account-row-card:active {
     background: rgba(0, 0, 0, 0.06) !important;
   }
+
+  .toggle-slider {
+    background-color: rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .btn-input-addon {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+  }
 }
 
 * {
@@ -1145,4 +1154,100 @@ body.modal-open {
 
 .btn-link-subtle:hover {
   color: var(--text-secondary);
+}
+
+/* Gemini AI Settings (BYOK - ADR 007) */
+.setup-section-gemini {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.16);
+  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 26px;
+  border: 1px solid var(--border-glass);
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--om-green);
+  border-color: var(--om-green);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.btn-input-addon {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 0 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  transition: background 0.15s ease;
+}
+
+.btn-input-addon:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-text-action {
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.btn-text-action:active {
+  opacity: 0.7;
+  transform: scale(0.97);
+}
+
+.gemini-status-success {
+  background: var(--om-green-bg);
+  color: var(--om-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.gemini-status-error {
+  background: var(--om-red-bg);
+  color: var(--om-red);
+  border: 1px solid rgba(244, 63, 94, 0.3);
 }

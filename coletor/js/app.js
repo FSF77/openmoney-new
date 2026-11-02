@@ -2,6 +2,7 @@
 import { coletorStorage } from './db.js';
 import { receiptScanner } from './ocr.js';
 import { voiceExpenseEngine } from './voice.js';
+import { geminiReceiptService } from './gemini.js';
 import { formatCurrency, parseCurrencyToCents, todayISO, formatDateBR, uid, SEP } from './models.js';
 
 let currentTxType = 'despesa';
@@ -271,6 +272,23 @@ function openSetupModal() {
       infoEl.textContent = 'Nenhuma base vinculada ainda.';
     }
   }
+
+  // Populate Gemini Config
+  const geminiCfg = coletorStorage.getGeminiConfig();
+  const toggleGeminiAi = document.getElementById('toggleGeminiAi');
+  const inputGeminiApiKey = document.getElementById('inputGeminiApiKey');
+  const geminiKeyStatus = document.getElementById('geminiKeyStatus');
+
+  if (toggleGeminiAi) {
+    toggleGeminiAi.checked = Boolean(geminiCfg.enabled);
+  }
+  if (inputGeminiApiKey) {
+    inputGeminiApiKey.value = geminiCfg.apiKey || '';
+  }
+  if (geminiKeyStatus) {
+    geminiKeyStatus.style.display = 'none';
+  }
+
   openModal(document.getElementById('modalSetup'));
 }
 
@@ -403,6 +421,17 @@ function openTransactionForm(preset = null) {
     if (preset.thumbnail) {
       previewImg.src = preset.thumbnail;
       previewWrap.style.display = 'flex';
+      const statusTitle = document.getElementById('receiptScanStatusTitle');
+      const statusSub = document.getElementById('receiptScanStatusSubtitle');
+      if (statusTitle && statusSub) {
+        if (preset.isAi) {
+          statusTitle.textContent = '✨ Analisado por IA Gemini Flash';
+          statusSub.textContent = `Modelo: ${preset.model || 'Gemini Flash'}`;
+        } else {
+          statusTitle.textContent = '✓ Comprovante Escaneado';
+          statusSub.textContent = 'Dados extraídos via OCR local';
+        }
+      }
     } else {
       previewWrap.style.display = 'none';
     }
@@ -528,10 +557,12 @@ async function handleReceiptImageSelected(e) {
       cat: parsed.cat,
       thumbnail: parsed.thumbnail,
       isExpense: true,
-      memo: 'Comprovante escaneado via OCR'
+      memo: parsed.isAi ? `Comprovante via IA Gemini (${parsed.model})` : 'Comprovante escaneado via OCR',
+      isAi: parsed.isAi,
+      model: parsed.model
     });
 
-    showToast('✓ Comprovante reconhecido com sucesso!');
+    showToast(parsed.isAi ? '✨ Comprovante reconhecido via IA Gemini!' : '✓ Comprovante reconhecido via OCR!');
   } catch (err) {
     closeAllModals();
     alert(`Não foi possível ler o comprovante: ${err.message}`);
@@ -814,6 +845,77 @@ function setupEventListeners() {
   if (btnChooseStructureFile && fileStructureInput) {
     btnChooseStructureFile.addEventListener('click', () => fileStructureInput.click());
     fileStructureInput.addEventListener('change', handleStructureFileSelected);
+  }
+
+  // Gemini AI Config Listeners
+  const toggleGeminiAi = document.getElementById('toggleGeminiAi');
+  const inputGeminiApiKey = document.getElementById('inputGeminiApiKey');
+  const btnToggleApiKeyVisibility = document.getElementById('btnToggleApiKeyVisibility');
+  const btnTestGeminiKey = document.getElementById('btnTestGeminiKey');
+  const geminiKeyStatus = document.getElementById('geminiKeyStatus');
+
+  if (toggleGeminiAi && inputGeminiApiKey) {
+    toggleGeminiAi.addEventListener('change', () => {
+      const cfg = coletorStorage.getGeminiConfig();
+      cfg.enabled = toggleGeminiAi.checked;
+      coletorStorage.saveGeminiConfig(cfg);
+      if (toggleGeminiAi.checked && !cfg.apiKey) {
+        inputGeminiApiKey.focus();
+      }
+      showToast(cfg.enabled ? '✨ IA Gemini ativada!' : 'IA Gemini desativada.');
+    });
+
+    const handleKeyChange = () => {
+      const cfg = coletorStorage.getGeminiConfig();
+      cfg.apiKey = inputGeminiApiKey.value.trim();
+      coletorStorage.saveGeminiConfig(cfg);
+    };
+    inputGeminiApiKey.addEventListener('change', handleKeyChange);
+    inputGeminiApiKey.addEventListener('blur', handleKeyChange);
+  }
+
+  if (btnToggleApiKeyVisibility && inputGeminiApiKey) {
+    btnToggleApiKeyVisibility.addEventListener('click', () => {
+      const isPwd = inputGeminiApiKey.type === 'password';
+      inputGeminiApiKey.type = isPwd ? 'text' : 'password';
+      btnToggleApiKeyVisibility.textContent = isPwd ? '🙈' : '👁️';
+    });
+  }
+
+  if (btnTestGeminiKey && inputGeminiApiKey && geminiKeyStatus) {
+    btnTestGeminiKey.addEventListener('click', async () => {
+      const key = inputGeminiApiKey.value.trim();
+      if (!key) {
+        geminiKeyStatus.style.display = 'block';
+        geminiKeyStatus.className = 'gemini-status-error';
+        geminiKeyStatus.textContent = '❌ Digite ou cole sua chave antes de testar.';
+        return;
+      }
+
+      geminiKeyStatus.style.display = 'block';
+      geminiKeyStatus.className = '';
+      geminiKeyStatus.style.color = 'var(--text-muted)';
+      geminiKeyStatus.textContent = '⏳ Conectando à API do Google Gemini...';
+
+      // Save key first
+      const cfg = coletorStorage.getGeminiConfig();
+      cfg.apiKey = key;
+      coletorStorage.saveGeminiConfig(cfg);
+
+      const testRes = await geminiReceiptService.testApiKey(key);
+      if (testRes.success) {
+        geminiKeyStatus.className = 'gemini-status-success';
+        geminiKeyStatus.textContent = '✓ Conexão bem-sucedida! IA pronta para uso.';
+        if (toggleGeminiAi && !toggleGeminiAi.checked) {
+          toggleGeminiAi.checked = true;
+          cfg.enabled = true;
+          coletorStorage.saveGeminiConfig(cfg);
+        }
+      } else {
+        geminiKeyStatus.className = 'gemini-status-error';
+        geminiKeyStatus.textContent = `❌ ${testRes.error}`;
+      }
+    });
   }
 
   // Action: Scan Receipt (Direct camera capture & OCR)
