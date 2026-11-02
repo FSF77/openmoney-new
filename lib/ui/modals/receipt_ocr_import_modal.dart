@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/gemini_receipt_service.dart';
+import '../../services/importers_exporters.dart';
 import '../../services/local_ocr_service.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/receipt_parser_engine.dart';
@@ -221,9 +222,9 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
     setState(() {
       _selectedIndex = index;
       final current = _drafts[index];
-      _dateCtrl.text = current.date;
+      _dateCtrl.text = fmtDate(current.date);
       _payeeCtrl.text = current.payee;
-      _amountCtrl.text = (current.amountCents / 100.0).toStringAsFixed(2);
+      _amountCtrl.text = (current.amountCents / 100.0).toStringAsFixed(2).replaceAll('.', ',');
     });
   }
 
@@ -308,8 +309,8 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
       child: Container(
-        width: size.width * 0.85,
-        height: size.height * 0.85,
+        width: size.width > 1100 ? 980 : size.width * 0.88,
+        height: size.height > 800 ? 650 : size.height * 0.85,
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -534,7 +535,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                                                         ),
                                                         const SizedBox(height: 2),
                                                         Text(
-                                                          '${item.date} • ${item.category}',
+                                                          '${fmtDate(item.date)} • ${item.category}',
                                                           style: TextStyle(
                                                             fontSize: 11,
                                                             color: isDark ? Colors.white60 : Colors.black54,
@@ -544,7 +545,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                                                     ),
                                                   ),
                                                   Text(
-                                                    'R\$ ${(item.amountCents / 100.0).toStringAsFixed(2)}',
+                                                    'R\$ ${(item.amountCents / 100.0).toStringAsFixed(2).replaceAll('.', ',')}',
                                                     style: TextStyle(
                                                       fontWeight: FontWeight.bold,
                                                       fontSize: 13,
@@ -667,11 +668,22 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                 child: TextField(
                   controller: _dateCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Data (AAAA-MM-DD)',
+                    labelText: 'Data (DD/MM/AAAA)',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.calendar_today),
                   ),
-                  onChanged: (v) => current.date = v.trim(),
+                  onChanged: (v) {
+                    final clean = v.trim();
+                    final parsed = parseDateString(clean);
+                    if (parsed != null) {
+                      current.date = parsed;
+                    } else if (clean.length == 10) {
+                      final parts = clean.split('/');
+                      if (parts.length == 3) {
+                        current.date = '${parts[2]}-${parts[1]}-${parts[0]}';
+                      }
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: 16),
@@ -685,7 +697,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                   ),
                   keyboardType: TextInputType.number,
                   onChanged: (v) {
-                    final normalized = v.replaceAll(',', '.').trim();
+                    final normalized = v.replaceAll('.', '').replaceAll(',', '.').trim();
                     final parsed = double.tryParse(normalized);
                     if (parsed != null) {
                       current.amountCents = (parsed * 100).round();
@@ -724,18 +736,24 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: widget.store.db.accounts.any((a) => a.id == current.accountId)
+                  key: ValueKey('acc_${current.filePath}'),
+                  isExpanded: true,
+                  initialValue: widget.store.db.accounts.any((a) => a.id == current.accountId)
                       ? current.accountId
                       : (widget.store.db.accounts.isNotEmpty ? widget.store.db.accounts.first.id : null),
                   decoration: const InputDecoration(
                     labelText: 'Conta',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.account_balance),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                   ),
                   items: widget.store.db.accounts.map((a) {
                     return DropdownMenuItem(
                       value: a.id,
-                      child: Text(a.name),
+                      child: Text(
+                        a.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) {
@@ -756,16 +774,31 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                         : (catOptions.isNotEmpty ? catOptions.first.value : current.category);
 
                     return DropdownButtonFormField<String>(
+                      key: ValueKey('cat_${current.filePath}_${current.isExpense}'),
+                      isExpanded: true,
                       initialValue: effectiveCat,
                       decoration: const InputDecoration(
-                        labelText: 'Categoria (Sugerida pelo Histórico)',
+                        labelText: 'Categoria (Sugerida)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.category),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                       ),
                       items: [
                         if (current.category.isNotEmpty && !catOptions.any((c) => c.value == current.category))
-                          DropdownMenuItem(value: current.category, child: Text(current.category)),
-                        ...catOptions.map((c) => DropdownMenuItem(value: c.value, child: Text(c.label))),
+                          DropdownMenuItem(
+                            value: current.category,
+                            child: Text(
+                              current.category,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ...catOptions.map((c) => DropdownMenuItem(
+                          value: c.value,
+                          child: Text(
+                            c.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
                       ],
                       onChanged: (v) {
                         if (v != null) {
