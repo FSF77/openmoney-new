@@ -23,6 +23,7 @@ Future<void> showCategoryDrillDownModal(
   String? titleOverride,
   Set<String>? accountFilterIds,
   CashFlowDateMode? dateMode,
+  CashFlowStatusFilter? statusFilter,
 }) async {
   await showDialog(
     context: context,
@@ -37,6 +38,7 @@ Future<void> showCategoryDrillDownModal(
       titleOverride: titleOverride,
       accountFilterIds: accountFilterIds,
       dateMode: dateMode,
+      statusFilter: statusFilter,
     ),
   );
 }
@@ -52,6 +54,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
   final String? titleOverride;
   final Set<String>? accountFilterIds;
   final CashFlowDateMode? dateMode;
+  final CashFlowStatusFilter? statusFilter;
 
   const _CategoryDrillDownDialog({
     required this.store,
@@ -64,6 +67,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
     this.titleOverride,
     this.accountFilterIds,
     this.dateMode,
+    this.statusFilter,
   });
 
   @override
@@ -108,6 +112,19 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
           widget.accountFilterIds!.isNotEmpty &&
           !widget.accountFilterIds!.contains(t.acc)) {
         return false;
+      }
+
+      if (widget.statusFilter != null) {
+        switch (widget.statusFilter!) {
+          case CashFlowStatusFilter.all:
+            break;
+          case CashFlowStatusFilter.reconciledOnly:
+            if (!t.rec) return false;
+            break;
+          case CashFlowStatusFilter.pendingOnly:
+            if (t.rec) return false;
+            break;
+        }
       }
 
       if (hasCat) {

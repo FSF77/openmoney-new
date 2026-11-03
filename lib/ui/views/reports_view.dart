@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/cash_flow_engine.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
@@ -17,6 +18,7 @@ class ReportsView extends StatefulWidget {
 class _ReportsViewState extends State<ReportsView> {
   Set<String> _selectedAccountIds = {};
   ReportPeriodKind _periodKind = ReportPeriodKind.monthly;
+  CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   late int _selectedYear;
 
   @override
@@ -42,6 +44,7 @@ class _ReportsViewState extends State<ReportsView> {
       titleOverride: isAnnual ? '$categoryPath · Ano $_selectedYear' : null,
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
+      statusFilter: _statusFilter,
     );
   }
 
@@ -56,53 +59,89 @@ class _ReportsViewState extends State<ReportsView> {
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       isAnnual: isAnnual,
+      statusFilter: _statusFilter,
     );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
         GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Linha 1: Título e Exportação PDF
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.pie_chart_outline, color: colors.accent, size: 22),
+                  Icon(Icons.pie_chart_outline, color: colors.accent, size: 24),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isAnnual
-                            ? 'Relatório Anual $_selectedYear'
-                            : 'Relatório',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isAnnual
+                              ? 'Relatório Anual $_selectedYear'
+                              : 'Relatório',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
+                        const SizedBox(height: 2),
+                        Text(
+                          'Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf, size: 16),
+                    label: Text(
+                        isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4'),
+                    onPressed: () {
+                      final pdfBytes =
+                          PdfReportGenerator.buildMonthlyReportPdfBytes(
+                        store: widget.store,
+                        monthYM: periodKey,
+                        data: data,
+                      );
+                      PdfReportGenerator.saveAndOpenPdfBytes(
+                        context,
+                        pdfBytes: pdfBytes,
+                        defaultFileName: isAnnual
+                            ? 'Relatorio-Ano-$_selectedYear.pdf'
+                            : 'Relatorio-${widget.store.month}.pdf',
+                      );
+                    },
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: colors.borderGlass),
+              const SizedBox(height: 12),
+              // Linha 2: Filtros e Seletores
               Wrap(
-                spacing: 10,
+                spacing: 12,
+                runSpacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SegmentedButton<ReportPeriodKind>(
+                    style: const ButtonStyle(
+                      textStyle: WidgetStatePropertyAll(
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
                     segments: const [
                       ButtonSegment(
                           value: ReportPeriodKind.monthly,
@@ -115,11 +154,55 @@ class _ReportsViewState extends State<ReportsView> {
                     onSelectionChanged: (s) =>
                         setState(() => _periodKind = s.first),
                   ),
-                  AccountMultiSelectFilter(
-                    store: widget.store,
-                    selectedAccountIds: _selectedAccountIds,
-                    onSelectionChanged: (set) =>
-                        setState(() => _selectedAccountIds = set),
+                  SizedBox(
+                    width: 200,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Contas',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      child: AccountMultiSelectFilter(
+                        store: widget.store,
+                        selectedAccountIds: _selectedAccountIds,
+                        plain: true,
+                        onSelectionChanged: (set) =>
+                            setState(() => _selectedAccountIds = set),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<CashFlowStatusFilter>(
+                      initialValue: _statusFilter,
+                      isExpanded: true,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textPrimary,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Status de Conciliação',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: CashFlowStatusFilter.values
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s.shortLabel,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _statusFilter = v);
+                      },
+                    ),
                   ),
                   if (!isAnnual)
                     MonthYearPickerBar(
@@ -140,7 +223,7 @@ class _ReportsViewState extends State<ReportsView> {
                           '$_selectedYear',
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                         ),
                         IconButton(
@@ -150,32 +233,16 @@ class _ReportsViewState extends State<ReportsView> {
                         ),
                         const SizedBox(width: 4),
                         OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 13),
+                            visualDensity: VisualDensity.compact,
+                          ),
                           onPressed: () => setState(
                               () => _selectedYear = DateTime.now().year),
                           child: const Text('Ano Atual'),
                         ),
                       ],
                     ),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.picture_as_pdf, size: 16),
-                    label: Text(
-                        isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4'),
-                    onPressed: () {
-                      final pdfBytes =
-                          PdfReportGenerator.buildMonthlyReportPdfBytes(
-                        store: widget.store,
-                        monthYM: periodKey,
-                        data: data,
-                      );
-                      PdfReportGenerator.saveAndOpenPdfBytes(
-                        context,
-                        pdfBytes: pdfBytes,
-                        defaultFileName: isAnnual
-                            ? 'Relatorio-Ano-$_selectedYear.pdf'
-                            : 'Relatorio-${widget.store.month}.pdf',
-                      );
-                    },
-                  ),
                 ],
               ),
             ],

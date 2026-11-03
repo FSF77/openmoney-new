@@ -9,6 +9,7 @@ class AccountMultiSelectFilter extends StatelessWidget {
   final Set<String> selectedAccountIds;
   final ValueChanged<Set<String>> onSelectionChanged;
   final bool isDense;
+  final bool plain;
 
   const AccountMultiSelectFilter({
     super.key,
@@ -16,6 +17,7 @@ class AccountMultiSelectFilter extends StatelessWidget {
     required this.selectedAccountIds,
     required this.onSelectionChanged,
     this.isDense = true,
+    this.plain = false,
   });
 
   List<Account> get _activeAccounts => store.activeAccounts;
@@ -77,6 +79,50 @@ class AccountMultiSelectFilter extends StatelessWidget {
     final colors = OpenMoneyColors(isDark);
     final isFiltered = _isFiltered;
     final bizMatch = _currentBusinessMatch;
+
+    if (plain) {
+      return InkWell(
+        onTap: () => _openFilterDialog(context),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(
+                    isFiltered
+                        ? (bizMatch != null
+                            ? Icons.business_rounded
+                            : Icons.check_circle_rounded)
+                        : Icons.account_balance_wallet_outlined,
+                    size: 16,
+                    color: isFiltered ? colors.accent : colors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _buttonLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isFiltered ? FontWeight.w700 : FontWeight.w500,
+                        color: isFiltered ? colors.accent : colors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 20,
+              color: isFiltered ? colors.accent : colors.textSecondary,
+            ),
+          ],
+        ),
+      );
+    }
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),

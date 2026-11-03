@@ -3024,6 +3024,7 @@ class MoneyStore extends ChangeNotifier {
     String monthYM, {
     Set<String>? accountFilterIds,
     bool isAnnual = false,
+    CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
   }) {
     final rawTxs = isAnnual
         ? db.txs.where((t) => t.date.startsWith('${monthYM.substring(0, 4)}-')).toList()
@@ -3036,6 +3037,16 @@ class MoneyStore extends ChangeNotifier {
       }
       if (tx.xfer != null || tx.peer != null) return false;
       if (!isCategoryIncludedInReports(tx.cat)) return false;
+      switch (statusFilter) {
+        case CashFlowStatusFilter.all:
+          break;
+        case CashFlowStatusFilter.reconciledOnly:
+          if (!tx.rec) return false;
+          break;
+        case CashFlowStatusFilter.pendingOnly:
+          if (tx.rec) return false;
+          break;
+      }
       return true;
     }).toList();
 
