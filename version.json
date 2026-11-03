@@ -1,24 +1,24 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 60,
-  "version": "2.2.4",
-  "notes": "Melhorias na visualização no card de patrimônio >> Anteriores: Rotina para importar pastas com recibos digitalizados uso OCR local ou integração com Gemini IA, Melhorias visuais nas telas de lançamento e relatório, inclusão de filtro anual no relatório, Alterar nomes orçamento para limite de gastos…",
-  "releaseDate": "03/11/2026",
-  "windows": {
-    "build": 59,
-    "version": "2.2.3",
-    "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.2.3.zip",
-    "sha256": "57fa0fe7e152e825755a74fdf4406ce3ee21f0c8c032701cb97ce4058d995a85",
-    "releaseDate": "03/11/2026"
-  },
-  "macos": {
-    "version": "2.2.4",
-    "build": 60,
-    "releaseDate": "03/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.2.4.zip",
-    "sha256": "fe10ca5658d8e9698bb0ce3a82d99431205b87f708db4a78b4b0f1851ff446cb",
-    "sizeMb": 11
-  },
-  "title": "OpenMoney Flutter v2.2.4"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "build":  60,
+    "version":  "2.2.4",
+    "notes":  "Melhorias na visualização no card de patrimônio \u003e\u003e Anteriores: Rotina para importar pastas com recibos digitalizados uso OCR local ou integração com Gemini IA, Melhorias visuais nas telas de lançamento e relatório, inclusão de filtro anual no relatório, Alterar nomes orçamento para limite de gastos…",
+    "releaseDate":  "03/11/2026",
+    "windows":  {
+                    "build":  60,
+                    "version":  "2.2.4",
+                    "sizeMb":  13,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.2.4.zip",
+                    "sha256":  "b085da6570085142d98d139dd31c01e76cdb3d1260ee399bd61fff2ee487856b",
+                    "releaseDate":  "03/11/2026"
+                },
+    "macos":  {
+                  "version":  "2.2.4",
+                  "build":  60,
+                  "releaseDate":  "03/11/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.2.4.zip",
+                  "sha256":  "fe10ca5658d8e9698bb0ce3a82d99431205b87f708db4a78b4b0f1851ff446cb",
+                  "sizeMb":  11
+              },
+    "title":  "OpenMoney Flutter v2.2.4"
 }
