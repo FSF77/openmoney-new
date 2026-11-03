@@ -108,6 +108,7 @@ class MoneyStore extends ChangeNotifier {
   bool sidebarShowInactiveAccounts = false;
   bool sidebarShowPlanning = true;
   bool sidebarShowModules = false;
+  bool hidePatrimonyBalance = false;
   bool showMissingDatabasePrompt = false;
   bool showWelcomeScreen = false;
   String missingDatabasePath = '';
@@ -295,6 +296,9 @@ class MoneyStore extends ChangeNotifier {
     if (cfg['sidebarShowModules'] is bool) {
       sidebarShowModules = cfg['sidebarShowModules'] as bool;
     }
+    if (cfg['hidePatrimonyBalance'] is bool) {
+      hidePatrimonyBalance = cfg['hidePatrimonyBalance'] as bool;
+    }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
     }
@@ -467,6 +471,14 @@ class MoneyStore extends ChangeNotifier {
     sidebarShowModules = !sidebarShowModules;
     final cfg = _readConfig();
     cfg['sidebarShowModules'] = sidebarShowModules;
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void toggleHidePatrimonyBalance() {
+    hidePatrimonyBalance = !hidePatrimonyBalance;
+    final cfg = _readConfig();
+    cfg['hidePatrimonyBalance'] = hidePatrimonyBalance;
     _writeConfig(cfg);
     notifyListeners();
   }
@@ -1443,6 +1455,45 @@ class MoneyStore extends ChangeNotifier {
   int totalBalance({bool predicted = false}) {
     rebuildIndexesIfNeeded();
     return predicted ? _cachedTotalPred : _cachedTotalReal;
+  }
+
+  /// Saldo consolidado previsto até o final do ano da competência atual (ex: até 31/12).
+  int totalBalancePredictedYear() {
+    rebuildIndexesIfNeeded();
+    final currentYear = _month.length >= 4 ? _month.substring(0, 4) : todayISO().substring(0, 4);
+    final endOfYear = '$currentYear-12-31';
+    final endYearMonth = '$currentYear-12';
+
+    final cardAccounts = <String, Account>{};
+    final predByAcc = <String, int>{};
+    for (final acc in db.accounts) {
+      predByAcc[acc.id] = acc.opening;
+      if (acc.type == kCardType && acc.card != null) {
+        cardAccounts[acc.id] = acc;
+      }
+    }
+
+    for (final tx in db.txs) {
+      final cardAcc = cardAccounts[tx.acc];
+      if (cardAcc != null) {
+        if (tx.auto != true || tx.rec) {
+          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
+          if (ik.compareTo(endYearMonth) <= 0) {
+            predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          }
+        }
+      } else {
+        if (tx.rec || tx.date.compareTo(endOfYear) <= 0) {
+          predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+        }
+      }
+    }
+
+    int total = 0;
+    for (final acc in db.accounts) {
+      total += predByAcc[acc.id] ?? acc.opening;
+    }
+    return total;
   }
 
   List<Account> get activeAccounts =>

@@ -393,6 +393,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
   }) {
     final totalReal = widget.store.totalBalance(predicted: false);
     final totalPred = widget.store.totalBalance(predicted: true);
+    final totalPredYear = widget.store.totalBalancePredictedYear();
     final dueSummary = widget.store.dueBillsSummary();
 
     final favAccounts = widget.store.favoriteAccounts;
@@ -479,41 +480,90 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               // Consolidated Patrimony Card
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: colors.surfaceGlass,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: colors.borderGlass),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'PATRIMÔNIO CONSOLIDADO (REAL)',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                        color: colors.textSecondary,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Patrimônio consolidado',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textSecondary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: widget.store.toggleHidePatrimonyBalance,
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              widget.store.hidePatrimonyBalance
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              size: 15,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+                          color: colors.textPrimary,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'Real: ',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          TextSpan(
+                            text: widget.store.hidePatrimonyBalance
+                                ? '••••••'
+                                : brl(totalReal),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: widget.store.hidePatrimonyBalance
+                                  ? colors.textPrimary
+                                  : (totalReal >= 0 ? colors.income : colors.expense),
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      brl(totalReal),
+                      'Previsto no mês: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPred)}',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: totalReal >= 0 ? colors.income : colors.expense,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textPrimary,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
-                      'Previsto no mês: ${brl(totalPred)}',
+                      'Previsto no ano: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPredYear)}',
                       style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textPrimary,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
