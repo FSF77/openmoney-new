@@ -154,24 +154,13 @@ class _ReportsViewState extends State<ReportsView> {
                     onSelectionChanged: (s) =>
                         setState(() => _periodKind = s.first),
                   ),
-                  SizedBox(
+                  AccountMultiSelectFilter(
+                    store: widget.store,
+                    selectedAccountIds: _selectedAccountIds,
+                    asFormField: true,
                     width: 200,
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Contas',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(),
-                      ),
-                      child: AccountMultiSelectFilter(
-                        store: widget.store,
-                        selectedAccountIds: _selectedAccountIds,
-                        plain: true,
-                        onSelectionChanged: (set) =>
-                            setState(() => _selectedAccountIds = set),
-                      ),
-                    ),
+                    onSelectionChanged: (set) =>
+                        setState(() => _selectedAccountIds = set),
                   ),
                   SizedBox(
                     width: 200,
@@ -395,7 +384,7 @@ class _ReportsViewState extends State<ReportsView> {
             ),
           ...groups.map((g) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.only(bottom: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -406,7 +395,7 @@ class _ReportsViewState extends State<ReportsView> {
                       onTap: () => _showCategoryDrillDown(
                           context, g.name, periodKey, isAnnual),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Column(
                           children: [
                             Row(
@@ -464,7 +453,7 @@ class _ReportsViewState extends State<ReportsView> {
                     ),
                   ),
                   if (g.subs.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     ...g.subs.map((sub) {
                       final fullPath = '${g.name}$kCategorySep${sub.name}';
                       return MouseRegion(
@@ -478,7 +467,7 @@ class _ReportsViewState extends State<ReportsView> {
                             isAnnual,
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+                            padding: const EdgeInsets.fromLTRB(14, 2.5, 4, 2.5),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [

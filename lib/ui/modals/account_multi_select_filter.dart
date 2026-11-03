@@ -10,6 +10,8 @@ class AccountMultiSelectFilter extends StatelessWidget {
   final ValueChanged<Set<String>> onSelectionChanged;
   final bool isDense;
   final bool plain;
+  final bool asFormField;
+  final double? width;
 
   const AccountMultiSelectFilter({
     super.key,
@@ -18,6 +20,8 @@ class AccountMultiSelectFilter extends StatelessWidget {
     required this.onSelectionChanged,
     this.isDense = true,
     this.plain = false,
+    this.asFormField = false,
+    this.width,
   });
 
   List<Account> get _activeAccounts => store.activeAccounts;
@@ -79,6 +83,78 @@ class AccountMultiSelectFilter extends StatelessWidget {
     final colors = OpenMoneyColors(isDark);
     final isFiltered = _isFiltered;
     final bizMatch = _currentBusinessMatch;
+
+    if (asFormField) {
+      final child = DropdownButtonFormField<String>(
+        initialValue: 'selected',
+        isExpanded: true,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: isFiltered ? FontWeight.w700 : FontWeight.w500,
+          color: isFiltered ? colors.accent : colors.textPrimary,
+        ),
+        decoration: InputDecoration(
+          labelText: 'Contas',
+          labelStyle: TextStyle(
+            fontSize: 13,
+            color: isFiltered ? colors.accent : null,
+          ),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          border: const OutlineInputBorder(),
+        ),
+        icon: Icon(
+          Icons.arrow_drop_down,
+          size: 20,
+          color: isFiltered ? colors.accent : colors.textSecondary,
+        ),
+        items: [
+          DropdownMenuItem<String>(
+            value: 'selected',
+            child: Row(
+              children: [
+                Icon(
+                  isFiltered
+                      ? (bizMatch != null
+                          ? Icons.business_rounded
+                          : Icons.check_circle_rounded)
+                      : Icons.account_balance_wallet_outlined,
+                  size: 16,
+                  color: isFiltered ? colors.accent : colors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _buttonLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          isFiltered ? FontWeight.w700 : FontWeight.w500,
+                      color: isFiltered ? colors.accent : colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        onChanged: (_) {},
+      );
+
+      final wrapped = InkWell(
+        onTap: () => _openFilterDialog(context),
+        child: IgnorePointer(
+          child: child,
+        ),
+      );
+
+      if (width != null) {
+        return SizedBox(width: width, child: wrapped);
+      }
+      return wrapped;
+    }
 
     if (plain) {
       return InkWell(

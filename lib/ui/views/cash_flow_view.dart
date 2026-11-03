@@ -404,23 +404,36 @@ class _CashFlowViewState extends State<CashFlowView> {
                     AccountMultiSelectFilter(
                       store: widget.store,
                       selectedAccountIds: _selectedAccountIds,
+                      asFormField: true,
+                      width: 200,
                       onSelectionChanged: (set) =>
                           setState(() => _selectedAccountIds = set),
                     ),
                     SizedBox(
-                      width: 190,
+                      width: 200,
                       child: DropdownButtonFormField<CashFlowStatusFilter>(
                         initialValue: _statusFilter,
                         isExpanded: true,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Status de Conciliação',
+                          labelStyle: TextStyle(fontSize: 13),
                           isDense: true,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(),
                         ),
                         items: CashFlowStatusFilter.values
                             .map((s) => DropdownMenuItem(
                                   value: s,
-                                  child: Text(s.shortLabel),
+                                  child: Text(
+                                    s.shortLabel,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                 ))
                             .toList(),
                         onChanged: (v) {
@@ -429,19 +442,30 @@ class _CashFlowViewState extends State<CashFlowView> {
                       ),
                     ),
                     SizedBox(
-                      width: 190,
+                      width: 200,
                       child: DropdownButtonFormField<CashFlowKindFilter>(
                         initialValue: _kindFilter,
                         isExpanded: true,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Tipo',
+                          labelStyle: TextStyle(fontSize: 13),
                           isDense: true,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(),
                         ),
                         items: CashFlowKindFilter.values
                             .map((k) => DropdownMenuItem(
                                   value: k,
-                                  child: Text(k.label),
+                                  child: Text(
+                                    k.label,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                 ))
                             .toList(),
                         onChanged: (v) {
@@ -450,19 +474,30 @@ class _CashFlowViewState extends State<CashFlowView> {
                       ),
                     ),
                     SizedBox(
-                      width: 210,
+                      width: 200,
                       child: DropdownButtonFormField<CashFlowDateMode>(
                         initialValue: _dateMode,
                         isExpanded: true,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Regime Contábil',
+                          labelStyle: TextStyle(fontSize: 13),
                           isDense: true,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(),
                         ),
                         items: CashFlowDateMode.values
                             .map((m) => DropdownMenuItem(
                                   value: m,
-                                  child: Text(m.shortLabel),
+                                  child: Text(
+                                    m.shortLabel,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                 ))
                             .toList(),
                         onChanged: (v) {
@@ -473,10 +508,17 @@ class _CashFlowViewState extends State<CashFlowView> {
                     SizedBox(
                       width: 200,
                       child: TextField(
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colors.textPrimary,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Filtrar categoria...',
+                          labelStyle: TextStyle(fontSize: 13),
                           prefixIcon: Icon(Icons.search, size: 16),
                           isDense: true,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           border: OutlineInputBorder(),
                         ),
                         onChanged: (v) => setState(() => _searchQuery = v),

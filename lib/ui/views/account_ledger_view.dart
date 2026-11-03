@@ -8,6 +8,7 @@ import '../modals/account_modal.dart';
 import '../modals/batch_delete_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/category_select_form_field.dart';
 import '../widgets/csv_export.dart';
 
 class AccountLedgerView extends StatefulWidget {
@@ -641,53 +642,59 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       SizedBox(
+                        height: 38,
+                        child: FilledButton.tonal(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: (_isExpense ? colors.expense : colors.income)
+                                .withValues(alpha: 0.16),
+                            foregroundColor:
+                                _isExpense ? colors.expense : colors.income,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            shape: StadiumBorder(
+                              side: BorderSide(
+                                color: _isExpense ? colors.expense : colors.income,
+                              ),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isExpense = !_isExpense;
+                              _syncDefaultCategory();
+                            });
+                          },
+                          child: Text(
+                            _isExpense ? '− Despesa' : '+ Receita',
+                          ),
+                        ),
+                      ),
+                      SizedBox(
                         width: 142,
                         child: TextField(
                           controller: _dateCtrl,
                           style: const TextStyle(fontSize: 13),
                           decoration: InputDecoration(
                             labelText: 'Data',
+                            labelStyle: const TextStyle(fontSize: 13),
                             isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                             border: const OutlineInputBorder(),
+                            suffixIconConstraints: const BoxConstraints(
+                              minWidth: 28,
+                              maxHeight: 24,
+                            ),
                             suffixIcon: IconButton(
                               icon: const Icon(Icons.calendar_month, size: 18),
                               tooltip: 'Escolher data no calendário',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                               onPressed: _pickDate,
-                            ),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () {
-                          setState(() {
-                            _isExpense = !_isExpense;
-                            _syncDefaultCategory();
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (_isExpense ? colors.expense : colors.income)
-                                .withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color:
-                                  _isExpense ? colors.expense : colors.income,
-                            ),
-                          ),
-                          child: Text(
-                            _isExpense ? '− Despesa' : '+ Receita',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color:
-                                  _isExpense ? colors.expense : colors.income,
                             ),
                           ),
                         ),
@@ -699,67 +706,27 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           style: const TextStyle(fontSize: 13),
                           decoration: const InputDecoration(
                             labelText: 'Favorecido / Descrição',
+                            labelStyle: TextStyle(fontSize: 13),
                             hintText: 'Ex.: Supermercado, Previsão...',
                             isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                             border: OutlineInputBorder(),
                           ),
                           onChanged: _onPayeeChanged,
                           onSubmitted: (_) => _submitQuickEntry(),
                         ),
                       ),
-                      Builder(
-                        builder: (context) {
-                          final catType = _isExpense ? 'Despesa' : 'Receita';
-                          final catOptions =
-                              widget.store.allCategoryOptions(catType);
-                          final others = widget.store.activeAccounts
-                              .where((a) => a.id != acc.id)
-                              .toList();
-                          final items = <DropdownMenuItem<String>>[
-                            ...catOptions.map(
-                              (c) => DropdownMenuItem(
-                                value: c.value,
-                                child: Text(
-                                  c.label,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            ...others.map(
-                              (a) => DropdownMenuItem(
-                                value: 'xfer:${a.id}',
-                                child: Text(
-                                  '⇄ Transferência: ${a.name}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ];
-                          final val =
-                              items.any((i) => i.value == _catSelection)
-                                  ? _catSelection
-                                  : (items.isNotEmpty
-                                      ? items.first.value!
-                                      : '');
-                          return SizedBox(
-                            width: 230,
-                            child: DropdownButtonFormField<String>(
-                              key: ValueKey('cat_$val'),
-                              initialValue: val.isEmpty ? null : val,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Categoria / Transferência',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              items: items,
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() => _catSelection = v);
-                                }
-                              },
-                            ),
-                          );
+                      CategorySelectFormField(
+                        store: widget.store,
+                        categoryType: _isExpense ? 'Despesa' : 'Receita',
+                        currentSelection: _catSelection,
+                        excludeAccountId: acc.id,
+                        width: 230,
+                        onChanged: (val) {
+                          setState(() => _catSelection = val);
                         },
                       ),
                       SizedBox(
@@ -769,7 +736,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           style: const TextStyle(fontSize: 13),
                           decoration: const InputDecoration(
                             labelText: 'Nota',
+                            labelStyle: TextStyle(fontSize: 13),
                             isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                             border: OutlineInputBorder(),
                           ),
                           onSubmitted: (_) => _submitQuickEntry(),
@@ -785,7 +757,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                           decoration: const InputDecoration(
                             labelText: 'Valor (R\$)',
+                            labelStyle: TextStyle(fontSize: 13),
                             isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                             border: OutlineInputBorder(),
                           ),
                           onSubmitted: (_) => _submitQuickEntry(),
@@ -796,27 +773,38 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         child: DropdownButtonFormField<String>(
                           initialValue: _mode,
                           isExpanded: true,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                          ),
                           decoration: const InputDecoration(
                             labelText: 'Modalidade',
+                            labelStyle: TextStyle(fontSize: 13),
                             isDense: true,
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 10,
-                              vertical: 10,
+                              vertical: 8,
                             ),
                           ),
                           items: const [
                             DropdownMenuItem(
                               value: 'single',
-                              child: Text('Único', overflow: TextOverflow.ellipsis),
+                              child: Text('Único',
+                                  style: TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: 'installment',
-                              child: Text('Parcelado', overflow: TextOverflow.ellipsis),
+                              child: Text('Parcelado',
+                                  style: TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: 'recurring',
-                              child: Text('Recorrente', overflow: TextOverflow.ellipsis),
+                              child: Text('Recorrente',
+                                  style: TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis),
                             ),
                           ],
                           onChanged: (v) {
@@ -830,20 +818,26 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           child: DropdownButtonFormField<int>(
                             initialValue: _installments,
                             isExpanded: true,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.textPrimary,
+                            ),
                             decoration: const InputDecoration(
                               labelText: 'Parcelas',
+                              labelStyle: TextStyle(fontSize: 13),
                               isDense: true,
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 10,
-                                vertical: 10,
+                                vertical: 8,
                               ),
                             ),
                             items: List.generate(
                               47,
                               (i) => DropdownMenuItem(
                                 value: i + 2,
-                                child: Text('${i + 2}x'),
+                                child: Text('${i + 2}x',
+                                    style: const TextStyle(fontSize: 13)),
                               ),
                             ),
                             onChanged: (v) {
@@ -857,13 +851,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           child: DropdownButtonFormField<String>(
                             initialValue: _freq,
                             isExpanded: true,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.textPrimary,
+                            ),
                             decoration: const InputDecoration(
                               labelText: 'Frequência',
+                              labelStyle: TextStyle(fontSize: 13),
                               isDense: true,
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 10,
-                                vertical: 10,
+                                vertical: 8,
                               ),
                             ),
                             items: kRecurrenceFrequencyOptions
@@ -872,6 +871,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     value: o.id,
                                     child: Text(
                                       o.label,
+                                      style: const TextStyle(fontSize: 13),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -882,10 +882,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             },
                           ),
                         ),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('Salvar'),
-                        onPressed: _submitQuickEntry,
+                      SizedBox(
+                        height: 38,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            shape: const StadiumBorder(),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Salvar'),
+                          onPressed: _submitQuickEntry,
+                        ),
                       ),
                     ],
                   ),

@@ -406,8 +406,8 @@ class _CategoriesViewState extends State<CategoriesView> {
           final topCount = widget.store.categoryUsageCount(top.path);
 
           return GlassCard(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Column(
               children: [
                 Row(
@@ -420,14 +420,14 @@ class _CategoriesViewState extends State<CategoriesView> {
                           onTap: () => _showCategoryDrillDown(top.path),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 6),
+                                horizontal: 6, vertical: 3),
                             child: Row(
                               children: [
                                 Text(
                                   top.name,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 14,
+                                    fontSize: 13.5,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -445,7 +445,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                                 const SizedBox(width: 6),
                                 Icon(
                                   Icons.open_in_new,
-                                  size: 14,
+                                  size: 13,
                                   color: colors.accent,
                                 ),
                               ],
@@ -455,29 +455,44 @@ class _CategoriesViewState extends State<CategoriesView> {
                       ),
                     ),
                     TextButton.icon(
-                      icon: const Icon(Icons.list_alt, size: 15),
-                      label: const Text('Lançamentos'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                      icon: const Icon(Icons.list_alt, size: 14),
+                      label: const Text('Lançamentos', style: TextStyle(fontSize: 12)),
                       onPressed: () => _showCategoryDrillDown(top.path),
                     ),
                     TextButton.icon(
-                      icon: const Icon(Icons.add, size: 15),
-                      label: const Text('Subcategoria'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                      icon: const Icon(Icons.add, size: 14),
+                      label: const Text('Subcategoria', style: TextStyle(fontSize: 12)),
                       onPressed: () =>
                           _showCategoryFormModal(presetParent: top.name),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 17),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
                       onPressed: () => _showCategoryFormModal(editing: top),
                     ),
+                    const SizedBox(width: 4),
                     IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
                       icon: Icon(Icons.delete_outline,
-                          size: 17, color: colors.expense),
+                          size: 16, color: colors.expense),
                       onPressed: () => _handleDeleteCategory(top),
                     ),
                   ],
                 ),
                 if (subs.isNotEmpty) ...[
-                  const Divider(height: 12),
+                  const Divider(height: 8),
                   ...subs.map((sub) {
                     final subCount = widget.store.categoryUsageCount(sub.path);
                     return Padding(
@@ -492,13 +507,13 @@ class _CategoriesViewState extends State<CategoriesView> {
                                 onTap: () => _showCategoryDrillDown(sub.path),
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 5),
+                                      horizontal: 6, vertical: 2),
                                   child: Row(
                                     children: [
                                       Text(
                                         '↳ ${sub.name}',
                                         style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: 12.5,
                                           color: colors.textSecondary,
                                         ),
                                       ),
@@ -521,7 +536,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                                       const SizedBox(width: 4),
                                       Icon(
                                         Icons.open_in_new,
-                                        size: 12,
+                                        size: 11,
                                         color: colors.accent,
                                       ),
                                     ],
@@ -531,19 +546,30 @@ class _CategoriesViewState extends State<CategoriesView> {
                             ),
                           ),
                           IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
                             tooltip: 'Ver Lançamentos',
                             icon: Icon(Icons.list_alt,
-                                size: 16, color: colors.accent),
+                                size: 15, color: colors.accent),
                             onPressed: () => _showCategoryDrillDown(sub.path),
                           ),
+                          const SizedBox(width: 4),
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.edit_outlined, size: 15),
                             onPressed: () =>
                                 _showCategoryFormModal(editing: sub),
                           ),
+                          const SizedBox(width: 4),
                           IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
                             icon: Icon(Icons.delete_outline,
-                                size: 16, color: colors.expense),
+                                size: 15, color: colors.expense),
                             onPressed: () => _handleDeleteCategory(sub),
                           ),
                         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/category_select_form_field.dart';
 
 Future<void> showTransactionCreateModal(
   BuildContext context,
@@ -291,13 +292,18 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
             children: [
               DropdownButtonFormField<String>(
                 initialValue: _accId,
+                isDense: true,
+                style: TextStyle(fontSize: 13, color: colors.textPrimary),
                 decoration: const InputDecoration(
                   labelText: 'Conta do Lançamento (Mover entre Contas)',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   border: OutlineInputBorder(),
                 ),
                 items: widget.store.db.accounts
                     .map((a) =>
-                        DropdownMenuItem(value: a.id, child: Text(a.name)))
+                        DropdownMenuItem(value: a.id, child: Text(a.name, style: const TextStyle(fontSize: 13))))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) {
@@ -320,11 +326,17 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   Expanded(
                     child: TextField(
                       controller: _dateCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
+                        labelStyle: const TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month, size: 20),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.calendar_month, size: 18),
                           tooltip: 'Escolher data no calendário',
                           onPressed: _pickDate,
                         ),
@@ -343,6 +355,10 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   ),
                   const SizedBox(width: 12),
                   SegmentedButton<bool>(
+                    style: const ButtonStyle(
+                      textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      visualDensity: VisualDensity.compact,
+                    ),
                     segments: const [
                       ButtonSegment(value: true, label: Text('− Despesa')),
                       ButtonSegment(value: false, label: Text('+ Receita')),
@@ -357,25 +373,24 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _payeeCtrl,
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(
                   labelText: 'Favorecido / Descrição',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
-              if (dropdownItems.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: effectiveCat,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoria ou Transferência',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: dropdownItems,
-                  onChanged: (v) {
-                    if (v != null) setState(() => _catSelection = v);
-                  },
-                ),
+              CategorySelectFormField(
+                store: widget.store,
+                categoryType: catType,
+                currentSelection: effectiveCat,
+                excludeAccountId: _accId,
+                labelText: 'Categoria ou Transferência',
+                onChanged: (v) => setState(() => _catSelection = v),
+              ),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -385,9 +400,14 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Valor (R\$)',
+                        labelStyle: TextStyle(fontSize: 13),
                         prefixText: 'R\$ ',
+                        prefixStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -396,8 +416,12 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   Expanded(
                     child: TextField(
                       controller: _memoCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Nota / Observação',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -420,14 +444,19 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                       initialValue:
                           opts.any((o) => o.key == selIk) ? selIk : opts.first.key,
                       isExpanded: true,
+                      isDense: true,
+                      style: TextStyle(fontSize: 13, color: colors.textPrimary),
                       decoration: const InputDecoration(
                         labelText: 'Competência da Fatura do Cartão',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         border: OutlineInputBorder(),
                       ),
                       items: opts
                           .map((o) => DropdownMenuItem(
                                 value: o.key,
-                                child: Text(o.label),
+                                child: Text(o.label, style: const TextStyle(fontSize: 13)),
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _customIk = v),
@@ -443,6 +472,10 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<ScopeChoice>(
+                  style: const ButtonStyle(
+                    textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    visualDensity: VisualDensity.compact,
+                  ),
                   segments: const [
                     ButtonSegment(
                       value: ScopeChoice.only,
@@ -747,8 +780,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               // Conta do Lançamento
               DropdownButtonFormField<String>(
                 initialValue: _accId,
+                isDense: true,
+                style: TextStyle(fontSize: 13, color: colors.textPrimary),
                 decoration: const InputDecoration(
                   labelText: 'Conta',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   border: OutlineInputBorder(),
                 ),
                 items: availableAccs
@@ -759,6 +797,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                                 (a.type == kCardType
                                     ? ' (Cartão)'
                                     : ' (${a.type})'),
+                            style: const TextStyle(fontSize: 13),
                           ),
                         ))
                     .toList(),
@@ -788,11 +827,17 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   Expanded(
                     child: TextField(
                       controller: _dateCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
+                        labelStyle: const TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month, size: 20),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.calendar_month, size: 18),
                           tooltip: 'Escolher data no calendário',
                           onPressed: () => _pickDate(_dateCtrl),
                         ),
@@ -814,6 +859,10 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   if (!isXfer) ...[
                     const SizedBox(width: 12),
                     SegmentedButton<bool>(
+                      style: const ButtonStyle(
+                        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        visualDensity: VisualDensity.compact,
+                      ),
                       segments: const [
                         ButtonSegment(value: true, label: Text('− Despesa')),
                         ButtonSegment(value: false, label: Text('+ Receita')),
@@ -858,8 +907,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           ? selIk
                           : opts.first.key,
                       isExpanded: true,
+                      isDense: true,
+                      style: TextStyle(fontSize: 13, color: colors.textPrimary),
                       decoration: const InputDecoration(
                         labelText: 'Fatura do Cartão (Competência)',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         border: OutlineInputBorder(),
                       ),
                       items: opts
@@ -867,7 +921,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                                 value: o.key,
                                 child: Text(o.key == defaultIk
                                     ? '${o.label} [Padrão]'
-                                    : o.label),
+                                    : o.label,
+                                    style: const TextStyle(fontSize: 13)),
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _customIk = v),
@@ -880,8 +935,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               // Favorecido / Descrição com Autocompletar inteligente
               TextField(
                 controller: _payeeCtrl,
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(
                   labelText: 'Favorecido / Descrição',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   border: OutlineInputBorder(),
                 ),
                 onChanged: _onPayeeChanged,
@@ -903,6 +962,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       ),
                       label: Text(
                         '${s.name} • ${s.category}${accName != null ? ' • $accName' : ''}',
+                        style: const TextStyle(fontSize: 12),
                       ),
                       onPressed: () => _applySuggestion(s),
                     );
@@ -912,19 +972,14 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               const SizedBox(height: 12),
 
               // Categoria ou Transferência
-              if (dropdownItems.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: effectiveCat,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoria ou Transferência',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: dropdownItems,
-                  onChanged: (v) {
-                    if (v != null) setState(() => _catSelection = v);
-                  },
-                ),
+              CategorySelectFormField(
+                store: widget.store,
+                categoryType: catType,
+                currentSelection: effectiveCat,
+                excludeAccountId: _accId,
+                labelText: 'Categoria ou Transferência',
+                onChanged: (v) => setState(() => _catSelection = v),
+              ),
               const SizedBox(height: 12),
 
               // Valor & Observação
@@ -936,9 +991,14 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Valor (R\$)',
+                        labelStyle: TextStyle(fontSize: 13),
                         prefixText: 'R\$ ',
+                        prefixStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -947,8 +1007,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   Expanded(
                     child: TextField(
                       controller: _memoCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Nota / Observação',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -965,6 +1029,10 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
+                  style: const ButtonStyle(
+                    textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    visualDensity: VisualDensity.compact,
+                  ),
                   segments: const [
                     ButtonSegment(value: 'single', label: Text('Único')),
                     ButtonSegment(
@@ -983,14 +1051,19 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _freq,
+                          isDense: true,
+                          style: TextStyle(fontSize: 13, color: colors.textPrimary),
                           decoration: const InputDecoration(
                             labelText: 'Frequência',
+                            labelStyle: TextStyle(fontSize: 13),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             border: OutlineInputBorder(),
                           ),
                           items: kRecurrenceFrequencyOptions
                               .map((o) => DropdownMenuItem(
                                     value: o.id,
-                                    child: Text(o.label),
+                                    child: Text(o.label, style: const TextStyle(fontSize: 13)),
                                   ))
                               .toList(),
                           onChanged: (v) {
@@ -1004,7 +1077,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Definir Data de Término'),
+                    title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
                     value: _hasEndDate,
                     onChanged: (v) => setState(() => _hasEndDate = v ?? false),
                   ),
@@ -1012,11 +1085,17 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     const SizedBox(height: 4),
                     TextField(
                       controller: _endDateCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data de Término (DD/MM/AAAA)',
+                        labelStyle: const TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month, size: 20),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.calendar_month, size: 18),
                           tooltip: 'Escolher data de término',
                           onPressed: () {
                             final baseD = dateFromISO(
@@ -1030,15 +1109,20 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 ] else if (_mode == 'installment') ...[
                   DropdownButtonFormField<int>(
                     initialValue: _installments,
+                    isDense: true,
+                    style: TextStyle(fontSize: 13, color: colors.textPrimary),
                     decoration: const InputDecoration(
                       labelText: 'Número de Parcelas',
+                      labelStyle: TextStyle(fontSize: 13),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       border: OutlineInputBorder(),
                     ),
                     items: List.generate(
                       119,
                       (i) => DropdownMenuItem(
                         value: i + 2,
-                        child: Text('${i + 2}x'),
+                        child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
                       ),
                     ),
                     onChanged: (v) {
@@ -1285,8 +1369,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
               // Conta destino
               DropdownButtonFormField<String>(
                 initialValue: _accId,
+                isDense: true,
+                style: TextStyle(fontSize: 13, color: colors.textPrimary),
                 decoration: const InputDecoration(
                   labelText: 'Conta Destino',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   border: OutlineInputBorder(),
                 ),
                 items: availableAccs
@@ -1297,6 +1386,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                                 (a.type == kCardType
                                     ? ' (Cartão)'
                                     : ' (${a.type})'),
+                            style: const TextStyle(fontSize: 13),
                           ),
                         ))
                     .toList(),
@@ -1326,11 +1416,17 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   Expanded(
                     child: TextField(
                       controller: _dateCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
+                        labelStyle: const TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month, size: 20),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.calendar_month, size: 18),
                           tooltip: 'Escolher data no calendário',
                           onPressed: () => _pickDate(_dateCtrl),
                         ),
@@ -1350,6 +1446,10 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   if (!isXfer) ...[
                     const SizedBox(width: 12),
                     SegmentedButton<bool>(
+                      style: const ButtonStyle(
+                        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        visualDensity: VisualDensity.compact,
+                      ),
                       segments: const [
                         ButtonSegment(value: true, label: Text('− Despesa')),
                         ButtonSegment(value: false, label: Text('+ Receita')),
@@ -1393,8 +1493,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                           ? selIk
                           : opts.first.key,
                       isExpanded: true,
+                      isDense: true,
+                      style: TextStyle(fontSize: 13, color: colors.textPrimary),
                       decoration: const InputDecoration(
                         labelText: 'Fatura do Cartão (Competência)',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         border: OutlineInputBorder(),
                       ),
                       items: opts
@@ -1402,7 +1507,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                                 value: o.key,
                                 child: Text(o.key == defaultIk
                                     ? '${o.label} [Padrão]'
-                                    : o.label),
+                                    : o.label,
+                                    style: const TextStyle(fontSize: 13)),
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _customIk = v),
@@ -1415,27 +1521,26 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
               // Favorecido / Descrição
               TextField(
                 controller: _payeeCtrl,
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(
                   labelText: 'Favorecido / Descrição',
+                  labelStyle: TextStyle(fontSize: 13),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
 
               // Categoria ou Transferência
-              if (dropdownItems.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: effectiveCat,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoria ou Transferência',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: dropdownItems,
-                  onChanged: (v) {
-                    if (v != null) setState(() => _catSelection = v);
-                  },
-                ),
+              CategorySelectFormField(
+                store: widget.store,
+                categoryType: catType,
+                currentSelection: effectiveCat,
+                excludeAccountId: _accId,
+                labelText: 'Categoria ou Transferência',
+                onChanged: (v) => setState(() => _catSelection = v),
+              ),
               const SizedBox(height: 12),
 
               // Valor & Observação
@@ -1447,9 +1552,14 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Valor (R\$)',
+                        labelStyle: TextStyle(fontSize: 13),
                         prefixText: 'R\$ ',
+                        prefixStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -1458,8 +1568,12 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   Expanded(
                     child: TextField(
                       controller: _memoCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         labelText: 'Nota / Observação',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -1476,6 +1590,10 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
+                  style: const ButtonStyle(
+                    textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    visualDensity: VisualDensity.compact,
+                  ),
                   segments: const [
                     ButtonSegment(value: 'single', label: Text('Único')),
                     ButtonSegment(value: 'recurring', label: Text('Recorrente')),
@@ -1492,14 +1610,19 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _freq,
+                          isDense: true,
+                          style: TextStyle(fontSize: 13, color: colors.textPrimary),
                           decoration: const InputDecoration(
                             labelText: 'Frequência',
+                            labelStyle: TextStyle(fontSize: 13),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             border: OutlineInputBorder(),
                           ),
                           items: kRecurrenceFrequencyOptions
                               .map((o) => DropdownMenuItem(
                                     value: o.id,
-                                    child: Text(o.label),
+                                    child: Text(o.label, style: const TextStyle(fontSize: 13)),
                                   ))
                               .toList(),
                           onChanged: (v) {
@@ -1513,7 +1636,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Definir Data de Término'),
+                    title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
                     value: _hasEndDate,
                     onChanged: (v) => setState(() => _hasEndDate = v ?? false),
                   ),
@@ -1521,11 +1644,17 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                     const SizedBox(height: 4),
                     TextField(
                       controller: _endDateCtrl,
+                      style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data de Término (DD/MM/AAAA)',
+                        labelStyle: const TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month, size: 20),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.calendar_month, size: 18),
                           tooltip: 'Escolher data de término',
                           onPressed: () {
                             final baseD = dateFromISO(_resolveIsoDate(_dateCtrl.text));
@@ -1538,15 +1667,20 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                 ] else if (_mode == 'installment') ...[
                   DropdownButtonFormField<int>(
                     initialValue: _installments,
+                    isDense: true,
+                    style: TextStyle(fontSize: 13, color: colors.textPrimary),
                     decoration: const InputDecoration(
                       labelText: 'Número de Parcelas',
+                      labelStyle: TextStyle(fontSize: 13),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       border: OutlineInputBorder(),
                     ),
                     items: List.generate(
                       119,
                       (i) => DropdownMenuItem(
                         value: i + 2,
-                        child: Text('${i + 2}x'),
+                        child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
                       ),
                     ),
                     onChanged: (v) {
