@@ -563,9 +563,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   @override
   void initState() {
     super.initState();
-    _accId = widget.initialAccountId ?? widget.store.lastUsedAccountId;
     final available = _availableAccounts();
-    if (!available.any((a) => a.id == _accId)) {
+    final candidateId = widget.initialAccountId;
+    if (candidateId != null &&
+        candidateId.isNotEmpty &&
+        available.any((a) => a.id == candidateId)) {
+      _accId = candidateId;
+    } else {
       _accId = available.isNotEmpty ? available.first.id : 'a1';
     }
 
@@ -601,7 +605,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   }
 
   List<Account> _availableAccounts() {
-    return List<Account>.from(widget.store.activeAccounts);
+    final favs = widget.store.favoriteAccounts;
+    final others = widget.store.regularActiveAccounts;
+    final list = <Account>[...favs, ...others];
+    if (list.isEmpty) {
+      list.addAll(widget.store.db.accounts);
+    }
+    return list;
   }
 
   String _resolveIsoDate(String raw, {String? fallback}) {
@@ -793,7 +803,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     .map((a) => DropdownMenuItem(
                           value: a.id,
                           child: Text(
-                            a.name +
+                            (a.isFavorite ? '★ ' : '') +
+                                a.name +
                                 (a.type == kCardType
                                     ? ' (Cartão)'
                                     : ' (${a.type})'),
@@ -1237,10 +1248,15 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   }
 
   List<Account> _availableAccounts() {
-    final list = List<Account>.from(widget.store.activeAccounts);
+    final favs = widget.store.favoriteAccounts;
+    final others = widget.store.regularActiveAccounts;
+    final list = <Account>[...favs, ...others];
     final current = widget.store.accById(widget.sourceTx.acc);
     if (current != null && !list.any((a) => a.id == current.id)) {
       list.insert(0, current);
+    }
+    if (list.isEmpty) {
+      list.addAll(widget.store.db.accounts);
     }
     return list;
   }
@@ -1382,7 +1398,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                     .map((a) => DropdownMenuItem(
                           value: a.id,
                           child: Text(
-                            a.name +
+                            (a.isFavorite ? '★ ' : '') +
+                                a.name +
                                 (a.type == kCardType
                                     ? ' (Cartão)'
                                     : ' (${a.type})'),

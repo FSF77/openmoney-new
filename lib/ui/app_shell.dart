@@ -559,7 +559,15 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       if (closeDrawerOnSelect) {
                         Navigator.of(context).pop();
                       }
-                      showTransactionCreateModal(context, widget.store);
+                      final currentAccId =
+                          widget.store.activeModule == NavModule.account
+                              ? widget.store.selectedAccountId
+                              : null;
+                      showTransactionCreateModal(
+                        context,
+                        widget.store,
+                        initialAccountId: currentAccId,
+                      );
                     },
                   ),
                 ),

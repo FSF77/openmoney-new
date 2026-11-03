@@ -641,33 +641,36 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      SizedBox(
-                        height: 38,
-                        child: FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: (_isExpense ? colors.expense : colors.income)
-                                .withValues(alpha: 0.16),
-                            foregroundColor:
-                                _isExpense ? colors.expense : colors.income,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            shape: StadiumBorder(
-                              side: BorderSide(
-                                color: _isExpense ? colors.expense : colors.income,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: SizedBox(
+                          height: 30,
+                          child: FilledButton.tonal(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: (_isExpense ? colors.expense : colors.income)
+                                  .withValues(alpha: 0.16),
+                              foregroundColor:
+                                  _isExpense ? colors.expense : colors.income,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              shape: StadiumBorder(
+                                side: BorderSide(
+                                  color: _isExpense ? colors.expense : colors.income,
+                                ),
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
                               ),
                             ),
-                            textStyle: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
+                            onPressed: () {
+                              setState(() {
+                                _isExpense = !_isExpense;
+                                _syncDefaultCategory();
+                              });
+                            },
+                            child: Text(
+                              _isExpense ? '− Despesa' : '+ Receita',
                             ),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isExpense = !_isExpense;
-                              _syncDefaultCategory();
-                            });
-                          },
-                          child: Text(
-                            _isExpense ? '− Despesa' : '+ Receita',
                           ),
                         ),
                       ),
@@ -882,20 +885,23 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             },
                           ),
                         ),
-                      SizedBox(
-                        height: 38,
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            shape: const StadiumBorder(),
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: SizedBox(
+                          height: 30,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              shape: const StadiumBorder(),
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Salvar'),
+                            onPressed: _submitQuickEntry,
                           ),
-                          icon: const Icon(Icons.check, size: 18),
-                          label: const Text('Salvar'),
-                          onPressed: _submitQuickEntry,
                         ),
                       ),
                     ],
