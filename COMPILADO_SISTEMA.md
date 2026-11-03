@@ -243,11 +243,19 @@ Permite automatizar lançamentos e transferências contínuas ou com prazo deter
 - **Responsividade**: Calibrado nativamente a 100% para monitores Full HD (1920x1080) e com escala visual proporcional contínua (até 60%) para janelas menores, garantindo que os 12 meses fiquem visíveis sem cortes horizontais.
 - **Exportação CSV**: Codificado em UTF-8 com BOM, delimitador `;`, valores decimais em vírgula e metadados dos filtros ativos gravados no cabeçalho.
 
-### 4.6 Relatório Mensal e Impressão/PDF em 1 Página A4
-- **Cards de Métricas Executivas**: Receitas, Despesas, Saldo Líquido do Mês e **Taxa de Poupança** (*Savings Rate* %).
+### 4.6 Relatório Mensal/Anual e Impressão/PDF em 1 Página A4
+- **Cards de Métricas Executivas**: Receitas, Despesas, Saldo Líquido do Período e **Taxa de Poupança** (*Savings Rate* %).
+- **Alternância entre Período Mensal e Anual**:
+  - *Mensal*: Auditoria contábil do mês selecionado.
+  - *Anual*: Agregação completa de todas as receitas e despesas do ano fiscal selecionado.
+- **Filtro de Status de Conciliação (Auditoria vs. Previsão)**:
+  - *Todos os Lançamentos*: Visão integrada incluindo transações conciliadas e pendentes.
+  - *Apenas Conciliados*: Exclusivamente movimentações já liquidadas e confirmadas em extrato bancário.
+  - *Apenas Pendentes*: Projeções financeiras e contas ainda a liquidar no período.
+- **Filtro Multi-Select de Contas**: Isolamento de contas individuais ou grupos de contas para relatórios segmentados.
 - **Drill-down Interativo por Categoria e Subcategoria**:
   - Clicar na linha de qualquer categoria ou subcategoria abre instantaneamente a janela de auditoria com os lançamentos correspondentes.
-  - Abre pré-filtrado para o mês ativo (garantindo conciliação centavo a centavo com o relatório), com seletor rápido no topo para alternar entre o mês e o histórico completo.
+  - O drill-down herda rigorosamente os filtros ativos de conta, ano/mês e status de conciliação.
 - **Impressão e Exportação em PDF Calibrada para 1 Página A4 (`MonthlyReportPrintView` / `MonthlyReportPDFGenerator`)**:
   - Acessível por `Cmd + P`, menu Arquivo ou menu suspenso de ações.
   - Layout executivo profissional (595.28 x 841.89 pt): cabeçalho oficial com data/hora de emissão, cards de métricas, duas colunas balanceadas (Receitas à esquerda, Despesas à direita) com barras de progresso percentuais, condensação inteligente de subcategorias excedentes e rodapé de autenticação.
@@ -317,6 +325,42 @@ Permite automatizar lançamentos e transferências contínuas ou com prazo deter
   - Resumo diário matinal inteligente às 08:30 (anti-spam) agregando montantes e quantidades a liquidar.
   - Badge dinâmico no ícone do aplicativo no macOS Dock e na tela de início do iOS com atualização e remoção automática ao conciliar.
   - Botão *"Testar Notificação"* para concessão de permissão e teste local de som e banner.
+
+### 4.13 Importação Inteligente de Comprovantes via OCR Nativo e IA Multimodal BYOK (ADR 007)
+- **Varredura em Lote de Documentos Fiscais**:
+  - Seleção de pasta contendo comprovantes em `.pdf`, `.png`, `.jpg`, `.jpeg` ou `.heic`.
+- **Extração Textual 100% Local (Nativa)**:
+  - *macOS e iOS*: `Apple Vision Framework` (`VNRecognizeTextRequest`) para imagens e `PDFKit` para extração direta de texto vetorial.
+  - *Windows*: API nativa WinRT `Windows.Media.Ocr.OcrEngine` com suporte ao idioma português (`pt-BR`).
+- **Reconhecimento Multimodal via IA Google Gemini (BYOK - Bring Your Own Key)**:
+  - O usuário insere sua própria chave gratuita obtida no Google AI Studio.
+  - Suporte a modelos de alta performance: `gemini-3.5-flash-lite`, `gemini-2.5-flash` e fallbacks em cascata.
+  - Prompt com regras contábeis estritas: descarte de maquinários POS (Cielo, Rede, Stone), descarte de dados do consumidor, cabeçalhos de NFC-e e tributos aproximados.
+- **Auditoria e Conferência em Split View**:
+  - Interface lado a lado: visualização ampliada do documento original à esquerda e formulário editável de auditoria à direita.
+  - Sugestão inteligente de categoria habitual e conta bancária baseada em similaridade de palavras e histórico de lançamentos.
+- **Ciclo de Vida Físico**:
+  - Ao confirmar a gravação dos lançamentos, os documentos processados são movidos de forma atômica para uma subpasta `processados/`.
+
+### 4.14 OpenMoney Coletor Mobile (PWA) e Automação via Atalhos do iOS (ADR 008)
+- **Coletor PWA Independente**:
+  - Progressive Web App leve para lançamento de compras e despesas no ponto de venda, disponível em [https://fsf77.github.io/openmoney-new/coletor/](https://fsf77.github.io/openmoney-new/coletor/).
+  - Operação 100% offline via Service Worker versionado (`openmoney-coletor-v1.3.1`).
+  - IA Gemini Multimodal (BYOK) nativa para análise instantânea de notas via câmera do smartphone.
+- **Automação via Atalhos do iOS (Apple Shortcuts)**:
+  - Disparado automaticamente ao pagar com a Carteira da Apple (Apple Pay) ou ao receber notificações bancárias.
+  - Chamada via URL com parâmetros estruturados:
+    ```text
+    https://fsf77.github.io/openmoney-new/coletor/?recibo=Data:03/11/2026;Conta:Nubank Mastercard Ultravioleta;Favorecido:Drogasil;Valor:30,99;
+    ```
+  - Botão de instalação em 1 clique do atalho oficial do iCloud disponível nas Configurações (⚙️) do Coletor.
+- **Motor de Resolução de Contas em 4 Níveis (4-Tier Smart Account Resolution)**:
+  1. *Nível 1 (Tabela De-Para de Apelidos)*: Mapeamentos manuais cadastrados pelo usuário no Coletor.
+  2. *Nível 2 (Sinônimos Bancários & Token Scorer)*: Algoritmo heurístico que remove ruídos de bandeira (`Mastercard`, `Visa`, `Cartão`, `Crédito`), reconhece sinônimos (`UV` $\leftrightarrow$ `Ultravioleta`, `Amex` $\leftrightarrow$ `American Express`, `Carbon` $\leftrightarrow$ `C6 Crédito`) e resolve conflitos de categoria (Platinum vs UV).
+  3. *Nível 3 (Memória Habitual de Conta do Favorecido — `lastAcc`)*: Atribui automaticamente a conta usada na última compra daquele mesmo estabelecimento.
+  4. *Nível 4 (Fallback)*: Conta ativa favorita (★) ou primeira conta ativa.
+- **Exportação e Sincronização**:
+  - Lançamentos ficam na fila pendente local (`localStorage`) e são exportados com 1 toque em `openmoney_inbox.json` para conferência e importação no desktop.
 
 ---
 

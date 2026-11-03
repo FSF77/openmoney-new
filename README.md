@@ -140,10 +140,12 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Ocultação do Menu Lateral**: Pressione `Cmd + B` (macOS) ou `Ctrl + B` (Windows) para recolher o menu lateral e maximizar a área de visualização.
 
 ### 6. Relatórios vs. Fluxo de Caixa (Tratamento de Transferências e Categorias)
-- **Filtro Estrito nos Relatórios Mensais de Receitas/Despesas**:
+- **Filtro Estrito nos Relatórios Mensais/Anuais de Receitas/Despesas**:
   - Transferências entre contas (`xfer != null` ou `peer != null`) e lançamentos de categorias com a opção "Considerar nos Relatórios" desmarcada **não aparecem nem são somados** nos totais de receitas e despesas da tela de Relatórios.
   - Cada categoria possui no seu cadastro/edição a opção configurável **"Considerar nos relatórios"** (`includeInReports`). Categorias fora dos relatórios recebem o badge visual `"OCULTA DE RELATÓRIOS"`.
   - **Filtro de Contas e Negócios nos Relatórios**: A tela de Relatórios conta com seletor de contas, permitindo escolher "Todas as Contas", selecionar múltiplas contas por checkbox ou filtrar por Negócio (ex.: **PF** ou **PJ**).
+  - **Filtro de Status de Conciliação**: Permite isolar "Todos os Lançamentos", "Apenas Conciliados" (para auditoria estrita) ou "Apenas Pendentes" (para projeções). O filtro propaga para a impressão/exportação em PDF de 1 página e para o drill-down de categorias.
+  - **Visão Anual Consolidada**: Suporte a relatórios consolidados do ano inteiro, com soma anual de cada categoria e cálculo anual da taxa de poupança (*Savings Rate*).
 - **Preservação Integral do Fluxo de Caixa**:
   - Essa exclusão de relatórios **NÃO se aplica ao Fluxo de Caixa**. O motor do Fluxo de Caixa (`CashFlowEngine`) processa rigorosamente todas as contas, transferências e categorias para assegurar a exatidão matemática do saldo anterior, do resultado financeiro e do saldo final em caixa/bancos.
 
@@ -311,16 +313,23 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 
 ---
 
-### 12. Coletor Mobile Web / PWA (`coletor/`)
+### 12. Coletor Mobile Web / PWA (`coletor/` - ADR 008)
 - Módulo PWA independente para registrar despesas e receitas rapidamente no smartphone (offline-first).
-- **Acesso Online**: [https://fsf77.github.io/openmoney-new/coletor/](https://fsf77.github.io/openmoney-new/coletor/)
-- Recursos do coletor:
-  - Registro de lançamentos rápidos com autocompletar de favorecidos da base.
-  - Suporte a leitura de comprovantes via **IA Multimodal Google Gemini (BYOK - ADR 007)** com fallback para OCR local de câmera.
-  - Inserção rápida por comando de voz.
-  - Exportação do lote em `openmoney_inbox.json`.
-- **Importação Desktop**:
-  - No OpenMoney Desktop, abra o importador Mobile Inbox para validar, auditar e importar os lançamentos pendentes com prevenção contra duplicidades e alocação automática de faturas.
+- **Acesso Oficial**: [https://fsf77.github.io/openmoney-new/coletor/](https://fsf77.github.io/openmoney-new/coletor/)
+- **Automação via Atalhos do iOS (Apple Shortcuts)**:
+  - Disparado automaticamente ao pagar por aproximação com Apple Pay ou receber notificações bancárias.
+  - Suporte a parâmetros estruturados na URL: `?recibo=Data:DD/MM/AAAA;Conta:...;Favorecido:...;Valor:...;`
+  - Atalho oficial disponível para download no iCloud diretamente na tela de Configurações (⚙️) do Coletor: [Baixar Atalho iOS](https://www.icloud.com/shortcuts/47a65df3d9c94513bba1af90b1a3ed4e).
+- **Motor de Resolução de Contas em 4 Níveis (4-Tier Smart Account Resolution)**:
+  1. *Nível 1 (Tabela De-Para / Apelidos)*: Mapeamento direto de nomes de cartões da carteira para contas do OpenMoney gerenciável em ⚙️ Configurações.
+  2. *Nível 2 (Sinônimos Bancários & Token Scorer)*: Algoritmo heurístico financeiro que descarta ruídos (`Mastercard`, `Visa`, `Cartão`, `Crédito`) e reconhece sinônimos de marcas (`UV` $\leftrightarrow$ `Ultravioleta`, `Amex` $\leftrightarrow$ `American Express`, `Carbon` $\leftrightarrow$ `C6 Crédito`), com desempate de categorias (evita associar cartões Platinum a UV).
+  3. *Nível 3 (Memória Habitual do Estabelecimento — `lastAcc`)*: Grava e reutiliza a última conta utilizada para aquele mesmo favorecido.
+  4. *Nível 4 (Fallback)*: Conta favorita (★) ou primeira conta ativa.
+- **Recursos Adicionais**:
+  - Leitura de comprovantes com **IA Multimodal Google Gemini (BYOK - ADR 007)** diretamente pela câmera do celular.
+  - Visualização de Contas e Saldos com contraste aprimorado (modo claro/escuro) e ordenação executiva (Favoritas e Ativas com saldo).
+  - Inserção por comando de voz e autocompletar inteligente com última conta e categoria.
+  - Exportação do lote em `openmoney_inbox.json` para importação e auditoria no desktop via Mobile Inbox.
 
 ---
 
