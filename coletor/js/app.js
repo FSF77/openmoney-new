@@ -258,6 +258,68 @@ function renderApp() {
   }
 }
 
+// Render Account Aliases (De-Para) in Setup Modal
+function renderAccountAliasesSetup(structure) {
+  const selectAcc = document.getElementById('selectAliasAccount');
+  const listEl = document.getElementById('accountAliasesList');
+  if (!selectAcc || !listEl) return;
+
+  // Fill accounts dropdown
+  let opts = '<option value="">Selecione uma conta...</option>';
+  if (structure && Array.isArray(structure.accounts)) {
+    const sortedAccs = structure.accounts
+      .filter(a => !a.inactive)
+      .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
+    for (const a of sortedAccs) {
+      opts += `<option value="${a.id}">${a.favorite ? '★ ' : ''}${a.name} (${a.type})</option>`;
+    }
+  }
+  selectAcc.innerHTML = opts;
+
+  // Render current aliases
+  const aliases = coletorStorage.getAccountAliases();
+  const keys = Object.keys(aliases);
+
+  if (keys.length === 0) {
+    listEl.innerHTML = `
+      <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;padding:10px;background:rgba(255,255,255,0.02);border:1px dashed var(--border-glass);border-radius:var(--radius-sm);">
+        Nenhum apelido cadastrado. O coletor usa reconhecimento inteligente automático (ex: <em>Ultravioleta &rarr; UV</em>).
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+  for (const notifName of keys) {
+    const accId = aliases[notifName];
+    const acc = structure?.accounts?.find(a => a.id === accId);
+    const accName = acc ? `${acc.favorite ? '★ ' : ''}${acc.name}` : `Conta (${accId})`;
+
+    html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.03);border:1px solid var(--border-glass);border-radius:var(--radius-sm);padding:8px 12px;gap:8px;">
+        <div style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">
+          <span style="color:var(--om-blue);font-weight:600;">${notifName}</span>
+          <span style="color:var(--text-muted);margin:0 4px;">&rarr;</span>
+          <span style="font-weight:600;color:var(--text-primary);">${accName}</span>
+        </div>
+        <button type="button" class="btn-delete-alias" data-notif="${notifName.replace(/"/g, '&quot;')}" title="Remover apelido" style="background:none;border:none;color:var(--om-red);cursor:pointer;font-size:1.1rem;padding:2px 6px;line-height:1;">
+          &times;
+        </button>
+      </div>
+    `;
+  }
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll('.btn-delete-alias').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const notif = btn.getAttribute('data-notif');
+      coletorStorage.removeAccountAlias(notif);
+      showToast('Apelido removido.');
+      renderAccountAliasesSetup(structure);
+    });
+  });
+}
+
 // Open Setup Modal
 function openSetupModal() {
   const structure = coletorStorage.getStructure();
@@ -288,6 +350,9 @@ function openSetupModal() {
   if (geminiKeyStatus) {
     geminiKeyStatus.style.display = 'none';
   }
+
+  // Populate Account Aliases
+  renderAccountAliasesSetup(structure);
 
   openModal(document.getElementById('modalSetup'));
 }
@@ -360,9 +425,10 @@ function renderCategoryOptions(selectedCat = '', type = null) {
 }
 
 // Apply selected Payee from Autocomplete
-function applyPayeeSelection(payeeName, catName, isExpense) {
+function applyPayeeSelection(payeeName, catName, isExpense, lastAcc = null) {
   const payeeInput = document.getElementById('formPayee');
   const catSelect = document.getElementById('formCategory');
+  const accSelect = document.getElementById('formAccount');
   const dropdown = document.getElementById('payeeDropdown');
 
   if (payeeInput) payeeInput.value = payeeName;
@@ -371,6 +437,12 @@ function applyPayeeSelection(payeeName, catName, isExpense) {
   }
   if (catName && catSelect) {
     catSelect.value = catName;
+  }
+  if (lastAcc && accSelect) {
+    const opt = accSelect.querySelector(`option[value="${lastAcc}"]`);
+    if (opt) {
+      accSelect.value = lastAcc;
+    }
   }
   if (dropdown) dropdown.classList.remove('show');
 }
@@ -463,7 +535,7 @@ function openTransactionForm(preset = null) {
       const catSelect = document.getElementById('formCategory');
       if (catSelect) catSelect.value = preset.cat;
     } else if (preset.payee && structure.frequentPayees) {
-      // Auto-match category based on payee
+      // Auto-match category and habitual account based on payee
       const norm = preset.payee.toLowerCase().trim();
       const match = structure.frequentPayees.find(p => p.payee.toLowerCase().trim() === norm) ||
                     structure.frequentPayees.find(p => p.payee.toLowerCase().includes(norm));
@@ -474,6 +546,12 @@ function openTransactionForm(preset = null) {
         if (match.cat) {
           const catSelect = document.getElementById('formCategory');
           if (catSelect) catSelect.value = match.cat;
+        }
+        if (!preset.accId && match.lastAcc && accSelect) {
+          const opt = accSelect.querySelector(`option[value="${match.lastAcc}"]`);
+          if (opt) {
+            accSelect.value = match.lastAcc;
+          }
         }
       }
     }
@@ -523,10 +601,10 @@ function processReceiptText(rawText) {
     accId: parsed.accId,
     cat: parsed.cat,
     isExpense: true,
-    memo: `OCR: "${(parsed.payee || '').slice(0, 30)}"`
+    memo: parsed.memo || (parsed.isStructured ? 'Atalho iOS' : `OCR: "${(parsed.payee || '').slice(0, 30)}"`)
   });
 
-  showToast('✓ Comprovante reconhecido com sucesso!');
+  showToast(parsed.isStructured ? '✓ Atalho iOS carregado com sucesso!' : '✓ Comprovante reconhecido com sucesso!');
 }
 
 // Handle Camera / Receipt Image Selection (Tesseract Fallback)
@@ -795,7 +873,7 @@ function setupEventListeners() {
       let html = '';
       for (const m of matches) {
         html += `
-          <div class="autocomplete-item" data-payee="${m.payee}" data-cat="${m.cat || ''}" data-type="${m.isExpense ? 'despesa' : 'receita'}">
+          <div class="autocomplete-item" data-payee="${m.payee}" data-cat="${m.cat || ''}" data-type="${m.isExpense ? 'despesa' : 'receita'}" data-acc="${m.lastAcc || ''}">
             <span class="name">${m.payee}</span>
             <span class="cat-badge">${m.cat || 'Geral'}</span>
           </div>
@@ -809,7 +887,8 @@ function setupEventListeners() {
           applyPayeeSelection(
             item.getAttribute('data-payee'),
             item.getAttribute('data-cat'),
-            item.getAttribute('data-type') === 'despesa'
+            item.getAttribute('data-type') === 'despesa',
+            item.getAttribute('data-acc') || null
           );
         });
       });
@@ -916,6 +995,35 @@ function setupEventListeners() {
         geminiKeyStatus.className = 'gemini-status-error';
         geminiKeyStatus.textContent = `❌ ${testRes.error}`;
       }
+    });
+  }
+
+  // Account Aliases (De-Para) Add Listener
+  const btnAddAccountAlias = document.getElementById('btnAddAccountAlias');
+  const inputAliasNotifName = document.getElementById('inputAliasNotifName');
+  const selectAliasAccount = document.getElementById('selectAliasAccount');
+
+  if (btnAddAccountAlias && inputAliasNotifName && selectAliasAccount) {
+    btnAddAccountAlias.addEventListener('click', () => {
+      const notifName = inputAliasNotifName.value.trim();
+      const accId = selectAliasAccount.value;
+      if (!notifName) {
+        showToast('⚠️ Digite o nome da notificação.');
+        inputAliasNotifName.focus();
+        return;
+      }
+      if (!accId) {
+        showToast('⚠️ Selecione a conta no OpenMoney.');
+        selectAliasAccount.focus();
+        return;
+      }
+
+      coletorStorage.setAccountAlias(notifName, accId);
+      inputAliasNotifName.value = '';
+      selectAliasAccount.value = '';
+      showToast('✓ Apelido de conta salvo com sucesso!');
+      const structure = coletorStorage.getStructure();
+      renderAccountAliasesSetup(structure);
     });
   }
 

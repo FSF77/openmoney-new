@@ -3,6 +3,7 @@ import { normalizeStr } from './models.js';
 
 const STORAGE_KEY_STRUCTURE = 'om_coletor_structure';
 const STORAGE_KEY_PENDING = 'om_coletor_pending_txs';
+const STORAGE_KEY_ACCOUNT_ALIASES = 'om_coletor_account_aliases';
 
 class ColetorStorage {
   // Load cached accounts, categories and payees
@@ -42,6 +43,35 @@ class ColetorStorage {
     };
     localStorage.setItem('om_coletor_gemini_config', JSON.stringify(data));
     return data;
+  }
+
+  // Account Aliases (De-Para for Notification / iOS Shortcuts to OpenMoney Accounts)
+  getAccountAliases() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_ACCOUNT_ALIASES);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  saveAccountAliases(aliases) {
+    localStorage.setItem(STORAGE_KEY_ACCOUNT_ALIASES, JSON.stringify(aliases || {}));
+  }
+
+  setAccountAlias(rawNotificationName, accId) {
+    const key = (rawNotificationName || '').trim();
+    if (!key || !accId) return;
+    const aliases = this.getAccountAliases();
+    aliases[key] = accId;
+    this.saveAccountAliases(aliases);
+  }
+
+  removeAccountAlias(rawNotificationName) {
+    const key = (rawNotificationName || '').trim();
+    const aliases = this.getAccountAliases();
+    delete aliases[key];
+    this.saveAccountAliases(aliases);
   }
 
   // Live Autocomplete for Payee (as user types)
@@ -102,6 +132,7 @@ class ColetorStorage {
         payeeMap.set(norm, {
           payee: clean,
           cat: t.cat || '',
+          lastAcc: t.acc || '',
           isExpense: t.amt < 0,
           count: 1,
           lastDate: t.date
@@ -112,6 +143,7 @@ class ColetorStorage {
         if (t.date > item.lastDate) {
           item.lastDate = t.date;
           item.cat = t.cat || item.cat;
+          if (t.acc) item.lastAcc = t.acc;
           item.isExpense = t.amt < 0;
         }
       }

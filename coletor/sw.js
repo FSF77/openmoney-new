@@ -1,5 +1,5 @@
 // OpenMoney Coletor Service Worker - Offline Cache
-const CACHE_NAME = 'openmoney-coletor-v1.2.1';
+const CACHE_NAME = 'openmoney-coletor-v1.3.0';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './css/style.css',
   './js/models.js',
   './js/db.js',
+  './js/account-matcher.js',
   './js/gemini.js',
   './js/ocr.js',
   './js/voice.js',

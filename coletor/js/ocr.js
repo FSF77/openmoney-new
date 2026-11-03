@@ -2,6 +2,7 @@
 import { parseCurrencyToCents, todayISO, normalizeStr } from './models.js';
 import { geminiReceiptService } from './gemini.js';
 import { coletorStorage } from './db.js';
+import { parseStructuredReceipt, parseReceiptDate, matchAccount } from './account-matcher.js';
 
 const CATEGORY_KEYWORDS = [
   { words: ['almoco', 'almoço', 'jantar', 'refeicao', 'refeição', 'restaurante', 'mcdonalds', 'burguer', 'burger', 'pizza', 'ifood', 'lanche', 'bar', 'churrascaria', 'cafe', 'café'], catContains: ['Restaurante', 'Alimentação'] },
@@ -194,13 +195,15 @@ class ReceiptScanner {
 
     const normPayee = normalizeStr(aiRes.payee || '');
     const normBank = normalizeStr(aiRes.detectedBank || '');
+    let matchedPayeeObj = null;
 
-    // 1. Check frequent payees for category association
+    // 1. Check frequent payees for category and habitual account association
     if (Array.isArray(structure.frequentPayees) && normPayee) {
       for (const p of structure.frequentPayees) {
         const normP = normalizeStr(p.payee);
         if (normP && (normPayee.includes(normP) || normP.includes(normPayee))) {
           matchedCat = p.cat || '';
+          matchedPayeeObj = p;
           break;
         }
       }
@@ -211,31 +214,14 @@ class ReceiptScanner {
       matchedCat = detectCategoryByKeywords(aiRes.payee, structure.cats);
     }
 
-    // 3. Match Account from detected bank or card
-    if (Array.isArray(structure.accounts)) {
-      const activeAccs = structure.accounts.filter(a => !a.inactive);
-
-      if (normBank) {
-        for (const acc of activeAccs) {
-          const normAccName = normalizeStr(acc.name);
-          if (normAccName && (normAccName.includes(normBank) || normBank.includes(normAccName))) {
-            matchedAccId = acc.id;
-            break;
-          }
-        }
-      }
-
-      // If no bank match, select favorite account or first active
-      if (!matchedAccId) {
-        const fav = activeAccs.find(a => a.favorite);
-        matchedAccId = fav ? fav.id : (activeAccs[0]?.id || null);
-      }
-    }
+    // 3. Match Account from detected bank/card using 4-Tier Matcher
+    const accMatch = matchAccount(normBank || aiRes.rawJson || '', structure, matchedPayeeObj);
+    matchedAccId = accMatch?.accId || null;
 
     return { cat: matchedCat, accId: matchedAccId };
   }
 
-  // High-accuracy parsing of receipt text (Live Text Apple or Tesseract)
+  // High-accuracy parsing of receipt text (Structured iOS Shortcuts, Live Text Apple or Tesseract)
   parseReceiptText(text, structure = null) {
     if (!text || typeof text !== 'string') {
       return {
@@ -248,6 +234,48 @@ class ReceiptScanner {
     }
 
     const raw = text.trim();
+
+    // 0. Check if text is structured key-value receipt (e.g. from iOS Shortcuts automation URL: Data:...;Conta:...;Favorecido:...;Valor:...;)
+    const structured = parseStructuredReceipt(raw);
+    if (structured) {
+      const detectedDate = parseReceiptDate(structured.rawDate);
+      const detectedAmount = parseCurrencyToCents(structured.rawAmount);
+      let detectedPayee = structured.rawPayee;
+      let detectedCat = structured.rawCategory;
+      let matchedPayeeObj = null;
+
+      // Smart Payee Association from frequent payees
+      if (structure && Array.isArray(structure.frequentPayees) && detectedPayee) {
+        const normP = normalizeStr(detectedPayee);
+        matchedPayeeObj = structure.frequentPayees.find(p => {
+          const np = normalizeStr(p.payee);
+          return np === normP || np.includes(normP) || normP.includes(np);
+        });
+        if (matchedPayeeObj) {
+          if (!detectedCat) detectedCat = matchedPayeeObj.cat || '';
+        }
+      }
+
+      // Keyword category fallback
+      if (!detectedCat && structure && Array.isArray(structure.cats) && detectedPayee) {
+        detectedCat = detectCategoryByKeywords(detectedPayee, structure.cats);
+      }
+
+      // 4-Tier Smart Account Resolution (Aliases -> Synonyms -> Payee Habitual -> Favorite)
+      const accMatch = matchAccount(structured.rawAccount, structure, matchedPayeeObj);
+
+      return {
+        isStructured: true,
+        payee: detectedPayee || 'Lançamento iOS',
+        amt: detectedAmount,
+        date: detectedDate,
+        cat: detectedCat || '',
+        accId: accMatch?.accId || null,
+        memo: structured.rawMemo || '',
+        rawText: raw
+      };
+    }
+
     const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
     const lowerFull = raw.toLowerCase();
     const normFull = normalizeStr(lowerFull);
@@ -308,7 +336,7 @@ class ReceiptScanner {
     // 3. Match Payee & Category from Frequent Payees (Smart Association)
     let matchedPayee = '';
     let matchedCat = '';
-    let matchedAccId = null;
+    let matchedPayeeObj = null;
 
     if (structure && Array.isArray(structure.frequentPayees)) {
       const sortedPayees = [...structure.frequentPayees].sort((a, b) => b.payee.length - a.payee.length);
@@ -317,6 +345,7 @@ class ReceiptScanner {
         if (normPayee && normFull.includes(normPayee)) {
           matchedPayee = p.payee;
           matchedCat = p.cat || '';
+          matchedPayeeObj = p;
           break;
         }
       }
@@ -327,34 +356,9 @@ class ReceiptScanner {
       matchedCat = detectCategoryByKeywords(normFull, structure.cats);
     }
 
-    // 5. Account Detection (Card, Cash or Bank Name)
-    if (structure && Array.isArray(structure.accounts)) {
-      const activeAccs = structure.accounts.filter(a => !a.inactive);
-
-      // Check account names mentioned in receipt
-      for (const acc of activeAccs) {
-        const normAccName = normalizeStr(acc.name);
-        if (normAccName && normFull.includes(normAccName)) {
-          matchedAccId = acc.id;
-          break;
-        }
-      }
-
-      if (!matchedAccId) {
-        if (normFull.includes('dinheiro') || normFull.includes('especie')) {
-          const cashAcc = activeAccs.find(a => a.type === 'Dinheiro');
-          if (cashAcc) matchedAccId = cashAcc.id;
-        } else if (normFull.includes('cartao') || normFull.includes('cartão') || normFull.includes('credito') || normFull.includes('crédito') || normFull.includes('debito') || normFull.includes('débito')) {
-          const cardAcc = activeAccs.find(a => a.type === 'Cartão de crédito');
-          if (cardAcc) matchedAccId = cardAcc.id;
-        }
-      }
-
-      if (!matchedAccId) {
-        const fav = activeAccs.find(a => a.favorite);
-        matchedAccId = fav ? fav.id : (activeAccs[0]?.id || null);
-      }
-    }
+    // 5. Account Detection using 4-Tier Matcher
+    const accMatch = matchAccount(normFull, structure, matchedPayeeObj);
+    const matchedAccId = accMatch?.accId || null;
 
     // 6. Payee Fallback (Clean first meaningful header line)
     if (!matchedPayee) {
@@ -378,6 +382,7 @@ class ReceiptScanner {
     }
 
     return {
+      isStructured: false,
       payee: matchedPayee || 'Comprovante Escaneado',
       amt: detectedAmount,
       date: detectedDate,
