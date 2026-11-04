@@ -346,11 +346,36 @@ Future<void> showPredictionsAdjustModal(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      item.payee,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      children: [
+                                        Text(
+                                          item.payee,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        if (item.date.isNotEmpty)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 1.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: colors.accent.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              fmtDate(item.date),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: colors.accent,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     Text(
                                       '${item.accountName} • ${item.category}',

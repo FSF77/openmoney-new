@@ -2865,11 +2865,12 @@ class MoneyStore extends ChangeNotifier {
 
           if (wasChanged) {
             adjustedItems.add(
-              '• ${pred.payee} ($accName • $catLabel):\n  Ajustada para ${brl(newRemaining)} (Base original: ${brl(base)} − Gastos da categoria: ${brl(netSpent)})',
+              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Ajustada para ${brl(newRemaining)} (Base original: ${brl(base)} − Gastos da categoria: ${brl(netSpent)})',
             );
             detailedItems.add(
               PredictionAdjustItem(
                 payee: pred.payee,
+                date: pred.date,
                 accountName: accName,
                 category: catLabel,
                 baseCents: base,
@@ -2880,11 +2881,12 @@ class MoneyStore extends ChangeNotifier {
             );
           } else {
             unchangedItems.add(
-              '• ${pred.payee} ($accName • $catLabel):\n  Mantida em ${brl(newRemaining)} (Base: ${brl(base)} − Gastos: ${brl(netSpent)})',
+              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Mantida em ${brl(newRemaining)} (Base: ${brl(base)} − Gastos: ${brl(netSpent)})',
             );
             detailedItems.add(
               PredictionAdjustItem(
                 payee: pred.payee,
+                date: pred.date,
                 accountName: accName,
                 category: catLabel,
                 baseCents: base,
@@ -2897,11 +2899,12 @@ class MoneyStore extends ChangeNotifier {
         } else {
           idsToDelete.add(pred.id);
           exhaustedItems.add(
-            '• ${pred.payee} ($accName • $catLabel):\n  Excluída — Previsão esgotada! Não há mais previsão disponível (Base: ${brl(base)} atingida por ${brl(netSpent)} em gastos).',
+            '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Excluída — Previsão esgotada! Não há mais previsão disponível (Base: ${brl(base)} atingida por ${brl(netSpent)} em gastos).',
           );
           detailedItems.add(
             PredictionAdjustItem(
               payee: pred.payee,
+              date: pred.date,
               accountName: accName,
               category: catLabel,
               baseCents: base,

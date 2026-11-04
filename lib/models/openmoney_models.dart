@@ -822,6 +822,7 @@ enum PredictionAdjustStatus {
 
 class PredictionAdjustItem {
   final String payee;
+  final String date;
   final String accountName;
   final String category;
   final int baseCents;
@@ -831,6 +832,7 @@ class PredictionAdjustItem {
 
   const PredictionAdjustItem({
     required this.payee,
+    this.date = '',
     required this.accountName,
     required this.category,
     required this.baseCents,
