@@ -2090,6 +2090,9 @@ class MoneyStore extends ChangeNotifier {
     }
 
     final today = todayISO();
+    final targetMonth = (isCard && baseIk != null && baseIk.isNotEmpty)
+        ? baseIk
+        : (date.length >= 7 ? date.substring(0, 7) : _month);
 
     if (mode == 'recurring') {
       final rule = RecurrenceRule(
@@ -2106,7 +2109,7 @@ class MoneyStore extends ChangeNotifier {
         end: endDate,
       );
       db.recs.add(rule);
-      _month = date.substring(0, 7);
+      _month = targetMonth;
       syncRecs();
     } else if (count > 1 && !isXfer) {
       final pid = uid();
@@ -2131,7 +2134,7 @@ class MoneyStore extends ChangeNotifier {
           ),
         );
       }
-      _month = date.substring(0, 7);
+      _month = targetMonth;
     } else {
       final xid = isXfer ? uid() : null;
       final rec = date.compareTo(today) <= 0;
@@ -2174,7 +2177,7 @@ class MoneyStore extends ChangeNotifier {
           ),
         );
       }
-      _month = date.substring(0, 7);
+      _month = targetMonth;
     }
 
     syncCards();
@@ -3480,7 +3483,13 @@ class MoneyStore extends ChangeNotifier {
   void navigateToTransaction(Transaction tx) {
     selectedAccountId = tx.acc;
     activeModule = NavModule.account;
-    _month = tx.date.length >= 7 ? tx.date.substring(0, 7) : _month;
+    final acc = accById(tx.acc);
+    final isCard = acc?.type == kCardType && acc?.card != null;
+    if (isCard && tx.ik != null && tx.ik!.isNotEmpty) {
+      _month = tx.ik!;
+    } else {
+      _month = tx.date.length >= 7 ? tx.date.substring(0, 7) : _month;
+    }
     highlightedTxId = tx.id;
     rebuildPredictedBalances();
     notifyListeners();

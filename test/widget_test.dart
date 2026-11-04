@@ -1112,4 +1112,45 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(reloadedProjetos.isBlocked, isTrue);
     expect(reloadedBeta.isBlocked, isTrue);
   });
+
+  test('23. Inserting a credit card transaction sets store.month to invoice key (ik) instead of transaction date', () {
+    final store = MoneyStore(autoBoot: false);
+    store.saveAccount(
+      name: 'Nubank Card',
+      type: kCardType,
+      openingCents: 0,
+      closeDay: 25,
+      dueDay: 5, // dueDay <= closeDay -> closeDay 25/10 closes invoice for 11; after 25/10 it falls in 12
+      payAccId: 'a1',
+    );
+    final card = store.db.accounts.firstWhere((a) => a.type == kCardType);
+
+    // Initial month is some old month
+    store.month = '2026-01';
+
+    // Purchase made on 2026-10-26 (after closeDay 25) -> falls into invoice 2026-12!
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-10-26',
+      payee: 'Restaurante',
+      catSelection: 'Alimentação › Restaurantes',
+      memo: '',
+      signedAmt: -10000,
+    );
+
+    // Should direct to invoice month (2026-12), not date month (2026-10)
+    expect(store.month, '2026-12');
+
+    // For a normal checking account, it directs to the transaction date's month
+    final checking = store.db.accounts.firstWhere((a) => a.type != kCardType);
+    store.addTransaction(
+      accId: checking.id,
+      date: '2026-10-26',
+      payee: 'Mercado',
+      catSelection: 'Alimentação › Mercado',
+      memo: '',
+      signedAmt: -5000,
+    );
+    expect(store.month, '2026-10');
+  });
 }
