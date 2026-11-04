@@ -192,14 +192,12 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
         }
 
         // 3. Fallback OCR nativo se IA desativada ou falhar
-        if (draft == null) {
-          draft = ReceiptParserEngine.parse(
-            filePath: f.path,
-            fileName: fileName,
-            text: extractedText,
-            store: widget.store,
-          );
-        }
+        draft ??= ReceiptParserEngine.parse(
+          filePath: f.path,
+          fileName: fileName,
+          text: extractedText,
+          store: widget.store,
+        );
 
         _drafts.add(draft);
       }
@@ -315,11 +313,11 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.1),
+            color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),
@@ -333,7 +331,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
                   ),
                 ),
               ),
@@ -441,7 +439,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                                 decoration: BoxDecoration(
                                   border: Border(
                                     right: BorderSide(
-                                      color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
                                     ),
                                   ),
                                 ),
@@ -497,11 +495,11 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                               decoration: BoxDecoration(
                                                 color: isCur
-                                                    ? (isDark ? Colors.blueAccent.withOpacity(0.18) : Colors.blue.withOpacity(0.1))
+                                                    ? (isDark ? Colors.blueAccent.withValues(alpha: 0.18) : Colors.blue.withValues(alpha: 0.1))
                                                     : Colors.transparent,
                                                 border: Border(
                                                   bottom: BorderSide(
-                                                    color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
+                                                    color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04),
                                                   ),
                                                 ),
                                               ),
@@ -580,7 +578,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
                   ),
                 ),
               ),

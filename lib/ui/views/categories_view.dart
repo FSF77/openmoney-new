@@ -423,9 +423,10 @@ class _CategoriesViewState extends State<CategoriesView> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
+                _CategoryRowHighlight(
+                  child: Row(
+                    children: [
+                      Expanded(
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
@@ -511,15 +512,17 @@ class _CategoriesViewState extends State<CategoriesView> {
                     ),
                   ],
                 ),
+                ),
                 if (subs.isNotEmpty) ...[
                   const Divider(height: 8),
                   ...subs.map((sub) {
                     final subCount = widget.store.categoryUsageCount(sub.path);
                     return Padding(
-                      padding: const EdgeInsets.only(left: 18),
-                      child: Row(
-                        children: [
-                          Expanded(
+                      padding: const EdgeInsets.only(left: 14),
+                      child: _CategoryRowHighlight(
+                        child: Row(
+                          children: [
+                            Expanded(
                             child: MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: GestureDetector(
@@ -601,6 +604,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                           ),
                         ],
                       ),
+                    ),
                     );
                   }),
                 ],
@@ -609,6 +613,43 @@ class _CategoriesViewState extends State<CategoriesView> {
           );
         }),
       ],
+    );
+  }
+}
+
+class _CategoryRowHighlight extends StatefulWidget {
+  final Widget child;
+
+  const _CategoryRowHighlight({
+    required this.child,
+  });
+
+  @override
+  State<_CategoryRowHighlight> createState() => _CategoryRowHighlightState();
+}
+
+class _CategoryRowHighlightState extends State<_CategoryRowHighlight> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovering = true),
+      onExit: (_) => setState(() => _isHovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: _isHovering
+              ? colors.textPrimary.withValues(alpha: 0.04)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: widget.child,
+      ),
     );
   }
 }
