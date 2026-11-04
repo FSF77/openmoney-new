@@ -268,6 +268,8 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
   - Categorias Principais e Subcategorias unificadas pelo delimitador oficial ` › ` (ex.: `Alimentação › Supermercado`).
 - **Importação e Exportação CSV Estruturada**:
   - Importador inteligente com detecção de delimitador (`;`, `,`, tab), suporte a separadores `›`, `>`, `/`, e criação automática de categorias-mãe.
+- **Destaque Visual ao Passar o Mouse (*Hover Highlight*)**:
+  - Feedback visual ergonômico idêntico ao extrato do livro-caixa: ao passar o mouse sobre qualquer linha de categoria ou subcategoria, a linha inteira recebe um fundo translúcido sutil (4% de opacidade) com cantos arredondados de 6px.
 - **Proteção contra Lançamentos Órfãos**:
   - Categorias com transações vinculadas não podem ser excluídas sem que o usuário defina uma categoria de destino para transferir os registros.
 

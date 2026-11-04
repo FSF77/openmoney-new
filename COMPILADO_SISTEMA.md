@@ -222,6 +222,8 @@ Permite automatizar lançamentos e transferências contínuas ou com prazo deter
 - **Importação e Exportação Estruturada em CSV**:
   - Exporta: `"Tipo";"Categoria Principal";"Subcategoria";"Categoria Completa"`.
   - Importa: Detecção automática de delimitadores (`;`, `,`, tab), suporte a formatos combinados com separadores (`›`, `>`, `/`, `:`), criação automática da categoria-pai e prevenção contra duplicidades.
+- **Destaque Visual ao Passar o Mouse (*Hover Highlight*)**:
+  - Cada linha de categoria principal e subcategoria conta com um realce translúcido sutil ao passar o mouse (`Color.primary.opacity(0.04)` com bordas arredondadas suaves de 6px e transição fluida de 120ms), replicando exatamente o mesmo comportamento de feedback visual do livro-caixa de lançamentos.
 
 ### 4.4 Planejamento Financeiro: Orçamento Mensal (Budget)
 - Definição de limites mensais por categoria de despesa.
