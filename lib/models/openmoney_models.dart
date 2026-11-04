@@ -127,6 +127,7 @@ class Account {
   String? comments;
   int? minBalance;
   String? logo;
+  List<String>? walletAliases;
 
   Account({
     required this.id,
@@ -144,6 +145,7 @@ class Account {
     this.comments,
     this.minBalance,
     this.logo,
+    this.walletAliases,
   });
 
   bool get isInactive => inactive == true;
@@ -175,6 +177,15 @@ class Account {
     final rawBiz = json['business'] as String?;
     final trimmedBiz = rawBiz?.trim();
 
+    List<String>? parsedAliases;
+    if (json['walletAliases'] is List) {
+      final list = (json['walletAliases'] as List)
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) parsedAliases = list;
+    }
+
     return Account(
       id: json['id'] as String? ?? uid(),
       name: json['name'] as String? ?? 'Conta',
@@ -192,6 +203,7 @@ class Account {
       comments: json['comments'] as String?,
       minBalance: (json['minBalance'] as num?)?.toInt(),
       logo: json['logo'] as String?,
+      walletAliases: parsedAliases,
     );
   }
 
@@ -217,6 +229,11 @@ class Account {
           'comments': comments!.trim(),
         if (minBalance != null) 'minBalance': minBalance,
         if (logo != null && logo!.trim().isNotEmpty) 'logo': logo!.trim(),
+        if (walletAliases != null && walletAliases!.isNotEmpty)
+          'walletAliases': walletAliases!
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
       };
 
   Account copyWith({
@@ -235,6 +252,7 @@ class Account {
     String? comments,
     int? minBalance,
     String? logo,
+    List<String>? walletAliases,
   }) {
     return Account(
       id: id ?? this.id,
@@ -253,6 +271,8 @@ class Account {
       comments: comments ?? this.comments,
       minBalance: minBalance ?? this.minBalance,
       logo: logo ?? this.logo,
+      walletAliases: walletAliases ??
+          (this.walletAliases != null ? List<String>.from(this.walletAliases!) : null),
     );
   }
 }

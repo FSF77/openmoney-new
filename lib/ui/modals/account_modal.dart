@@ -40,6 +40,7 @@ class _AccountDialogState extends State<_AccountDialog> {
   late final TextEditingController _accountNumberCtrl;
   late final TextEditingController _minBalanceCtrl;
   late final TextEditingController _commentsCtrl;
+  late final TextEditingController _walletAliasesCtrl;
   late String _type;
   late int _closeDay;
   late int _dueDay;
@@ -66,6 +67,9 @@ class _AccountDialogState extends State<_AccountDialog> {
       text: acc?.minBalance != null ? formatInputCents(acc!.minBalance!) : '',
     );
     _commentsCtrl = TextEditingController(text: acc?.comments ?? '');
+    _walletAliasesCtrl = TextEditingController(
+      text: (acc?.walletAliases ?? []).join(', '),
+    );
     _type = acc?.type ?? 'Corrente';
     _closeDay = acc?.card?.closeDay ?? 1;
     _dueDay = acc?.card?.dueDay ?? 10;
@@ -95,6 +99,7 @@ class _AccountDialogState extends State<_AccountDialog> {
     _accountNumberCtrl.dispose();
     _minBalanceCtrl.dispose();
     _commentsCtrl.dispose();
+    _walletAliasesCtrl.dispose();
     super.dispose();
   }
 
@@ -128,6 +133,11 @@ class _AccountDialogState extends State<_AccountDialog> {
       comments: _commentsCtrl.text,
       minBalance: minBalanceCents,
       logo: _logo,
+      walletAliases: _walletAliasesCtrl.text
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(),
     );
 
     if (err != null) {
@@ -717,6 +727,17 @@ class _AccountDialogState extends State<_AccountDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Comentários / Observações',
                   hintText: 'Anotações sobre a conta, chave PIX, gerente...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _walletAliasesCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nomes na Carteira (De/Para Atalhos iOS)',
+                  hintText:
+                      'Ex: Nubank Mastercard Ultravioleta, America Express Gold',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),

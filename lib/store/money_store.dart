@@ -1805,6 +1805,7 @@ class MoneyStore extends ChangeNotifier {
     String? comments,
     int? minBalance,
     String? logo,
+    List<String>? walletAliases,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da conta.';
@@ -1814,6 +1815,12 @@ class MoneyStore extends ChangeNotifier {
         (trimmedBiz != null && trimmedBiz.isNotEmpty) ? trimmedBiz : null;
 
     final cleanLogo = (logo != null && logo.trim().isNotEmpty) ? logo.trim() : null;
+    final cleanAliases = walletAliases
+        ?.map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final effectiveAliases =
+        (cleanAliases != null && cleanAliases.isNotEmpty) ? cleanAliases : null;
 
     CardConfig? cardCfg;
     if (type == kCardType) {
@@ -1842,6 +1849,9 @@ class MoneyStore extends ChangeNotifier {
         db.accounts[idx].comments = comments?.trim().isEmpty == true ? null : comments?.trim();
         db.accounts[idx].minBalance = minBalance;
         db.accounts[idx].logo = cleanLogo;
+        if (walletAliases != null) {
+          db.accounts[idx].walletAliases = effectiveAliases;
+        }
         if (type == kCardType && db.accounts[idx].invoices == null) {
           db.accounts[idx].invoices = {};
         }
@@ -1871,6 +1881,7 @@ class MoneyStore extends ChangeNotifier {
         comments: comments?.trim().isEmpty == true ? null : comments?.trim(),
         minBalance: minBalance,
         logo: cleanLogo,
+        walletAliases: effectiveAliases,
       );
       db.accounts.add(acc);
       selectedAccountId = newId;
@@ -1888,6 +1899,47 @@ class MoneyStore extends ChangeNotifier {
     markIndexesDirty();
     save();
     return null;
+  }
+
+  void addWalletAlias(String alias, String accountId) {
+    final trimmed = alias.trim();
+    if (trimmed.isEmpty) return;
+    final norm = removeDiacritics(trimmed).toLowerCase();
+
+    bool changed = false;
+    for (int i = 0; i < db.accounts.length; i++) {
+      final acc = db.accounts[i];
+      if (acc.id == accountId) {
+        if (removeDiacritics(acc.name.trim()).toLowerCase() == norm) {
+          continue;
+        }
+        final aliases = List<String>.from(acc.walletAliases ?? []);
+        final exists = aliases.any(
+          (a) => removeDiacritics(a.trim()).toLowerCase() == norm,
+        );
+        if (!exists) {
+          aliases.add(trimmed);
+          acc.walletAliases = aliases;
+          changed = true;
+        }
+      } else {
+        if (acc.walletAliases != null && acc.walletAliases!.isNotEmpty) {
+          final before = acc.walletAliases!.length;
+          acc.walletAliases!.removeWhere(
+            (a) => removeDiacritics(a.trim()).toLowerCase() == norm,
+          );
+          if (acc.walletAliases!.length != before) {
+            if (acc.walletAliases!.isEmpty) {
+              acc.walletAliases = null;
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      save();
+    }
   }
 
   void toggleAccountInactive(String id) {
@@ -2713,43 +2765,38 @@ class MoneyStore extends ChangeNotifier {
       final predTxs =
           monthTxs.where((t) => isPredictionPayee(t.payee)).toList();
       allPredCount += predTxs.length;
+      if (predTxs.isEmpty) continue;
 
-      final monthPreds = <String, List<Transaction>>{};
-      final invPreds = <String, List<Transaction>>{};
+      final predsByCategory = <String, List<Transaction>>{};
       for (final pt in predTxs) {
-        final cfg = cardCfgs[pt.acc];
-        if (invoiceMode && cfg != null) {
-          final pik = pt.ik ?? invKeyFor(cfg, pt.date);
-          invPreds.putIfAbsent('${pt.cat}|$pik', () => []).add(pt);
-        } else {
-          monthPreds.putIfAbsent(pt.cat, () => []).add(pt);
-        }
+        predsByCategory.putIfAbsent(pt.cat, () => []).add(pt);
       }
-      monthPreds.forEach((cat, preds) {
-        final spent = monthTxs
-            .where((t) =>
-                t.cat == cat && !isPredictionPayee(t.payee) && t.xfer == null)
-            .toList();
-        groups.add((cat: cat, preds: preds, spent: spent, label: ''));
-      });
-      invPreds.forEach((key, preds) {
-        final idx = key.lastIndexOf('|');
-        final cat = key.substring(0, idx);
-        final pik = key.substring(idx + 1);
-        // Somente lançamentos de cartão cuja fatura (ik) é a mesma da previsão
-        final spent = db.txs.where((t) {
-          final cfg = cardCfgs[t.acc];
-          if (cfg == null) return false;
-          if (t.auto == true || t.cat != cat || t.xfer != null) return false;
-          if (isPredictionPayee(t.payee)) return false;
-          return (t.ik ?? invKeyFor(cfg, t.date)) == pik;
-        }).toList();
-        groups.add((
-          cat: cat,
-          preds: preds,
-          spent: spent,
-          label: ' • Fatura ${fmtMonth(pik)}'
-        ));
+
+      final monthLabel =
+          (months.length > 1 && m != targetMonth) ? ' • ${fmtMonth(m)}' : '';
+
+      predsByCategory.forEach((cat, preds) {
+        final List<Transaction> spent;
+        if (invoiceMode) {
+          // No modo por fatura: despesas bancárias com data do mês + compras de cartão cuja fatura vence no mês
+          spent = db.txs.where((t) {
+            if (t.auto == true || t.cat != cat || t.xfer != null) return false;
+            if (isPredictionPayee(t.payee)) return false;
+            final cfg = cardCfgs[t.acc];
+            if (cfg != null) {
+              return (t.ik ?? invKeyFor(cfg, t.date)) == m;
+            } else {
+              return t.date.startsWith(m);
+            }
+          }).toList();
+        } else {
+          // No modo por mês: todas as despesas com data do mês
+          spent = monthTxs
+              .where((t) =>
+                  t.cat == cat && !isPredictionPayee(t.payee) && t.xfer == null)
+              .toList();
+        }
+        groups.add((cat: cat, preds: preds, spent: spent, label: monthLabel));
       });
     }
 

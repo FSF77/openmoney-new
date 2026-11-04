@@ -7,6 +7,7 @@ import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'mobile_inbox_modal.dart';
+import 'wallet_import_modal.dart';
 
 Future<void> showCsvQifCenterModal(
   BuildContext context,
@@ -216,6 +217,17 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: 16,
+                    ),
+                    label: const Text('Importar da Carteira (Atalhos CSV)'),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await showWalletImportModal(context, widget.store);
+                    },
+                  ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.phone_iphone, size: 16),
                     label: const Text('Importar do Celular (.json)'),
