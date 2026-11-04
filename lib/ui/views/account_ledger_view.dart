@@ -44,6 +44,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   @override
   void initState() {
     super.initState();
+    _checkCreditCardOpenInvoice();
     _syncDefaultCategory();
   }
 
@@ -52,7 +53,23 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.account.id != widget.account.id) {
       _customIk = null;
+      _checkCreditCardOpenInvoice();
       _syncDefaultCategory();
+    }
+  }
+
+  void _checkCreditCardOpenInvoice() {
+    final acc = widget.account;
+    if (acc.type == kCardType && acc.card != null) {
+      final openIk = invKeyFor(acc.card!, todayISO());
+      if (widget.store.month.compareTo(openIk) < 0) {
+        widget.store.month = openIk;
+      }
+    } else {
+      final curMonth = todayISO().substring(0, 7);
+      if (widget.store.month != curMonth) {
+        widget.store.month = curMonth;
+      }
     }
   }
 

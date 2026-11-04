@@ -45,7 +45,10 @@ class CategorySelectFormField extends StatelessWidget {
     // Constrói lista estruturada: Categorias principais, subcategorias e transferências
     final options = <({String label, String value, bool isHeader})>[];
     for (final top in store.topCategories(type: categoryType)) {
-      final subs = store.subCategories(top.name, type: categoryType);
+      if (top.isBlocked) continue;
+      final subs = store.subCategories(top.name, type: categoryType)
+          .where((s) => !s.isBlocked)
+          .toList();
       if (subs.isEmpty) {
         options.add((label: top.name, value: top.path, isHeader: false));
       } else {

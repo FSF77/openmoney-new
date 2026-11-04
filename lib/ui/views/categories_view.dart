@@ -98,6 +98,7 @@ class _CategoriesViewState extends State<CategoriesView> {
     String type = editing?.type ?? _selectedType;
     String? parent = editing != null ? editing.parent : presetParent;
     bool includeInReports = editing?.effectiveIncludeInReports ?? true;
+    bool blocked = editing?.isBlocked ?? false;
     String? errorMsg;
 
     showDialog(
@@ -192,6 +193,17 @@ class _CategoriesViewState extends State<CategoriesView> {
                     onChanged: (v) =>
                         setModalState(() => includeInReports = v),
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Bloquear Categoria'),
+                    subtitle: const Text(
+                      'Não permite novos lançamentos e oculta da caixa de seleção.',
+                      style: TextStyle(fontSize: 11.5),
+                    ),
+                    value: blocked,
+                    onChanged: (v) =>
+                        setModalState(() => blocked = v),
+                  ),
                 ],
               ),
             ),
@@ -208,6 +220,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                     parent: parent,
                     type: type,
                     includeInReports: includeInReports,
+                    blocked: blocked ? true : null,
                   );
                   if (err != null) {
                     setModalState(() => errorMsg = err);
@@ -435,6 +448,13 @@ class _CategoriesViewState extends State<CategoriesView> {
                                   text: '$topCount lanç.',
                                   color: colors.accent,
                                 ),
+                                if (top.isBlocked) ...[
+                                  const SizedBox(width: 6),
+                                  StatusBadge(
+                                    text: 'BLOQUEADA',
+                                    color: colors.expense,
+                                  ),
+                                ],
                                 if (!widget.store.isCategoryIncludedInReports(top.path)) ...[
                                   const SizedBox(width: 6),
                                   StatusBadge(
@@ -526,6 +546,13 @@ class _CategoriesViewState extends State<CategoriesView> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
+                                      if (sub.isBlocked) ...[
+                                        const SizedBox(width: 6),
+                                        StatusBadge(
+                                          text: 'BLOQUEADA',
+                                          color: colors.expense,
+                                        ),
+                                      ],
                                       if (!widget.store.isCategoryIncludedInReports(sub.path)) ...[
                                         const SizedBox(width: 6),
                                         StatusBadge(

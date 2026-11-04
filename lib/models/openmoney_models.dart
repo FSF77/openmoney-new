@@ -282,15 +282,19 @@ class CategoryItem {
   String? parent;
   String type;
   bool? includeInReports;
+  bool? blocked;
 
   CategoryItem({
     required this.name,
     String? parent,
     this.type = 'Despesa',
     this.includeInReports,
+    this.blocked,
   }) : parent = (parent != null && parent.isEmpty) ? null : parent;
 
   String get id => path;
+
+  bool get isBlocked => blocked == true;
 
   String get path {
     if (parent != null && parent!.isNotEmpty) {
@@ -318,6 +322,7 @@ class CategoryItem {
         parent: null,
         type: (lower == 'salário' || lower == 'salario') ? 'Receita' : 'Despesa',
         includeInReports: null,
+        blocked: null,
       );
     }
     if (json is Map) {
@@ -328,6 +333,7 @@ class CategoryItem {
         parent: (p != null && p.isEmpty) ? null : p,
         type: map['type'] as String? ?? 'Despesa',
         includeInReports: map['includeInReports'] as bool?,
+        blocked: map['blocked'] as bool?,
       );
     }
     return CategoryItem(name: 'Outros');
@@ -338,6 +344,7 @@ class CategoryItem {
         if (parent != null) 'parent': parent,
         'type': type,
         if (includeInReports != null) 'includeInReports': includeInReports,
+        if (blocked == true) 'blocked': true,
       };
 
   CategoryItem copyWith({
@@ -345,12 +352,14 @@ class CategoryItem {
     String? parent,
     String? type,
     bool? includeInReports,
+    bool? blocked,
   }) {
     return CategoryItem(
       name: name ?? this.name,
       parent: parent ?? this.parent,
       type: type ?? this.type,
       includeInReports: includeInReports ?? this.includeInReports,
+      blocked: blocked ?? this.blocked,
     );
   }
 }

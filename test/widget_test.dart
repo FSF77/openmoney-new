@@ -1052,4 +1052,64 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(result.newTxs[0].cat, 'Compra › Automóvel');
     expect(result.newTxs[1].cat, 'Alimentação › Lanche');
   });
+
+  test('21. Navigating to accounts adjusts month: open invoice for credit cards, current month for non-cards', () {
+    final store = MoneyStore(autoBoot: false);
+    store.saveAccount(
+      name: 'Cartão Master',
+      type: kCardType,
+      openingCents: 0,
+      closeDay: 1,
+      dueDay: 10,
+      payAccId: 'a1',
+    );
+    final card = store.db.accounts.firstWhere((a) => a.type == kCardType);
+    final checking = store.db.accounts.firstWhere((a) => a.type != kCardType);
+
+    // Set month to a past closed invoice/month
+    store.month = '2020-01';
+
+    // Navigate to card account -> advances to open invoice
+    store.navigateTo(NavModule.account, accountId: card.id);
+    final expectedOpenIk = invKeyFor(card.card!, todayISO());
+    expect(store.month, expectedOpenIk);
+
+    // Set month to a past month
+    store.month = '2020-05';
+
+    // Navigate to non-card checking account -> resets to current calendar month
+    store.navigateTo(NavModule.account, accountId: checking.id);
+    expect(store.month, todayISO().substring(0, 7));
+  });
+
+  test('22. Blocked category is excluded from selection options and paths but remains in reports/db', () {
+    final store = MoneyStore(autoBoot: false);
+
+    // Save a new active category and a subcategory
+    store.saveCategory(name: 'Projetos', type: 'Despesa');
+    store.saveCategory(name: 'Beta', parent: 'Projetos', type: 'Despesa');
+
+    expect(store.allCategoryPaths('Despesa').contains('Projetos'), isTrue);
+    expect(store.allCategoryPaths('Despesa').contains('Projetos › Beta'), isTrue);
+
+    // Block the subcategory
+    store.toggleCategoryBlocked('Projetos › Beta');
+    expect(store.isCategoryBlocked('Projetos › Beta'), isTrue);
+    expect(store.allCategoryPaths('Despesa').contains('Projetos › Beta'), isFalse);
+    expect(store.allCategoryPaths('Despesa', includeBlocked: true).contains('Projetos › Beta'), isTrue);
+
+    // Block the parent category
+    store.toggleCategoryBlocked('Projetos');
+    expect(store.isCategoryBlocked('Projetos'), isTrue);
+    expect(store.allCategoryPaths('Despesa').contains('Projetos'), isFalse);
+    expect(store.allCategoryPaths('Despesa', includeBlocked: true).contains('Projetos'), isTrue);
+
+    // Serializes and round-trips correctly with blocked attribute
+    final json = store.db.toJson();
+    final reloadedDb = Database.fromJson(json);
+    final reloadedProjetos = reloadedDb.cats.firstWhere((c) => c.path == 'Projetos');
+    final reloadedBeta = reloadedDb.cats.firstWhere((c) => c.path == 'Projetos › Beta');
+    expect(reloadedProjetos.isBlocked, isTrue);
+    expect(reloadedBeta.isBlocked, isTrue);
+  });
 }

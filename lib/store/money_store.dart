@@ -132,6 +132,26 @@ class MoneyStore extends ChangeNotifier {
     activeModule = module;
     if (accountId != null) {
       selectedAccountId = accountId;
+      if (module == NavModule.account) {
+        final acc = accById(accountId);
+        if (acc != null) {
+          if (acc.type == kCardType && acc.card != null) {
+            final openIk = invKeyFor(acc.card!, todayISO());
+            if (_month.compareTo(openIk) < 0) {
+              _month = openIk;
+              syncRecs();
+              rebuildPredictedBalances();
+            }
+          } else {
+            final curMonth = todayISO().substring(0, 7);
+            if (_month != curMonth) {
+              _month = curMonth;
+              syncRecs();
+              rebuildPredictedBalances();
+            }
+          }
+        }
+      }
     }
     notifyListeners();
   }
@@ -1726,23 +1746,41 @@ class MoneyStore extends ChangeNotifier {
     return list;
   }
 
-  List<String> allCategoryPaths(String type) {
+  List<String> allCategoryPaths(String type, {bool includeBlocked = false}) {
     final result = <String>[];
     for (final top in topCategories(type: type)) {
-      result.add(top.path);
-      for (final sub in subCategories(top.name, type: type)) {
-        result.add(sub.path);
+      if (!includeBlocked && top.isBlocked) continue;
+      final subs = subCategories(top.name, type: type);
+      if (subs.isEmpty) {
+        result.add(top.path);
+      } else {
+        if (includeBlocked || !top.isBlocked) {
+          result.add(top.path);
+        }
+        for (final sub in subs) {
+          if (!includeBlocked && (sub.isBlocked || top.isBlocked)) continue;
+          result.add(sub.path);
+        }
       }
     }
     return result;
   }
 
-  List<({String label, String value})> allCategoryOptions(String type) {
+  List<({String label, String value})> allCategoryOptions(String type, {bool includeBlocked = false}) {
     final result = <({String label, String value})>[];
     for (final top in topCategories(type: type)) {
-      result.add((label: top.name, value: top.path));
-      for (final sub in subCategories(top.name, type: type)) {
-        result.add((label: '   ↳ ${sub.name}', value: sub.path));
+      if (!includeBlocked && top.isBlocked) continue;
+      final subs = subCategories(top.name, type: type);
+      if (subs.isEmpty) {
+        result.add((label: top.name, value: top.path));
+      } else {
+        if (includeBlocked || !top.isBlocked) {
+          result.add((label: top.name, value: top.path));
+        }
+        for (final sub in subs) {
+          if (!includeBlocked && (sub.isBlocked || top.isBlocked)) continue;
+          result.add((label: '   ↳ ${sub.name}', value: sub.path));
+        }
       }
     }
     return result;
@@ -2882,6 +2920,7 @@ class MoneyStore extends ChangeNotifier {
     String? parent,
     required String type,
     bool includeInReports = true,
+    bool? blocked,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da categoria.';
@@ -2890,11 +2929,17 @@ class MoneyStore extends ChangeNotifier {
     }
 
     final cleanParent = (parent != null && parent.isEmpty) ? null : parent;
+    bool? resolvedBlocked = blocked;
+    if (resolvedBlocked == null && editingPath != null) {
+      final existing = db.cats.where((c) => c.path == editingPath).firstOrNull;
+      resolvedBlocked = existing?.blocked;
+    }
     final newItem = CategoryItem(
       name: trimmed,
       parent: cleanParent,
       type: type,
       includeInReports: includeInReports,
+      blocked: resolvedBlocked,
     );
     final newPath = newItem.path;
 
@@ -3067,6 +3112,52 @@ class MoneyStore extends ChangeNotifier {
       return false;
     }
     return true;
+  }
+
+  bool isCategoryBlocked(String catPath) {
+    for (final cat in db.cats) {
+      if (cat.path.toLowerCase() == catPath.toLowerCase()) {
+        return cat.isBlocked;
+      }
+    }
+    final parts = catPath.split(kCategorySep);
+    if (parts.length > 1) {
+      final parentName = parts[0].trim();
+      for (final cat in db.cats) {
+        if (cat.name.toLowerCase() == parentName.toLowerCase() &&
+            cat.parent == null) {
+          if (cat.isBlocked) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void toggleCategoryBlocked(String catPath) {
+    final idx = db.cats.indexWhere((c) => c.path == catPath);
+    if (idx == -1) return;
+    final cat = db.cats[idx];
+    final newBlocked = !cat.isBlocked;
+    cat.blocked = newBlocked ? true : null;
+
+    // Se bloquear uma categoria pai, bloqueia recursivamente suas subcategorias
+    if (cat.parent == null) {
+      for (int i = 0; i < db.cats.length; i++) {
+        if (db.cats[i].parent == cat.name) {
+          db.cats[i].blocked = newBlocked ? true : null;
+        }
+      }
+    }
+
+    save();
+    notifyListeners();
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.update,
+      entity: AuditEntity.category,
+      summary: 'Categoria "${cat.path}" ${newBlocked ? "bloqueada" : "desbloqueada"} para novos lançamentos',
+    );
   }
 
   // MARK: - Monthly Report Builder
