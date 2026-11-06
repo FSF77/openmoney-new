@@ -311,21 +311,32 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ],
                     ),
-                    SegmentedButton<CashFlowPeriodKind>(
-                      style: isMobile
-                          ? SegmentedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              textStyle: const TextStyle(fontSize: 11),
-                            )
-                          : null,
-                      segments: CashFlowPeriodKind.values
-                          .map((p) =>
-                              ButtonSegment(value: p, label: Text(p.label)))
-                          .toList(),
-                      selected: {_periodKind},
-                      onSelectionChanged: (s) =>
-                          setState(() => _periodKind = s.first),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<CashFlowPeriodKind>(
+                        showSelectedIcon: !isMobile,
+                        style: isMobile
+                            ? SegmentedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                textStyle: const TextStyle(fontSize: 11),
+                              )
+                            : null,
+                        segments: CashFlowPeriodKind.values
+                            .map((p) => ButtonSegment(
+                                  value: p,
+                                  label: Text(
+                                    p.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                  ),
+                                ))
+                            .toList(),
+                        selected: {_periodKind},
+                        onSelectionChanged: (s) =>
+                            setState(() => _periodKind = s.first),
+                      ),
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
