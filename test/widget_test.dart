@@ -7,9 +7,16 @@ import 'package:openmoney/main.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/backup_manager.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
+import 'package:openmoney/services/cloud_sync_service.dart';
 import 'package:openmoney/services/importers_exporters.dart';
 import 'package:openmoney/store/money_store.dart';
+import 'package:openmoney/ui/views/account_ledger_view.dart';
+import 'package:openmoney/ui/views/categories_view.dart';
 import 'package:openmoney/ui/views/cash_flow_view.dart';
+import 'package:openmoney/ui/views/due_bills_view.dart';
+import 'package:openmoney/ui/views/installments_view.dart';
+import 'package:openmoney/ui/views/reports_view.dart';
+import 'package:openmoney/ui/modals/account_multi_select_filter.dart';
 
 void main() {
   group('OpenMoney JSON v6 Schema & Business Rules Parity Tests', () {
@@ -1202,5 +1209,252 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
       find.byIcon(Icons.check_circle_rounded),
       findsWidgets, // May be in result card or header
     );
+  });
+
+  testWidgets('25. Compact icon-only export/import buttons in AccountLedger, Reports, and Categories', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+
+    // 1. AccountLedgerView
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AccountLedgerView(store: store, account: store.activeAccounts.first),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final ledgerCsvTooltip = find.byTooltip('Exportar CSV');
+    expect(ledgerCsvTooltip, findsOneWidget);
+    expect(find.descendant(of: ledgerCsvTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: ledgerCsvTooltip, matching: find.byIcon(Icons.download)), findsOneWidget);
+
+    final ledgerPdfTooltip = find.byTooltip('Exportar Extrato PDF');
+    expect(ledgerPdfTooltip, findsOneWidget);
+    expect(find.descendant(of: ledgerPdfTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: ledgerPdfTooltip, matching: find.byIcon(Icons.picture_as_pdf)), findsOneWidget);
+
+    // 2. ReportsView
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReportsView(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final reportsPdfTooltip = find.byTooltip('Exportar PDF A4');
+    expect(reportsPdfTooltip, findsOneWidget);
+    expect(find.descendant(of: reportsPdfTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: reportsPdfTooltip, matching: find.byIcon(Icons.picture_as_pdf)), findsOneWidget);
+
+    // 3. CategoriesView
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CategoriesView(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final catImportTooltip = find.byTooltip('Importar CSV');
+    expect(catImportTooltip, findsOneWidget);
+    expect(find.descendant(of: catImportTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: catImportTooltip, matching: find.byIcon(Icons.file_upload_outlined)), findsOneWidget);
+
+    final catExportTooltip = find.byTooltip('Exportar CSV');
+    expect(catExportTooltip, findsOneWidget);
+    expect(find.descendant(of: catExportTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: catExportTooltip, matching: find.byIcon(Icons.download)), findsOneWidget);
+  });
+
+  testWidgets('26. DueBillsView & InstallmentsView compact CSV button, and CashFlowView filter alignment', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+
+    // 1. DueBillsView
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DueBillsView(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dueBillsCsvTooltip = find.byTooltip('Exportar CSV');
+    expect(dueBillsCsvTooltip, findsOneWidget);
+    expect(find.descendant(of: dueBillsCsvTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: dueBillsCsvTooltip, matching: find.byIcon(Icons.download)), findsOneWidget);
+
+    // 2. InstallmentsView
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: InstallmentsView(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final installmentsCsvTooltip = find.byTooltip('Exportar CSV');
+    expect(installmentsCsvTooltip, findsOneWidget);
+    expect(find.descendant(of: installmentsCsvTooltip, matching: find.byType(OutlinedButton)), findsOneWidget);
+    expect(find.descendant(of: installmentsCsvTooltip, matching: find.byIcon(Icons.download)), findsOneWidget);
+
+    // 3. CashFlowView filter alignment: Contas filter top matches Status and other dropdowns
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CashFlowView(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final accRect = tester.getRect(find.byType(AccountMultiSelectFilter));
+    final statusRect = tester.getRect(find.ancestor(
+      of: find.byType(DropdownButtonFormField<CashFlowStatusFilter>),
+      matching: find.byType(SizedBox),
+    ).first);
+
+    expect(accRect.top, equals(statusRect.top));
+    expect(accRect.height, equals(40.0));
+    expect(statusRect.height, equals(40.0));
+  });
+
+  testWidgets('27. Database button and modal renamed strictly to "Base de Dados Local"', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+    await tester.pumpWidget(OpenMoneyApp(store: store));
+    await tester.pumpAndSettle();
+
+    // Verify button tooltip is 'Base de Dados Local'
+    final dbBtn = find.byTooltip('Base de Dados Local');
+    expect(dbBtn, findsWidgets);
+
+    // Tap the first database button to open modal
+    await tester.tap(dbBtn.first);
+    await tester.pumpAndSettle();
+
+    // Verify modal title is 'Base de Dados Local'
+    expect(find.text('Base de Dados Local'), findsWidgets);
+  });
+
+  testWidgets('28. Inhibit local database shortcut button when Cloud is enabled, and single-line cloud footer', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+
+    // Initial state: not authenticated -> dbBtn exists
+    await tester.pumpWidget(OpenMoneyApp(store: store));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Base de Dados Local'), findsWidgets);
+
+    // Verify footer single-line text and version
+    final footerText = find.textContaining('Sincronização Cloud • v');
+    expect(footerText, findsOneWidget);
+    final textWidget = tester.widget<Text>(footerText);
+    expect(textWidget.maxLines, equals(1));
+    expect(textWidget.softWrap, isFalse);
+
+    // Simulate Cloud login
+    final cloud = CloudSyncService.instance;
+    cloud.loadSessionFromConfig({
+      'cloudApiBaseUrl': 'https://cloud.openmoney.app',
+      'cloudAuthToken': 'fake_jwt_token',
+      'cloudUserId': 'user123',
+      'cloudUserEmail': 'teste@openmoney.app',
+      'cloudUserName': 'Teste',
+    });
+    await tester.pumpAndSettle();
+
+    // With Cloud enabled: local database shortcut button must be inhibited (hidden)
+    expect(find.byTooltip('Base de Dados Local'), findsNothing);
+
+    // Cleanup session
+    cloud.logout();
+    await tester.pumpAndSettle();
+
+    // After logout, button returns
+    expect(find.byTooltip('Base de Dados Local'), findsWidgets);
+  });
+
+  testWidgets('29. Cash flow ending balance comments support add, edit, delete, persistence and indicators', (tester) async {
+    tester.view.physicalSize = const Size(2400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+
+    // 1. Verify model serialization / deserialization
+    store.setCommentForPeriod('2026-10', 'Reserva de emergência aplicada');
+    expect(store.commentForPeriod('2026-10'), equals('Reserva de emergência aplicada'));
+
+    final json = store.db.toJson();
+    expect(json['comments'], isA<Map>());
+    expect((json['comments'] as Map)['2026-10'], equals('Reserva de emergência aplicada'));
+
+    final reloadedDb = Database.fromJson(json);
+    expect(reloadedDb.comments['2026-10'], equals('Reserva de emergência aplicada'));
+
+    // 2. Open Cash Flow view
+    store.activeModule = NavModule.cashFlow;
+    await tester.pumpWidget(OpenMoneyApp(store: store));
+    await tester.pumpAndSettle();
+
+    // Verify Ending balance row
+    expect(find.text('Saldo Final Acumulado'), findsOneWidget);
+
+    // Verify comment icon indicator exists
+    expect(find.byIcon(Icons.comment_outlined), findsWidgets);
+
+    // Verify cell tooltip containing the comment
+    expect(
+      find.byTooltip('Comentário (10/2026):\nReserva de emergência aplicada\n(Clique para editar)'),
+      findsOneWidget,
+    );
+
+    // 3. Tap on the cell to open comment dialog
+    await tester.tap(find.byTooltip('Comentário (10/2026):\nReserva de emergência aplicada\n(Clique para editar)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Comentário do Saldo Final'), findsOneWidget);
+    expect(find.text('Excluir'), findsOneWidget);
+
+    // Edit text and save
+    await tester.enterText(find.byType(TextField).last, 'Novo comentário revisado');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+
+    expect(store.commentForPeriod('2026-10'), equals('Novo comentário revisado'));
+
+    // 4. Tap again and delete
+    await tester.tap(find.byTooltip('Comentário (10/2026):\nNovo comentário revisado\n(Clique para editar)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(store.commentForPeriod('2026-10'), isNull);
   });
 }
