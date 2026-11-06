@@ -388,10 +388,12 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ),
                     ),
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Exportar CSV'),
-                      onPressed: () => _exportCsv(matrix),
+                    Tooltip(
+                      message: 'Exportar CSV',
+                      child: OutlinedButton(
+                        onPressed: () => _exportCsv(matrix),
+                        child: const Icon(Icons.download, size: 18),
+                      ),
                     ),
                   ],
                 ),
@@ -411,6 +413,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                     SizedBox(
                       width: 200,
+                      height: 40,
                       child: DropdownButtonFormField<CashFlowStatusFilter>(
                         initialValue: _statusFilter,
                         isExpanded: true,
@@ -443,6 +446,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                     SizedBox(
                       width: 200,
+                      height: 40,
                       child: DropdownButtonFormField<CashFlowKindFilter>(
                         initialValue: _kindFilter,
                         isExpanded: true,
@@ -475,6 +479,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                     SizedBox(
                       width: 200,
+                      height: 40,
                       child: DropdownButtonFormField<CashFlowDateMode>(
                         initialValue: _dateMode,
                         isExpanded: true,
@@ -507,6 +512,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                     SizedBox(
                       width: 200,
+                      height: 40,
                       child: TextField(
                         style: TextStyle(
                           fontSize: 13,
@@ -516,6 +522,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                           labelText: 'Filtrar categoria...',
                           labelStyle: TextStyle(fontSize: 13),
                           prefixIcon: Icon(Icons.search, size: 16),
+                          prefixIconConstraints:
+                              BoxConstraints(minWidth: 32, minHeight: 0),
                           isDense: true,
                           contentPadding:
                               EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -526,6 +534,10 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                _buildKpiSummaryRow(matrix, colors),
               ],
             ),
           ),
@@ -1205,6 +1217,156 @@ class _CashFlowViewState extends State<CashFlowView> {
             const SizedBox(width: _scrollbarSpacer),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildKpiSummaryRow(CashFlowMatrix matrix, OpenMoneyColors colors) {
+    final totalIncome = matrix.incomeSection.grandTotal;
+    final totalExpense = matrix.expenseSection.grandTotal;
+    final net = matrix.netGrandTotal;
+    final isPositive = net >= 0;
+    final netColor = isPositive ? colors.income : colors.expense;
+
+    final incomeCard = _buildKpiCard(
+      title: 'TOTAL RECEITAS',
+      amount: brl(totalIncome),
+      color: colors.income,
+      icon: Icons.north_east,
+      colors: colors,
+    );
+
+    final expenseCard = _buildKpiCard(
+      title: 'TOTAL DESPESAS',
+      amount: brl(totalExpense),
+      color: colors.expense,
+      icon: Icons.south_east,
+      colors: colors,
+    );
+
+    final netCard = _buildKpiCard(
+      title: 'RESULTADO LÍQUIDO',
+      amount: brl(net),
+      color: netColor,
+      icon: isPositive ? Icons.check_circle_rounded : Icons.error_rounded,
+      colors: colors,
+      trailingBadge: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: netColor.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          isPositive ? 'Superávit' : 'Déficit',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: netColor,
+          ),
+        ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 640) {
+          return Column(
+            children: [
+              incomeCard,
+              const SizedBox(height: 8),
+              expenseCard,
+              const SizedBox(height: 8),
+              netCard,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: incomeCard),
+            const SizedBox(width: 14),
+            Expanded(child: expenseCard),
+            const SizedBox(width: 14),
+            Expanded(child: netCard),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String amount,
+    required Color color,
+    required IconData icon,
+    required OpenMoneyColors colors,
+    Widget? trailingBadge,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.22),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: colors.isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    if (trailingBadge != null) trailingBadge,
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  amount,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

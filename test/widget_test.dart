@@ -9,6 +9,7 @@ import 'package:openmoney/services/backup_manager.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
 import 'package:openmoney/services/importers_exporters.dart';
 import 'package:openmoney/store/money_store.dart';
+import 'package:openmoney/ui/views/cash_flow_view.dart';
 
 void main() {
   group('OpenMoney JSON v6 Schema & Business Rules Parity Tests', () {
@@ -701,12 +702,12 @@ CX
       );
       final cardX = store.db.accounts.firstWhere((a) => a.name == 'Cartão X');
 
-      // 3. Importa CSV com R$ 2.000,00 na fatura de janeiro/2026 e R$ 2.000,00 na fatura de novembro/2026
+      // 3. Importa CSV com R$ 2.000,00 na fatura de janeiro/2026 e R$ 2.000,00 na fatura de dezembro/2026 (futura)
       const csvContent = '''
 "Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura"
 "2025-12-15";"Cartão X";"Compra A";"Alimentação";"";"-1200,00";"Sim";"01/2026"
 "2025-12-20";"Cartão X";"Compra B";"Lazer";"";"-800,00";"Sim";"01/2026"
-"2026-10-18";"Cartão X";"Compra C";"Moradia";"";"-2000,00";"Sim";"11/2026"
+"2026-11-18";"Cartão X";"Compra C";"Moradia";"";"-2000,00";"Sim";"12/2026"
 ''';
       final bytes = Uint8List.fromList(utf8.encode(csvContent));
       final importRes = store.importCSVBytes(bytes);
@@ -721,14 +722,14 @@ CX
       expect(payJan.rec, true);
       expect(payJan.auto, true);
 
-      // Verifica que para a fatura futura 11/2026 (vencimento 05/11/2026 > hoje),
+      // Verifica que para a fatura futura 12/2026 (vencimento 05/12/2026 > hoje),
       // o lançamento de pagamento na Conta Padrão Y NÃO fica conciliado (rec: false)
-      final payNov = store.db.txs.firstWhere(
-        (t) => t.acc == accY.id && t.inv == '2026-11' && t.card == cardX.id,
+      final payDec = store.db.txs.firstWhere(
+        (t) => t.acc == accY.id && t.inv == '2026-12' && t.card == cardX.id,
       );
-      expect(payNov.date, '2026-11-05');
-      expect(payNov.amt, -200000); // -R$ 2.000,00
-      expect(payNov.rec, false);
+      expect(payDec.date, '2026-12-05');
+      expect(payDec.amt, -200000); // -R$ 2.000,00
+      expect(payDec.rec, false);
 
       // Verifica fatura 01/2026 liquidada no Cartão X
       final summaryJan = store.invoiceSummary(cardX.id, '2026-01')!;
@@ -737,12 +738,12 @@ CX
       expect(summaryJan.remainingCents, 0);
       expect(summaryJan.isFullyPaid, true);
 
-      // Verifica fatura futura 11/2026 ainda em aberto (não liquidada antes do vencimento)
-      final summaryNov = store.invoiceSummary(cardX.id, '2026-11')!;
-      expect(summaryNov.chargesCents, 200000);
-      expect(summaryNov.paymentsCents, 0);
-      expect(summaryNov.remainingCents, 200000);
-      expect(summaryNov.isFullyPaid, false);
+      // Verifica fatura futura 12/2026 ainda em aberto (não liquidada antes do vencimento)
+      final summaryDec = store.invoiceSummary(cardX.id, '2026-12')!;
+      expect(summaryDec.chargesCents, 200000);
+      expect(summaryDec.paymentsCents, 0);
+      expect(summaryDec.remainingCents, 200000);
+      expect(summaryDec.isFullyPaid, false);
 
       // Saldo conciliado da Conta Padrão Y desconta apenas a fatura vencida (01/2026):
       // R$ 10.000,00 - R$ 2.000,00 = R$ 8.000,00
@@ -1152,5 +1153,54 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
       signedAmt: -5000,
     );
     expect(store.month, '2026-10');
+  });
+
+  testWidgets('24. CashFlowView: Export CSV compact button, equal filter box heights, and KPI summary cards parity', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            height: 900,
+            child: CashFlowView(store: store),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Export CSV compact button with tooltip
+    final exportFinder = find.byTooltip('Exportar CSV');
+    expect(exportFinder, findsOneWidget);
+    final exportBtn = tester.widget<OutlinedButton>(
+      find.descendant(of: exportFinder, matching: find.byType(OutlinedButton)),
+    );
+    expect(exportBtn, isNotNull);
+    expect(find.descendant(of: exportFinder, matching: find.byIcon(Icons.download)), findsOneWidget);
+
+    // 2. Filter bar box heights equality (category search matches dropdowns)
+    final categoryFieldFinder = find.widgetWithText(TextField, 'Filtrar categoria...');
+    expect(categoryFieldFinder, findsOneWidget);
+    final statusFieldFinder = find.byType(DropdownButtonFormField<CashFlowStatusFilter>);
+    expect(statusFieldFinder, findsOneWidget);
+
+    final hCategory = tester.getSize(categoryFieldFinder).height;
+    final hStatus = tester.getSize(statusFieldFinder).height;
+    expect(hCategory, equals(40.0));
+    expect(hStatus, equals(40.0));
+    expect(hCategory, equals(hStatus));
+
+    // 3. KPI Summary cards (Receitas, Despesas, Resultado Líquido)
+    expect(find.text('TOTAL RECEITAS'), findsOneWidget);
+    expect(find.text('TOTAL DESPESAS'), findsOneWidget);
+    expect(find.text('RESULTADO LÍQUIDO'), findsOneWidget);
+    expect(find.byIcon(Icons.north_east), findsOneWidget);
+    expect(find.byIcon(Icons.south_east), findsOneWidget);
+    expect(
+      find.byIcon(Icons.check_circle_rounded),
+      findsWidgets, // May be in result card or header
+    );
   });
 }
