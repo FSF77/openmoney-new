@@ -1,5 +1,5 @@
-name = "openmoney"
-pages_build_output_dir = "build/web"
+name = "openmoney-new"
+pages_build_output_dir = "web-dist"
 compatibility_date = "2025-01-01"
 
 # ==============================================================================
