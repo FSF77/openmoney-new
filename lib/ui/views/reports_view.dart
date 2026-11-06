@@ -100,29 +100,27 @@ class _ReportsViewState extends State<ReportsView> {
                       ],
                     ),
                   ),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  Tooltip(
+                    message:
+                        isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4',
+                    child: OutlinedButton(
+                      onPressed: () {
+                        final pdfBytes =
+                            PdfReportGenerator.buildMonthlyReportPdfBytes(
+                          store: widget.store,
+                          monthYM: periodKey,
+                          data: data,
+                        );
+                        PdfReportGenerator.saveAndOpenPdfBytes(
+                          context,
+                          pdfBytes: pdfBytes,
+                          defaultFileName: isAnnual
+                              ? 'Relatorio-Ano-$_selectedYear.pdf'
+                              : 'Relatorio-${widget.store.month}.pdf',
+                        );
+                      },
+                      child: const Icon(Icons.picture_as_pdf, size: 18),
                     ),
-                    icon: const Icon(Icons.picture_as_pdf, size: 16),
-                    label: Text(
-                        isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4'),
-                    onPressed: () {
-                      final pdfBytes =
-                          PdfReportGenerator.buildMonthlyReportPdfBytes(
-                        store: widget.store,
-                        monthYM: periodKey,
-                        data: data,
-                      );
-                      PdfReportGenerator.saveAndOpenPdfBytes(
-                        context,
-                        pdfBytes: pdfBytes,
-                        defaultFileName: isAnnual
-                            ? 'Relatorio-Ano-$_selectedYear.pdf'
-                            : 'Relatorio-${widget.store.month}.pdf',
-                      );
-                    },
                   ),
                 ],
               ),

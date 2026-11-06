@@ -105,18 +105,20 @@ class _DueBillsViewState extends State<DueBillsView> {
                         setState(() => _selectedAccountIds = set),
                   ),
                   const SizedBox(width: 10),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.download, size: 17),
-                    label: const Text('Exportar CSV'),
-                    onPressed: items.isEmpty
-                        ? null
-                        : () => exportCsvWithFeedback(
-                              context,
-                              csv: store.dueBillsCSVString(items),
-                              defaultName:
-                                  'openmoney-contas-a-pagar-receber.csv',
-                              title: 'Exportar Contas a Pagar e Receber (CSV)',
-                            ),
+                  Tooltip(
+                    message: 'Exportar CSV',
+                    child: OutlinedButton(
+                      onPressed: items.isEmpty
+                          ? null
+                          : () => exportCsvWithFeedback(
+                                context,
+                                csv: store.dueBillsCSVString(items),
+                                defaultName:
+                                    'openmoney-contas-a-pagar-receber.csv',
+                                title: 'Exportar Contas a Pagar e Receber (CSV)',
+                              ),
+                      child: const Icon(Icons.download, size: 18),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   if (items.isNotEmpty)

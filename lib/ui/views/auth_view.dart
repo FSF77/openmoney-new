@@ -194,28 +194,17 @@ class _AuthViewState extends State<AuthView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Cabeçalho com Logo e Título
+                    // Cabeçalho com Logo Oficial e Título
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                colors.accentBlue,
-                                const Color(0xFF00C6FF),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            color: Colors.white,
-                            size: 26,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.asset(
+                            'logo/openmoney_app_icon.png',
+                            width: 52,
+                            height: 52,
+                            filterQuality: FilterQuality.medium,
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -243,6 +232,117 @@ class _AuthViewState extends State<AuthView> {
                       ],
                     ),
                     const SizedBox(height: 24),
+
+                    if (CloudSyncService.instance.savedAccounts.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: colors.bgPrimary.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colors.borderGlass),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.switch_account_rounded,
+                                  size: 15,
+                                  color: colors.accentBlue,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Contas Salvas neste Dispositivo (Acesso Rápido)',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ...CloudSyncService.instance.savedAccounts.map(
+                              (acc) => ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  Icons.account_circle_outlined,
+                                  color: colors.accentBlue,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  acc.name.isNotEmpty
+                                      ? '${acc.name} (${acc.email})'
+                                      : acc.email,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                                trailing: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () async {
+                                          setState(() {
+                                            _isLoading = true;
+                                            _errorMessage = null;
+                                          });
+                                          CloudSyncService.instance
+                                              .setWebAuthFlowInProgress(true);
+                                          try {
+                                            CloudSyncService.instance
+                                                .switchToSavedAccount(acc);
+                                            final synced = await widget.store
+                                                .syncFromCloud();
+                                            if (synced) {
+                                              widget.store
+                                                  .saveCloudSessionToConfig();
+                                              return;
+                                            }
+                                            if (mounted) {
+                                              setState(() {
+                                                _emailCtrl.text = acc.email;
+                                                _errorMessage =
+                                                    'Sessão expirada para ${acc.email}. Digite sua senha para reconectar.';
+                                              });
+                                            }
+                                          } finally {
+                                            CloudSyncService.instance
+                                                .setWebAuthFlowInProgress(
+                                                  false,
+                                                );
+                                            if (mounted) {
+                                              setState(
+                                                () => _isLoading = false,
+                                              );
+                                            }
+                                          }
+                                        },
+                                  child: const Text(
+                                    'Entrar',
+                                    style: TextStyle(fontSize: 11.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     // Seletor Entrar / Criar Conta
                     Container(

@@ -392,15 +392,19 @@ class _CategoriesViewState extends State<CategoriesView> {
                     onSelectionChanged: (s) =>
                         setState(() => _selectedType = s.first),
                   ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.file_upload_outlined, size: 16),
-                    label: const Text('Importar CSV'),
-                    onPressed: _importCategoriesCsv,
+                  Tooltip(
+                    message: 'Importar CSV',
+                    child: OutlinedButton(
+                      onPressed: _importCategoriesCsv,
+                      child: const Icon(Icons.file_upload_outlined, size: 18),
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.download, size: 16),
-                    label: const Text('Exportar CSV'),
-                    onPressed: _exportCategoriesCsv,
+                  Tooltip(
+                    message: 'Exportar CSV',
+                    child: OutlinedButton(
+                      onPressed: _exportCategoriesCsv,
+                      child: const Icon(Icons.download, size: 18),
+                    ),
                   ),
                   FilledButton.icon(
                     icon: const Icon(Icons.add, size: 18),

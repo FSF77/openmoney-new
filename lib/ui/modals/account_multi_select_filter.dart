@@ -12,6 +12,7 @@ class AccountMultiSelectFilter extends StatelessWidget {
   final bool plain;
   final bool asFormField;
   final double? width;
+  final double? height;
 
   const AccountMultiSelectFilter({
     super.key,
@@ -22,6 +23,7 @@ class AccountMultiSelectFilter extends StatelessWidget {
     this.plain = false,
     this.asFormField = false,
     this.width,
+    this.height,
   });
 
   List<Account> get _activeAccounts => store.activeAccounts;
@@ -150,8 +152,8 @@ class AccountMultiSelectFilter extends StatelessWidget {
         ),
       );
 
-      if (width != null) {
-        return SizedBox(width: width, child: wrapped);
+      if (width != null || height != null) {
+        return SizedBox(width: width, height: height, child: wrapped);
       }
       return wrapped;
     }

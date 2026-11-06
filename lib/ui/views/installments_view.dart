@@ -75,17 +75,19 @@ class _InstallmentsViewState extends State<InstallmentsView> {
                         setState(() => _selectedAccountIds = set),
                   ),
                   const SizedBox(width: 10),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.download, size: 17),
-                    label: const Text('Exportar CSV'),
-                    onPressed: items.isEmpty
-                        ? null
-                        : () => exportCsvWithFeedback(
-                              context,
-                              csv: store.dueBillsCSVString(items),
-                              defaultName: 'openmoney-compras-parceladas.csv',
-                              title: 'Exportar Compras Parceladas (CSV)',
-                            ),
+                  Tooltip(
+                    message: 'Exportar CSV',
+                    child: OutlinedButton(
+                      onPressed: items.isEmpty
+                          ? null
+                          : () => exportCsvWithFeedback(
+                                context,
+                                csv: store.dueBillsCSVString(items),
+                                defaultName: 'openmoney-compras-parceladas.csv',
+                                title: 'Exportar Compras Parceladas (CSV)',
+                              ),
+                      child: const Icon(Icons.download, size: 18),
+                    ),
                   ),
                 ],
               ),

@@ -401,15 +401,20 @@ class _CashFlowViewState extends State<CashFlowView> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.start,
                   children: [
-                    AccountMultiSelectFilter(
-                      store: widget.store,
-                      selectedAccountIds: _selectedAccountIds,
-                      asFormField: true,
+                    SizedBox(
                       width: 200,
-                      onSelectionChanged: (set) =>
-                          setState(() => _selectedAccountIds = set),
+                      height: 40,
+                      child: AccountMultiSelectFilter(
+                        store: widget.store,
+                        selectedAccountIds: _selectedAccountIds,
+                        asFormField: true,
+                        width: 200,
+                        height: 40,
+                        onSelectionChanged: (set) =>
+                            setState(() => _selectedAccountIds = set),
+                      ),
                     ),
                     SizedBox(
                       width: 200,

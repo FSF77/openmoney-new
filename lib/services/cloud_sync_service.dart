@@ -60,11 +60,55 @@ class CloudDatabaseSnapshot {
   });
 }
 
+class SavedCloudAccount {
+  final String userId;
+  final String email;
+  final String name;
+  final String authToken;
+  final String apiBaseUrl;
+  final int revision;
+  final String? lastSyncedAt;
+
+  const SavedCloudAccount({
+    required this.userId,
+    required this.email,
+    required this.name,
+    required this.authToken,
+    required this.apiBaseUrl,
+    required this.revision,
+    this.lastSyncedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'userId': userId,
+        'email': email,
+        'name': name,
+        'authToken': authToken,
+        'apiBaseUrl': apiBaseUrl,
+        'revision': revision,
+        if (lastSyncedAt != null) 'lastSyncedAt': lastSyncedAt,
+      };
+
+  factory SavedCloudAccount.fromJson(Map<String, dynamic> json) {
+    return SavedCloudAccount(
+      userId: (json['userId'] ?? '').toString(),
+      email: (json['email'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      authToken: (json['authToken'] ?? '').toString(),
+      apiBaseUrl: (json['apiBaseUrl'] ?? '').toString(),
+      revision: (json['revision'] as num?)?.toInt() ?? 1,
+      lastSyncedAt: json['lastSyncedAt']?.toString(),
+    );
+  }
+}
+
 class CloudSyncService extends ChangeNotifier {
   CloudSyncService._();
   static final CloudSyncService instance = CloudSyncService._();
 
   static const String _kWebSessionKey = 'openmoney_cloud_session_v1';
+  static const String _kWebSavedAccountsKey =
+      'openmoney_cloud_saved_accounts_v1';
 
   String _apiBaseUrl = '';
   String _authToken = '';
@@ -77,6 +121,7 @@ class CloudSyncService extends ChangeNotifier {
   CloudSyncState _state = CloudSyncState.disconnected;
   bool _webOfflineGuestMode = false;
   bool _webAuthFlowInProgress = false;
+  final List<SavedCloudAccount> _savedAccounts = <SavedCloudAccount>[];
 
   String get apiBaseUrl => _apiBaseUrl;
   String get authToken => _authToken;
@@ -90,6 +135,8 @@ class CloudSyncService extends ChangeNotifier {
   bool get isAuthenticated => _authToken.isNotEmpty && _userId.isNotEmpty;
   bool get isWebOfflineGuestMode => _webOfflineGuestMode;
   bool get isWebAuthFlowInProgress => _webAuthFlowInProgress;
+  List<SavedCloudAccount> get savedAccounts =>
+      List.unmodifiable(_savedAccounts);
 
   void setWebAuthFlowInProgress(bool value) {
     if (_webAuthFlowInProgress == value) return;
@@ -140,6 +187,33 @@ class CloudSyncService extends ChangeNotifier {
           }
         } catch (_) {}
       }
+      final rawSaved = webLocalStorageGet(_kWebSavedAccountsKey);
+      if (rawSaved != null && rawSaved.isNotEmpty) {
+        try {
+          final list = jsonDecode(rawSaved);
+          if (list is List) {
+            _savedAccounts
+              ..clear()
+              ..addAll(
+                list
+                    .whereType<Map>()
+                    .map((m) =>
+                        SavedCloudAccount.fromJson(Map<String, dynamic>.from(m)))
+                    .where((a) => a.userId.isNotEmpty && a.authToken.isNotEmpty),
+              );
+          }
+        } catch (_) {}
+      }
+    } else if (cfg['cloudSavedAccounts'] is List) {
+      _savedAccounts
+        ..clear()
+        ..addAll(
+          (cfg['cloudSavedAccounts'] as List)
+              .whereType<Map>()
+              .map((m) =>
+                  SavedCloudAccount.fromJson(Map<String, dynamic>.from(m)))
+              .where((a) => a.userId.isNotEmpty && a.authToken.isNotEmpty),
+        );
     }
 
     _apiBaseUrl = (source['cloudApiBaseUrl'] as String?)?.trim() ?? '';
@@ -155,13 +229,45 @@ class CloudSyncService extends ChangeNotifier {
 
     if (isAuthenticated) {
       _state = CloudSyncState.synced;
+      _upsertCurrentAccountToSavedList();
     } else {
       _state = CloudSyncState.disconnected;
     }
     notifyListeners();
   }
 
+  void _upsertCurrentAccountToSavedList() {
+    if (!isAuthenticated) return;
+    final entry = SavedCloudAccount(
+      userId: _userId,
+      email: _userEmail,
+      name: _userName,
+      authToken: _authToken,
+      apiBaseUrl: _apiBaseUrl,
+      revision: _revision,
+      lastSyncedAt: _lastSyncedAt?.toIso8601String(),
+    );
+    final idx = _savedAccounts.indexWhere(
+      (a) =>
+          a.userId == _userId ||
+          (a.email.toLowerCase() == _userEmail.toLowerCase() &&
+              a.apiBaseUrl == _apiBaseUrl),
+    );
+    if (idx >= 0) {
+      _savedAccounts[idx] = entry;
+    } else {
+      _savedAccounts.insert(0, entry);
+    }
+    if (kIsWeb) {
+      webLocalStorageSet(
+        _kWebSavedAccountsKey,
+        jsonEncode(_savedAccounts.map((e) => e.toJson()).toList()),
+      );
+    }
+  }
+
   Map<String, dynamic> exportSessionToConfig(Map<String, dynamic> baseCfg) {
+    _upsertCurrentAccountToSavedList();
     final cfg = Map<String, dynamic>.from(baseCfg);
     cfg['cloudApiBaseUrl'] = _apiBaseUrl;
     cfg['cloudAuthToken'] = _authToken;
@@ -172,10 +278,52 @@ class CloudSyncService extends ChangeNotifier {
     if (_lastSyncedAt != null) {
       cfg['cloudLastSyncedAt'] = _lastSyncedAt!.toIso8601String();
     }
+    cfg['cloudSavedAccounts'] = _savedAccounts.map((e) => e.toJson()).toList();
     if (kIsWeb) {
       webLocalStorageSet(_kWebSessionKey, jsonEncode(cfg));
+      webLocalStorageSet(
+        _kWebSavedAccountsKey,
+        jsonEncode(_savedAccounts.map((e) => e.toJson()).toList()),
+      );
     }
     return cfg;
+  }
+
+  /// Alterna imediatamente para outra conta/base salva
+  void switchToSavedAccount(SavedCloudAccount acc) {
+    _apiBaseUrl = acc.apiBaseUrl;
+    _authToken = acc.authToken;
+    _userId = acc.userId;
+    _userEmail = acc.email;
+    _userName = acc.name;
+    _revision = acc.revision;
+    _lastSyncedAt =
+        acc.lastSyncedAt != null ? DateTime.tryParse(acc.lastSyncedAt!) : null;
+    _webOfflineGuestMode = false;
+    _state = CloudSyncState.synced;
+    _lastError = null;
+    exportSessionToConfig({});
+    notifyListeners();
+  }
+
+  /// Remove uma conta da lista de alternância rápida
+  void removeSavedAccount(String userIdToRemove) {
+    _savedAccounts.removeWhere((a) => a.userId == userIdToRemove);
+    if (kIsWeb) {
+      webLocalStorageSet(
+        _kWebSavedAccountsKey,
+        jsonEncode(_savedAccounts.map((e) => e.toJson()).toList()),
+      );
+    }
+    if (_userId == userIdToRemove) {
+      if (_savedAccounts.isNotEmpty) {
+        switchToSavedAccount(_savedAccounts.first);
+      } else {
+        logout();
+      }
+    } else {
+      notifyListeners();
+    }
   }
 
   void enableWebOfflineGuestMode() {
@@ -246,6 +394,7 @@ class CloudSyncService extends ChangeNotifier {
         _webOfflineGuestMode = false;
         _state = CloudSyncState.synced;
         _lastError = null;
+        _upsertCurrentAccountToSavedList();
         if (kIsWeb) {
           exportSessionToConfig({});
         }
@@ -329,6 +478,7 @@ class CloudSyncService extends ChangeNotifier {
         _webOfflineGuestMode = false;
         _state = CloudSyncState.synced;
         _lastError = null;
+        _upsertCurrentAccountToSavedList();
         if (kIsWeb) {
           exportSessionToConfig({});
         }
@@ -699,6 +849,71 @@ class CloudSyncService extends ChangeNotifier {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Exclui os dados da base na nuvem (ou a conta completa + base) após confirmação de segurança
+  Future<({bool ok, bool deletedAccount, String? error})> deleteCloudDatabase({
+    required String confirmText,
+    bool deleteFullAccount = false,
+  }) async {
+    if (!isAuthenticated) {
+      return (
+        ok: false,
+        deletedAccount: false,
+        error: 'Sessão não autenticada.',
+      );
+    }
+    if (confirmText.trim().toUpperCase() != 'EXCLUIR') {
+      return (
+        ok: false,
+        deletedAccount: false,
+        error: 'Digite exatamente EXCLUIR para confirmar a exclusão.',
+      );
+    }
+
+    try {
+      final currentId = _userId;
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/db/delete'),
+        headers: _headers(),
+        body: jsonEncode({
+          'confirm': 'EXCLUIR',
+          'mode': deleteFullAccount ? 'full_account' : 'db_only',
+        }),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
+        if (kIsWeb && currentId.isNotEmpty) {
+          webLocalStorageRemove('openmoney_web_cache_$currentId');
+        }
+        if (deleteFullAccount) {
+          removeSavedAccount(currentId);
+          return (ok: true, deletedAccount: true, error: null);
+        } else {
+          _revision = 1;
+          _lastSyncedAt = DateTime.now();
+          _state = CloudSyncState.synced;
+          _lastError = null;
+          _upsertCurrentAccountToSavedList();
+          if (kIsWeb) {
+            exportSessionToConfig({});
+          }
+          notifyListeners();
+          return (ok: true, deletedAccount: false, error: null);
+        }
+      }
+      final err =
+          (decoded?['error'] ?? 'Falha ao excluir base (HTTP ${res.statusCode}).')
+              .toString();
+      return (ok: false, deletedAccount: false, error: err);
+    } catch (_) {
+      return (
+        ok: false,
+        deletedAccount: false,
+        error: 'Erro de conexão com o servidor Cloudflare.',
+      );
+    }
   }
 
   Map<String, dynamic>? _tryDecodeJson(String raw) {

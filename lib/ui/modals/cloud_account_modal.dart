@@ -29,6 +29,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   bool _isRegisterMode = false;
   bool _isBusy = false;
   bool _showPasswordChange = false;
+  bool _addingAnotherAccount = false;
+  bool _registerWithBlankBase = true;
   String? _statusMsg;
   bool _isError = false;
   List<CloudBackupInfo> _cloudBackups = const [];
@@ -93,12 +95,18 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
       if (!mounted) return;
       if (res.ok) {
         widget.store.saveCloudSessionToConfig();
-        await widget.store.pushLocalToCloud(force: true);
+        if (_registerWithBlankBase) {
+          await widget.store.resetToBlankDatabaseAndSync(pushToCloud: true);
+        } else {
+          await widget.store.pushLocalToCloud(force: true);
+        }
         await _loadCloudBackups();
         setState(() {
+          _addingAnotherAccount = false;
           _isError = false;
-          _statusMsg =
-              '✓ Conta criada e base openmoney.json sincronizada na nuvem!';
+          _statusMsg = _registerWithBlankBase
+              ? '✓ Nova conta criada com base em branco pronta para uso!'
+              : '✓ Conta criada e base openmoney.json sincronizada na nuvem!';
         });
       } else {
         setState(() {
@@ -118,8 +126,9 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
         await widget.store.syncFromCloud();
         await _loadCloudBackups();
         setState(() {
+          _addingAnotherAccount = false;
           _isError = false;
-          _statusMsg = '✓ Conectado e sincronizado com sucesso!';
+          _statusMsg = '✓ Conectado em ${_cloud.userEmail} e sincronizado!';
         });
       } else {
         setState(() {
@@ -131,6 +140,332 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
     if (mounted) {
       setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _handleSwitchAccount(SavedCloudAccount acc) async {
+    if (acc.userId == _cloud.userId && _cloud.isAuthenticated) return;
+    setState(() {
+      _isBusy = true;
+      _statusMsg = 'Alternando para ${acc.email} e carregando base...';
+      _isError = false;
+    });
+    _cloud.switchToSavedAccount(acc);
+    if (!mounted) return;
+    widget.store.saveCloudSessionToConfig();
+    final synced = await widget.store.syncFromCloud();
+    await _loadCloudBackups();
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
+      _addingAnotherAccount = false;
+      _isError = !synced;
+      _statusMsg = synced
+          ? '✓ Conta alternada para ${acc.email} (r${_cloud.revision})!'
+          : (_cloud.lastError ??
+              'Sessão expirada ou sem conexão para ${acc.email}. Faça login novamente.');
+    });
+  }
+
+  Future<void> _confirmCreateNewBlankDatabase(OpenMoneyColors colors) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.borderGlass),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Atenção: Criar Nova Base em Branco',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: colors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '⚠️ CUIDADO: Ao criar uma nova base em branco nesta conta (${_cloud.userEmail.isNotEmpty ? _cloud.userEmail : "atual"}), os lançamentos, contas e cartões atuais serão substituídos por uma estrutura limpa (Schema v7).',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colors.textPrimary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '💡 Dica: Se você deseja manter sua base atual intacta e criar uma segunda base separada, use o botão "+ Criar Nova Conta / Base" com outro e-mail ou exporte um backup .json antes de prosseguir.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.textSecondary,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await widget.store.exportDatabaseFileWithPicker();
+                },
+                icon: const Icon(Icons.download_outlined, size: 16),
+                label: const Text('Exportar Backup .json Antes de Continuar'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: colors.textSecondary),
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.note_add_outlined, size: 16),
+            label: const Text('Sim, Criar Base em Branco'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isBusy = true;
+      _isError = false;
+      _statusMsg = 'Criando nova base em branco e sincronizando...';
+    });
+
+    await widget.store.resetToBlankDatabaseAndSync(pushToCloud: true);
+    await _loadCloudBackups();
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
+      _isError = false;
+      _statusMsg =
+          '✓ Nova base em branco criada e sincronizada com sucesso!';
+    });
+  }
+
+  Future<void> _confirmDeleteExistingDatabase(OpenMoneyColors colors) async {
+    final confirmCtrl = TextEditingController();
+    bool deleteFullAccount = false;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isTypedValid =
+              confirmCtrl.text.trim().toUpperCase() == 'EXCLUIR';
+          return AlertDialog(
+            backgroundColor: colors.bgSecondary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: colors.accentRed.withValues(alpha: 0.6),
+                width: 1.4,
+              ),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.dangerous_rounded,
+                  color: colors.accentRed,
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Atenção Crítica: Excluir Base Existente',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: colors.accentRed,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colors.accentRed.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: colors.accentRed.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      '🚨 AVISO IRREVERSÍVEL: Esta ação apagará permanentemente os dados financeiros e os backups diários na nuvem da conta ${_cloud.userEmail}.\n\nRecomendamos fortemente exportar uma cópia do seu arquivo openmoney.json antes de prosseguir.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                        height: 1.38,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await widget.store.exportDatabaseFileWithPicker();
+                    },
+                    icon: const Icon(Icons.download_outlined, size: 16),
+                    label: const Text('Fazer Backup (.json) Agora por Segurança'),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: deleteFullAccount,
+                    activeColor: colors.accentRed,
+                    onChanged: (val) =>
+                        setDialogState(() => deleteFullAccount = val ?? false),
+                    title: Text(
+                      'Excluir também o meu login/conta de usuário da nuvem',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      deleteFullAccount
+                          ? 'Sua conta e base serão removidas por completo do servidor.'
+                          : 'Apenas a base e os backups serão apagados; seu login continuará ativo com uma base zerada.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Para confirmar, digite EXCLUIR no campo abaixo:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: confirmCtrl,
+                    onChanged: (_) => setDialogState(() {}),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Digite EXCLUIR',
+                      isDense: true,
+                      filled: true,
+                      fillColor: colors.bgPrimary.withValues(alpha: 0.65),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: Text(
+                  'Cancelar',
+                  style: TextStyle(color: colors.textSecondary),
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.accentRed,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isTypedValid
+                    ? () => Navigator.of(ctx).pop({
+                          'confirm': confirmCtrl.text.trim(),
+                          'deleteFullAccount': deleteFullAccount,
+                        })
+                    : null,
+                icon: const Icon(Icons.delete_forever_rounded, size: 17),
+                label: Text(
+                  deleteFullAccount
+                      ? 'Excluir Conta e Base'
+                      : 'Excluir Base da Nuvem',
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    confirmCtrl.dispose();
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _isBusy = true;
+      _isError = false;
+      _statusMsg = 'Excluindo base na nuvem...';
+    });
+
+    final fullAcc = result['deleteFullAccount'] == true;
+    final res = await _cloud.deleteCloudDatabase(
+      confirmText: result['confirm'] as String,
+      deleteFullAccount: fullAcc,
+    );
+
+    if (!mounted) return;
+    if (res.ok) {
+      await widget.store.resetToBlankDatabaseAndSync(pushToCloud: false);
+      widget.store.saveCloudSessionToConfig();
+      if (!fullAcc) {
+        await _loadCloudBackups();
+      }
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _isError = false;
+        _statusMsg = fullAcc
+            ? '✓ Conta e base excluídas permanentemente.'
+            : '✓ Base existente e backups excluídos! Conta reiniciada com base limpa.';
+      });
+      if (fullAcc && kIsWeb) {
+        Navigator.of(context).pop();
+      }
+    } else {
+      setState(() {
+        _isBusy = false;
+        _isError = true;
+        _statusMsg = res.error ?? 'Falha ao excluir base.';
+      });
     }
   }
 
@@ -228,30 +563,23 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             side: BorderSide(color: colors.borderGlass),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
+            constraints: const BoxConstraints(maxWidth: 580, maxHeight: 740),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Cabeçalho
+                  // Cabeçalho com Logo Oficial da Aplicação
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: colors.accentBlue.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _cloud.isAuthenticated
-                              ? Icons.cloud_done_rounded
-                              : Icons.cloud_sync_outlined,
-                          color: _cloud.isAuthenticated
-                              ? colors.accentGreen
-                              : colors.accentBlue,
-                          size: 22,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Image.asset(
+                          'logo/openmoney_app_icon.png',
+                          width: 40,
+                          height: 40,
+                          filterQuality: FilterQuality.medium,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -270,7 +598,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                             Text(
                               _cloud.isAuthenticated
                                   ? 'Conectado como ${_cloud.userEmail} • ${_cloud.statusLabel}'
-                                  : 'Sincronize sua base openmoney.json entre Web, Desktop e Mobile',
+                                  : 'Sincronize e alterne entre múltiplas contas e bases openmoney.json',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: colors.textSecondary,
@@ -291,7 +619,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
                   Flexible(
                     child: SingleChildScrollView(
-                      child: _cloud.isAuthenticated
+                      child: (_cloud.isAuthenticated && !_addingAnotherAccount)
                           ? _buildConnectedBody(colors)
                           : _buildDisconnectedBody(colors),
                     ),
@@ -335,10 +663,11 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   }
 
   Widget _buildConnectedBody(OpenMoneyColors colors) {
+    final savedAccounts = _cloud.savedAccounts;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Card de Resumo da Conta
+        // Card de Resumo da Conta Ativa
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -369,15 +698,41 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _cloud.userName.isNotEmpty
-                          ? _cloud.userName
-                          : _cloud.userEmail,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _cloud.userName.isNotEmpty
+                                ? _cloud.userName
+                                : _cloud.userEmail,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.accentGreen.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'ATIVA',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: colors.accentGreen,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       '${_cloud.userEmail} • Revisão na nuvem: r${_cloud.revision}',
@@ -393,7 +748,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                 onPressed: () {
                   _cloud.logout();
                   widget.store.saveCloudSessionToConfig();
-                  if (kIsWeb) {
+                  if (kIsWeb && _cloud.savedAccounts.isEmpty) {
                     Navigator.of(context).pop();
                   }
                 },
@@ -411,6 +766,217 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Seção: Alternar entre Contas / Bases Salvas
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.switch_account_rounded,
+                        size: 16,
+                        color: colors.accentBlue,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        'Alternar entre Contas e Bases (${savedAccounts.length})',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _isBusy
+                            ? null
+                            : () {
+                                setState(() {
+                                  _emailCtrl.clear();
+                                  _passwordCtrl.clear();
+                                  _isRegisterMode = false;
+                                  _addingAnotherAccount = true;
+                                  _statusMsg = null;
+                                });
+                              },
+                        icon: const Icon(Icons.login, size: 14),
+                        label: const Text(
+                          'Outra Conta',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _isBusy
+                            ? null
+                            : () {
+                                setState(() {
+                                  _nameCtrl.clear();
+                                  _emailCtrl.clear();
+                                  _passwordCtrl.clear();
+                                  _registerWithBlankBase = true;
+                                  _isRegisterMode = true;
+                                  _addingAnotherAccount = true;
+                                  _statusMsg = null;
+                                });
+                              },
+                        icon: const Icon(Icons.person_add_alt_1, size: 14),
+                        label: const Text(
+                          '+ Nova Conta/Base',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (savedAccounts.length > 1) ...[
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 130),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: savedAccounts.length,
+                    separatorBuilder: (_, __) =>
+                        Divider(color: colors.borderGlass, height: 1),
+                    itemBuilder: (ctx, idx) {
+                      final acc = savedAccounts[idx];
+                      final isCurrent = acc.userId == _cloud.userId ||
+                          acc.email.toLowerCase() ==
+                              _cloud.userEmail.toLowerCase();
+                      return ListTile(
+                        dense: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 6),
+                        leading: Icon(
+                          isCurrent
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 17,
+                          color: isCurrent
+                              ? colors.accentGreen
+                              : colors.textSecondary,
+                        ),
+                        title: Text(
+                          acc.name.isNotEmpty
+                              ? '${acc.name} (${acc.email})'
+                              : acc.email,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: isCurrent
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Revisão r${acc.revision}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!isCurrent)
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: _isBusy
+                                    ? null
+                                    : () => _handleSwitchAccount(acc),
+                                child: const Text(
+                                  'Alternar',
+                                  style: TextStyle(fontSize: 11.5),
+                                ),
+                              )
+                            else
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                child: Text(
+                                  'Em uso',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: colors.accentGreen,
+                                  ),
+                                ),
+                              ),
+                            if (!isCurrent)
+                              IconButton(
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 15,
+                                  color: colors.textSecondary,
+                                ),
+                                tooltip: 'Remover atalho desta conta',
+                                onPressed: _isBusy
+                                    ? null
+                                    : () => _cloud.removeSavedAccount(
+                                          acc.userId,
+                                        ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Use "Outra Conta" ou "+ Nova Conta/Base" acima para conectar múltiplos e-mails e alternar entre suas bases com 1 clique.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -499,7 +1065,88 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           ],
         ),
 
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+
+        // Seção: Gerenciar Base (Criar Nova Base em Branco / Excluir Base Existente com Avisos de Cuidado)
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.accentRed.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colors.accentRed.withValues(alpha: 0.28),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.orange.shade400,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Gerenciamento da Base Atual (Operações com Aviso de Segurança)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade400,
+                        side: BorderSide(
+                          color: Colors.orange.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmCreateNewBlankDatabase(colors),
+                      icon: const Icon(Icons.note_add_outlined, size: 16),
+                      label: const Text(
+                        'Criar Nova Base Limpa',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.accentRed,
+                        side: BorderSide(
+                          color: colors.accentRed.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmDeleteExistingDatabase(colors),
+                      icon: const Icon(Icons.delete_forever_outlined, size: 16),
+                      label: const Text(
+                        'Excluir Base Existente...',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
 
         // Seção de Backups Diários na Nuvem
         Row(
@@ -525,7 +1172,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           ],
         ),
         Container(
-          constraints: const BoxConstraints(maxHeight: 160),
+          constraints: const BoxConstraints(maxHeight: 150),
           decoration: BoxDecoration(
             color: colors.bgPrimary.withValues(alpha: 0.45),
             borderRadius: BorderRadius.circular(10),
@@ -587,7 +1234,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                     ),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // Alteração de Senha
         Align(
@@ -634,9 +1281,78 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   }
 
   Widget _buildDisconnectedBody(OpenMoneyColors colors) {
+    final savedAccounts = _cloud.savedAccounts;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_addingAnotherAccount && _cloud.isAuthenticated) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _addingAnotherAccount = false),
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: Text(
+                'Voltar para a conta ativa (${_cloud.userEmail})',
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        if (savedAccounts.isNotEmpty && !_cloud.isAuthenticated) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: colors.bgPrimary.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colors.borderGlass),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Contas Salvas neste Dispositivo (Acesso Rápido)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ...savedAccounts.map(
+                  (acc) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.account_circle_outlined,
+                      color: colors.accentBlue,
+                      size: 20,
+                    ),
+                    title: Text(
+                      acc.name.isNotEmpty
+                          ? '${acc.name} (${acc.email})'
+                          : acc.email,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    trailing: OutlinedButton(
+                      onPressed:
+                          _isBusy ? null : () => _handleSwitchAccount(acc),
+                      child: const Text(
+                        'Conectar',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (!kIsWeb) ...[
           _buildInput(
             colors: colors,
@@ -655,7 +1371,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             ),
             const SizedBox(width: 8),
             ChoiceChip(
-              label: const Text('Criar nova conta'),
+              label: const Text('Criar nova conta / base'),
               selected: _isRegisterMode,
               onSelected: (_) => setState(() => _isRegisterMode = true),
             ),
@@ -689,6 +1405,53 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             controller: _inviteCtrl,
             label: 'Código de Convite (se configurado)',
           ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: colors.bgPrimary.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colors.borderGlass),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dados iniciais para esta nova conta:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text(
+                        'Criar Nova Base em Branco (Limpa)',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      selected: _registerWithBlankBase,
+                      onSelected: (_) =>
+                          setState(() => _registerWithBlankBase = true),
+                    ),
+                    ChoiceChip(
+                      label: const Text(
+                        'Copiar Dados Atualmente na Tela',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      selected: !_registerWithBlankBase,
+                      onSelected: (_) =>
+                          setState(() => _registerWithBlankBase = false),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
         const SizedBox(height: 16),
         SizedBox(
@@ -704,7 +1467,9 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
               _isBusy
                   ? 'Conectando...'
                   : (_isRegisterMode
-                      ? 'Criar Conta e Enviar Base Atual'
+                      ? (_registerWithBlankBase
+                          ? 'Criar Nova Conta e Base em Branco'
+                          : 'Criar Conta e Enviar Base Atual')
                       : 'Conectar e Sincronizar'),
             ),
           ),

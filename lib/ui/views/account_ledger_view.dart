@@ -338,68 +338,68 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   ),
                                 ],
                               ),
-                              OutlinedButton.icon(
-                                icon: const Icon(Icons.download, size: 15),
-                                label: const Text('Exportar CSV',
-                                    style: TextStyle(fontSize: 11.5)),
-                                onPressed: () {
-                                  final exportTxs = isCard
-                                      ? widget.store.invoiceTransactions(
-                                          acc.id,
-                                          widget.store.month,
-                                        )
-                                      : monthData.transactions;
-                                  final safeAccName = acc.name
-                                      .toLowerCase()
-                                      .replaceAll(' ', '-')
-                                      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-                                  final defaultName =
-                                      'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
-                                  final csvContent = CSVExporter.generateCSV(
-                                    transactions: exportTxs,
-                                    accounts: widget.store.db.accounts,
-                                  );
-                                  exportCsvWithFeedback(
-                                    context,
-                                    csv: csvContent,
-                                    defaultName: defaultName,
-                                    title:
-                                        'Exportar Lançamentos de ${acc.name} (CSV)',
-                                  );
-                                },
-                              ),
-                              FilledButton.tonalIcon(
-                                icon: const Icon(Icons.picture_as_pdf, size: 15),
-                                label: Text(
-                                  isCard
-                                      ? 'Exportar Fatura PDF'
-                                      : 'Exportar Extrato PDF',
-                                  style: const TextStyle(fontSize: 11.5),
+                              Tooltip(
+                                message: 'Exportar CSV',
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    final exportTxs = isCard
+                                        ? widget.store.invoiceTransactions(
+                                            acc.id,
+                                            widget.store.month,
+                                          )
+                                        : monthData.transactions;
+                                    final safeAccName = acc.name
+                                        .toLowerCase()
+                                        .replaceAll(' ', '-')
+                                        .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                                    final defaultName =
+                                        'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                                    final csvContent = CSVExporter.generateCSV(
+                                      transactions: exportTxs,
+                                      accounts: widget.store.db.accounts,
+                                    );
+                                    exportCsvWithFeedback(
+                                      context,
+                                      csv: csvContent,
+                                      defaultName: defaultName,
+                                      title:
+                                          'Exportar Lançamentos de ${acc.name} (CSV)',
+                                    );
+                                  },
+                                  child: const Icon(Icons.download, size: 18),
                                 ),
-                                onPressed: () {
-                                  final exportTxs = isCard
-                                      ? widget.store.invoiceTransactions(
-                                          acc.id,
-                                          widget.store.month,
-                                        )
-                                      : monthData.transactions;
-                                  final pdfBytes =
-                                      PdfReportGenerator.buildStatementOrInvoicePdfBytes(
-                                    store: widget.store,
-                                    account: acc,
-                                    monthYM: widget.store.month,
-                                    transactions: exportTxs,
-                                    invoiceSummary: invSummary,
-                                  );
-                                  final defaultName = isCard
-                                      ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
-                                      : 'Extrato-${acc.name}-${widget.store.month}.pdf';
-                                  PdfReportGenerator.saveAndOpenPdfBytes(
-                                    context,
-                                    pdfBytes: pdfBytes,
-                                    defaultFileName: defaultName,
-                                  );
-                                },
+                              ),
+                              Tooltip(
+                                message: isCard
+                                    ? 'Exportar Fatura PDF'
+                                    : 'Exportar Extrato PDF',
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    final exportTxs = isCard
+                                        ? widget.store.invoiceTransactions(
+                                            acc.id,
+                                            widget.store.month,
+                                          )
+                                        : monthData.transactions;
+                                    final pdfBytes =
+                                        PdfReportGenerator.buildStatementOrInvoicePdfBytes(
+                                      store: widget.store,
+                                      account: acc,
+                                      monthYM: widget.store.month,
+                                      transactions: exportTxs,
+                                      invoiceSummary: invSummary,
+                                    );
+                                    final defaultName = isCard
+                                        ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                                        : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                                    PdfReportGenerator.saveAndOpenPdfBytes(
+                                      context,
+                                      pdfBytes: pdfBytes,
+                                      defaultFileName: defaultName,
+                                    );
+                                  },
+                                  child: const Icon(Icons.picture_as_pdf, size: 18),
+                                ),
                               ),
                             ],
                           ),

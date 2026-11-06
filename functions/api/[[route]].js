@@ -1060,6 +1060,94 @@ export async function onRequest(context) {
     );
   }
 
+  // ==========================================================================
+  // 8. POST /api/db/delete ou DELETE /api/db (Exclui base existente ou conta completa)
+  // ==========================================================================
+  if (
+    (path === "/api/db/delete" && request.method === "POST") ||
+    (path === "/api/db" && request.method === "DELETE")
+  ) {
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (_) {}
+
+    const confirmWord = String(body.confirm || "")
+      .trim()
+      .toUpperCase();
+    if (confirmWord !== "EXCLUIR") {
+      return jsonResponse(
+        {
+          error:
+            "Confirmação de segurança obrigatória: digite EXCLUIR para prosseguir.",
+        },
+        400,
+        origin
+      );
+    }
+
+    const mode = String(body.mode || "db_only").trim();
+
+    if (mode === "full_account") {
+      await env.DB.batch([
+        env.DB.prepare(
+          `DELETE FROM user_database_chunks WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
+          `DELETE FROM user_database_backups WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
+          `DELETE FROM user_databases WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(`DELETE FROM users WHERE id = ?1`).bind(userId),
+      ]);
+      return jsonResponse(
+        {
+          ok: true,
+          deletedAccount: true,
+        },
+        200,
+        origin
+      );
+    }
+
+    // Modo db_only: apaga todos os lançamentos/blocos/backups da nuvem e recria base limpa v7
+    const nowIso = new Date().toISOString();
+    const freshPayload = await encryptUserPayload(
+      JSON.stringify(defaultOpenMoneyV7Payload()),
+      userId,
+      env
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM user_database_chunks WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `DELETE FROM user_database_backups WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
+         VALUES (?1, 7, 1, ?2, '{}', ?3)
+         ON CONFLICT(user_id) DO UPDATE SET
+           schema_version = 7,
+           revision = 1,
+           payload = excluded.payload,
+           updated_at = excluded.updated_at`
+      ).bind(userId, freshPayload, nowIso),
+    ]);
+
+    return jsonResponse(
+      {
+        ok: true,
+        deletedAccount: false,
+        revision: 1,
+      },
+      200,
+      origin
+    );
+  }
+
     return jsonResponse({ error: "Rota não encontrada." }, 404, origin);
   } catch (err) {
     console.error("Erro interno no Pages Function:", err);

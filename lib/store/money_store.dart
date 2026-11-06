@@ -703,6 +703,34 @@ class MoneyStore extends ChangeNotifier {
     loadFromJsonMap(decoded, virtualPath: virtualPath);
   }
 
+  /// Reseta a base em memória para uma Nova Base em Branco (Schema v7) e sincroniza na nuvem
+  Future<bool> resetToBlankDatabaseAndSync({bool pushToCloud = true}) async {
+    db = Database(
+      accounts: [
+        Account(id: 'a1', name: 'Conta Corrente', type: 'Corrente', opening: 0),
+      ],
+      cats: List<CategoryItem>.from(kDefaultCats),
+      txs: [],
+      recs: [],
+      budgets: {},
+      v: 7,
+    );
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+    }
+    rebuildIndexes();
+    selectedAccountId = 'a1';
+    activeModule = NavModule.account;
+    if (!kIsWeb && dbPath.isNotEmpty) {
+      _performDiskWrite();
+    }
+    notifyListeners();
+    if (pushToCloud && CloudSyncService.instance.isAuthenticated) {
+      return await pushLocalToCloud(force: true);
+    }
+    return true;
+  }
+
   void createNewDatabaseAtPath(String path, {String? bookmarkData}) {
     db = Database(
       accounts: [
