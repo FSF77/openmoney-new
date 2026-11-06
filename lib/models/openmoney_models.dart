@@ -629,6 +629,7 @@ class Database {
   List<Transaction> txs;
   List<RecurrenceRule> recs;
   Map<String, int> budgets;
+  Map<String, String> comments;
   int v;
 
   /// Modo de abatimento de previsões: 'month' (padrão) ou 'invoice' (por fatura)
@@ -640,6 +641,7 @@ class Database {
     List<Transaction>? txs,
     List<RecurrenceRule>? recs,
     Map<String, int>? budgets,
+    Map<String, String>? comments,
     this.v = 7,
     this.predMode = 'month',
   })  : accounts = accounts ??
@@ -654,7 +656,8 @@ class Database {
         cats = cats ?? List<CategoryItem>.from(kDefaultCats),
         txs = txs ?? [],
         recs = recs ?? [],
-        budgets = budgets ?? {};
+        budgets = budgets ?? {},
+        comments = comments ?? {};
 
   factory Database.fromJson(Map<String, dynamic> json) {
     List<Account>? parsedAccounts;
@@ -696,6 +699,15 @@ class Database {
       });
     }
 
+    Map<String, String> parsedComments = {};
+    if (json['comments'] is Map) {
+      (json['comments'] as Map).forEach((k, v) {
+        if (v != null) {
+          parsedComments[k.toString()] = v.toString();
+        }
+      });
+    }
+
     return Database(
       accounts: (parsedAccounts != null && parsedAccounts.isNotEmpty)
           ? parsedAccounts
@@ -711,6 +723,7 @@ class Database {
       txs: parsedTxs ?? [],
       recs: parsedRecs ?? [],
       budgets: parsedBudgets,
+      comments: parsedComments,
       v: (json['v'] as num?)?.toInt() ?? 7,
       predMode: json['predMode'] == 'invoice' ? 'invoice' : 'month',
     );
@@ -722,6 +735,7 @@ class Database {
         'txs': txs.map((t) => t.toJson()).toList(),
         'recs': recs.map((r) => r.toJson()).toList(),
         'budgets': budgets,
+        if (comments.isNotEmpty) 'comments': comments,
         'v': v,
         if (predMode != 'month') 'predMode': predMode,
       };

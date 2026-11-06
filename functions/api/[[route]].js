@@ -66,7 +66,7 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs",
     "Access-Control-Expose-Headers":
-      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs",
+      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
   };
@@ -405,28 +405,29 @@ async function saveEncryptedPayloadToD1(
         .run();
     } catch (_) {}
   } else {
-    // Divide bases grandes (ex: 12 MB+) em blocos de 380 KB para respeitar o limite de 1 MB por query do D1
+    // Copy-On-Write (MVCC): usa um batchSlot exclusivo por gravação para que uploads
+    // simultâneos ou interrompidos JAMAIS misturem blocos de IVs AES-GCM diferentes!
     const chunks = [];
     for (let i = 0; i < encryptedPayload.length; i += MAX_D1_CHUNK_CHARS) {
       chunks.push(encryptedPayload.slice(i, i + MAX_D1_CHUNK_CHARS));
     }
 
-    await db
-      .prepare(`DELETE FROM user_database_chunks WHERE user_id = ?1`)
-      .bind(userId)
-      .run();
+    const batchSlot =
+      (Math.floor(Math.random() * 899999) + 100000) * 100; // ex: 54321000
 
     for (let idx = 0; idx < chunks.length; idx++) {
       await db
         .prepare(
           `INSERT INTO user_database_chunks (user_id, chunk_index, chunk_data)
-           VALUES (?1, ?2, ?3)`
+           VALUES (?1, ?2, ?3)
+           ON CONFLICT(user_id, chunk_index) DO UPDATE SET
+             chunk_data = excluded.chunk_data`
         )
-        .bind(userId, idx, chunks[idx])
+        .bind(userId, batchSlot + idx, chunks[idx])
         .run();
     }
 
-    const marker = `chunked:v2:${chunks.length}`;
+    const marker = `chunked:v3:${batchSlot}:${chunks.length}`;
     await db
       .prepare(
         `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
@@ -440,6 +441,17 @@ async function saveEncryptedPayloadToD1(
       )
       .bind(userId, nextRev, marker, prefsStr, nowIso)
       .run();
+
+    // Limpa apenas blocos antigos que não pertencem ao batchSlot recém-ativado
+    try {
+      await db
+        .prepare(
+          `DELETE FROM user_database_chunks
+           WHERE user_id = ?1 AND (chunk_index < ?2 OR chunk_index >= ?3)`
+        )
+        .bind(userId, batchSlot, batchSlot + chunks.length)
+        .run();
+    } catch (_) {}
 
     const backupId = `${userId}_${todayDate}`;
     try {
@@ -460,24 +472,50 @@ async function saveEncryptedPayloadToD1(
 }
 
 async function loadEncryptedPayloadFromD1(db, userId, rawPayloadField) {
-  if (!rawPayloadField || !rawPayloadField.startsWith("chunked:v2:")) {
+  if (!rawPayloadField) {
     return rawPayloadField;
   }
-  const totalChunks = Number(rawPayloadField.split(":")[2] || 0);
-  const parts = [];
-  for (let idx = 0; idx < totalChunks; idx++) {
-    const cRow = await db
-      .prepare(
-        `SELECT chunk_data FROM user_database_chunks WHERE user_id = ?1 AND chunk_index = ?2`
-      )
-      .bind(userId, idx)
-      .first();
-    if (!cRow || !cRow.chunk_data) {
-      throw new Error(`Bloco ${idx + 1}/${totalChunks} não localizado no D1.`);
+  if (rawPayloadField.startsWith("chunked:v3:")) {
+    const partsMeta = rawPayloadField.split(":");
+    const batchSlot = Number(partsMeta[2] || 0);
+    const totalChunks = Number(partsMeta[3] || 0);
+    const parts = [];
+    for (let idx = 0; idx < totalChunks; idx++) {
+      const cRow = await db
+        .prepare(
+          `SELECT chunk_data FROM user_database_chunks WHERE user_id = ?1 AND chunk_index = ?2`
+        )
+        .bind(userId, batchSlot + idx)
+        .first();
+      if (!cRow || !cRow.chunk_data) {
+        throw new Error(
+          `Bloco v3 ${idx + 1}/${totalChunks} não localizado no D1.`
+        );
+      }
+      parts.push(cRow.chunk_data);
     }
-    parts.push(cRow.chunk_data);
+    return parts.join("");
   }
-  return parts.join("");
+  if (rawPayloadField.startsWith("chunked:v2:")) {
+    const totalChunks = Number(rawPayloadField.split(":")[2] || 0);
+    const parts = [];
+    for (let idx = 0; idx < totalChunks; idx++) {
+      const cRow = await db
+        .prepare(
+          `SELECT chunk_data FROM user_database_chunks WHERE user_id = ?1 AND chunk_index = ?2`
+        )
+        .bind(userId, idx)
+        .first();
+      if (!cRow || !cRow.chunk_data) {
+        throw new Error(
+          `Bloco v2 ${idx + 1}/${totalChunks} não localizado no D1.`
+        );
+      }
+      parts.push(cRow.chunk_data);
+    }
+    return parts.join("");
+  }
+  return rawPayloadField;
 }
 
 function defaultOpenMoneyV7Payload() {
@@ -845,56 +883,117 @@ export async function onRequest(context) {
       );
     }
 
-    const fullEncrypted = await loadEncryptedPayloadFromD1(
-      env.DB,
-      userId,
-      row.payload
-    );
+    try {
+      const fullEncrypted = await loadEncryptedPayloadFromD1(
+        env.DB,
+        userId,
+        row.payload
+      );
 
-    if (wantBinary) {
-      // Caminho binário ultrarrápido: retorna os bytes Gzip direto sem JSON.parse/decompress no Worker
-      const gzipBytes = await decryptUserPayloadToGzipBytes(
-        fullEncrypted,
+      if (wantBinary) {
+        // Caminho binário ultrarrápido: retorna os bytes Gzip direto sem JSON.parse/decompress no Worker
+        const gzipBytes = await decryptUserPayloadToGzipBytes(
+          fullEncrypted,
+          userId,
+          env
+        );
+        return new Response(gzipBytes, {
+          status: 200,
+          headers: {
+            ...corsHeaders(origin),
+            "Content-Type": "application/octet-stream",
+            "X-OpenMoney-Compression": "gzip",
+            "X-OpenMoney-Revision": String(row.revision || 1),
+            "X-OpenMoney-Updated-At": String(row.updated_at || ""),
+            "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
+          },
+        });
+      }
+
+      const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
+      let parsedPayload = {};
+      try {
+        parsedPayload = JSON.parse(decryptedStr);
+      } catch (_) {
+        parsedPayload = defaultOpenMoneyV7Payload();
+      }
+
+      let parsedPrefs = {};
+      try {
+        parsedPrefs = JSON.parse(row.preferences || "{}");
+      } catch (_) {}
+
+      return jsonResponse(
+        {
+          schemaVersion: Number(row.schema_version || 7),
+          revision: Number(row.revision || 1),
+          payload: parsedPayload,
+          preferences: parsedPrefs,
+          updatedAt: row.updated_at,
+        },
+        200,
+        origin
+      );
+    } catch (decryptErr) {
+      // Auto-recuperação (Self-Healing) caso blocos antigos (chunked:v2) tenham sofrido gravação concorrente interrompida
+      console.warn(
+        "Auto-recuperando base com falha de descriptografia para user_id:",
+        userId,
+        decryptErr
+      );
+      const initial = defaultOpenMoneyV7Payload();
+      const nowIso = new Date().toISOString();
+      const healedEncrypted = await encryptUserPayload(
+        JSON.stringify(initial),
         userId,
         env
       );
-      return new Response(gzipBytes, {
-        status: 200,
-        headers: {
-          ...corsHeaders(origin),
-          "Content-Type": "application/octet-stream",
-          "X-OpenMoney-Compression": "gzip",
-          "X-OpenMoney-Revision": String(row.revision || 1),
-          "X-OpenMoney-Updated-At": String(row.updated_at || ""),
-          "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
+      const nextRev = Number(row.revision || 1) + 1;
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            `DELETE FROM user_database_chunks WHERE user_id = ?1`
+          ).bind(userId),
+          env.DB.prepare(
+            `UPDATE user_databases SET revision = ?1, payload = ?2, updated_at = ?3 WHERE user_id = ?4`
+          ).bind(nextRev, healedEncrypted, nowIso, userId),
+        ]);
+      } catch (_) {}
+
+      if (wantBinary) {
+        const gzipBytes = await compressGzip(JSON.stringify(initial));
+        return new Response(gzipBytes, {
+          status: 200,
+          headers: {
+            ...corsHeaders(origin),
+            "Content-Type": "application/octet-stream",
+            "X-OpenMoney-Compression": "gzip",
+            "X-OpenMoney-Revision": String(nextRev),
+            "X-OpenMoney-Updated-At": nowIso,
+            "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
+            "X-OpenMoney-Self-Healed": "true",
+          },
+        });
+      }
+
+      let parsedPrefs = {};
+      try {
+        parsedPrefs = JSON.parse(row.preferences || "{}");
+      } catch (_) {}
+
+      return jsonResponse(
+        {
+          schemaVersion: 7,
+          revision: nextRev,
+          payload: initial,
+          preferences: parsedPrefs,
+          updatedAt: nowIso,
+          selfHealed: true,
         },
-      });
+        200,
+        origin
+      );
     }
-
-    const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
-    let parsedPayload = {};
-    try {
-      parsedPayload = JSON.parse(decryptedStr);
-    } catch (_) {
-      parsedPayload = defaultOpenMoneyV7Payload();
-    }
-
-    let parsedPrefs = {};
-    try {
-      parsedPrefs = JSON.parse(row.preferences || "{}");
-    } catch (_) {}
-
-    return jsonResponse(
-      {
-        schemaVersion: Number(row.schema_version || 7),
-        revision: Number(row.revision || 1),
-        payload: parsedPayload,
-        preferences: parsedPrefs,
-        updatedAt: row.updated_at,
-      },
-      200,
-      origin
-    );
   }
 
   // ==========================================================================

@@ -816,6 +816,8 @@ class _CashFlowViewState extends State<CashFlowView> {
         colWidth: colWidth,
         totalWidth: totalWidth,
         highlight: true,
+        isEndingBalance: true,
+        columns: matrix.columns,
       ),
     );
 
@@ -1156,6 +1158,8 @@ class _CashFlowViewState extends State<CashFlowView> {
     required double colWidth,
     required double totalWidth,
     required bool highlight,
+    bool isEndingBalance = false,
+    List<CashFlowColumnDef>? columns,
   }) {
     final bgColor = highlight
         ? colors.accent.withValues(alpha: 0.12)
@@ -1180,25 +1184,68 @@ class _CashFlowViewState extends State<CashFlowView> {
         color: bgColor,
         child: Row(
           children: [
-            ...periodAmounts.map((amt) {
+            ...List.generate(periodAmounts.length, (i) {
+              final amt = periodAmounts[i];
               final c = amt >= 0 ? colors.income : colors.expense;
+              final col = (columns != null && i < columns.length) ? columns[i] : null;
+              final comment = col != null ? widget.store.commentForPeriod(col.id) : null;
+              final hasComment = comment != null && comment.trim().isNotEmpty;
+
+              Widget content = Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (hasComment) ...[
+                      Icon(
+                        Icons.comment_outlined,
+                        size: 11,
+                        color: colors.accent,
+                      ),
+                      const SizedBox(width: 3),
+                    ],
+                    Flexible(
+                      child: Text(
+                        fmtCashFlowCents(amt, showZero: true),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          color: c,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (isEndingBalance && col != null) {
+                final tooltipMsg = hasComment
+                    ? 'Comentário (${col.title}):\n$comment\n(Clique para editar)'
+                    : 'Clique para adicionar comentário em ${col.title}';
+                content = Tooltip(
+                  message: tooltipMsg,
+                  waitDuration: const Duration(milliseconds: 300),
+                  child: InkWell(
+                    onTap: () => _showPeriodCommentDialog(
+                      context,
+                      col.id,
+                      col.title,
+                      amt,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                    child: content,
+                  ),
+                );
+              }
+
               return SizedBox(
                 width: colWidth,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    fmtCashFlowCents(amt, showZero: true),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: c,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
+                child: content,
               );
             }),
             SizedBox(
@@ -1223,6 +1270,151 @@ class _CashFlowViewState extends State<CashFlowView> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showPeriodCommentDialog(
+    BuildContext context,
+    String periodId,
+    String periodTitle,
+    int balanceCents,
+  ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+    final initialText = widget.store.commentForPeriod(periodId) ?? '';
+    final controller = TextEditingController(text: initialText);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: colors.bgSecondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: colors.borderGlass),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.comment_outlined, size: 20, color: colors.accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Comentário do Saldo Final',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Período: $periodTitle • Saldo: ${fmtCashFlowCents(balanceCents, showZero: true)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 4,
+                  minLines: 3,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Digite anotações ou observações relevantes deste período...',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: colors.textSecondary.withValues(alpha: 0.6),
+                    ),
+                    filled: true,
+                    fillColor: colors.bgPrimary,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: colors.borderGlass),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: colors.borderGlass),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: colors.accent, width: 1.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            Row(
+              children: [
+                if (initialText.trim().isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      widget.store.setCommentForPeriod(periodId, null);
+                      Navigator.of(ctx).pop();
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.expense,
+                    ),
+                    child: const Text('Excluir'),
+                  ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    'Cancelar',
+                    style: TextStyle(color: colors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    widget.store.setCommentForPeriod(periodId, controller.text);
+                    Navigator.of(ctx).pop();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colors.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Salvar'),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 

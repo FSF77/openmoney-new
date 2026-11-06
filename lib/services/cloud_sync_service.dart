@@ -121,6 +121,7 @@ class CloudSyncService extends ChangeNotifier {
   CloudSyncState _state = CloudSyncState.disconnected;
   bool _webOfflineGuestMode = false;
   bool _webAuthFlowInProgress = false;
+  Future<bool>? _inFlightPush;
   final List<SavedCloudAccount> _savedAccounts = <SavedCloudAccount>[];
 
   String get apiBaseUrl => _apiBaseUrl;
@@ -556,7 +557,11 @@ class CloudSyncService extends ChangeNotifier {
   Future<CloudDatabaseSnapshot?> fetchDatabase() async {
     if (!isAuthenticated) return null;
 
+    final reqUserId = _userId;
+    final reqToken = _authToken;
+
     _state = CloudSyncState.syncing;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -564,10 +569,15 @@ class CloudSyncService extends ChangeNotifier {
         method: 'GET',
         url: _endpoint('/api/db?format=binary'),
         headers: {
-          'Authorization': 'Bearer $_authToken',
+          'Authorization': 'Bearer $reqToken',
           'Accept': 'application/octet-stream, application/json',
         },
       );
+
+      // Se o usuário alternou de conta enquanto a requisição estava em trânsito, ignora resposta antiga
+      if (_userId != reqUserId || _authToken != reqToken) {
+        return null;
+      }
 
       if (res.statusCode == 401) {
         logout();
@@ -586,6 +596,9 @@ class CloudSyncService extends ChangeNotifier {
         final rawBytes = isGzip
             ? await platformGzipDecompress(res.bodyBytes)
             : res.bodyBytes;
+        if (_userId != reqUserId || _authToken != reqToken) {
+          return null;
+        }
         final rawJson = utf8.decode(rawBytes, allowMalformed: true);
         final payloadMap = _tryDecodeJson(rawJson) ?? <String, dynamic>{};
 
@@ -685,13 +698,16 @@ class CloudSyncService extends ChangeNotifier {
           (decoded?['error'] ?? 'Erro HTTP ${res.statusCode}').toString();
       notifyListeners();
     } catch (e) {
+      if (_userId != reqUserId || _authToken != reqToken) {
+        return null;
+      }
       _state = CloudSyncState.error;
       _lastError = 'Sem conexão com a nuvem no momento.';
       notifyListeners();
     }
 
     // Fallback para o cache local do próprio usuário na Web se estiver sem rede
-    if (kIsWeb && _userId.isNotEmpty) {
+    if (kIsWeb && _userId == reqUserId && _userId.isNotEmpty) {
       final cachedRaw = webLocalStorageGet('openmoney_web_cache_$_userId');
       if (cachedRaw != null && cachedRaw.isNotEmpty) {
         final cached = _tryDecodeJson(cachedRaw);
@@ -716,12 +732,41 @@ class CloudSyncService extends ChangeNotifier {
     required Map<String, dynamic> preferences,
     bool force = false,
   }) async {
+    // Aguarda envio anterior caso exista, evitando gravações concorrentes no D1
+    if (_inFlightPush != null) {
+      try {
+        await _inFlightPush;
+      } catch (_) {}
+    }
+
+    final future = _executePushDatabase(
+      payload: payload,
+      preferences: preferences,
+      force: force,
+    );
+    _inFlightPush = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_inFlightPush, future)) {
+        _inFlightPush = null;
+      }
+    }
+  }
+
+  Future<bool> _executePushDatabase({
+    required Map<String, dynamic> payload,
+    required Map<String, dynamic> preferences,
+    bool force = false,
+  }) async {
+    final reqUserId = _userId;
+    final reqToken = _authToken;
     final rawJson = jsonEncode(payload);
 
-    if (kIsWeb && _userId.isNotEmpty) {
+    if (kIsWeb && reqUserId.isNotEmpty) {
       if (rawJson.length < 2000000) {
         webLocalStorageSet(
-          'openmoney_web_cache_$_userId',
+          'openmoney_web_cache_$reqUserId',
           jsonEncode({
             'revision': _revision,
             'payload': payload,
@@ -729,7 +774,7 @@ class CloudSyncService extends ChangeNotifier {
           }),
         );
       } else {
-        webLocalStorageRemove('openmoney_web_cache_$_userId');
+        webLocalStorageRemove('openmoney_web_cache_$reqUserId');
       }
     } else if (kIsWeb && _webOfflineGuestMode) {
       if (rawJson.length < 2000000) {
@@ -744,7 +789,9 @@ class CloudSyncService extends ChangeNotifier {
       return true;
     }
 
-    if (!isAuthenticated) return false;
+    if (!isAuthenticated || reqUserId.isEmpty || reqToken.isEmpty) {
+      return false;
+    }
 
     _state = CloudSyncState.syncing;
     notifyListeners();
@@ -752,6 +799,12 @@ class CloudSyncService extends ChangeNotifier {
     try {
       final rawBytes = Uint8List.fromList(utf8.encode(rawJson));
       final compressedBytes = await platformGzipCompress(rawBytes);
+
+      // Se o usuário alternou de conta durante a compressão Gzip, aborta o envio para não misturar bases!
+      if (_userId != reqUserId || _authToken != reqToken) {
+        return false;
+      }
+
       final prefsB64 = base64Url
           .encode(utf8.encode(jsonEncode(preferences)))
           .replaceAll('=', '');
@@ -760,7 +813,7 @@ class CloudSyncService extends ChangeNotifier {
         method: 'PUT',
         url: _endpoint('/api/db'),
         headers: {
-          'Authorization': 'Bearer $_authToken',
+          'Authorization': 'Bearer $reqToken',
           'Content-Type': 'application/octet-stream',
           'X-OpenMoney-Compression': 'gzip',
           'X-OpenMoney-Raw-Size': '${rawBytes.length}',
@@ -768,6 +821,10 @@ class CloudSyncService extends ChangeNotifier {
         },
         bodyBytes: compressedBytes,
       );
+
+      if (_userId != reqUserId || _authToken != reqToken) {
+        return false;
+      }
 
       if (res.statusCode == 401) {
         logout();
@@ -803,6 +860,9 @@ class CloudSyncService extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
+      if (_userId != reqUserId || _authToken != reqToken) {
+        return false;
+      }
       _state = CloudSyncState.error;
       _lastError = 'Alterações salvas localmente (aguardando conexão).';
       notifyListeners();

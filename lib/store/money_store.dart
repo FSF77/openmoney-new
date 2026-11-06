@@ -705,6 +705,7 @@ class MoneyStore extends ChangeNotifier {
 
   /// Reseta a base em memória para uma Nova Base em Branco (Schema v7) e sincroniza na nuvem
   Future<bool> resetToBlankDatabaseAndSync({bool pushToCloud = true}) async {
+    cancelPendingSave();
     db = Database(
       accounts: [
         Account(id: 'a1', name: 'Conta Corrente', type: 'Corrente', opening: 0),
@@ -967,12 +968,16 @@ class MoneyStore extends ChangeNotifier {
     _cachedTotalPred = totalPred;
   }
 
+  void cancelPendingSave() {
+    _debounceSaveTimer?.cancel();
+    _debounceSaveTimer = null;
+  }
+
   void save({bool immediate = false}) {
     rebuildIndexesIfNeeded();
     notifyListeners();
 
-    _debounceSaveTimer?.cancel();
-    _debounceSaveTimer = null;
+    cancelPendingSave();
 
     if (kIsWeb) {
       if (immediate) {
@@ -1014,6 +1019,7 @@ class MoneyStore extends ChangeNotifier {
 
   /// Baixa a base openmoney.json da nuvem para a sessão atual e grava em disco (se Desktop/Mobile)
   Future<bool> syncFromCloud() async {
+    cancelPendingSave();
     if (!CloudSyncService.instance.isAuthenticated) return false;
     final snap = await CloudSyncService.instance.fetchDatabase();
     if (snap == null || snap.payload.isEmpty) return false;
@@ -1050,6 +1056,7 @@ class MoneyStore extends ChangeNotifier {
 
   /// Envia a base atual em memória para a conta Cloud do usuário
   Future<bool> pushLocalToCloud({bool force = false}) async {
+    cancelPendingSave();
     if (!CloudSyncService.instance.isAuthenticated) return false;
     final ok = await CloudSyncService.instance.pushDatabase(
       payload: db.toJson(),
@@ -3379,6 +3386,23 @@ class MoneyStore extends ChangeNotifier {
       db.budgets.remove(categoryPath);
     }
     save();
+  }
+
+  String? commentForPeriod(String periodKey) => db.comments[periodKey];
+
+  void setCommentForPeriod(String periodKey, String? comment) {
+    final text = comment?.trim() ?? '';
+    if (text.isEmpty) {
+      if (db.comments.containsKey(periodKey)) {
+        db.comments.remove(periodKey);
+        save();
+      }
+    } else {
+      if (db.comments[periodKey] != text) {
+        db.comments[periodKey] = text;
+        save();
+      }
+    }
   }
 
   bool isCategoryIncludedInReports(String catPath) {

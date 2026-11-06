@@ -144,26 +144,61 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   }
 
   Future<void> _handleSwitchAccount(SavedCloudAccount acc) async {
-    if (acc.userId == _cloud.userId && _cloud.isAuthenticated) return;
+    if (acc.userId == _cloud.userId &&
+        _cloud.isAuthenticated &&
+        _cloud.state == CloudSyncState.synced) {
+      return;
+    }
+
+    widget.store.cancelPendingSave();
+
+    final prevAccount = _cloud.isAuthenticated
+        ? SavedCloudAccount(
+            userId: _cloud.userId,
+            email: _cloud.userEmail,
+            name: _cloud.userName,
+            authToken: _cloud.authToken,
+            apiBaseUrl: _cloud.apiBaseUrl,
+            revision: _cloud.revision,
+            lastSyncedAt: _cloud.lastSyncedAt?.toIso8601String(),
+          )
+        : null;
+
     setState(() {
       _isBusy = true;
       _statusMsg = 'Alternando para ${acc.email} e carregando base...';
       _isError = false;
     });
+
     _cloud.switchToSavedAccount(acc);
     if (!mounted) return;
-    widget.store.saveCloudSessionToConfig();
     final synced = await widget.store.syncFromCloud();
+    final errMsg = _cloud.lastError;
+
+    if (!synced) {
+      // Se falhar ao carregar a nova conta, restaura a conta anterior para manter consistência com a base em tela
+      if (prevAccount != null && prevAccount.userId != acc.userId) {
+        _cloud.switchToSavedAccount(prevAccount);
+        widget.store.saveCloudSessionToConfig();
+      }
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _isError = true;
+        _statusMsg = errMsg ??
+            'Não foi possível carregar a base de ${acc.email}. Tente novamente ou reconecte com sua senha.';
+      });
+      return;
+    }
+
+    widget.store.saveCloudSessionToConfig();
     await _loadCloudBackups();
     if (!mounted) return;
     setState(() {
       _isBusy = false;
       _addingAnotherAccount = false;
-      _isError = !synced;
-      _statusMsg = synced
-          ? '✓ Conta alternada para ${acc.email} (r${_cloud.revision})!'
-          : (_cloud.lastError ??
-              'Sessão expirada ou sem conexão para ${acc.email}. Faça login novamente.');
+      _isError = false;
+      _statusMsg = '✓ Conta alternada para ${acc.email} (r${_cloud.revision})!';
     });
   }
 
