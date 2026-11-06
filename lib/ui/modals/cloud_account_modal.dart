@@ -27,6 +27,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   final CloudSyncService _cloud = CloudSyncService.instance;
 
   bool _isRegisterMode = false;
+  bool _isForgotMode = false;
+  int _forgotStep = 1;
   bool _isBusy = false;
   bool _showPasswordChange = false;
   bool _addingAnotherAccount = false;
@@ -40,6 +42,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _resetCodeCtrl = TextEditingController();
+  final _newForgotPassCtrl = TextEditingController();
   final _inviteCtrl = TextEditingController();
   final _curPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
@@ -62,10 +66,107 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _resetCodeCtrl.dispose();
+    _newForgotPassCtrl.dispose();
     _inviteCtrl.dispose();
     _curPassCtrl.dispose();
     _newPassCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRequestResetCode() async {
+    final cleanEmail = _emailCtrl.text.trim();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe um e-mail válido para receber o código.';
+      });
+      return;
+    }
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+    try {
+      final res = await _cloud.requestPasswordResetCode(
+        email: cleanEmail,
+        customApiUrl: _serverCtrl.text.trim().isEmpty ? null : _serverCtrl.text.trim(),
+      );
+      if (mounted) {
+        if (res.ok) {
+          setState(() {
+            _forgotStep = 2;
+            _statusMsg = res.message ?? 'Código enviado para seu e-mail!';
+            _isError = false;
+          });
+        } else {
+          setState(() {
+            _isError = true;
+            _statusMsg = res.error;
+          });
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _handleResetPasswordAndLogin() async {
+    final cleanEmail = _emailCtrl.text.trim();
+    final cleanCode = _resetCodeCtrl.text.trim();
+    final newPass = _newForgotPassCtrl.text;
+
+    if (cleanCode.isEmpty) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe o código de 6 dígitos recebido por e-mail.';
+      });
+      return;
+    }
+    if (newPass.length < 8) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'A nova senha deve ter no mínimo 8 caracteres.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+
+    try {
+      final res = await _cloud.resetPasswordWithCode(
+        email: cleanEmail,
+        code: cleanCode,
+        newPassword: newPass,
+        customApiUrl: _serverCtrl.text.trim().isEmpty ? null : _serverCtrl.text.trim(),
+      );
+      if (mounted) {
+        if (res.ok) {
+          widget.store.saveCloudSessionToConfig();
+          await widget.store.syncFromCloud();
+          await _loadCloudBackups();
+          setState(() {
+            _isForgotMode = false;
+            _forgotStep = 1;
+            _addingAnotherAccount = false;
+            _isError = false;
+            _statusMsg = res.message ?? '✓ Senha redefinida e sincronizado!';
+          });
+        } else {
+          setState(() {
+            _isError = true;
+            _statusMsg = res.error;
+          });
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   Future<void> _loadCloudBackups() async {
@@ -1320,6 +1421,164 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
   Widget _buildDisconnectedBody(OpenMoneyColors colors) {
     final savedAccounts = _cloud.savedAccounts;
+    if (_isForgotMode) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _isForgotMode = false;
+                  _forgotStep = 1;
+                  _statusMsg = null;
+                  _isError = false;
+                });
+              },
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Voltar ao Login', style: TextStyle(fontSize: 12.5)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _forgotStep == 1
+                ? 'Recuperar Senha por E-mail (Etapa 1 de 2)'
+                : 'Definir Nova Senha (Etapa 2 de 2)',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _forgotStep == 1
+                ? 'Digite seu e-mail cadastrado. Um código de 6 dígitos será enviado via Resend.'
+                : 'Digite o código de 6 dígitos recebido por e-mail e sua nova senha.',
+            style: TextStyle(fontSize: 12, color: colors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          if (!kIsWeb) ...[
+            _buildInput(
+              colors: colors,
+              controller: _serverCtrl,
+              label: 'URL do Servidor Cloud',
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_forgotStep == 1) ...[
+            _buildInput(
+              colors: colors,
+              controller: _emailCtrl,
+              label: 'E-mail Cadastrado',
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 42,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.accentBlue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _isBusy ? null : _handleRequestResetCode,
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  _isBusy ? 'Enviando código...' : 'Enviar Código de Recuperação',
+                ),
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.bgPrimary.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.email_outlined, size: 16, color: colors.accentBlue),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _emailCtrl.text.trim(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _forgotStep = 1;
+                        _resetCodeCtrl.clear();
+                        _newForgotPassCtrl.clear();
+                        _statusMsg = null;
+                        _isError = false;
+                      });
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Alterar',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: colors.accentBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            _buildInput(
+              colors: colors,
+              controller: _resetCodeCtrl,
+              label: 'Código de Verificação (6 dígitos)',
+            ),
+            const SizedBox(height: 10),
+            _buildInput(
+              colors: colors,
+              controller: _newForgotPassCtrl,
+              label: 'Nova Senha (mín. 8 caracteres)',
+              obscure: true,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 42,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.accentBlue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _isBusy ? null : _handleResetPasswordAndLogin,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: Text(
+                  _isBusy ? 'Redefinindo senha...' : 'Redefinir Senha e Conectar',
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton(
+                onPressed: _isBusy ? null : _handleRequestResetCode,
+                child: Text(
+                  'Não recebeu o código? Reenviar',
+                  style: TextStyle(fontSize: 12, color: colors.accentBlue),
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1435,6 +1694,37 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           label: 'Senha',
           obscure: true,
         ),
+        if (!_isRegisterMode) ...[
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {
+                setState(() {
+                  _isForgotMode = true;
+                  _forgotStep = 1;
+                  _statusMsg = null;
+                  _isError = false;
+                  _resetCodeCtrl.clear();
+                  _newForgotPassCtrl.clear();
+                });
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Esqueci minha senha',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: colors.accentBlue,
+                ),
+              ),
+            ),
+          ),
+        ],
         if (_isRegisterMode) ...[
           const SizedBox(height: 10),
           _buildInput(

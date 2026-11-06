@@ -55,6 +55,17 @@ async function ensureSchema(db) {
         UNIQUE (user_id, backup_date)
       )
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0
+      )
+    `),
   ]);
   schemaInitialized = true;
 }
@@ -239,6 +250,106 @@ async function verifyJwt(token, env) {
   } catch (_) {
     return null;
   }
+}
+
+function generateSixDigitCode() {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  const code = 100000 + (array[0] % 900000);
+  return String(code);
+}
+
+async function hashResetCode(code, email, secret) {
+  const data = encoder.encode(`${code}:${email.toLowerCase()}:${secret}`);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  return bytesToBase64(new Uint8Array(hashBuf));
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendResendEmail({ env, to, subject, htmlText }) {
+  const apiKey = (env.RESEND_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error(
+      "Serviço de e-mail não configurado no servidor. Configure a variável RESEND_API_KEY no painel da Cloudflare."
+    );
+  }
+  const from =
+    (env.RESEND_FROM_EMAIL || "").trim() ||
+    "OpenMoney <seguranca@openmoney.app.br>";
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      html: htmlText,
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const msg = errData?.message || res.statusText || `HTTP ${res.status}`;
+    throw new Error(`Falha no envio via Resend: ${msg}`);
+  }
+
+  return await res.json().catch(() => ({}));
+}
+
+function buildPasswordResetEmailHtml({ code, email, name }) {
+  const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Recuperação de Senha - OpenMoney</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#1e293b;border-radius:14px;border:1px solid #334155;padding:32px 28px;text-align:left;" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <h1 style="margin:0;font-size:22px;color:#38bdf8;font-weight:800;letter-spacing:-0.5px;">OpenMoney Cloud</h1>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Sincronização & Gestão Financeira Segura</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:14px;line-height:1.6;color:#cbd5e1;">
+              <p style="margin:0 0 14px;">${greeting}</p>
+              <p style="margin:0 0 14px;">Recebemos uma solicitação para redefinir a senha da sua conta <strong>${escapeHtml(email)}</strong>.</p>
+              <p style="margin:0 0 20px;">Utilize o código de verificação abaixo no aplicativo para criar sua nova senha:</p>
+              <div style="background-color:#0f172a;border:1px solid #38bdf8;border-radius:10px;padding:18px;text-align:center;margin-bottom:20px;">
+                <span style="font-size:32px;font-weight:800;letter-spacing:8px;color:#38bdf8;font-family:monospace;">${code}</span>
+              </div>
+              <p style="margin:0 0 10px;font-size:13px;color:#94a3b8;">⏱️ Este código expira em <strong>15 minutos</strong>.</p>
+              <p style="margin:0;font-size:12.5px;color:#64748b;">Se você não solicitou a recuperação, nenhuma alteração foi realizada e você pode ignorar este e-mail com segurança.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:24px;border-top:1px solid #334155;font-size:11.5px;color:#64748b;text-align:center;">
+              OpenMoney • Criptografia AES-256-GCM + PBKDF2 • openmoney.app.br
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 // Deriva uma chave AES-256-GCM exclusiva para o user_id usando HKDF-SHA256
@@ -778,6 +889,208 @@ export async function onRequest(context) {
         token,
         revision: dbRow ? Number(dbRow.revision) : 1,
         user: { id: user.id, email: user.email, name: user.name },
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 2.1 POST /api/auth/forgot-password (Solicita código de 6 dígitos via Resend)
+  // ==========================================================================
+  if (path === "/api/auth/forgot-password" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+
+    if (!email || !email.includes("@")) {
+      return jsonResponse({ error: "Informe um e-mail válido." }, 400, origin);
+    }
+
+    const user = await env.DB.prepare(
+      "SELECT id, name, email FROM users WHERE email = ?1"
+    )
+      .bind(email)
+      .first();
+
+    if (!user) {
+      return jsonResponse(
+        {
+          ok: true,
+          message:
+            "Se este e-mail estiver cadastrado, você receberá o código de recuperação em instantes.",
+        },
+        200,
+        origin
+      );
+    }
+
+    const code = generateSixDigitCode();
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+    const tokenId = `rst_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const nowIso = new Date().toISOString();
+    const expiresAtIso = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await env.DB.prepare(
+      "UPDATE password_reset_tokens SET used = 1 WHERE email = ?1 AND used = 0"
+    )
+      .bind(email)
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO password_reset_tokens (id, user_id, email, code_hash, created_at, expires_at, used)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)`
+    )
+      .bind(tokenId, user.id, email, codeHash, nowIso, expiresAtIso)
+      .run();
+
+    try {
+      const htmlText = buildPasswordResetEmailHtml({
+        code,
+        email,
+        name: user.name,
+      });
+      await sendResendEmail({
+        env,
+        to: email,
+        subject: `OpenMoney: Código de Recuperação de Senha (${code})`,
+        htmlText,
+      });
+    } catch (err) {
+      return jsonResponse(
+        {
+          error:
+            err.message ||
+            "Não foi possível enviar o e-mail de recuperação. Verifique a configuração do Resend na Cloudflare.",
+        },
+        500,
+        origin
+      );
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        message: "Código de recuperação enviado para o seu e-mail!",
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 2.2 POST /api/auth/verify-reset-code (Valida o código de 6 dígitos)
+  // ==========================================================================
+  if (path === "/api/auth/verify-reset-code" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const code = String(body.code || "").trim();
+
+    if (!email || !code) {
+      return jsonResponse({ error: "E-mail e código são obrigatórios." }, 400, origin);
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+    const nowIso = new Date().toISOString();
+
+    const tokenRow = await env.DB.prepare(
+      `SELECT id FROM password_reset_tokens 
+       WHERE email = ?1 AND code_hash = ?2 AND used = 0 AND expires_at > ?3`
+    )
+      .bind(email, codeHash, nowIso)
+      .first();
+
+    if (!tokenRow) {
+      return jsonResponse(
+        { error: "Código inválido ou expirado. Solicite um novo código." },
+        400,
+        origin
+      );
+    }
+
+    return jsonResponse({ ok: true, valid: true }, 200, origin);
+  }
+
+  // ==========================================================================
+  // 2.3 POST /api/auth/reset-password (Define a nova senha com o código)
+  // ==========================================================================
+  if (path === "/api/auth/reset-password" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const code = String(body.code || "").trim();
+    const newPassword = String(body.newPassword || "");
+
+    if (!email || !code) {
+      return jsonResponse({ error: "E-mail e código são obrigatórios." }, 400, origin);
+    }
+    if (newPassword.length < 8) {
+      return jsonResponse(
+        { error: "A nova senha deve ter pelo menos 8 caracteres." },
+        400,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+    const nowIso = new Date().toISOString();
+
+    const tokenRow = await env.DB.prepare(
+      `SELECT id, user_id FROM password_reset_tokens 
+       WHERE email = ?1 AND code_hash = ?2 AND used = 0 AND expires_at > ?3`
+    )
+      .bind(email, codeHash, nowIso)
+      .first();
+
+    if (!tokenRow) {
+      return jsonResponse(
+        { error: "Código inválido ou expirado. Solicite um novo código." },
+        400,
+        origin
+      );
+    }
+
+    const user = await env.DB.prepare(
+      "SELECT id, name, email FROM users WHERE id = ?1"
+    )
+      .bind(tokenRow.user_id)
+      .first();
+
+    if (!user) {
+      return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+    }
+
+    const newSalt = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
+    const newHash = await hashPasswordPBKDF2(newPassword, newSalt);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE users SET password_hash = ?1, password_salt = ?2, failed_attempts = 0, locked_until = NULL WHERE id = ?3"
+      ).bind(newHash, newSalt, user.id),
+      env.DB.prepare(
+        "UPDATE password_reset_tokens SET used = 1 WHERE id = ?1"
+      ).bind(tokenRow.id),
+    ]);
+
+    const dbRow = await env.DB.prepare(
+      "SELECT revision FROM user_databases WHERE user_id = ?1"
+    )
+      .bind(user.id)
+      .first();
+
+    const token = await signJwt(
+      { sub: user.id, email: user.email, name: user.name },
+      env
+    );
+
+    return jsonResponse(
+      {
+        ok: true,
+        token,
+        revision: dbRow ? Number(dbRow.revision) : 1,
+        user: { id: user.id, email: user.email, name: user.name },
+        message: "Senha redefinida com sucesso!",
       },
       200,
       origin

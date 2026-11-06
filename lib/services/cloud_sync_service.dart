@@ -542,6 +542,114 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
+  Future<({bool ok, String? message, String? error})> requestPasswordResetCode({
+    required String email,
+    String? customApiUrl,
+  }) async {
+    if (customApiUrl != null) {
+      _apiBaseUrl = customApiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      return (ok: false, message: null, error: 'Informe um e-mail válido.');
+    }
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/forgot-password'),
+        headers: _headers(),
+        body: jsonEncode({'email': cleanEmail}),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final msg = decoded?['message']?.toString() ??
+            'Código de recuperação enviado para o seu e-mail!';
+        return (ok: true, message: msg, error: null);
+      }
+      final errMsg = (decoded?['error'] ??
+              'Falha ao solicitar código de recuperação.')
+          .toString();
+      return (ok: false, message: null, error: errMsg);
+    } catch (e) {
+      return (
+        ok: false,
+        message: null,
+        error: 'Erro de conexão com o servidor. Verifique sua internet.',
+      );
+    }
+  }
+
+  Future<({bool ok, String? message, String? error})> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+    String? customApiUrl,
+  }) async {
+    if (customApiUrl != null) {
+      _apiBaseUrl = customApiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanCode = code.trim();
+    if (cleanEmail.isEmpty || cleanCode.isEmpty) {
+      return (
+        ok: false,
+        message: null,
+        error: 'E-mail e código são obrigatórios.'
+      );
+    }
+    if (newPassword.length < 8) {
+      return (
+        ok: false,
+        message: null,
+        error: 'A nova senha deve ter no mínimo 8 caracteres.'
+      );
+    }
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/reset-password'),
+        headers: _headers(),
+        body: jsonEncode({
+          'email': cleanEmail,
+          'code': cleanCode,
+          'newPassword': newPassword,
+        }),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
+        _authToken = (decoded['token'] ?? '').toString();
+        final user = decoded['user'] as Map<String, dynamic>? ?? {};
+        _userId = (user['id'] ?? '').toString();
+        _userEmail = (user['email'] ?? cleanEmail).toString();
+        _userName = (user['name'] ?? '').toString();
+        _revision = (decoded['revision'] as num?)?.toInt() ?? 0;
+        _webOfflineGuestMode = false;
+        _state = CloudSyncState.synced;
+        _lastError = null;
+        _upsertCurrentAccountToSavedList();
+        if (kIsWeb) {
+          exportSessionToConfig({});
+        }
+        notifyListeners();
+        return (
+          ok: true,
+          message: decoded['message']?.toString() ??
+              'Senha redefinida com sucesso!',
+          error: null,
+        );
+      }
+      final errMsg =
+          (decoded?['error'] ?? 'Falha ao redefinir senha.').toString();
+      return (ok: false, message: null, error: errMsg);
+    } catch (_) {
+      return (
+        ok: false,
+        message: null,
+        error: 'Erro de conexão ao redefinir senha.'
+      );
+    }
+  }
+
   void logout() {
     _authToken = '';
     _userId = '';
