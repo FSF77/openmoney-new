@@ -69,10 +69,12 @@ function jsonResponse(data, status = 200, origin = "*") {
 }
 
 function bytesToBase64(bytes) {
+  const CHUNK_SIZE = 0x8000; // 32768
   let binary = "";
   const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, len));
+    binary += String.fromCharCode.apply(null, chunk);
   }
   return btoa(binary);
 }
@@ -85,6 +87,26 @@ function base64ToBytes(b64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+// Compressão Gzip nativa (Web Streams) para manter payloads em <10% do tamanho
+async function compressGzip(text) {
+  const cs = new CompressionStream("gzip");
+  const writer = cs.writable.getWriter();
+  writer.write(encoder.encode(text));
+  writer.close();
+  const buffer = await new Response(cs.readable).arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+// Descompressão Gzip nativa (Web Streams)
+async function decompressGzip(bytes) {
+  const ds = new DecompressionStream("gzip");
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  const buffer = await new Response(ds.readable).arrayBuffer();
+  return decoder.decode(buffer);
 }
 
 function base64UrlEncode(strOrBytes) {
@@ -228,33 +250,58 @@ async function deriveUserAesKey(userId, env) {
 async function encryptUserPayload(plainText, userId, env) {
   const key = await deriveUserAesKey(userId, env);
   const iv = crypto.getRandomValues(new Uint8Array(12));
+  // Comprime com Gzip antes de cifrar: reduz 1MB para ~50KB, acelerando a criptografia e economizando CPU/D1
+  const compressedBytes = await compressGzip(plainText);
   const cipherBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
-    encoder.encode(plainText)
+    compressedBytes
   );
-  return `enc:v1:${bytesToBase64(iv)}:${bytesToBase64(
+  return `enc:v2:${bytesToBase64(iv)}:${bytesToBase64(
     new Uint8Array(cipherBuffer)
   )}`;
 }
 
 async function decryptUserPayload(storedText, userId, env) {
-  if (!storedText || !storedText.startsWith("enc:v1:")) {
+  if (!storedText) {
     return storedText;
   }
-  const parts = storedText.split(":");
-  if (parts.length !== 4) {
-    throw new Error("Invalid encrypted payload format");
+
+  // Formato v2: AES-256-GCM com compressão Gzip
+  if (storedText.startsWith("enc:v2:")) {
+    const parts = storedText.split(":");
+    if (parts.length !== 4) {
+      throw new Error("Invalid encrypted payload format v2");
+    }
+    const iv = base64ToBytes(parts[2]);
+    const cipherBytes = base64ToBytes(parts[3]);
+    const key = await deriveUserAesKey(userId, env);
+    const plainBuffer = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      cipherBytes
+    );
+    return await decompressGzip(new Uint8Array(plainBuffer));
   }
-  const iv = base64ToBytes(parts[2]);
-  const cipherBytes = base64ToBytes(parts[3]);
-  const key = await deriveUserAesKey(userId, env);
-  const plainBuffer = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    cipherBytes
-  );
-  return decoder.decode(plainBuffer);
+
+  // Formato v1 legado (sem gzip)
+  if (storedText.startsWith("enc:v1:")) {
+    const parts = storedText.split(":");
+    if (parts.length !== 4) {
+      throw new Error("Invalid encrypted payload format v1");
+    }
+    const iv = base64ToBytes(parts[2]);
+    const cipherBytes = base64ToBytes(parts[3]);
+    const key = await deriveUserAesKey(userId, env);
+    const plainBuffer = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      cipherBytes
+    );
+    return decoder.decode(plainBuffer);
+  }
+
+  return storedText;
 }
 
 function defaultOpenMoneyV7Payload() {
@@ -301,26 +348,27 @@ export async function onRequest(context) {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
 
-  if (!env.DB) {
-    return jsonResponse(
-      {
-        error:
-          "Banco Cloudflare D1 (binding 'DB') ainda não vinculado no projeto Cloudflare Pages.",
-      },
-      503,
-      origin
-    );
-  }
-
   try {
-    await ensureSchema(env.DB);
-  } catch (e) {
-    return jsonResponse(
-      { error: `Erro ao inicializar schema D1: ${e.message}` },
-      500,
-      origin
-    );
-  }
+    if (!env.DB) {
+      return jsonResponse(
+        {
+          error:
+            "Banco Cloudflare D1 (binding 'DB') ainda não vinculado no projeto Cloudflare Pages.",
+        },
+        503,
+        origin
+      );
+    }
+
+    try {
+      await ensureSchema(env.DB);
+    } catch (e) {
+      return jsonResponse(
+        { error: `Erro ao inicializar schema D1: ${e.message}` },
+        500,
+        origin
+      );
+    }
 
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "");
@@ -680,31 +728,35 @@ export async function onRequest(context) {
       .bind(userId, nextRev, encryptedPayload, prefsStr, nowIso)
       .run();
 
-    // Garante 1 snapshot diário na nuvem por usuário e retém os últimos 15 dias
+    // Garante 1 snapshot diário na nuvem por usuário e retém os últimos 15 dias (não bloqueia resposta em caso de falha)
     const backupId = `${userId}_${todayDate}`;
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-         ON CONFLICT(user_id, backup_date) DO UPDATE SET
-           revision = excluded.revision,
-           size_bytes = excluded.size_bytes,
-           payload = excluded.payload,
-           created_at = excluded.created_at`
-      ).bind(
-        backupId,
-        userId,
-        todayDate,
-        nextRev,
-        sizeBytes,
-        encryptedPayload,
-        nowIso
-      ),
-      env.DB.prepare(
-        `DELETE FROM user_database_backups
-         WHERE user_id = ?1 AND backup_date < date('now', '-15 days')`
-      ).bind(userId),
-    ]);
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(user_id, backup_date) DO UPDATE SET
+             revision = excluded.revision,
+             size_bytes = excluded.size_bytes,
+             payload = excluded.payload,
+             created_at = excluded.created_at`
+        ).bind(
+          backupId,
+          userId,
+          todayDate,
+          nextRev,
+          sizeBytes,
+          encryptedPayload,
+          nowIso
+        ),
+        env.DB.prepare(
+          `DELETE FROM user_database_backups
+           WHERE user_id = ?1 AND backup_date < date('now', '-15 days')`
+        ).bind(userId),
+      ]);
+    } catch (bErr) {
+      console.warn("Falha não-bloqueante ao registrar snapshot diário:", bErr);
+    }
 
     return jsonResponse(
       {
@@ -789,5 +841,17 @@ export async function onRequest(context) {
     );
   }
 
-  return jsonResponse({ error: "Rota não encontrada." }, 404, origin);
+    return jsonResponse({ error: "Rota não encontrada." }, 404, origin);
+  } catch (err) {
+    console.error("Erro interno no Pages Function:", err);
+    return jsonResponse(
+      {
+        error: `Erro interno no servidor: ${
+          err && err.message ? err.message : String(err)
+        }`,
+      },
+      500,
+      origin
+    );
+  }
 }
