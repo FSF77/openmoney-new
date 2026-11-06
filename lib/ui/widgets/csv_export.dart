@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/native_file_picker.dart';
+import '../../services/platform_io.dart';
 
 Future<void> exportCsvWithFeedback(
   BuildContext context, {

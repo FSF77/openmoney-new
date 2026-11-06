@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/openmoney_models.dart';
 import '../services/bank_logo_registry.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/native_file_picker.dart';
 import '../services/update_service.dart';
 import '../store/money_store.dart';
@@ -10,6 +12,7 @@ import 'modals/account_modal.dart';
 import 'modals/audit_logs_modal.dart';
 import 'modals/backups_history_modal.dart';
 import 'modals/batch_delete_modal.dart';
+import 'modals/cloud_account_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/help_modal.dart';
 import 'modals/mobile_inbox_modal.dart';
@@ -944,10 +947,22 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               ),
               if (widget.store.sidebarShowModules) ...[
                 _SidebarNavTile(
+                  icon: Icons.cloud_sync_outlined,
+                  label: 'Conta Cloud & Sincronização',
+                  selected: false,
+                  badgeText: CloudSyncService.instance.isAuthenticated
+                      ? 'On'
+                      : null,
+                  badgeColor: colors.accentGreen,
+                  onTap: () => showCloudAccountModal(context, widget.store),
+                ),
+                _SidebarNavTile(
                   icon: Icons.archive_outlined,
                   label: 'Backups de Segurança',
                   selected: false,
-                  onTap: () => showBackupsHistoryModal(context, widget.store),
+                  onTap: () => kIsWeb
+                      ? showCloudAccountModal(context, widget.store)
+                      : showBackupsHistoryModal(context, widget.store),
                 ),
                 _SidebarNavTile(
                   icon: Icons.history_edu_outlined,
@@ -1009,6 +1024,56 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               ],
             ],
           ),
+        ),
+        ListenableBuilder(
+          listenable: CloudSyncService.instance,
+          builder: (context, _) {
+            final cloud = CloudSyncService.instance;
+            return InkWell(
+              onTap: () => showCloudAccountModal(context, widget.store),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: colors.borderGlass)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      cloud.isAuthenticated
+                          ? Icons.cloud_done_rounded
+                          : Icons.cloud_outlined,
+                      size: 15,
+                      color: cloud.isAuthenticated
+                          ? colors.accentGreen
+                          : colors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        cloud.isAuthenticated
+                            ? '${cloud.userEmail} • ${cloud.statusLabel}'
+                            : 'Sincronização Cloud',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cloud.isAuthenticated
+                              ? colors.textPrimary
+                              : colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 15,
+                      color: colors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

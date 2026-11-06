@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../ui/theme/liquid_glass.dart';
+import 'platform_io.dart';
 
 class OpenMoneyVersion {
   static const String fallbackVersion = '2.2.7';

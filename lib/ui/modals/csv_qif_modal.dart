@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/native_file_picker.dart';
+import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'mobile_inbox_modal.dart';
@@ -52,7 +52,6 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
   }
 
   void _importFile({required bool isQif}) {
-    if (kIsWeb) return;
     final path = _filePathCtrl.text.trim();
     if (path.isEmpty || !File(path).existsSync()) {
       setState(() {

@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'platform_io.dart';
 
 class NativeFilePickerResult {
   final String path;
@@ -100,6 +101,15 @@ class NativeFilePicker {
     List<String> allowedExtensions = const ['json'],
   }) async {
     try {
+      if (kIsWeb) {
+        final virtualPath = await webPickFileAsVirtualPath(
+          allowedExtensions: allowedExtensions,
+        );
+        if (virtualPath != null && virtualPath.isNotEmpty) {
+          return NativeFilePickerResult(path: virtualPath);
+        }
+        return null;
+      }
       if (Platform.isIOS) {
         final res = await _iosChannel.invokeMethod<Map>('pickFile', {
           'title': title,
@@ -180,6 +190,12 @@ class NativeFilePicker {
     List<String> allowedExtensions = const ['json'],
   }) async {
     try {
+      if (kIsWeb) {
+        final cleanDefault = defaultName.trim().isEmpty
+            ? 'openmoney.json'
+            : defaultName.trim();
+        return NativeFilePickerResult(path: 'web://download/$cleanDefault');
+      }
       if (Platform.isIOS) {
         final res = await _iosChannel.invokeMethod<Map>('saveFile', {
           'title': title,

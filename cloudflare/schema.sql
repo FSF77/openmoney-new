@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS user_databases (
   updated_at TEXT NOT NULL
 );
 
+-- 2b. Blocos de 380KB para Bases Grandes (>10MB) respeitando o limite de 1MB por instrução SQL do D1
+CREATE TABLE IF NOT EXISTS user_database_chunks (
+  user_id TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  chunk_data TEXT NOT NULL,
+  PRIMARY KEY (user_id, chunk_index)
+);
+
 -- 3. Backups Diários Automáticos na Nuvem (Isolados e Criptografados por Usuário)
 CREATE TABLE IF NOT EXISTS user_database_backups (
   id TEXT PRIMARY KEY,

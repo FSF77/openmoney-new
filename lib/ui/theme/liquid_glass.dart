@@ -30,11 +30,14 @@ class OpenMoneyColors {
       isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
 
   Color get accent => const Color(0xFF0EA5E9);
+  Color get accentBlue => accent;
   Color get accentIndigo => const Color(0xFF6366F1);
   Color get income =>
       isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+  Color get accentGreen => income;
   Color get expense =>
       isDark ? const Color(0xFFFB7185) : const Color(0xFFE11D48);
+  Color get accentRed => expense;
   Color get warning =>
       isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
 

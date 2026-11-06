@@ -36,6 +36,14 @@ async function ensureSchema(db) {
       )
     `),
     db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_database_chunks (
+        user_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        chunk_data TEXT NOT NULL,
+        PRIMARY KEY (user_id, chunk_index)
+      )
+    `),
+    db.prepare(`
       CREATE TABLE IF NOT EXISTS user_database_backups (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -55,7 +63,10 @@ function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs",
+    "Access-Control-Expose-Headers":
+      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
   };
@@ -69,17 +80,24 @@ function jsonResponse(data, status = 200, origin = "*") {
 }
 
 function bytesToBase64(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (typeof u8.toBase64 === "function") {
+    return u8.toBase64();
+  }
   const CHUNK_SIZE = 0x8000; // 32768
   let binary = "";
-  const len = bytes.byteLength;
+  const len = u8.byteLength;
   for (let i = 0; i < len; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, len));
+    const chunk = u8.subarray(i, Math.min(i + CHUNK_SIZE, len));
     binary += String.fromCharCode.apply(null, chunk);
   }
   return btoa(binary);
 }
 
 function base64ToBytes(b64) {
+  if (typeof Uint8Array.fromBase64 === "function") {
+    return Uint8Array.fromBase64(b64);
+  }
   const binary = atob(b64);
   const len = binary.length;
   const bytes = new Uint8Array(len);
@@ -247,11 +265,9 @@ async function deriveUserAesKey(userId, env) {
   );
 }
 
-async function encryptUserPayload(plainText, userId, env) {
+async function encryptCompressedBytes(compressedBytes, userId, env) {
   const key = await deriveUserAesKey(userId, env);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  // Comprime com Gzip antes de cifrar: reduz 1MB para ~50KB, acelerando a criptografia e economizando CPU/D1
-  const compressedBytes = await compressGzip(plainText);
   const cipherBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
@@ -260,6 +276,35 @@ async function encryptUserPayload(plainText, userId, env) {
   return `enc:v2:${bytesToBase64(iv)}:${bytesToBase64(
     new Uint8Array(cipherBuffer)
   )}`;
+}
+
+async function encryptUserPayload(plainText, userId, env) {
+  const compressedBytes = await compressGzip(plainText);
+  return encryptCompressedBytes(compressedBytes, userId, env);
+}
+
+// Descriptografa e retorna diretamente os bytes Gzip (0ms de CPU de descompressão/JSON no Worker)
+async function decryptUserPayloadToGzipBytes(storedText, userId, env) {
+  if (!storedText) {
+    return compressGzip(JSON.stringify(defaultOpenMoneyV7Payload()));
+  }
+  if (storedText.startsWith("enc:v2:")) {
+    const parts = storedText.split(":");
+    if (parts.length !== 4) {
+      throw new Error("Invalid encrypted payload format v2");
+    }
+    const iv = base64ToBytes(parts[2]);
+    const cipherBytes = base64ToBytes(parts[3]);
+    const key = await deriveUserAesKey(userId, env);
+    const plainBuffer = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      cipherBytes
+    );
+    return new Uint8Array(plainBuffer);
+  }
+  const plainStr = await decryptUserPayload(storedText, userId, env);
+  return compressGzip(plainStr);
 }
 
 async function decryptUserPayload(storedText, userId, env) {
@@ -302,6 +347,137 @@ async function decryptUserPayload(storedText, userId, env) {
   }
 
   return storedText;
+}
+
+const MAX_D1_CHUNK_CHARS = 380000; // ~380 KB por query SQL (limite D1 = 1 MB)
+
+async function saveEncryptedPayloadToD1(
+  db,
+  userId,
+  nextRev,
+  encryptedPayload,
+  prefsStr,
+  nowIso,
+  todayDate,
+  sizeBytes
+) {
+  if (encryptedPayload.length <= MAX_D1_CHUNK_CHARS) {
+    await db
+      .prepare(
+        `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
+         VALUES (?1, 7, ?2, ?3, ?4, ?5)
+         ON CONFLICT(user_id) DO UPDATE SET
+           schema_version = 7,
+           revision = excluded.revision,
+           payload = excluded.payload,
+           preferences = excluded.preferences,
+           updated_at = excluded.updated_at`
+      )
+      .bind(userId, nextRev, encryptedPayload, prefsStr, nowIso)
+      .run();
+
+    await db
+      .prepare(`DELETE FROM user_database_chunks WHERE user_id = ?1`)
+      .bind(userId)
+      .run();
+
+    const backupId = `${userId}_${todayDate}`;
+    try {
+      await db
+        .prepare(
+          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(user_id, backup_date) DO UPDATE SET
+             revision = excluded.revision,
+             size_bytes = excluded.size_bytes,
+             payload = excluded.payload,
+             created_at = excluded.created_at`
+        )
+        .bind(
+          backupId,
+          userId,
+          todayDate,
+          nextRev,
+          sizeBytes,
+          encryptedPayload,
+          nowIso
+        )
+        .run();
+    } catch (_) {}
+  } else {
+    // Divide bases grandes (ex: 12 MB+) em blocos de 380 KB para respeitar o limite de 1 MB por query do D1
+    const chunks = [];
+    for (let i = 0; i < encryptedPayload.length; i += MAX_D1_CHUNK_CHARS) {
+      chunks.push(encryptedPayload.slice(i, i + MAX_D1_CHUNK_CHARS));
+    }
+
+    await db
+      .prepare(`DELETE FROM user_database_chunks WHERE user_id = ?1`)
+      .bind(userId)
+      .run();
+
+    for (let idx = 0; idx < chunks.length; idx++) {
+      await db
+        .prepare(
+          `INSERT INTO user_database_chunks (user_id, chunk_index, chunk_data)
+           VALUES (?1, ?2, ?3)`
+        )
+        .bind(userId, idx, chunks[idx])
+        .run();
+    }
+
+    const marker = `chunked:v2:${chunks.length}`;
+    await db
+      .prepare(
+        `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
+         VALUES (?1, 7, ?2, ?3, ?4, ?5)
+         ON CONFLICT(user_id) DO UPDATE SET
+           schema_version = 7,
+           revision = excluded.revision,
+           payload = excluded.payload,
+           preferences = excluded.preferences,
+           updated_at = excluded.updated_at`
+      )
+      .bind(userId, nextRev, marker, prefsStr, nowIso)
+      .run();
+
+    const backupId = `${userId}_${todayDate}`;
+    try {
+      await db
+        .prepare(
+          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(user_id, backup_date) DO UPDATE SET
+             revision = excluded.revision,
+             size_bytes = excluded.size_bytes,
+             payload = excluded.payload,
+             created_at = excluded.created_at`
+        )
+        .bind(backupId, userId, todayDate, nextRev, sizeBytes, marker, nowIso)
+        .run();
+    } catch (_) {}
+  }
+}
+
+async function loadEncryptedPayloadFromD1(db, userId, rawPayloadField) {
+  if (!rawPayloadField || !rawPayloadField.startsWith("chunked:v2:")) {
+    return rawPayloadField;
+  }
+  const totalChunks = Number(rawPayloadField.split(":")[2] || 0);
+  const parts = [];
+  for (let idx = 0; idx < totalChunks; idx++) {
+    const cRow = await db
+      .prepare(
+        `SELECT chunk_data FROM user_database_chunks WHERE user_id = ?1 AND chunk_index = ?2`
+      )
+      .bind(userId, idx)
+      .first();
+    if (!cRow || !cRow.chunk_data) {
+      throw new Error(`Bloco ${idx + 1}/${totalChunks} não localizado no D1.`);
+    }
+    parts.push(cRow.chunk_data);
+  }
+  return parts.join("");
 }
 
 function defaultOpenMoneyV7Payload() {
@@ -638,8 +814,24 @@ export async function onRequest(context) {
       .bind(userId)
       .first();
 
+    const wantBinary = url.searchParams.get("format") === "binary";
+
     if (!row) {
       const initial = defaultOpenMoneyV7Payload();
+      if (wantBinary) {
+        const gzipBytes = await compressGzip(JSON.stringify(initial));
+        return new Response(gzipBytes, {
+          status: 200,
+          headers: {
+            ...corsHeaders(origin),
+            "Content-Type": "application/octet-stream",
+            "X-OpenMoney-Compression": "gzip",
+            "X-OpenMoney-Revision": "1",
+            "X-OpenMoney-Updated-At": new Date().toISOString(),
+            "X-OpenMoney-Prefs": base64UrlEncode("{}"),
+          },
+        });
+      }
       return jsonResponse(
         {
           schemaVersion: 7,
@@ -653,7 +845,33 @@ export async function onRequest(context) {
       );
     }
 
-    const decryptedStr = await decryptUserPayload(row.payload, userId, env);
+    const fullEncrypted = await loadEncryptedPayloadFromD1(
+      env.DB,
+      userId,
+      row.payload
+    );
+
+    if (wantBinary) {
+      // Caminho binário ultrarrápido: retorna os bytes Gzip direto sem JSON.parse/decompress no Worker
+      const gzipBytes = await decryptUserPayloadToGzipBytes(
+        fullEncrypted,
+        userId,
+        env
+      );
+      return new Response(gzipBytes, {
+        status: 200,
+        headers: {
+          ...corsHeaders(origin),
+          "Content-Type": "application/octet-stream",
+          "X-OpenMoney-Compression": "gzip",
+          "X-OpenMoney-Revision": String(row.revision || 1),
+          "X-OpenMoney-Updated-At": String(row.updated_at || ""),
+          "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
+        },
+      });
+    }
+
+    const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
     let parsedPayload = {};
     try {
       parsedPayload = JSON.parse(decryptedStr);
@@ -680,19 +898,58 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 5. PUT /api/db (Gravação criptografada AES-256-GCM + Backup Diário Automático)
+  // 5. PUT /api/db (Gravação criptografada AES-256-GCM + Chunking D1 + Backup Diário)
   // ==========================================================================
   if (path === "/api/db" && request.method === "PUT") {
-    const body = await request.json();
-    const payloadObj = body.payload;
-    const prefsObj = body.preferences || {};
+    const contentType = (
+      request.headers.get("Content-Type") || ""
+    ).toLowerCase();
 
-    if (!payloadObj || typeof payloadObj !== "object") {
-      return jsonResponse(
-        { error: "Payload openmoney.json inválido." },
-        400,
-        origin
+    let encryptedPayload = "";
+    let prefsStr = "{}";
+    let sizeBytes = 0;
+
+    if (contentType.includes("application/octet-stream")) {
+      // Caminho binário Gzip pré-comprimido no cliente (zero CPU de JSON/Gzip no Worker!)
+      const rawBuf = await request.arrayBuffer();
+      const compressedBytes = new Uint8Array(rawBuf);
+      if (compressedBytes.byteLength === 0) {
+        return jsonResponse({ error: "Payload binário vazio." }, 400, origin);
+      }
+      sizeBytes = Number(
+        request.headers.get("X-OpenMoney-Raw-Size") ||
+          compressedBytes.byteLength
       );
+      const prefsHeader = request.headers.get("X-OpenMoney-Prefs") || "";
+      if (prefsHeader) {
+        try {
+          prefsStr = decoder.decode(base64UrlDecodeToBytes(prefsHeader));
+        } catch (_) {
+          prefsStr = "{}";
+        }
+      }
+      encryptedPayload = await encryptCompressedBytes(
+        compressedBytes,
+        userId,
+        env
+      );
+    } else {
+      // Compatibilidade JSON para payloads menores ou clientes legados
+      const body = await request.json();
+      const payloadObj = body.payload;
+      const prefsObj = body.preferences || {};
+
+      if (!payloadObj || typeof payloadObj !== "object") {
+        return jsonResponse(
+          { error: "Payload openmoney.json inválido." },
+          400,
+          origin
+        );
+      }
+      const plainJsonStr = JSON.stringify(payloadObj);
+      sizeBytes = encoder.encode(plainJsonStr).byteLength;
+      encryptedPayload = await encryptUserPayload(plainJsonStr, userId, env);
+      prefsStr = JSON.stringify(prefsObj);
     }
 
     const current = await env.DB.prepare(
@@ -706,57 +963,25 @@ export async function onRequest(context) {
     const nowIso = new Date().toISOString();
     const todayDate = nowIso.slice(0, 10); // YYYY-MM-DD
 
-    const plainJsonStr = JSON.stringify(payloadObj);
-    const sizeBytes = encoder.encode(plainJsonStr).byteLength;
-    const encryptedPayload = await encryptUserPayload(
-      plainJsonStr,
+    await saveEncryptedPayloadToD1(
+      env.DB,
       userId,
-      env
+      nextRev,
+      encryptedPayload,
+      prefsStr,
+      nowIso,
+      todayDate,
+      sizeBytes
     );
-    const prefsStr = JSON.stringify(prefsObj);
 
-    await env.DB.prepare(
-      `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
-       VALUES (?1, 7, ?2, ?3, ?4, ?5)
-       ON CONFLICT(user_id) DO UPDATE SET
-         schema_version = 7,
-         revision = excluded.revision,
-         payload = excluded.payload,
-         preferences = excluded.preferences,
-         updated_at = excluded.updated_at`
-    )
-      .bind(userId, nextRev, encryptedPayload, prefsStr, nowIso)
-      .run();
-
-    // Garante 1 snapshot diário na nuvem por usuário e retém os últimos 15 dias (não bloqueia resposta em caso de falha)
-    const backupId = `${userId}_${todayDate}`;
     try {
-      await env.DB.batch([
-        env.DB.prepare(
-          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-           ON CONFLICT(user_id, backup_date) DO UPDATE SET
-             revision = excluded.revision,
-             size_bytes = excluded.size_bytes,
-             payload = excluded.payload,
-             created_at = excluded.created_at`
-        ).bind(
-          backupId,
-          userId,
-          todayDate,
-          nextRev,
-          sizeBytes,
-          encryptedPayload,
-          nowIso
-        ),
-        env.DB.prepare(
-          `DELETE FROM user_database_backups
-           WHERE user_id = ?1 AND backup_date < date('now', '-15 days')`
-        ).bind(userId),
-      ]);
-    } catch (bErr) {
-      console.warn("Falha não-bloqueante ao registrar snapshot diário:", bErr);
-    }
+      await env.DB.prepare(
+        `DELETE FROM user_database_backups
+         WHERE user_id = ?1 AND backup_date < date('now', '-15 days')`
+      )
+        .bind(userId)
+        .run();
+    } catch (_) {}
 
     return jsonResponse(
       {
@@ -825,16 +1050,10 @@ export async function onRequest(context) {
       .bind(nextRev, backupRow.payload, nowIso, userId)
       .run();
 
-    const decryptedStr = await decryptUserPayload(
-      backupRow.payload,
-      userId,
-      env
-    );
     return jsonResponse(
       {
         ok: true,
         revision: nextRev,
-        payload: JSON.parse(decryptedStr),
       },
       200,
       origin

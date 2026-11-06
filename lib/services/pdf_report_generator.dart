@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/openmoney_models.dart';
 import '../services/native_file_picker.dart';
 import '../store/money_store.dart';
+import 'platform_io.dart';
 
 /// Construtor nativo de documentos PDF 1.4 vetoriais em página A4 (595.28 x 841.89 pt)
 class _SimpleA4PdfDocument {

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
 import '../services/audit_log_manager.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/importers_exporters.dart';
 import '../services/native_file_picker.dart';
+import '../services/platform_io.dart';
 
 enum NavModule {
   account,
@@ -239,7 +240,18 @@ class MoneyStore extends ChangeNotifier {
   }
 
   Map<String, dynamic> _readConfig() {
-    if (kIsWeb || _configFilePath.isEmpty) return {};
+    if (kIsWeb) {
+      final raw = webLocalStorageGet('openmoney_web_config');
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) return decoded;
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+      return {};
+    }
+    if (_configFilePath.isEmpty) return {};
     try {
       final f = File(_configFilePath);
       if (!f.existsSync()) return {};
@@ -251,34 +263,34 @@ class MoneyStore extends ChangeNotifier {
   }
 
   void _writeConfig(Map<String, dynamic> cfg) {
-    if (kIsWeb || _configFilePath.isEmpty) return;
+    if (kIsWeb) {
+      webLocalStorageSet('openmoney_web_config', jsonEncode(cfg));
+      return;
+    }
+    if (_configFilePath.isEmpty) return;
     try {
       Directory(_appSupportDirPath).createSync(recursive: true);
       File(_configFilePath).writeAsStringSync(jsonEncode(cfg), flush: true);
     } catch (_) {}
   }
 
-  void boot() {
-    if (kIsWeb) {
-      migrate();
-      syncRecs();
-      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
-      rebuildIndexes();
-      notifyListeners();
-      return;
-    }
+  Map<String, dynamic> exportPreferencesMap() {
+    return <String, dynamic>{
+      'reminderDaysAhead': reminderDaysAhead,
+      'isDarkMode': isDarkMode,
+      'fontScale': fontScale,
+      'isSidebarVisible': isSidebarVisible,
+      'sidebarShowFavorites': sidebarShowFavorites,
+      'sidebarShowActiveAccounts': sidebarShowActiveAccounts,
+      'sidebarShowInactiveAccounts': sidebarShowInactiveAccounts,
+      'sidebarShowPlanning': sidebarShowPlanning,
+      'sidebarShowModules': sidebarShowModules,
+      'hidePatrimonyBalance': hidePatrimonyBalance,
+      'lastUsedAccountId': _lastUsedAccountId,
+    };
+  }
 
-    try {
-      Directory(_appSupportDirPath).createSync(recursive: true);
-    } catch (_) {}
-
-    final cfg = _readConfig();
-    if (cfg['recentFiles'] is List) {
-      recentFiles = (cfg['recentFiles'] as List)
-          .whereType<Map>()
-          .map((m) => RecentFileItem.fromJson(Map<String, dynamic>.from(m)))
-          .toList();
-    }
+  void applyPreferencesMap(Map<String, dynamic> cfg) {
     if (cfg['reminderDaysAhead'] is num) {
       reminderDaysAhead =
           (cfg['reminderDaysAhead'] as num).toInt().clamp(1, 60);
@@ -321,6 +333,68 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
+    }
+  }
+
+  void saveCloudSessionToConfig() {
+    final cfg = _readConfig();
+    final updated = CloudSyncService.instance.exportSessionToConfig(cfg);
+    _writeConfig(updated);
+  }
+
+  void boot() {
+    final cfg = _readConfig();
+    applyPreferencesMap(cfg);
+    CloudSyncService.instance.loadSessionFromConfig(cfg);
+
+    if (kIsWeb) {
+      dbPath = CloudSyncService.instance.isAuthenticated
+          ? 'cloud://${CloudSyncService.instance.userEmail}'
+          : 'openmoney.json';
+      if (CloudSyncService.instance.isAuthenticated) {
+        // Carrega cache instantâneo do usuário enquanto busca a revisão mais recente na nuvem
+        final cachedRaw = webLocalStorageGet(
+          'openmoney_web_cache_${CloudSyncService.instance.userId}',
+        );
+        if (cachedRaw != null && cachedRaw.isNotEmpty) {
+          try {
+            final cached = jsonDecode(cachedRaw);
+            if (cached is Map<String, dynamic> &&
+                cached['payload'] is Map<String, dynamic>) {
+              db = Database.fromJson(cached['payload'] as Map<String, dynamic>);
+            }
+          } catch (_) {}
+        }
+        migrate();
+        syncRecs();
+        syncCards(
+            settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
+        rebuildIndexes();
+        if (db.accounts.isNotEmpty) {
+          selectedAccountId = db.accounts.first.id;
+        }
+        notifyListeners();
+        syncFromCloud();
+        return;
+      }
+
+      migrate();
+      syncRecs();
+      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
+      rebuildIndexes();
+      notifyListeners();
+      return;
+    }
+
+    try {
+      Directory(_appSupportDirPath).createSync(recursive: true);
+    } catch (_) {}
+
+    if (cfg['recentFiles'] is List) {
+      recentFiles = (cfg['recentFiles'] as List)
+          .whereType<Map>()
+          .map((m) => RecentFileItem.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
     }
 
     if (Platform.isIOS && cfg['bookmarkData'] is String) {
@@ -560,7 +634,7 @@ class MoneyStore extends ChangeNotifier {
   }
 
   bool openDatabaseFromPath(String path, {String? bookmarkData}) {
-    if (kIsWeb || path.isEmpty) return false;
+    if (path.isEmpty) return false;
     try {
       final f = File(path);
       if (!f.existsSync()) {
@@ -571,7 +645,9 @@ class MoneyStore extends ChangeNotifier {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       final loaded = Database.fromJson(decoded);
 
-      dbPath = path;
+      dbPath = kIsWeb && CloudSyncService.instance.isAuthenticated
+          ? 'cloud://${CloudSyncService.instance.userEmail}'
+          : path;
       db = loaded;
       migrate();
       syncRecs();
@@ -582,16 +658,20 @@ class MoneyStore extends ChangeNotifier {
         activeModule = NavModule.account;
       }
 
-      final cfg = _readConfig();
-      cfg['dbPath'] = path;
-      if (bookmarkData != null && bookmarkData.isNotEmpty) {
-        cfg['bookmarkData'] = bookmarkData;
+      if (!kIsWeb) {
+        final cfg = _readConfig();
+        cfg['dbPath'] = path;
+        if (bookmarkData != null && bookmarkData.isNotEmpty) {
+          cfg['bookmarkData'] = bookmarkData;
+        }
+        _writeConfig(cfg);
       }
-      _writeConfig(cfg);
 
       save(immediate: true);
-      registerRecentFile(path);
-      _setupFileWatcher(path);
+      if (!kIsWeb) {
+        registerRecentFile(path);
+        _setupFileWatcher(path);
+      }
       showMissingDatabasePrompt = false;
       showWelcomeScreen = false;
       notifyListeners();
@@ -602,8 +682,7 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
-  void loadFromJsonString(String rawJson, {String virtualPath = ''}) {
-    final decoded = jsonDecode(rawJson) as Map<String, dynamic>;
+  void loadFromJsonMap(Map<String, dynamic> decoded, {String virtualPath = ''}) {
     db = Database.fromJson(decoded);
     if (virtualPath.isNotEmpty) {
       dbPath = virtualPath;
@@ -614,8 +693,14 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      activeModule = NavModule.account;
     }
     notifyListeners();
+  }
+
+  void loadFromJsonString(String rawJson, {String virtualPath = ''}) {
+    final decoded = jsonDecode(rawJson) as Map<String, dynamic>;
+    loadFromJsonMap(decoded, virtualPath: virtualPath);
   }
 
   void createNewDatabaseAtPath(String path, {String? bookmarkData}) {
@@ -858,19 +943,143 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexesIfNeeded();
     notifyListeners();
 
-    if (kIsWeb || dbPath.isEmpty) return;
-
     _debounceSaveTimer?.cancel();
     _debounceSaveTimer = null;
 
+    if (kIsWeb) {
+      if (immediate) {
+        _performCloudPush();
+        return;
+      }
+      _debounceSaveTimer = Timer(const Duration(milliseconds: 350), () {
+        _performCloudPush();
+      });
+      return;
+    }
+
+    if (dbPath.isEmpty) return;
+
     if (immediate) {
       _performDiskWrite();
+      if (CloudSyncService.instance.isAuthenticated) {
+        _performCloudPush();
+      }
       return;
     }
 
     _debounceSaveTimer = Timer(const Duration(milliseconds: 350), () {
       _performDiskWrite();
+      if (CloudSyncService.instance.isAuthenticated) {
+        _performCloudPush();
+      }
     });
+  }
+
+  Future<void> _performCloudPush({bool force = false}) async {
+    await CloudSyncService.instance.pushDatabase(
+      payload: db.toJson(),
+      preferences: exportPreferencesMap(),
+      force: force,
+    );
+    saveCloudSessionToConfig();
+  }
+
+  /// Baixa a base openmoney.json da nuvem para a sessão atual e grava em disco (se Desktop/Mobile)
+  Future<bool> syncFromCloud() async {
+    if (!CloudSyncService.instance.isAuthenticated) return false;
+    final snap = await CloudSyncService.instance.fetchDatabase();
+    if (snap == null || snap.payload.isEmpty) return false;
+
+    try {
+      db = Database.fromJson(snap.payload);
+      if (snap.preferences.isNotEmpty) {
+        applyPreferencesMap(snap.preferences);
+        final cfg = _readConfig();
+        cfg.addAll(snap.preferences);
+        _writeConfig(cfg);
+      }
+      if (kIsWeb) {
+        dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+      }
+      migrate();
+      syncRecs();
+      syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
+      rebuildIndexes();
+      if (db.accounts.isNotEmpty &&
+          accById(selectedAccountId) == null) {
+        selectedAccountId = db.accounts.first.id;
+      }
+      if (!kIsWeb && dbPath.isNotEmpty) {
+        _performDiskWrite();
+      }
+      saveCloudSessionToConfig();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Envia a base atual em memória para a conta Cloud do usuário
+  Future<bool> pushLocalToCloud({bool force = false}) async {
+    if (!CloudSyncService.instance.isAuthenticated) return false;
+    final ok = await CloudSyncService.instance.pushDatabase(
+      payload: db.toJson(),
+      preferences: exportPreferencesMap(),
+      force: force,
+    );
+    if (ok) {
+      saveCloudSessionToConfig();
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  /// Exporta o arquivo openmoney.json (faz download direto no navegador quando na Web)
+  Future<String?> exportDatabaseFileWithPicker() async {
+    final defaultName = 'openmoney-${todayISO()}.json';
+    final savePath = await NativeFilePicker.saveFile(
+      title: 'Exportar Base de Dados OpenMoney (.json)',
+      defaultName: defaultName,
+      allowedExtensions: const ['json'],
+    );
+    if (savePath == null || savePath.isEmpty) return null;
+    final prettyJson = exportDatabaseJson(pretty: true);
+    File(savePath).writeAsStringSync(prettyJson, flush: true);
+    return savePath;
+  }
+
+  /// Importa um arquivo openmoney.json escolhido pelo usuário (no navegador Web ou Desktop/Mobile)
+  Future<bool> importDatabaseFileWithPicker() async {
+    final selectedPath = await NativeFilePicker.pickFile(
+      title: 'Importar Base de Dados OpenMoney (.json)',
+      allowedExtensions: const ['json'],
+    );
+    if (selectedPath == null || selectedPath.isEmpty) return false;
+    try {
+      final raw = await File(selectedPath).readAsString();
+      if (raw.trim().isEmpty) return false;
+      loadFromJsonString(
+        raw,
+        virtualPath: kIsWeb
+            ? (CloudSyncService.instance.isAuthenticated
+                ? 'cloud://${CloudSyncService.instance.userEmail}'
+                : 'openmoney.json')
+            : selectedPath,
+      );
+      if (!kIsWeb && dbPath.isNotEmpty) {
+        _performDiskWrite();
+      }
+      if (CloudSyncService.instance.isAuthenticated) {
+        await pushLocalToCloud(force: true);
+      } else {
+        save(immediate: true);
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[OpenMoney] Erro ao importar base: $e');
+      return false;
+    }
   }
 
   void _performDiskWrite() {

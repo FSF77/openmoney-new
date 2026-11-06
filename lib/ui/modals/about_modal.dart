@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../services/platform_io.dart';
 import '../../services/update_service.dart';
 import '../theme/liquid_glass.dart';
 
@@ -25,16 +25,7 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
   const _AboutOpenMoneyDialog({required this.colors});
 
   void _openUrl(String url) {
-    if (kIsWeb) return;
-    try {
-      if (Platform.isMacOS) {
-        Process.run('open', [url]);
-      } else if (Platform.isWindows) {
-        Process.run('cmd', ['/c', 'start', '', url]);
-      } else if (Platform.isLinux) {
-        Process.run('xdg-open', [url]);
-      }
-    } catch (_) {}
+    webOpenExternalUrl(url);
   }
 
   String _platformName() {

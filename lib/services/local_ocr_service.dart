@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/services.dart';
+import 'platform_io.dart';
 
 /// Serviço responsável por extrair texto de imagens e documentos PDF localmente,
 /// utilizando os recursos nativos do sistema operacional (macOS Vision e Windows Media OCR / PowerShell).

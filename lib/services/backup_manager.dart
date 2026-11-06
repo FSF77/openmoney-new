@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
+import 'platform_io.dart';
 
 class BackupFileInfo {
   final String path;

@@ -77,6 +77,15 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "🔨 Compilando aplicativo macOS em modo Release..."
 flutter build macos --release
 
+# 1b. Compilação da versão Web na MESMA versão e build
+echo "🌐 Compilando aplicativo Web (Cloudflare Pages) na versão v${VERSION}+${BUILD_NUM}..."
+flutter build web --release
+
+# Copia o build Web para web-dist/ para deploy automático via GitHub -> Cloudflare Pages (sem precisar de npx)
+rm -rf "${ROOT_DIR}/web-dist"
+mkdir -p "${ROOT_DIR}/web-dist"
+cp -R "${ROOT_DIR}/build/web/"* "${ROOT_DIR}/web-dist/"
+
 APP_PATH="${ROOT_DIR}/build/macos/Build/Products/Release/openmoney.app"
 if [ ! -d "${APP_PATH}" ]; then
     APP_PATH="${ROOT_DIR}/build/macos/Build/Products/Release/OpenMoney.app"
@@ -146,6 +155,13 @@ data["macos"]["releaseDate"] = "${RELEASE_DATE}"
 data["macos"]["downloadUrl"] = "${DOWNLOAD_URL}"
 data["macos"]["sha256"] = "${SHA256}"
 data["macos"]["sizeMb"] = int("${FILE_SIZE_MB}")
+
+if "web" not in data:
+    data["web"] = {}
+
+data["web"]["version"] = "${VERSION}"
+data["web"]["build"] = int("${BUILD_NUM}")
+data["web"]["releaseDate"] = "${RELEASE_DATE}"
 
 with open(version_file, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -241,17 +257,23 @@ chmod +x "${ROOT_DIR}/install.sh"
 
 # 4. Commit e Push no próprio repositório openmoney-new
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add .gitignore scripts/ lib/ test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
+git add .gitignore scripts/ lib/ web/ web-dist/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else
-    git commit -m "Release macOS v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
+    git commit -m "Release macOS & Web v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
     git tag -f "v${VERSION}"
     echo "📤 Enviando release para o GitHub..."
     git push origin main "v${VERSION}" --force
 fi
 
+# 5. Deploy automático na Cloudflare Pages (se wrangler estiver configurado)
+if command -v npx >/dev/null 2>&1 && ! grep -q "SUBSTITUIR_PELO_ID_DO_SEU_D1_NA_CLOUDFLARE" "${ROOT_DIR}/wrangler.toml" 2>/dev/null; then
+    echo "☁️ Publicando versão Web v${VERSION}+${BUILD_NUM} na Cloudflare Pages..."
+    npx wrangler pages deploy "${ROOT_DIR}/build/web" --project-name=openmoney || echo "⚠️ Deploy direto via Wrangler ignorado (ou gerenciado via GitHub Integration na Cloudflare)."
+fi
+
 echo ""
-echo "🎉 Versão macOS v${VERSION} publicada com sucesso no repositório oficial!"
+echo "🎉 Versão macOS & Web v${VERSION} (Build ${BUILD_NUM}) publicada com sucesso!"
 echo "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
-echo "📥 Download: ${DOWNLOAD_URL}"
+echo "📥 Download macOS: ${DOWNLOAD_URL}"
