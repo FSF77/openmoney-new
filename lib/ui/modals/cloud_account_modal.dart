@@ -47,7 +47,10 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   @override
   void initState() {
     super.initState();
-    _serverCtrl = TextEditingController(text: _cloud.apiBaseUrl);
+    final initialServer = _cloud.apiBaseUrl.isNotEmpty
+        ? _cloud.apiBaseUrl
+        : CloudSyncService.defaultApiBaseUrl;
+    _serverCtrl = TextEditingController(text: initialServer);
     if (_cloud.isAuthenticated) {
       _loadCloudBackups();
     }
@@ -1392,8 +1395,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           _buildInput(
             colors: colors,
             controller: _serverCtrl,
-            label:
-                'URL do seu OpenMoney na Cloudflare (ex: https://openmoney.suaempresa.com.br)',
+            label: 'URL do Servidor Cloud',
           ),
           const SizedBox(height: 12),
         ],

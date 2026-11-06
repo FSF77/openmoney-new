@@ -106,6 +106,7 @@ class CloudSyncService extends ChangeNotifier {
   CloudSyncService._();
   static final CloudSyncService instance = CloudSyncService._();
 
+  static const String defaultApiBaseUrl = 'https://openmoney.app.br';
   static const String _kWebSessionKey = 'openmoney_cloud_session_v1';
   static const String _kWebSavedAccountsKey =
       'openmoney_cloud_saved_accounts_v1';
@@ -124,7 +125,8 @@ class CloudSyncService extends ChangeNotifier {
   Future<bool>? _inFlightPush;
   final List<SavedCloudAccount> _savedAccounts = <SavedCloudAccount>[];
 
-  String get apiBaseUrl => _apiBaseUrl;
+  String get apiBaseUrl =>
+      _apiBaseUrl.isNotEmpty ? _apiBaseUrl : (kIsWeb ? '' : defaultApiBaseUrl);
   String get authToken => _authToken;
   String get userId => _userId;
   String get userEmail => _userEmail;
@@ -217,7 +219,10 @@ class CloudSyncService extends ChangeNotifier {
         );
     }
 
-    _apiBaseUrl = (source['cloudApiBaseUrl'] as String?)?.trim() ?? '';
+    final rawUrl = (source['cloudApiBaseUrl'] as String?)?.trim();
+    _apiBaseUrl = (rawUrl != null && rawUrl.isNotEmpty)
+        ? rawUrl
+        : (kIsWeb ? '' : defaultApiBaseUrl);
     _authToken = (source['cloudAuthToken'] as String?)?.trim() ?? '';
     _userId = (source['cloudUserId'] as String?)?.trim() ?? '';
     _userEmail = (source['cloudUserEmail'] as String?)?.trim() ?? '';
