@@ -19,7 +19,6 @@ class AuthView extends StatefulWidget {
 class _AuthViewState extends State<AuthView> {
   bool _isRegisterMode = false;
   bool _obscurePassword = true;
-  bool _showAdvancedServer = false;
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic>? _importedInitialJson;
@@ -221,7 +220,7 @@ class _AuthViewState extends State<AuthView> {
                               ),
                             ),
                             Text(
-                              'v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build}) • Base Isolada Criptografada',
+                              'v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: colors.textSecondary,
@@ -574,74 +573,42 @@ class _AuthViewState extends State<AuthView> {
 
                     const SizedBox(height: 14),
 
-                    // Configuração opcional de servidor e modo local
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => setState(
-                            () => _showAdvancedServer = !_showAdvancedServer,
-                          ),
-                          icon: Icon(
-                            Icons.dns_outlined,
-                            size: 14,
+                    // Modo local / offline neste navegador
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          CloudSyncService.instance
+                              .enableWebOfflineGuestMode();
+                          final rawGuest =
+                              webLocalStorageGet('openmoney_web_guest_db');
+                          if (rawGuest != null && rawGuest.isNotEmpty) {
+                            try {
+                              final decoded = jsonDecode(rawGuest);
+                              if (decoded is Map<String, dynamic> &&
+                                  decoded['payload'] is Map<String, dynamic>) {
+                                widget.store.loadFromJsonString(
+                                  jsonEncode(decoded['payload']),
+                                  virtualPath: 'local://navegador',
+                                );
+                              }
+                            } catch (_) {}
+                          }
+                          widget.store.save();
+                        },
+                        icon: Icon(
+                          Icons.computer_outlined,
+                          size: 14,
+                          color: colors.textSecondary,
+                        ),
+                        label: Text(
+                          'Usar Offline neste Navegador',
+                          style: TextStyle(
+                            fontSize: 11.5,
                             color: colors.textSecondary,
                           ),
-                          label: Text(
-                            'Servidor Cloud',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: colors.textSecondary,
-                            ),
-                          ),
                         ),
-                        TextButton.icon(
-                          onPressed: () {
-                            CloudSyncService.instance
-                                .enableWebOfflineGuestMode();
-                            final rawGuest =
-                                webLocalStorageGet('openmoney_web_guest_db');
-                            if (rawGuest != null && rawGuest.isNotEmpty) {
-                              try {
-                                final decoded = jsonDecode(rawGuest);
-                                if (decoded is Map<String, dynamic> &&
-                                    decoded['payload']
-                                        is Map<String, dynamic>) {
-                                  widget.store.loadFromJsonString(
-                                    jsonEncode(decoded['payload']),
-                                    virtualPath: 'local://navegador',
-                                  );
-                                }
-                              } catch (_) {}
-                            }
-                            widget.store.save();
-                          },
-                          icon: Icon(
-                            Icons.computer_outlined,
-                            size: 14,
-                            color: colors.textSecondary,
-                          ),
-                          label: Text(
-                            'Usar Offline neste Navegador',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    if (_showAdvancedServer) ...[
-                      const SizedBox(height: 8),
-                      _buildTextField(
-                        colors: colors,
-                        controller: _serverUrlCtrl,
-                        label: 'URL da API Cloudflare Pages (Opcional)',
-                        hint: 'Em branco usa o próprio domínio atual',
-                        icon: Icons.cloud_outlined,
                       ),
-                    ],
+                    ),
 
                     const SizedBox(height: 12),
                     Divider(color: colors.borderGlass),
@@ -657,7 +624,9 @@ class _AuthViewState extends State<AuthView> {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            'Criptografia AES-256-GCM + PBKDF2 • Base openmoney.json 100% isolada por usuário',
+                            'Criptografia AES-256-GCM + PBKDF2',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
