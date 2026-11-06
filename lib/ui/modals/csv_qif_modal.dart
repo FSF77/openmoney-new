@@ -368,11 +368,10 @@ Future<void> showDatabaseFileManagerModal(
           backgroundColor: colors.bgSecondary,
           title: const Row(
             children: [
-              Icon(Icons.cloud_sync_outlined, color: Colors.lightBlueAccent),
+              Icon(Icons.folder_open_outlined, color: Colors.lightBlueAccent),
               SizedBox(width: 10),
               Expanded(
-                child: Text(
-                    'Base de Dados & Sincronização (iCloud Drive / OneDrive)'),
+                child: Text('Base de Dados Local'),
               ),
             ],
           ),

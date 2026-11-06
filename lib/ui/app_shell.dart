@@ -184,13 +184,21 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Sincronizar Base (.json)',
-                          icon: const Icon(Icons.cloud_sync_outlined),
-                          onPressed: () => showDatabaseFileManagerModal(
-                            context,
-                            widget.store,
-                          ),
+                        ListenableBuilder(
+                          listenable: CloudSyncService.instance,
+                          builder: (context, _) {
+                            if (CloudSyncService.instance.isAuthenticated) {
+                              return const SizedBox.shrink();
+                            }
+                            return IconButton(
+                              tooltip: 'Base de Dados Local',
+                              icon: const Icon(Icons.folder_open_outlined),
+                              onPressed: () => showDatabaseFileManagerModal(
+                                context,
+                                widget.store,
+                              ),
+                            );
+                          },
                         ),
                         IconButton(
                           tooltip: 'Alternar Tema Claro / Escuro',
@@ -465,14 +473,22 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Base de Dados (iCloud / OneDrive)',
-                        icon: const Icon(Icons.folder_open_outlined, size: 18),
-                        onPressed: () => showDatabaseFileManagerModal(
-                          context,
-                          widget.store,
-                        ),
+                      ListenableBuilder(
+                        listenable: CloudSyncService.instance,
+                        builder: (context, _) {
+                          if (CloudSyncService.instance.isAuthenticated) {
+                            return const SizedBox.shrink();
+                          }
+                          return IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Base de Dados Local',
+                            icon: const Icon(Icons.folder_open_outlined, size: 18),
+                            onPressed: () => showDatabaseFileManagerModal(
+                              context,
+                              widget.store,
+                            ),
+                          );
+                        },
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
@@ -1045,47 +1061,56 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           listenable: CloudSyncService.instance,
           builder: (context, _) {
             final cloud = CloudSyncService.instance;
-            return InkWell(
-              onTap: () => showCloudAccountModal(context, widget.store),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: colors.borderGlass)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      cloud.isAuthenticated
-                          ? Icons.cloud_done_rounded
-                          : Icons.cloud_outlined,
-                      size: 15,
-                      color: cloud.isAuthenticated
-                          ? colors.accentGreen
-                          : colors.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
+            final labelText = cloud.isAuthenticated
+                ? '${cloud.userEmail} • ${cloud.statusLabel} • v${OpenMoneyVersion.version}'
+                : 'Sincronização Cloud • v${OpenMoneyVersion.version}';
+            return Tooltip(
+              message: cloud.isAuthenticated
+                  ? '${cloud.userEmail} • ${cloud.statusLabel} • v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})'
+                  : 'Sincronização Cloud • v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
+              child: InkWell(
+                onTap: () => showCloudAccountModal(context, widget.store),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: colors.borderGlass)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
                         cloud.isAuthenticated
-                            ? '${cloud.userEmail} • ${cloud.statusLabel}'
-                            : 'Sincronização Cloud',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: cloud.isAuthenticated
-                              ? colors.textPrimary
-                              : colors.textSecondary,
+                            ? Icons.cloud_done_rounded
+                            : Icons.cloud_outlined,
+                        size: 15,
+                        color: cloud.isAuthenticated
+                            ? colors.accentGreen
+                            : colors.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          labelText,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: cloud.isAuthenticated
+                                ? colors.textPrimary
+                                : colors.textSecondary,
+                          ),
                         ),
                       ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 15,
-                      color: colors.textSecondary,
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 15,
+                        color: colors.textSecondary,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
