@@ -104059,37 +104059,37 @@ case 3:return"Sincronizando..."
 case 2:return"Sincronizado (r"+s.f+")"
 case 4:return"Conflito de Revis\xe3o"
 case 5:return"Offline / Pendente"}},
-aDf(a){var s,r,q,p,o,n,m,l=this,k=null,j=a,i=A.NF("openmoney_cloud_session_v1")
-if(i!=null&&i.length!==0)try{s=B.aL.kV(i,k)
-if(t.a.b(s))j=s}catch(p){}r=A.NF("openmoney_cloud_saved_accounts_v1")
-if(r!=null&&r.length!==0)try{q=B.aL.kV(r,k)
-if(t.j.b(q)){o=l.as
+aDf(a){var s,r,q,p,o,n,m,l,k=this,j=null,i=a,h=A.NF("openmoney_cloud_session_v1")
+if(h!=null&&h.length!==0)try{s=B.aL.kV(h,j)
+if(t.a.b(s))i=s}catch(p){}r=A.NF("openmoney_cloud_saved_accounts_v1")
+if(r!=null&&r.length!==0)try{q=B.aL.kV(r,j)
+if(t.j.b(q)){o=k.as
 B.c.a7(o)
 n=J.Bc(q,t.f)
 n=A.j6(n,new A.aa6(),n.$ti.h("r.E"),t.bB)
-B.c.F(o,new A.a0(n,new A.aa7(),A.k(n).h("a0<r.E>")))}}catch(p){}o=A.bg(J.cR(j,"cloudApiBaseUrl"))
-o=o==null?k:B.b.T(o)
-l.a=o==null?"":o
-o=A.bg(J.cR(j,"cloudAuthToken"))
-o=o==null?k:B.b.T(o)
-l.b=o==null?"":o
-o=A.bg(J.cR(j,"cloudUserId"))
-o=o==null?k:B.b.T(o)
-l.c=o==null?"":o
-o=A.bg(J.cR(j,"cloudUserEmail"))
-o=o==null?k:B.b.T(o)
-l.d=o==null?"":o
-o=A.bg(J.cR(j,"cloudUserName"))
-o=o==null?k:B.b.T(o)
-l.e=o==null?"":o
-o=A.er(J.cR(j,"cloudRevision"))
-o=o==null?k:B.d.cR(o)
-l.f=o==null?0:o
-m=A.bg(J.cR(j,"cloudLastSyncedAt"))
-if(m!=null&&m.length!==0)l.r=A.b12(m)
-if(l.b.length!==0&&l.c.length!==0){l.x=B.d7
-l.xa()}else l.x=B.hH
-l.N()},
+B.c.F(o,new A.a0(n,new A.aa7(),A.k(n).h("a0<r.E>")))}}catch(p){}o=A.bg(J.cR(i,"cloudApiBaseUrl"))
+m=o==null?j:B.b.T(o)
+k.a=m!=null&&m.length!==0?m:""
+o=A.bg(J.cR(i,"cloudAuthToken"))
+o=o==null?j:B.b.T(o)
+k.b=o==null?"":o
+o=A.bg(J.cR(i,"cloudUserId"))
+o=o==null?j:B.b.T(o)
+k.c=o==null?"":o
+o=A.bg(J.cR(i,"cloudUserEmail"))
+o=o==null?j:B.b.T(o)
+k.d=o==null?"":o
+o=A.bg(J.cR(i,"cloudUserName"))
+o=o==null?j:B.b.T(o)
+k.e=o==null?"":o
+o=A.er(J.cR(i,"cloudRevision"))
+o=o==null?j:B.d.cR(o)
+k.f=o==null?0:o
+l=A.bg(J.cR(i,"cloudLastSyncedAt"))
+if(l!=null&&l.length!==0)k.r=A.b12(l)
+if(k.b.length!==0&&k.c.length!==0){k.x=B.d7
+k.xa()}else k.x=B.hH
+k.N()},
 xa(){var s,r,q,p,o,n,m,l,k=this,j=k.b
 if(!(j.length!==0&&k.c.length!==0))return
 s=k.c
@@ -109605,14 +109605,17 @@ A.v4.prototype={
 a8(){var s=$.es(),r=$.a9()
 return new A.IB(s,B.oN,new A.bD(B.aU,r),new A.bD(B.aU,r),new A.bD(B.aU,r),new A.bD(B.aU,r),new A.bD(B.aU,r),new A.bD(B.aU,r))}}
 A.IB.prototype={
-ah(){var s,r,q,p=this
-p.aA()
-s=p.d
+ah(){var s,r,q,p,o=this
+o.aA()
+s=o.d
 r=s.a
-q=$.a9()
-p.at!==$&&A.aw()
-p.at=new A.bD(new A.bx(r,B.ao,B.a6),q)
-if(s.b.length!==0&&s.c.length!==0)p.jR()},
+q=r.length!==0
+if((q?r:"").length!==0)p=q?r:""
+else p="https://openmoney.app.br"
+r=$.a9()
+o.at!==$&&A.aw()
+o.at=new A.bD(new A.bx(p,B.ao,B.a6),r)
+if(s.b.length!==0&&s.c.length!==0)o.jR()},
 m(){var s,r=this,q=r.at
 q===$&&A.a()
 s=q.E$=$.a9()
@@ -109718,6 +109721,7 @@ if(d.length!==0&&e.c.length!==0){o=e.c
 n=e.d
 m=e.e
 l=e.a
+l=l.length!==0?l:""
 k=e.f
 j=e.r
 i=new A.hK(o,n,m,d,l,k,j==null?null:j.G2())}else i=null
@@ -113265,6 +113269,7 @@ A.Ii.prototype={
 ah(){var s,r
 this.aA()
 s=$.es().a
+s=s.length!==0?s:""
 r=$.a9()
 this.at!==$&&A.aw()
 this.at=new A.bD(new A.bx(s,B.ao,B.a6),r)},
