@@ -311,57 +311,79 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                 ? 'Auditoria: ${widget.categoryTypeFilter}'
                 : 'Auditoria de Lançamentos'));
 
+    final screenSize = MediaQuery.sizeOf(context);
+    final isMobile = screenSize.width < 720;
+    final dialogWidth =
+        isMobile ? (screenSize.width - 20).clamp(320.0, 780.0) : 780.0;
+    final dialogHeight =
+        isMobile ? (screenSize.height - 24).clamp(440.0, 720.0) : 560.0;
+
     return Dialog(
       backgroundColor: colors.bgSecondary,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 24,
+        vertical: isMobile ? 10 : 24,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colors.borderGlass),
       ),
       child: SizedBox(
-        width: 780,
-        height: 560,
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isMobile ? 12 : 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
-                children: [
-                  Icon(Icons.manage_search, color: colors.accent, size: 24),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayTitle,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                            color: colors.textPrimary,
+              if (isMobile) ...[
+                Row(
+                  children: [
+                    Icon(Icons.manage_search, color: colors.accent, size: 22),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayTitle,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: colors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          'Clique em qualquer lançamento abaixo para abrir ou editar',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: colors.textSecondary,
+                          Text(
+                            'Clique no lançamento para editar',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: colors.textSecondary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.tonalIcon(
-                    icon: const Icon(Icons.download, size: 16),
-                    label: const Text('Exportar CSV'),
-                    onPressed: () => _exportCsv(txs),
-                  ),
-                  const SizedBox(width: 8),
-                  // Botões de escopo temporal
-                  Container(
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Exportar CSV',
+                      icon: const Icon(Icons.download, size: 18),
+                      onPressed: () => _exportCsv(txs),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Fechar',
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: colors.borderGlass),
@@ -370,14 +392,14 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildScopeButton(
-                          label: 'Todo o Histórico',
+                          label: 'Histórico',
                           scope: CategoryDrillDownScope.all,
                           colors: colors,
                           isFirst: true,
                           isLast: false,
                         ),
                         _buildScopeButton(
-                          label: 'Ano $effectiveYear',
+                          label: effectiveYear,
                           scope: CategoryDrillDownScope.year,
                           colors: colors,
                           isFirst: false,
@@ -394,69 +416,197 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 14),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Icon(Icons.manage_search, color: colors.accent, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayTitle,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: colors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Clique em qualquer lançamento abaixo para abrir ou editar',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.download, size: 16),
+                      label: const Text('Exportar CSV'),
+                      onPressed: () => _exportCsv(txs),
+                    ),
+                    const SizedBox(width: 8),
+                    // Botões de escopo temporal
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildScopeButton(
+                            label: 'Todo o Histórico',
+                            scope: CategoryDrillDownScope.all,
+                            colors: colors,
+                            isFirst: true,
+                            isLast: false,
+                          ),
+                          _buildScopeButton(
+                            label: 'Ano $effectiveYear',
+                            scope: CategoryDrillDownScope.year,
+                            colors: colors,
+                            isFirst: false,
+                            isLast: widget.isAnnual,
+                          ),
+                          if (!widget.isAnnual)
+                            _buildScopeButton(
+                              label: fmtMonth(monthYM),
+                              scope: CategoryDrillDownScope.month,
+                              colors: colors,
+                              isFirst: false,
+                              isLast: true,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              SizedBox(height: isMobile ? 8 : 14),
               // Barra de Pesquisa e Ordenação
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText:
-                            'Pesquisar nos resultados (favorecido, nota, conta)...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
+              if (isMobile) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Pesquisar...',
+                            hintStyle: const TextStyle(fontSize: 12),
+                            prefixIcon: const Icon(Icons.search, size: 16),
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                          ),
+                          onChanged: (v) =>
+                              setState(() => _searchQuery = v.trim()),
                         ),
                       ),
-                      onChanged: (v) =>
-                          setState(() => _searchQuery = v.trim()),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Ordenar:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 6),
-                  DropdownButton<String>(
-                    value: _sortField,
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(value: 'date', child: Text('Data')),
-                      DropdownMenuItem(value: 'payee', child: Text('Nome')),
-                      DropdownMenuItem(value: 'amount', child: Text('Valor')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _sortField = v);
-                    },
-                  ),
-                  IconButton(
-                    tooltip:
-                        _sortAsc ? 'Ordem Crescente' : 'Ordem Decrescente',
-                    icon: Icon(
-                      _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
-                      size: 18,
+                    const SizedBox(width: 8),
+                    DropdownButton<String>(
+                      value: _sortField,
+                      underline: const SizedBox(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'date', child: Text('Data')),
+                        DropdownMenuItem(value: 'payee', child: Text('Nome')),
+                        DropdownMenuItem(value: 'amount', child: Text('Valor')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _sortField = v);
+                      },
                     ),
-                    onPressed: () => setState(() => _sortAsc = !_sortAsc),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip:
+                          _sortAsc ? 'Ordem Crescente' : 'Ordem Decrescente',
+                      icon: Icon(
+                        _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 16,
+                      ),
+                      onPressed: () => setState(() => _sortAsc = !_sortAsc),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText:
+                              'Pesquisar nos resultados (favorecido, nota, conta)...',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                        ),
+                        onChanged: (v) =>
+                            setState(() => _searchQuery = v.trim()),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Ordenar:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 6),
+                    DropdownButton<String>(
+                      value: _sortField,
+                      underline: const SizedBox(),
+                      items: const [
+                        DropdownMenuItem(value: 'date', child: Text('Data')),
+                        DropdownMenuItem(value: 'payee', child: Text('Nome')),
+                        DropdownMenuItem(value: 'amount', child: Text('Valor')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _sortField = v);
+                      },
+                    ),
+                    IconButton(
+                      tooltip:
+                          _sortAsc ? 'Ordem Crescente' : 'Ordem Decrescente',
+                      icon: Icon(
+                        _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 18,
+                      ),
+                      onPressed: () => setState(() => _sortAsc = !_sortAsc),
+                    ),
+                  ],
+                ),
+              ],
+              SizedBox(height: isMobile ? 6 : 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${txs.length} lançamento(s) encontrado(s)',
+                    '${txs.length} lançamento(s)',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
+                      fontSize: isMobile ? 11.5 : 12.5,
                       color: colors.textSecondary,
                     ),
                   ),
@@ -464,7 +614,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                     'Total: ${brl(totalCents)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      fontSize: 13.5,
+                      fontSize: isMobile ? 12 : 13.5,
                       color: totalCents >= 0 ? colors.income : colors.expense,
                     ),
                   ),

@@ -156,11 +156,18 @@ class BudgetView extends StatelessWidget {
               children: [
                 InkWell(
                   onTap: () => _editBudget(context, top.path, topBudget),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 10,
+                      runSpacing: 4,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               top.name,
@@ -169,26 +176,24 @@ class BudgetView extends StatelessWidget {
                                 fontSize: 14,
                               ),
                             ),
-                            if (isOver) ...[
-                              const SizedBox(width: 8),
+                            if (isOver)
                               StatusBadge(
                                 text: 'ACIMA DO LIMITE',
                                 color: colors.expense,
                               ),
-                            ],
                           ],
                         ),
-                      ),
-                      Text(
-                        'Realizado: ${brl(effectiveTopSpent)} / Limite: ${brl(effectiveTopBudget)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: isOver ? colors.expense : colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                        Text(
+                          'Realizado: ${brl(effectiveTopSpent)} / Limite: ${brl(effectiveTopBudget)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                            color: isOver ? colors.expense : colors.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -222,42 +227,50 @@ class BudgetView extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      '↳ ${sub.name}',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: colors.textSecondary,
+                            SizedBox(
+                              width: double.infinity,
+                              child: Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        '↳ ${sub.name}',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: colors.textSecondary,
+                                        ),
                                       ),
-                                    ),
-                                    if (subOver) ...[
-                                      const SizedBox(width: 6),
-                                      StatusBadge(
-                                        text: 'ACIMA DO LIMITE',
-                                        color: colors.expense,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                Text(
-                                  '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: subOver
-                                        ? colors.expense
-                                        : colors.textSecondary,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
+                                      if (subOver)
+                                        StatusBadge(
+                                          text: 'ACIMA DO LIMITE',
+                                          color: colors.expense,
+                                        ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                  Text(
+                                    '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: subOver
+                                          ? colors.expense
+                                          : colors.textSecondary,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 5),
                             ClipRRect(
@@ -285,24 +298,31 @@ class BudgetView extends StatelessWidget {
         }),
         const SizedBox(height: 8),
         GlassCard(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Consolidado do Mês (Limite Total vs. Realizado)',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-              ),
-              Text(
-                'Realizado: ${brl(totalSpent)} • Limite: ${brl(totalPlanned)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: totalPlanned > 0 && totalSpent > totalPlanned
-                      ? colors.expense
-                      : colors.income,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                const Text(
+                  'Consolidado do Mês (Limite Total vs. Realizado)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                 ),
-              ),
-            ],
+                Text(
+                  'Realizado: ${brl(totalSpent)} • Limite: ${brl(totalPlanned)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                    color: totalPlanned > 0 && totalSpent > totalPlanned
+                        ? colors.expense
+                        : colors.income,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],

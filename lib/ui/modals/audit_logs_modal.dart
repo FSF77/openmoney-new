@@ -110,28 +110,35 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
     final filtered = _filteredEntries;
+    final isMobile = MediaQuery.sizeOf(context).width < 680;
 
     return Dialog(
       backgroundColor: colors.bgSecondary,
       surfaceTintColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 10 : 24,
+        vertical: isMobile ? 12 : 24,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colors.borderGlass, width: 1),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
+        constraints: BoxConstraints(
           maxWidth: 780,
           maxHeight: 640,
-          minWidth: 540,
-          minHeight: 440,
+          minWidth: isMobile ? 300 : 540,
+          minHeight: isMobile ? 380 : 440,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header estilo LiquidGlass / OpenMoney
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 14 : 20,
+                vertical: isMobile ? 12 : 16,
+              ),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF162032) : const Color(0xFFF1F5F9),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -142,19 +149,19 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
               child: Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: isMobile ? 34 : 40,
+                    height: isMobile ? 34 : 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.amber.withValues(alpha: 0.15),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.history_edu_outlined,
                       color: Colors.amber,
-                      size: 22,
+                      size: isMobile ? 18 : 22,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: isMobile ? 10 : 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,7 +169,7 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                         Text(
                           'Logs de Auditoria e Alterações',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: isMobile ? 14 : 16,
                             fontWeight: FontWeight.bold,
                             color: colors.textPrimary,
                           ),
@@ -171,7 +178,7 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                         Text(
                           'Histórico detalhado mantido pelos últimos 30 dias (${widget.store.logFilePath.split(RegExp(r"[/\\]")).last})',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isMobile ? 11 : 12,
                             color: colors.textSecondary,
                           ),
                           maxLines: 1,
@@ -181,65 +188,130 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                     ),
                   ),
                   IconButton(
+                    visualDensity: VisualDensity.compact,
                     tooltip: 'Recarregar logs',
                     icon: const Icon(Icons.refresh, size: 20),
                     onPressed: _loadLogs,
                   ),
+                  if (isMobile)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Fechar',
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                 ],
               ),
             ),
 
             // Barra de Filtros e Busca
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: SizedBox(
-                      height: 36,
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Filtrar por texto, descrição ou valor...',
-                          hintStyle: TextStyle(fontSize: 12, color: colors.textMuted),
-                          prefixIcon: Icon(Icons.search, size: 16, color: colors.textMuted),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 14),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.borderGlass),
-                          ),
-                          filled: true,
-                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF),
-                        ),
-                        style: const TextStyle(fontSize: 13),
-                        onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Segmented filters
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      _buildFilterChip('all', 'Todos', colors),
-                      _buildFilterChip('transaction', 'Lançamentos', colors),
-                      _buildFilterChip('account', 'Contas', colors),
-                      _buildFilterChip('category', 'Categorias', colors),
-                      _buildFilterChip('delete', 'Exclusões', colors),
-                    ],
-                  ),
-                ],
+              padding: EdgeInsets.fromLTRB(
+                isMobile ? 10 : 16,
+                isMobile ? 8 : 12,
+                isMobile ? 10 : 16,
+                isMobile ? 6 : 8,
               ),
+              child: isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          height: 34,
+                          child: TextField(
+                            controller: _searchCtrl,
+                            decoration: InputDecoration(
+                              hintText: 'Filtrar por texto, descrição ou valor...',
+                              hintStyle: TextStyle(fontSize: 11.5, color: colors.textMuted),
+                              prefixIcon: Icon(Icons.search, size: 16, color: colors.textMuted),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 14),
+                                      onPressed: () {
+                                        _searchCtrl.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: colors.borderGlass),
+                              ),
+                              filled: true,
+                              fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF),
+                            ),
+                            style: const TextStyle(fontSize: 12.5),
+                            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildFilterChip('all', 'Todos', colors),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('transaction', 'Lançamentos', colors),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('account', 'Contas', colors),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('category', 'Categorias', colors),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('delete', 'Exclusões', colors),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: SizedBox(
+                            height: 36,
+                            child: TextField(
+                              controller: _searchCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Filtrar por texto, descrição ou valor...',
+                                hintStyle: TextStyle(fontSize: 12, color: colors.textMuted),
+                                prefixIcon: Icon(Icons.search, size: 16, color: colors.textMuted),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 14),
+                                        onPressed: () {
+                                          _searchCtrl.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
+                                      )
+                                    : null,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: colors.borderGlass),
+                                ),
+                                filled: true,
+                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF),
+                              ),
+                              style: const TextStyle(fontSize: 13),
+                              onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Segmented filters
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            _buildFilterChip('all', 'Todos', colors),
+                            _buildFilterChip('transaction', 'Lançamentos', colors),
+                            _buildFilterChip('account', 'Contas', colors),
+                            _buildFilterChip('category', 'Categorias', colors),
+                            _buildFilterChip('delete', 'Exclusões', colors),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
 
             const Divider(height: 1),
@@ -377,25 +449,58 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                   top: BorderSide(color: colors.borderGlass, width: 1),
                 ),
               ),
-              child: Row(
-                children: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.file_open_outlined, size: 16),
-                    label: const Text('Abrir Arquivo .log'),
-                    onPressed: () => widget.store.openLogFileInEditor(),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    icon: const Icon(Icons.folder_open, size: 16),
-                    label: const Text('Revelar no Finder / Explorer'),
-                    onPressed: () => widget.store.revealLogFileInFinder(),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Fechar'),
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 560;
+                  if (isCompact) {
+                    return Row(
+                      children: [
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Abrir Arquivo .log',
+                          icon: const Icon(Icons.file_open_outlined, size: 18),
+                          onPressed: () => widget.store.openLogFileInEditor(),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Revelar no Gerenciador de Arquivos',
+                          icon: const Icon(Icons.folder_open, size: 18),
+                          onPressed: () => widget.store.revealLogFileInFinder(),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Fechar'),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.file_open_outlined, size: 16),
+                        label: const Text('Abrir Arquivo .log'),
+                        onPressed: () => widget.store.openLogFileInEditor(),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Revelar no Finder / Explorer'),
+                        onPressed: () => widget.store.revealLogFileInFinder(),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Fechar'),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],

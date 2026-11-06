@@ -762,22 +762,34 @@ class _AccountDialogState extends State<_AccountDialog> {
           ),
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       actions: [
-        if (widget.editingAccount != null)
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: colors.expense),
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: const Text('Excluir'),
-            onPressed: _handleDeleteAttempt,
-          ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton.icon(
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Salvar'),
-          onPressed: _handleSave,
+        Row(
+          children: [
+            if (widget.editingAccount != null)
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.expense,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Excluir'),
+                onPressed: _handleDeleteAttempt,
+              ),
+            const Spacer(),
+            TextButton(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Salvar'),
+              onPressed: _handleSave,
+            ),
+          ],
         ),
       ],
     );

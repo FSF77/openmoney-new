@@ -494,34 +494,88 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
           ),
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       actions: [
-        if (widget.tx.auto != true)
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: colors.accent),
-            icon: const Icon(Icons.copy_rounded, size: 18),
-            label: const Text('Copiar'),
-            onPressed: () {
-              Navigator.pop(context);
-              showTransactionCopyModal(context, widget.store, widget.tx);
-            },
-          ),
-        TextButton.icon(
-          style: TextButton.styleFrom(foregroundColor: colors.expense),
-          icon: const Icon(Icons.delete_outline, size: 18),
-          label: const Text('Excluir'),
-          onPressed: () {
-            Navigator.pop(context);
-            showDeleteTransactionDialog(context, widget.store, widget.tx);
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 480;
+            final copyBtn = widget.tx.auto != true
+                ? TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.accent,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.copy_rounded, size: 17),
+                    label: const Text('Copiar'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showTransactionCopyModal(context, widget.store, widget.tx);
+                    },
+                  )
+                : const SizedBox.shrink();
+
+            final deleteBtn = TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: colors.expense,
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.delete_outline, size: 17),
+              label: const Text('Excluir'),
+              onPressed: () {
+                Navigator.pop(context);
+                showDeleteTransactionDialog(context, widget.store, widget.tx);
+              },
+            );
+
+            final cancelBtn = TextButton(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            );
+
+            final saveBtn = FilledButton.icon(
+              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Salvar Alterações'),
+              onPressed: _handleSave,
+            );
+
+            if (isNarrow) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      if (widget.tx.auto != true) copyBtn,
+                      if (widget.tx.auto != true) const SizedBox(width: 8),
+                      deleteBtn,
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      cancelBtn,
+                      const SizedBox(width: 8),
+                      saveBtn,
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                if (widget.tx.auto != true) copyBtn,
+                if (widget.tx.auto != true) const SizedBox(width: 6),
+                deleteBtn,
+                const Spacer(),
+                cancelBtn,
+                const SizedBox(width: 8),
+                saveBtn,
+              ],
+            );
           },
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton.icon(
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Salvar Alterações'),
-          onPressed: _handleSave,
         ),
       ],
     );
