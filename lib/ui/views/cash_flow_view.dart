@@ -40,6 +40,7 @@ class _CashFlowViewState extends State<CashFlowView> {
   CashFlowDateMode _dateMode = CashFlowDateMode.transactionDate;
   String _searchQuery = '';
   final Set<String> _collapsedGroups = {};
+  bool _mobileShowFilters = false;
 
   late final ScrollController _headerHScrollController;
   late final ScrollController _bodyHScrollController;
@@ -258,18 +259,25 @@ class _CashFlowViewState extends State<CashFlowView> {
       searchQuery: _searchQuery,
     );
 
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
+
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 10 : 16,
+            isMobile ? 8 : 14,
+            isMobile ? 10 : 16,
+            isMobile ? 4 : 8,
+          ),
           child: GlassCard(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(isMobile ? 10 : 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
+                  spacing: isMobile ? 8 : 12,
+                  runSpacing: isMobile ? 6 : 10,
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -277,31 +285,40 @@ class _CashFlowViewState extends State<CashFlowView> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.grid_on_rounded,
-                            color: colors.accent, size: 22),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Fluxo de Caixa (${_periodKind.label})',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                color: colors.textPrimary,
+                            color: colors.accent, size: isMobile ? 18 : 22),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Fluxo de Caixa (${_periodKind.label})',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 14.5 : 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.textPrimary,
+                                ),
                               ),
-                            ),
-                            Text(
-                              matrix.periodSubtitle,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
+                              Text(
+                                matrix.periodSubtitle,
+                                style: TextStyle(
+                                  fontSize: isMobile ? 11 : 12,
+                                  color: colors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
                     SegmentedButton<CashFlowPeriodKind>(
+                      style: isMobile
+                          ? SegmentedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              textStyle: const TextStyle(fontSize: 11),
+                            )
+                          : null,
                       segments: CashFlowPeriodKind.values
                           .map((p) =>
                               ButtonSegment(value: p, label: Text(p.label)))
@@ -310,11 +327,12 @@ class _CashFlowViewState extends State<CashFlowView> {
                       onSelectionChanged: (s) =>
                           setState(() => _periodKind = s.first),
                     ),
-                    if (_periodKind == CashFlowPeriodKind.daily)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_periodKind == CashFlowPeriodKind.daily) ...[
                           IconButton(
+                            visualDensity: isMobile ? VisualDensity.compact : null,
                             icon: const Icon(Icons.chevron_left),
                             tooltip: 'Mês anterior',
                             onPressed: () {
@@ -330,12 +348,13 @@ class _CashFlowViewState extends State<CashFlowView> {
                           ),
                           Text(
                             '${_month.toString().padLeft(2, '0')}/$_year',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: isMobile ? 13.5 : 15,
                             ),
                           ),
                           IconButton(
+                            visualDensity: isMobile ? VisualDensity.compact : null,
                             icon: const Icon(Icons.chevron_right),
                             tooltip: 'Próximo mês',
                             onPressed: () {
@@ -349,215 +368,297 @@ class _CashFlowViewState extends State<CashFlowView> {
                               });
                             },
                           ),
-                        ],
-                      )
-                    else if (_periodKind != CashFlowPeriodKind.yearly)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                        ] else if (_periodKind != CashFlowPeriodKind.yearly) ...[
                           IconButton(
+                            visualDensity: isMobile ? VisualDensity.compact : null,
                             icon: const Icon(Icons.chevron_left),
                             tooltip: 'Ano anterior',
                             onPressed: () => setState(() => _year -= 1),
                           ),
                           Text(
                             '$_year',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: isMobile ? 13.5 : 15,
                             ),
                           ),
                           IconButton(
+                            visualDensity: isMobile ? VisualDensity.compact : null,
                             icon: const Icon(Icons.chevron_right),
                             tooltip: 'Próximo ano',
                             onPressed: () => setState(() => _year += 1),
                           ),
                         ],
-                      ),
-                    Tooltip(
-                      message: _collapsedGroups.isEmpty
-                          ? 'Recolher todas as categorias'
-                          : 'Expandir todas as categorias',
-                      child: OutlinedButton(
-                        onPressed: () => _toggleAllGroups(matrix),
-                        child: Icon(
-                          _collapsedGroups.isEmpty
-                              ? Icons.unfold_less
-                              : Icons.unfold_more,
-                          size: 18,
+                        Tooltip(
+                          message: _collapsedGroups.isEmpty
+                              ? 'Recolher todas as categorias'
+                              : 'Expandir todas as categorias',
+                          child: OutlinedButton(
+                            style: isMobile
+                                ? OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  )
+                                : null,
+                            onPressed: () => _toggleAllGroups(matrix),
+                            child: Icon(
+                              _collapsedGroups.isEmpty
+                                  ? Icons.unfold_less
+                                  : Icons.unfold_more,
+                              size: 18,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    Tooltip(
-                      message: 'Exportar CSV',
-                      child: OutlinedButton(
-                        onPressed: () => _exportCsv(matrix),
-                        child: const Icon(Icons.download, size: 18),
-                      ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Exportar CSV',
+                          child: OutlinedButton(
+                            style: isMobile
+                                ? OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  )
+                                : null,
+                            onPressed: () => _exportCsv(matrix),
+                            child: const Icon(Icons.download, size: 18),
+                          ),
+                        ),
+                        if (isMobile) ...[
+                          const SizedBox(width: 6),
+                          FilledButton.tonalIcon(
+                            style: FilledButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: Icon(
+                              _mobileShowFilters
+                                  ? Icons.expand_less
+                                  : Icons.tune,
+                              size: 16,
+                            ),
+                            label: Text(
+                              _mobileShowFilters ? 'Ocultar' : 'Filtros',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                            onPressed: () => setState(
+                                () => _mobileShowFilters = !_mobileShowFilters),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      height: 40,
-                      child: AccountMultiSelectFilter(
-                        store: widget.store,
-                        selectedAccountIds: _selectedAccountIds,
-                        asFormField: true,
+                if (!isMobile || _mobileShowFilters) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.start,
+                    children: [
+                      SizedBox(
                         width: 200,
                         height: 40,
-                        onSelectionChanged: (set) =>
-                            setState(() => _selectedAccountIds = set),
+                        child: AccountMultiSelectFilter(
+                          store: widget.store,
+                          selectedAccountIds: _selectedAccountIds,
+                          asFormField: true,
+                          width: 200,
+                          height: 40,
+                          onSelectionChanged: (set) =>
+                              setState(() => _selectedAccountIds = set),
+                        ),
                       ),
-                    ),
-                    SizedBox(
-                      width: 200,
-                      height: 40,
-                      child: DropdownButtonFormField<CashFlowStatusFilter>(
-                        initialValue: _statusFilter,
-                        isExpanded: true,
+                      SizedBox(
+                        width: 200,
+                        height: 40,
+                        child: DropdownButtonFormField<CashFlowStatusFilter>(
+                          initialValue: _statusFilter,
+                          isExpanded: true,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colors.textPrimary,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Status de Conciliação',
+                            labelStyle: TextStyle(fontSize: 13),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: CashFlowStatusFilter.values
+                              .map((s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s.shortLabel,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _statusFilter = v);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 200,
+                        height: 40,
+                        child: DropdownButtonFormField<CashFlowKindFilter>(
+                          initialValue: _kindFilter,
+                          isExpanded: true,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colors.textPrimary,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Tipo',
+                            labelStyle: TextStyle(fontSize: 13),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: CashFlowKindFilter.values
+                              .map((k) => DropdownMenuItem(
+                                    value: k,
+                                    child: Text(
+                                      k.label,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _kindFilter = v);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 200,
+                        height: 40,
+                        child: DropdownButtonFormField<CashFlowDateMode>(
+                          initialValue: _dateMode,
+                          isExpanded: true,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colors.textPrimary,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Regime Contábil',
+                            labelStyle: TextStyle(fontSize: 13),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: CashFlowDateMode.values
+                              .map((m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(
+                                      m.shortLabel,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _dateMode = v);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 200,
+                        height: 40,
+                        child: TextField(
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Filtrar categoria...',
+                            labelStyle: TextStyle(fontSize: 13),
+                            prefixIcon: Icon(Icons.search, size: 16),
+                            prefixIconConstraints:
+                                BoxConstraints(minWidth: 32, minHeight: 0),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (v) => setState(() => _searchQuery = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  _buildKpiSummaryRow(matrix, colors),
+                ] else ...[
+                  const SizedBox(height: 6),
+                  const Divider(height: 1),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Rec: ${brl(matrix.incomeSection.grandTotal)}',
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: colors.textPrimary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.income,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Status de Conciliação',
-                          labelStyle: TextStyle(fontSize: 13),
-                          isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: CashFlowStatusFilter.values
-                            .map((s) => DropdownMenuItem(
-                                  value: s,
-                                  child: Text(
-                                    s.shortLabel,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v != null) setState(() => _statusFilter = v);
-                        },
                       ),
-                    ),
-                    SizedBox(
-                      width: 200,
-                      height: 40,
-                      child: DropdownButtonFormField<CashFlowKindFilter>(
-                        initialValue: _kindFilter,
-                        isExpanded: true,
+                      Text(
+                        'Desp: ${brl(matrix.expenseSection.grandTotal)}',
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: colors.textPrimary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.expense,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Tipo',
-                          labelStyle: TextStyle(fontSize: 13),
-                          isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: CashFlowKindFilter.values
-                            .map((k) => DropdownMenuItem(
-                                  value: k,
-                                  child: Text(
-                                    k.label,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v != null) setState(() => _kindFilter = v);
-                        },
                       ),
-                    ),
-                    SizedBox(
-                      width: 200,
-                      height: 40,
-                      child: DropdownButtonFormField<CashFlowDateMode>(
-                        initialValue: _dateMode,
-                        isExpanded: true,
+                      Text(
+                        'Líq: ${brl(matrix.netGrandTotal)}',
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: colors.textPrimary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: matrix.netGrandTotal >= 0
+                              ? colors.income
+                              : colors.expense,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Regime Contábil',
-                          labelStyle: TextStyle(fontSize: 13),
-                          isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: CashFlowDateMode.values
-                            .map((m) => DropdownMenuItem(
-                                  value: m,
-                                  child: Text(
-                                    m.shortLabel,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v != null) setState(() => _dateMode = v);
-                        },
                       ),
-                    ),
-                    SizedBox(
-                      width: 200,
-                      height: 40,
-                      child: TextField(
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.textPrimary,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Filtrar categoria...',
-                          labelStyle: TextStyle(fontSize: 13),
-                          prefixIcon: Icon(Icons.search, size: 16),
-                          prefixIconConstraints:
-                              BoxConstraints(minWidth: 32, minHeight: 0),
-                          isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (v) => setState(() => _searchQuery = v),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                _buildKpiSummaryRow(matrix, colors),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+            padding: EdgeInsets.fromLTRB(
+              isMobile ? 10 : 16,
+              4,
+              isMobile ? 10 : 16,
+              isMobile ? 10 : 20,
+            ),
             child: GlassCard(
               padding: EdgeInsets.zero,
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  final isCompactGrid = constraints.maxWidth < 640;
                   final scaleBonus = widget.store.fontScale > 1.0 ? (widget.store.fontScale - 1.0) : 0.0;
-                  final catWidth = 230.0 + (scaleBonus * 40.0);
-                  final colWidth = ((_periodKind == CashFlowPeriodKind.daily ? 124.0 : 130.0) * widget.store.fontScale).roundToDouble();
-                  final totalWidth = (145.0 * widget.store.fontScale).roundToDouble();
+                  final catWidth = (isCompactGrid ? 142.0 : 230.0) + (scaleBonus * 40.0);
+                  final colWidth = (((isCompactGrid
+                              ? 104.0
+                              : (_periodKind == CashFlowPeriodKind.daily ? 124.0 : 130.0)) *
+                          widget.store.fontScale))
+                      .roundToDouble();
+                  final totalWidth =
+                      ((isCompactGrid ? 114.0 : 145.0) * widget.store.fontScale)
+                          .roundToDouble();
                   final gridWidth = (matrix.columns.length * colWidth) + totalWidth + _scrollbarSpacer;
                   final allRows = _buildAllRows(matrix, colors, colWidth, totalWidth);
 

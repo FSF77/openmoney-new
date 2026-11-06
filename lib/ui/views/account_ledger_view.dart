@@ -39,6 +39,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   String _freq = 'monthly';
   String? _customIk;
   bool _filterCardByInvoice = true;
+  bool _mobileShowQuickEntry = false;
+  bool _mobileShowHeaderTools = false;
   List<PayeeSuggestion> _suggestions = [];
 
   @override
@@ -176,6 +178,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       _amtCtrl.clear();
       _mode = 'single';
       _suggestions = [];
+      _mobileShowQuickEntry = false;
     });
   }
 
@@ -236,17 +239,411 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       }
     }
 
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
+
     return Column(
       children: [
         // 1. Account Executive Header
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 10 : 16,
+            isMobile ? 8 : 14,
+            isMobile ? 10 : 16,
+            isMobile ? 4 : 8,
+          ),
           child: GlassCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16,
+              vertical: isMobile ? 10 : 12,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Linha Superior: Info da Conta & Ações à Esquerda | Saldos à Direita (como no Swift)
+                if (isMobile) ...[
+                  // Layout Mobile Compacto: Nome + Botões de topo
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      AccountLogoWidget(
+                        account: acc,
+                        size: 36,
+                        cornerRadius: 8,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    acc.name,
+                                    style: TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: colors.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (acc.isFavorite) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.star,
+                                      size: 14, color: Colors.amber),
+                                ],
+                                if (acc.isInactive) ...[
+                                  const SizedBox(width: 4),
+                                  StatusBadge(
+                                    text: 'INATIVA',
+                                    color: colors.warning,
+                                  ),
+                                ],
+                              ],
+                            ),
+                            Text(
+                              acc.type,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Editar Conta',
+                        icon: const Icon(Icons.settings_outlined, size: 18),
+                        onPressed: () => showAccountModal(
+                          context,
+                          widget.store,
+                          editingAccount: acc,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Opções, Busca e Exportação',
+                        icon: Icon(
+                          _mobileShowHeaderTools
+                              ? Icons.expand_less
+                              : Icons.tune,
+                          size: 18,
+                          color: (_mobileShowHeaderTools ||
+                                  _searchCtrl.text.isNotEmpty)
+                              ? colors.accent
+                              : null,
+                        ),
+                        onPressed: () => setState(() =>
+                            _mobileShowHeaderTools = !_mobileShowHeaderTools),
+                      ),
+                      if (!acc.isInactive) ...[
+                        const SizedBox(width: 6),
+                        FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                          ),
+                          icon: Icon(
+                            _mobileShowQuickEntry ? Icons.close : Icons.add,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _mobileShowQuickEntry ? 'Fechar' : 'Lançar',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onPressed: () => setState(() =>
+                              _mobileShowQuickEntry = !_mobileShowQuickEntry),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Saldos lado a lado ocupando a largura de forma limpa
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colors.bgPrimary.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Saldo Conciliado (Real)',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: colors.textSecondary),
+                              ),
+                              Text(
+                                brl(widget.store.balance(acc, predicted: false)),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: widget.store.balance(acc,
+                                              predicted: false) >=
+                                          0
+                                      ? colors.income
+                                      : colors.expense,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 26,
+                          color: colors.borderGlass,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                isCard
+                                    ? 'Previsto (Fatura)'
+                                    : 'Previsto Final do Mês',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: colors.textSecondary),
+                              ),
+                              Text(
+                                brl(widget.store.balance(acc, predicted: true)),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: widget.store.balance(acc,
+                                              predicted: true) >=
+                                          0
+                                      ? colors.income
+                                      : colors.expense,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Seletor de Mês/Ano sempre visível de forma compacta
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: MonthYearPickerBar(
+                      currentMonthYM: widget.store.month,
+                      availableYears: widget.store.allYearsInDatabase(),
+                      onMonthChanged: (ym) => widget.store.month = ym,
+                    ),
+                  ),
+                  if (_mobileShowHeaderTools) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 210,
+                          height: 34,
+                          child: TextField(
+                            controller: _searchCtrl,
+                            style: const TextStyle(fontSize: 12.5),
+                            decoration: InputDecoration(
+                              hintText: 'Filtrar no mês...',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: colors.textMuted,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.filter_list,
+                                size: 16,
+                                color: colors.textSecondary,
+                              ),
+                              suffixIcon: _searchCtrl.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 14),
+                                      onPressed: () =>
+                                          setState(() => _searchCtrl.clear()),
+                                    )
+                                  : null,
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          icon: const Icon(Icons.auto_fix_high, size: 14),
+                          label: const Text('Ajustar Previsões',
+                              style: TextStyle(fontSize: 11.5)),
+                          onPressed: () {
+                            final res = widget.store
+                                .adjustPredictions(widget.store.month);
+                            showPredictionsAdjustModal(context, res);
+                          },
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Modo de abatimento das previsões',
+                          icon: const Icon(Icons.tune, size: 18),
+                          padding: EdgeInsets.zero,
+                          initialValue: widget.store.db.predMode,
+                          onSelected: widget.store.setPredMode,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                                value: 'month', child: Text('Por mês')),
+                            PopupMenuItem(
+                                value: 'invoice',
+                                child: Text('Por fatura (cartão)')),
+                          ],
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          onPressed: () {
+                            final exportTxs = isCard
+                                ? widget.store.invoiceTransactions(
+                                    acc.id,
+                                    widget.store.month,
+                                  )
+                                : monthData.transactions;
+                            final safeAccName = acc.name
+                                .toLowerCase()
+                                .replaceAll(' ', '-')
+                                .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                            final defaultName =
+                                'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                            final csvContent = CSVExporter.generateCSV(
+                              transactions: exportTxs,
+                              accounts: widget.store.db.accounts,
+                            );
+                            exportCsvWithFeedback(
+                              context,
+                              csv: csvContent,
+                              defaultName: defaultName,
+                              title:
+                                  'Exportar Lançamentos de ${acc.name} (CSV)',
+                            );
+                          },
+                          child: const Icon(Icons.download, size: 16),
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          onPressed: () {
+                            final exportTxs = isCard
+                                ? widget.store.invoiceTransactions(
+                                    acc.id,
+                                    widget.store.month,
+                                  )
+                                : monthData.transactions;
+                            final pdfBytes = PdfReportGenerator
+                                .buildStatementOrInvoicePdfBytes(
+                              store: widget.store,
+                              account: acc,
+                              monthYM: widget.store.month,
+                              transactions: exportTxs,
+                              invoiceSummary: invSummary,
+                            );
+                            final defaultName = isCard
+                                ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                                : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                            PdfReportGenerator.saveAndOpenPdfBytes(
+                              context,
+                              pdfBytes: pdfBytes,
+                              defaultFileName: defaultName,
+                            );
+                          },
+                          child: const Icon(Icons.picture_as_pdf, size: 16),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (invSummary != null) ...[
+                    const Divider(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Fatura ${fmtMonth(invSummary.key)} • Vence ${fmtDate(invSummary.dueDate)} • Aberto: ${brl(invSummary.remainingCents)}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FilterChip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                _filterCardByInvoice ? 'Fatura' : 'Mês Civil',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              selected: _filterCardByInvoice,
+                              onSelected: (v) =>
+                                  setState(() => _filterCardByInvoice = v),
+                            ),
+                            const SizedBox(width: 6),
+                            FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              icon:
+                                  const Icon(Icons.payments_outlined, size: 14),
+                              label: const Text('Pagar Fatura',
+                                  style: TextStyle(fontSize: 11)),
+                              onPressed: () => showInvoicePaymentModal(
+                                context,
+                                widget.store,
+                                cardAccount: acc,
+                                summary: invSummary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ] else ...[
+                // Linha Superior Desktop (Inalterada)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -589,17 +986,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     ),
                   ],
                 ),
+                ],
                 if (pendingCount > 0) ...[
-                  const SizedBox(height: 10),
+                  SizedBox(height: isMobile ? 6 : 10),
                   InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () {
                       widget.store.navigateTo(NavModule.dueBills);
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 10 : 12,
+                        vertical: isMobile ? 6 : 8,
                       ),
                       decoration: BoxDecoration(
                         color: colors.warning.withValues(alpha: 0.14),
@@ -618,18 +1016,20 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Você possui $pendingCount lançamento(s) pendente(s) de conciliação nos próximos ${widget.store.reminderDaysAhead} dias nesta conta.',
+                              isMobile
+                                  ? '$pendingCount pendente(s) nos próximos ${widget.store.reminderDaysAhead} dias.'
+                                  : 'Você possui $pendingCount lançamento(s) pendente(s) de conciliação nos próximos ${widget.store.reminderDaysAhead} dias nesta conta.',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: isMobile ? 11.5 : 12,
                                 fontWeight: FontWeight.w600,
                                 color: colors.warning,
                               ),
                             ),
                           ),
                           Text(
-                            'Ver Vencimentos →',
+                            isMobile ? 'Ver →' : 'Ver Vencimentos →',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: isMobile ? 11.5 : 12,
                               fontWeight: FontWeight.bold,
                               color: colors.warning,
                             ),
@@ -644,10 +1044,13 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
           ),
         ),
 
-        // 2. Quick Entry Bar (Barra de Inserção Rápida)
-        if (!acc.isInactive)
+        // 2. Quick Entry Bar (Barra de Inserção Rápida — recolhível no celular para liberar espaço para rolar os lançamentos)
+        if (!acc.isInactive && (!isMobile || _mobileShowQuickEntry))
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 16,
+              vertical: 4,
+            ),
             child: GlassCard(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -1066,6 +1469,11 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                           child: ListTile(
                             dense: true,
+                            contentPadding: isMobile
+                                ? const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2)
+                                : null,
+                            horizontalTitleGap: isMobile ? 6 : null,
                             onTap: () => showTransactionEditModal(
                               context,
                               widget.store,
@@ -1075,6 +1483,14 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
+                                  visualDensity:
+                                      isMobile ? VisualDensity.compact : null,
+                                  padding: isMobile
+                                      ? const EdgeInsets.all(4)
+                                      : null,
+                                  constraints: isMobile
+                                      ? const BoxConstraints()
+                                      : null,
                                   tooltip: tx.rec
                                       ? 'Conciliado (Clique para desmarcar)'
                                       : 'Pendente (Clique para conciliar)',
@@ -1085,18 +1501,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     color: tx.rec
                                         ? colors.income
                                         : colors.textMuted,
-                                    size: 20,
+                                    size: isMobile ? 19 : 20,
                                   ),
                                   onPressed: () =>
                                       widget.store.toggleReconciled(tx.id),
                                 ),
                                 Container(
-                                  width: 26,
+                                  width: isMobile ? 22 : 26,
                                   alignment: Alignment.center,
                                   child: Text(
                                     tx.date.split('-').last,
                                     style: TextStyle(
-                                      fontSize: 12.5,
+                                      fontSize: isMobile ? 11.5 : 12.5,
                                       fontWeight: FontWeight.w700,
                                       color: colors.textSecondary,
                                       fontFeatures: const [
@@ -1107,7 +1523,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 ),
                               ],
                             ),
-                            title: Row(
+                            title: isMobile
+                                ? Text(
+                                    tx.payee,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: colors.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : Row(
                               children: [
                                 Flexible(
                                   flex: 3,
@@ -1181,18 +1608,79 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 ],
                               ],
                             ),
-                            subtitle: tx.memo.trim().isNotEmpty
+                            subtitle: isMobile
                                 ? Padding(
                                     padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
-                                      tx.memo.trim(),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colors.textSecondary,
-                                      ),
+                                    child: Wrap(
+                                      spacing: 4,
+                                      runSpacing: 3,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        Text(
+                                          tx.cat.isEmpty
+                                              ? 'Sem categoria'
+                                              : tx.cat,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: tx.cat.isEmpty
+                                                ? colors.textMuted
+                                                : colors.textSecondary,
+                                            fontStyle: tx.cat.isEmpty
+                                                ? FontStyle.italic
+                                                : FontStyle.normal,
+                                          ),
+                                        ),
+                                        if (tx.memo.trim().isNotEmpty)
+                                          Text(
+                                            '• ${tx.memo.trim()}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: colors.textSecondary,
+                                            ),
+                                          ),
+                                        if (isPred)
+                                          StatusBadge(
+                                            text: 'PREVISÃO',
+                                            color: colors.accentIndigo,
+                                          ),
+                                        if (tx.recId != null)
+                                          StatusBadge(
+                                            text: recurrenceFrequencyLabel(
+                                                    tx.recFreq)
+                                                .toUpperCase(),
+                                            color: colors.accent,
+                                            icon: Icons.repeat,
+                                          ),
+                                        if (tx.auto == true)
+                                          StatusBadge(
+                                            text: 'FATURA AUTO',
+                                            color: colors.warning,
+                                          ),
+                                        if (tx.ik != null &&
+                                            tx.ik!.isNotEmpty &&
+                                            tx.auto != true)
+                                          StatusBadge(
+                                            text:
+                                                'FAT. ${formatInvoiceKeyForDisplay(tx.ik!)}',
+                                            color: colors.accentIndigo,
+                                          ),
+                                      ],
                                     ),
                                   )
-                                : null,
+                                : (tx.memo.trim().isNotEmpty
+                                    ? Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text(
+                                          tx.memo.trim(),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: colors.textSecondary,
+                                          ),
+                                        ),
+                                      )
+                                    : null),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1200,7 +1688,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   brl(tx.amt),
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 14,
+                                    fontSize: isMobile ? 13 : 14,
                                     color: tx.amt >= 0
                                         ? colors.income
                                         : colors.expense,
@@ -1209,13 +1697,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                SizedBox(width: isMobile ? 2 : 4),
                                 if (tx.auto != true) ...[
                                   IconButton(
+                                    visualDensity:
+                                        isMobile ? VisualDensity.compact : null,
+                                    padding: isMobile
+                                        ? const EdgeInsets.all(3)
+                                        : null,
+                                    constraints: isMobile
+                                        ? const BoxConstraints()
+                                        : null,
                                     tooltip: 'Copiar Lançamento',
                                     icon: Icon(
                                       Icons.copy_rounded,
-                                      size: 16,
+                                      size: isMobile ? 15 : 16,
                                       color: colors.textMuted,
                                     ),
                                     onPressed: () => showTransactionCopyModal(
@@ -1224,13 +1720,20 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                       tx,
                                     ),
                                   ),
-                                  const SizedBox(width: 2),
+                                  if (!isMobile) const SizedBox(width: 2),
                                 ],
                                 IconButton(
+                                  visualDensity:
+                                      isMobile ? VisualDensity.compact : null,
+                                  padding:
+                                      isMobile ? const EdgeInsets.all(3) : null,
+                                  constraints: isMobile
+                                      ? const BoxConstraints()
+                                      : null,
                                   tooltip: 'Excluir Lançamento',
                                   icon: Icon(
                                     Icons.delete_outline,
-                                    size: 17,
+                                    size: isMobile ? 16 : 17,
                                     color: colors.textMuted,
                                   ),
                                   onPressed: tx.auto == true

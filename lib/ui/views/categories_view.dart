@@ -354,25 +354,27 @@ class _CategoriesViewState extends State<CategoriesView> {
                 children: [
                   Icon(Icons.category_outlined, color: colors.accent, size: 22),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Catálogo de Categorias e Subcategorias',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Catálogo de Categorias e Subcategorias',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Organização em árvore de 2 níveis com proteção contra perda de classificação',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
+                        Text(
+                          'Organização em árvore de 2 níveis com proteção contra perda de classificação',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -418,6 +420,7 @@ class _CategoriesViewState extends State<CategoriesView> {
         ),
         const SizedBox(height: 14),
         ...topCats.map((top) {
+          final isNarrow = MediaQuery.sizeOf(context).width < 680;
           final subs =
               widget.store.subCategories(top.name, type: _selectedType);
           final topCount = widget.store.categoryUsageCount(top.path);
@@ -439,7 +442,10 @@ class _CategoriesViewState extends State<CategoriesView> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 3),
-                            child: Row(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   top.name,
@@ -448,26 +454,20 @@ class _CategoriesViewState extends State<CategoriesView> {
                                     fontSize: 13.5,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 StatusBadge(
                                   text: '$topCount lanç.',
                                   color: colors.accent,
                                 ),
-                                if (top.isBlocked) ...[
-                                  const SizedBox(width: 6),
+                                if (top.isBlocked)
                                   StatusBadge(
                                     text: 'BLOQUEADA',
                                     color: colors.expense,
                                   ),
-                                ],
-                                if (!widget.store.isCategoryIncludedInReports(top.path)) ...[
-                                  const SizedBox(width: 6),
+                                if (!widget.store.isCategoryIncludedInReports(top.path))
                                   StatusBadge(
-                                    text: 'OCULTA DE RELATÓRIOS',
+                                    text: isNarrow ? 'OCULTA' : 'OCULTA DE RELATÓRIOS',
                                     color: colors.textMuted,
                                   ),
-                                ],
-                                const SizedBox(width: 6),
                                 Icon(
                                   Icons.open_in_new,
                                   size: 13,
@@ -479,25 +479,47 @@ class _CategoriesViewState extends State<CategoriesView> {
                         ),
                       ),
                     ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
+                    if (isNarrow) ...[
+                      IconButton(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Ver Lançamentos',
+                        icon: Icon(Icons.list_alt, size: 16, color: colors.accent),
+                        onPressed: () => _showCategoryDrillDown(top.path),
                       ),
-                      icon: const Icon(Icons.list_alt, size: 14),
-                      label: const Text('Lançamentos', style: TextStyle(fontSize: 12)),
-                      onPressed: () => _showCategoryDrillDown(top.path),
-                    ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
+                      const SizedBox(width: 4),
+                      IconButton(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Nova Subcategoria',
+                        icon: Icon(Icons.add_circle_outline, size: 16, color: colors.accent),
+                        onPressed: () =>
+                            _showCategoryFormModal(presetParent: top.name),
                       ),
-                      icon: const Icon(Icons.add, size: 14),
-                      label: const Text('Subcategoria', style: TextStyle(fontSize: 12)),
-                      onPressed: () =>
-                          _showCategoryFormModal(presetParent: top.name),
-                    ),
+                      const SizedBox(width: 4),
+                    ] else ...[
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        ),
+                        icon: const Icon(Icons.list_alt, size: 14),
+                        label: const Text('Lançamentos', style: TextStyle(fontSize: 12)),
+                        onPressed: () => _showCategoryDrillDown(top.path),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        ),
+                        icon: const Icon(Icons.add, size: 14),
+                        label: const Text('Subcategoria', style: TextStyle(fontSize: 12)),
+                        onPressed: () =>
+                            _showCategoryFormModal(presetParent: top.name),
+                      ),
+                    ],
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.all(4),
@@ -535,7 +557,10 @@ class _CategoriesViewState extends State<CategoriesView> {
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
-                                  child: Row(
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
                                       Text(
                                         '↳ ${sub.name}',
@@ -544,7 +569,6 @@ class _CategoriesViewState extends State<CategoriesView> {
                                           color: colors.textSecondary,
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
                                       Text(
                                         '($subCount lanç.)',
                                         style: TextStyle(
@@ -553,21 +577,16 @@ class _CategoriesViewState extends State<CategoriesView> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      if (sub.isBlocked) ...[
-                                        const SizedBox(width: 6),
+                                      if (sub.isBlocked)
                                         StatusBadge(
                                           text: 'BLOQUEADA',
                                           color: colors.expense,
                                         ),
-                                      ],
-                                      if (!widget.store.isCategoryIncludedInReports(sub.path)) ...[
-                                        const SizedBox(width: 6),
+                                      if (!widget.store.isCategoryIncludedInReports(sub.path))
                                         StatusBadge(
-                                          text: 'OCULTA DE RELATÓRIOS',
+                                          text: isNarrow ? 'OCULTA' : 'OCULTA DE RELATÓRIOS',
                                           color: colors.textMuted,
                                         ),
-                                      ],
-                                      const SizedBox(width: 4),
                                       Icon(
                                         Icons.open_in_new,
                                         size: 11,

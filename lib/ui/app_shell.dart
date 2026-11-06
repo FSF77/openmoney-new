@@ -171,6 +171,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       backgroundColor: colors.bgSecondary,
                       title: Text(
                         widget.store.windowTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -188,7 +190,15 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                           listenable: CloudSyncService.instance,
                           builder: (context, _) {
                             if (CloudSyncService.instance.isAuthenticated) {
-                              return const SizedBox.shrink();
+                              return IconButton(
+                                tooltip: 'Cloud & Sincronização',
+                                icon: Icon(
+                                  Icons.cloud_done_outlined,
+                                  color: colors.income,
+                                ),
+                                onPressed: () =>
+                                    showCloudAccountModal(context, widget.store),
+                              );
                             }
                             return IconButton(
                               tooltip: 'Base de Dados Local',
