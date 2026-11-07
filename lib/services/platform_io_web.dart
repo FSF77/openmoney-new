@@ -56,12 +56,11 @@ void webClearUrlQueryParams() {
       final pathname =
           loc.getProperty<JSString?>('pathname'.toJS)?.toDart ?? '/';
       final hash = loc.getProperty<JSString?>('hash'.toJS)?.toDart ?? '';
-      final cleanHash = hash.contains('?recibo=') || hash.contains('&recibo=')
-          ? hash.split('?').first
-          : hash;
+      final cleanHash = hash.contains('?') ? hash.split('?').first : hash;
+      final currentState = history.getProperty<JSAny?>('state'.toJS);
       history.callMethod<JSAny?>(
         'replaceState'.toJS,
-        null,
+        currentState,
         ''.toJS,
         '$pathname$cleanHash'.toJS,
       );

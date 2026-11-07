@@ -61,6 +61,7 @@ class ShortcutUrlService extends ChangeNotifier {
 
   ShortcutReceiptDraft? _pendingDraft;
   bool _isModalOpen = false;
+  bool _hasCapturedInitialUrl = false;
 
   bool get hasPendingDraft => _pendingDraft != null;
   bool get isModalOpen => _isModalOpen;
@@ -72,14 +73,16 @@ class ShortcutUrlService extends ChangeNotifier {
   ShortcutReceiptDraft? consumePendingDraft() {
     final d = _pendingDraft;
     _pendingDraft = null;
+    webClearUrlQueryParams();
     return d;
   }
 
-  /// Verifica a URL atual do navegador em busca de `?recibo=...` ou parâmetros individuais
-  /// (`?data=...&conta=...&favorecido=...&valor=...`).
+  /// Verifica a URL inicial do navegador (uma única vez por abertura do app)
+  /// em busca de `?recibo=...` ou parâmetros individuais (`?data=...&conta=...&favorecido=...&valor=...`).
   /// Se encontrar, armazena o rascunho pendente e limpa a barra de endereços.
   bool captureFromCurrentUrl() {
-    if (!kIsWeb) return false;
+    if (!kIsWeb || _hasCapturedInitialUrl) return false;
+    _hasCapturedInitialUrl = true;
 
     final search = webWindowSearch();
     final hash = webWindowHash();
@@ -91,12 +94,6 @@ class ShortcutUrlService extends ChangeNotifier {
     if (parsed == null && hash.contains('?')) {
       final qIdx = hash.indexOf('?');
       parsed = parseQueryString(hash.substring(qIdx));
-    }
-    if (parsed == null) {
-      final baseParams = Uri.base.queryParameters;
-      if (baseParams.isNotEmpty) {
-        parsed = parseQueryParametersMap(baseParams);
-      }
     }
 
     if (parsed != null && parsed.hasAnyData) {

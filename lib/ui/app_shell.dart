@@ -76,9 +76,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
   void _maybeOpenPendingShortcutModal() {
     if (!mounted) return;
     final shortcutSvc = ShortcutUrlService.instance;
-    if (!shortcutSvc.hasPendingDraft) {
-      shortcutSvc.captureFromCurrentUrl();
-    }
     if (!shortcutSvc.hasPendingDraft || shortcutSvc.isModalOpen) return;
     if (widget.store.showWelcomeScreen ||
         widget.store.showMissingDatabasePrompt) {
@@ -129,6 +126,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           fromShortcut: true,
         );
       } finally {
+        webClearUrlQueryParams();
         shortcutSvc.setModalOpen(false);
       }
     });
