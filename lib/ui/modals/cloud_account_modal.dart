@@ -747,6 +747,15 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         ),
                       ),
                       IconButton(
+                        icon: Icon(
+                          Icons.help_outline_rounded,
+                          color: colors.accentBlue,
+                          size: 20,
+                        ),
+                        tooltip: 'Guia de Ajuda da Sincronização',
+                        onPressed: () => showCloudSyncHelpModal(context, colors),
+                      ),
+                      IconButton(
                         icon: Icon(Icons.close, color: colors.textSecondary),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
@@ -1930,6 +1939,332 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           borderSide: BorderSide(color: colors.borderGlass),
         ),
       ),
+    );
+  }
+}
+
+/// Abre a modal com o Guia de Ajuda e Boas Práticas do OpenMoney Cloud
+Future<void> showCloudSyncHelpModal(
+  BuildContext context,
+  OpenMoneyColors colors,
+) async {
+  await showDialog(
+    context: context,
+    builder: (ctx) => _CloudSyncHelpDialog(colors: colors),
+  );
+}
+
+class _CloudSyncHelpDialog extends StatefulWidget {
+  final OpenMoneyColors colors;
+
+  const _CloudSyncHelpDialog({required this.colors});
+
+  @override
+  State<_CloudSyncHelpDialog> createState() => _CloudSyncHelpDialogState();
+}
+
+class _CloudSyncHelpDialogState extends State<_CloudSyncHelpDialog> {
+  int _selectedTopic = 0;
+
+  static const List<({String title, IconData icon, String summary, List<String> paragraphs})> _topics = [
+    (
+      title: '1. Primeiro Acesso & Importação',
+      icon: Icons.rocket_launch_outlined,
+      summary: 'Como criar sua conta na nuvem ou trazer sua base openmoney.json existente.',
+      paragraphs: [
+        '• Se você já possui uma base openmoney.json existente:\nAo criar sua conta na versão Web (https://openmoney.app.br), clique no botão "Importar meu openmoney.json existente (Opcional)". Sua base completa será compactada via Gzip, criptografada via AES-256-GCM e enviada imediatamente para o servidor.',
+        '• Se você está no aplicativo Desktop:\nAbra a janela "Cloud & Sincronização", marque a opção "Criar nova conta / base" e selecione "Copiar Dados Atualmente na Tela". O aplicativo enviará a base que já está aberta na tela para a sua nova conta.',
+        '• Se você é um novo usuário começando do zero:\nSelecione "Criar Nova Base em Branco (Limpa)". O sistema criará uma base limpa no Schema v: 7, pronta para você cadastrar suas contas e lançamentos.',
+      ],
+    ),
+    (
+      title: '2. Sincronização no Dia a Dia',
+      icon: Icons.sync_rounded,
+      summary: 'Salvamento automático contínuo com debounce de 350ms.',
+      paragraphs: [
+        '• Salvamento Automático:\nToda vez que você adiciona ou edita um lançamento, conta ou fatura, o OpenMoney aguarda 350 milissegundos após você parar de digitar e salva as alterações na nuvem de forma invisível.',
+        '• Download Automático:\nAo abrir o aplicativo ou alternar entre telas, o sistema busca revisões mais recentes (rX) feitas em outros dispositivos e atualiza a tela na hora.',
+        '• Indicadores de Estado:\n- 🟢 Sincronizado (r15): Todos os dados estão salvos na nuvem.\n- 🔵 Sincronizando...: Transmitindo ou recebendo alterações.\n- ⚪ Modo Local: Operando offline neste navegador.',
+      ],
+    ),
+    (
+      title: '3. Múltiplos Dispositivos',
+      icon: Icons.devices_rounded,
+      summary: 'Use no Mac, Windows, iPhone, Android e Web simultaneamente.',
+      paragraphs: [
+        '• Conectar em Outro Dispositivo:\nNo segundo aparelho (ex: celular ou notebook do trabalho), acesse https://openmoney.app.br ou abra o aplicativo nativo, digite o MESMO e-mail e a MESMA senha e clique em "Acessar Minha Base".',
+        '• Sincronia Instantânea:\nO que você lançar pelo celular na rua aparecerá automaticamente no seu computador quando você abri-lo em casa.',
+      ],
+    ),
+    (
+      title: '4. Múltiplas Contas (Multi-Account)',
+      icon: Icons.switch_account_outlined,
+      summary: 'Gerencie bases Pessoal, Familiar e PJ no mesmo computador.',
+      paragraphs: [
+        '• Alternância Rápida em 1 Clique:\nNa tela "Cloud & Sincronização", a seção "Alternar entre Contas e Bases" lista todas as contas salvas neste dispositivo. Basta clicar em "Alternar".',
+        '• Proteção de Dados:\nAo alternar de conta, qualquer gravação pendente é imediatamente cancelada para impedir qualquer risco de contaminação de dados entre bases diferentes.',
+        '• Criar Nova Base Separada:\nClique em "+ Nova Conta/Base" para cadastrar outro e-mail com uma base totalmente isolada.',
+      ],
+    ),
+    (
+      title: '5. Backups Diários na Nuvem',
+      icon: Icons.shield_outlined,
+      summary: 'Histórico dos últimos 15 dias armazenado de forma segura.',
+      paragraphs: [
+        '• Snapshots Automáticos:\nA cada dia em que você salvar alterações, o servidor Cloudflare D1 armazena uma fotografia diária criptografada da sua base.',
+        '• Como Restaurar:\nNo painel de Nuvem, role até "Backups Diários Automáticos na Nuvem" e clique em "Restaurar" ao lado da data desejada para recuperar a base daquele dia.',
+      ],
+    ),
+    (
+      title: '6. Recuperação de Senha por E-mail',
+      icon: Icons.mark_email_read_outlined,
+      summary: 'Código numérico de 6 dígitos via Resend válido por 15 minutos.',
+      paragraphs: [
+        '• Como Recuperar:\nNa tela de login, clique em "Esqueci minha senha", informe seu e-mail cadastrado e clique em "Enviar Código de Recuperação".',
+        '• Código de 6 Dígitos:\nVocê receberá um e-mail do OpenMoney com um código numérico válido por 15 minutos. Digite o código no aplicativo, informe sua nova senha (mínimo de 8 caracteres) e o sistema já entrará logado.',
+        '• Se aparecer "Sessão expirada":\nIsso acontece se você redefiniu a senha na Web e o Desktop ainda tinha a sessão antiga. Basta clicar no botão "Reconectar com Senha" e digitar a nova senha.',
+      ],
+    ),
+    (
+      title: '7. Modo Offline e Navegador',
+      icon: Icons.wifi_off_rounded,
+      summary: 'Uso sem internet ou sem criar conta na nuvem.',
+      paragraphs: [
+        '• Modo Offline:\nSe você perder a conexão, o aplicativo continua funcionando normalmente e sincroniza tudo assim que a internet voltar.',
+        '• Modo Visitante:\nNa versão Web, clicar em "Usar Offline neste Navegador" grava os dados no localStorage do seu navegador sem enviar nada para servidores externos.',
+      ],
+    ),
+    (
+      title: '8. Criptografia & Privacidade',
+      icon: Icons.lock_outline_rounded,
+      summary: 'AES-256-GCM + PBKDF2 com isolamento estrito por usuário.',
+      paragraphs: [
+        '• Chaves Exclusivas por Usuário:\nO arquivo openmoney.json é criptografado com AES-256-GCM usando chave derivada via HKDF-SHA256 para o seu user_id. O banco de dados só armazena texto cifrado.',
+        '• Senhas Seguras:\nSenhas são protegidas com salt aleatório de 128 bits e 100.000 iterações PBKDF2-HMAC-SHA256.',
+        '• Retenção e Exportação:\nVocê é o único dono dos seus dados e pode exportar seu arquivo .json físico a qualquer momento pelas configurações.',
+      ],
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+    final isCompact = MediaQuery.of(context).size.width < 700;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780, maxHeight: 620),
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.bgSecondary,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colors.borderGlass, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cabeçalho da Modal de Ajuda
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.help_outline_rounded,
+                      color: colors.accentBlue,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Guia de Uso: OpenMoney Cloud & Sincronização',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: colors.textSecondary),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(color: colors.borderGlass, height: 1),
+
+              // Corpo da Ajuda
+              Expanded(
+                child: isCompact ? _buildCompactView(colors) : _buildWideView(colors),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideView(OpenMoneyColors colors) {
+    final activeTopic = _topics[_selectedTopic];
+
+    return Row(
+      children: [
+        // Coluna Esquerda: Lista de Tópicos
+        Container(
+          width: 260,
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: colors.borderGlass)),
+            color: colors.bgPrimary.withValues(alpha: 0.35),
+          ),
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: _topics.length,
+            separatorBuilder: (_, __) => Divider(
+              color: colors.borderGlass.withValues(alpha: 0.4),
+              height: 1,
+            ),
+            itemBuilder: (ctx, idx) {
+              final item = _topics[idx];
+              final isSelected = idx == _selectedTopic;
+
+              return ListTile(
+                dense: true,
+                selected: isSelected,
+                selectedTileColor: colors.accentBlue.withValues(alpha: 0.15),
+                leading: Icon(
+                  item.icon,
+                  size: 18,
+                  color: isSelected ? colors.accentBlue : colors.textSecondary,
+                ),
+                title: Text(
+                  item.title,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    color: isSelected ? colors.accentBlue : colors.textPrimary,
+                  ),
+                ),
+                onTap: () => setState(() => _selectedTopic = idx),
+              );
+            },
+          ),
+        ),
+
+        // Coluna Direita: Conteúdo Detalhado
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(activeTopic.icon, size: 24, color: colors.accentBlue),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        activeTopic.title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  activeTopic.summary,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...activeTopic.paragraphs.map(
+                  (p) => Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: colors.bgPrimary.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Text(
+                      p,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactView(OpenMoneyColors colors) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _topics.length,
+      itemBuilder: (ctx, idx) {
+        final item = _topics[idx];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: ExpansionTile(
+            leading: Icon(item.icon, size: 20, color: colors.accentBlue),
+            title: Text(
+              item.title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
+            ),
+            subtitle: Text(
+              item.summary,
+              style: TextStyle(fontSize: 11.5, color: colors.textSecondary),
+            ),
+            childrenPadding: const EdgeInsets.all(12),
+            children: item.paragraphs
+                .map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      p,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.45,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
     );
   }
 }

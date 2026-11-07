@@ -1,6 +1,6 @@
 {
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "build": 66,
+  "build": 67,
   "version": "2.3.0",
   "notes": "Liberado a opção para sincronização online, seus dados estão seguros com login e senha, uso de criptografia AES-256-GCM + PBKDF2, versão web em https://openmoney.app.br , aplicação e base hospedados na Cloudflare, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
   "releaseDate": "06/11/2026",
@@ -14,16 +14,16 @@
   },
   "macos": {
     "version": "2.3.0",
-    "build": 66,
+    "build": 67,
     "releaseDate": "06/11/2026",
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.0.zip",
-    "sha256": "94f4bec61e021de7956caa6d19474d213c49e3551c77c3e7f14aa4b43b4a2624",
+    "sha256": "b2b2f30a8bab316d1aa0785ac83bb94d247e7386b531a8ec85d6ce70ae067674",
     "sizeMb": 11
   },
   "title": "OpenMoney Flutter v2.3.0",
   "web": {
     "version": "2.3.0",
-    "build": 66,
+    "build": 67,
     "releaseDate": "06/11/2026"
   }
 }
