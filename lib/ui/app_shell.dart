@@ -189,7 +189,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ListenableBuilder(
                           listenable: CloudSyncService.instance,
                           builder: (context, _) {
-                            if (CloudSyncService.instance.isAuthenticated) {
+                            if (kIsWeb &&
+                                CloudSyncService.instance.isAuthenticated) {
                               return IconButton(
                                 tooltip: 'Cloud & Sincronização',
                                 icon: Icon(
@@ -988,16 +989,17 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               if (widget.store.sidebarShowModules) ...[
-                _SidebarNavTile(
-                  icon: Icons.cloud_sync_outlined,
-                  label: 'Conta Cloud & Sincronização',
-                  selected: false,
-                  badgeText: CloudSyncService.instance.isAuthenticated
-                      ? 'On'
-                      : null,
-                  badgeColor: colors.accentGreen,
-                  onTap: () => showCloudAccountModal(context, widget.store),
-                ),
+                if (kIsWeb)
+                  _SidebarNavTile(
+                    icon: Icons.cloud_sync_outlined,
+                    label: 'Conta Cloud & Sincronização',
+                    selected: false,
+                    badgeText: CloudSyncService.instance.isAuthenticated
+                        ? 'On'
+                        : null,
+                    badgeColor: colors.accentGreen,
+                    onTap: () => showCloudAccountModal(context, widget.store),
+                  ),
                 _SidebarNavTile(
                   icon: Icons.archive_outlined,
                   label: 'Backups de Segurança',
@@ -1067,7 +1069,52 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             ],
           ),
         ),
-        ListenableBuilder(
+        if (!kIsWeb)
+          Tooltip(
+            message:
+                'OpenMoney v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
+            child: InkWell(
+              onTap: () => showDatabaseFileManagerModal(context, widget.store),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: colors.borderGlass)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.folder_open_rounded,
+                      size: 15,
+                      color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Base Local • v${OpenMoneyVersion.version}',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 15,
+                      color: colors.textSecondary.withValues(alpha: 0.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ListenableBuilder(
           listenable: CloudSyncService.instance,
           builder: (context, _) {
             final cloud = CloudSyncService.instance;

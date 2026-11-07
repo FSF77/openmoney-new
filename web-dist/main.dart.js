@@ -108338,12 +108338,26 @@ g=a.a.c
 f=g.ay?B.eJ:B.eK
 f=A.aa(f,k?B.ab:B.k,a0,16)
 i.push(A.cF(!1,a2,!0,new A.aj(B.bY,A.X(A.b([f,B.aF,A.k("M\xd3DULOS",a0,a0,a0,a0,A.u(a0,a0,k?B.ab:B.k,a0,a0,a0,a0,a0,a0,a0,a0,10.5,a0,a0,B.Z,a0,a0,!0,a0,0.5,a0,a0,a0,a0,a0,a0),a0,a0,a0)],h),B.i,B.e,B.h,0),a0),a0,!0,a0,a0,a0,a0,a0,a0,a0,a0,a0,g.gaHH(),a0,a0,a0,a0,a0,a0,a0))
-if(a.a.c.ay){a2=j.b.length!==0&&j.c.length!==0?"On":a0
-g=k?B.X:B.W
-B.c.F(i,A.b([new A.f_(B.RX,"Conta Cloud & Sincroniza\xe7\xe3o",!1,a2,g,new A.aLG(a,a3),a0),new A.f_(B.im,"Backups de Seguran\xe7a",!1,a0,a0,new A.aLH(a,a3),a0),new A.f_(B.v2,"Logs de Altera\xe7\xf5es",!1,a0,a0,new A.aLI(a,a3),a0),new A.f_(B.dj,"Importar Carteira (CSV)",!1,a0,a0,new A.aLJ(a,a3),a0),new A.f_(B.Ro,"Importar Comprovantes (OCR)",!1,a0,a0,new A.aLK(a,a3),a0),new A.f_(B.ol,"Importar do Celular (.json)",!1,a0,a0,new A.aLL(a,a3),a0),new A.f_(B.oi,"Importar / Exportar (CSV)",!1,a0,a0,new A.aLM(a,a3),a0),new A.f_(B.ou,"Excluir Lan\xe7amentos",!1,a0,a0,new A.aLN(a,a3),a0),new A.f_(B.op,"Buscar Atualiza\xe7\xf5es",!1,a0,a0,new A.aLP(a3),a0),new A.f_(B.uN,"Ajuda e Manual",!1,a0,a0,new A.aLQ(a,a3),a0),new A.f_(B.QP,"Sobre o OpenMoney",!1,a0,a0,new A.aLR(a3,a4),a0)],h))}a2=A.am(A.np(i,B.fA,a0,!1),1)
-i=a4.gaO()
-g=A.aa(B.QO,k?B.k:B.q,a0,16)
-return A.ai(A.b([new A.aj(B.Py,l,a0),a2,new A.hI(new A.aLS(a,a4),a0,j,a0),A.ay(a0,A.X(A.b([g,B.bn,A.am(A.k("Fontes",a0,B.U,a0,a0,A.u(a0,a0,k?B.k:B.q,a0,a0,a0,a0,a0,a0,a0,a0,11.5,a0,a0,B.a4,a0,a0,!0,a0,a0,a0,a0,a0,a0,a0,a0),a0,a0,a0),1),A.b63(a4,a.a.c)],h),B.i,B.e,B.h,0),B.n,a0,a0,new A.ax(a0,a0,new A.ch(new A.af(i,1,B.w,-1),B.r,B.r,B.r),a0,a0,a0,B.x),a0,a0,a0,B.bk,a0,a0,a0)],h),B.i,B.e,B.h)}}
+if(a.a.c.ay){a2=A.b([],h)
+g=j.b.length!==0&&j.c.length!==0?"On":a0
+f=k?B.X:B.W
+a2.push(new A.f_(B.RX,"Conta Cloud & Sincroniza\xe7\xe3o",!1,g,f,new A.aLG(a,a3),a0))
+a2.push(new A.f_(B.im,"Backups de Seguran\xe7a",!1,a0,a0,new A.aLH(a,a3),a0))
+a2.push(new A.f_(B.v2,"Logs de Altera\xe7\xf5es",!1,a0,a0,new A.aLI(a,a3),a0))
+a2.push(new A.f_(B.dj,"Importar Carteira (CSV)",!1,a0,a0,new A.aLJ(a,a3),a0))
+a2.push(new A.f_(B.Ro,"Importar Comprovantes (OCR)",!1,a0,a0,new A.aLK(a,a3),a0))
+a2.push(new A.f_(B.ol,"Importar do Celular (.json)",!1,a0,a0,new A.aLL(a,a3),a0))
+a2.push(new A.f_(B.oi,"Importar / Exportar (CSV)",!1,a0,a0,new A.aLM(a,a3),a0))
+a2.push(new A.f_(B.ou,"Excluir Lan\xe7amentos",!1,a0,a0,new A.aLN(a,a3),a0))
+a2.push(new A.f_(B.op,"Buscar Atualiza\xe7\xf5es",!1,a0,a0,new A.aLP(a3),a0))
+a2.push(new A.f_(B.uN,"Ajuda e Manual",!1,a0,a0,new A.aLQ(a,a3),a0))
+a2.push(new A.f_(B.QP,"Sobre o OpenMoney",!1,a0,a0,new A.aLR(a3,a4),a0))
+B.c.F(i,a2)}a2=A.b([new A.aj(B.Py,l,a0),A.am(A.np(i,B.fA,a0,!1),1)],h)
+a2.push(new A.hI(new A.aLS(a,a4),a0,j,a0))
+j=a4.gaO()
+l=A.aa(B.QO,k?B.k:B.q,a0,16)
+a2.push(A.ay(a0,A.X(A.b([l,B.bn,A.am(A.k("Fontes",a0,B.U,a0,a0,A.u(a0,a0,k?B.k:B.q,a0,a0,a0,a0,a0,a0,a0,a0,11.5,a0,a0,B.a4,a0,a0,!0,a0,a0,a0,a0,a0,a0,a0,a0),a0,a0,a0),1),A.b63(a4,a.a.c)],h),B.i,B.e,B.h,0),B.n,a0,a0,new A.ax(a0,a0,new A.ch(new A.af(j,1,B.w,-1),B.r,B.r,B.r),a0,a0,a0,B.x),a0,a0,a0,B.bk,a0,a0,a0))
+return A.ai(a2,B.i,B.e,B.h)}}
 A.aMx.prototype={
 $1(a){var s=this.a.c
 s.toString

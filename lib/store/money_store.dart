@@ -464,9 +464,11 @@ class MoneyStore extends ChangeNotifier {
     _setupFileWatcher(targetPath);
     notifyListeners();
 
-    startPeriodicCloudSync();
-    if (CloudSyncService.instance.isAuthenticated) {
-      syncFromCloud();
+    if (kIsWeb) {
+      startPeriodicCloudSync();
+      if (CloudSyncService.instance.isAuthenticated) {
+        syncFromCloud();
+      }
     }
   }
 
@@ -999,23 +1001,18 @@ class MoneyStore extends ChangeNotifier {
 
     if (immediate) {
       _performDiskWrite();
-      if (CloudSyncService.instance.isAuthenticated) {
-        _performCloudPush();
-      }
       return;
     }
 
     _debounceSaveTimer = Timer(const Duration(milliseconds: 350), () {
       _performDiskWrite();
-      if (CloudSyncService.instance.isAuthenticated) {
-        _performCloudPush();
-      }
     });
   }
 
   Timer? _periodicSyncTimer;
 
   void startPeriodicCloudSync() {
+    if (!kIsWeb) return;
     _periodicSyncTimer?.cancel();
     _periodicSyncTimer =
         Timer.periodic(const Duration(seconds: 30), (_) async {
