@@ -81,10 +81,13 @@ flutter build macos --release
 echo "🌐 Compilando aplicativo Web (Cloudflare Pages) na versão v${VERSION}+${BUILD_NUM}..."
 flutter build web --release
 
-# Copia o build Web para web-dist/ para deploy automático via GitHub -> Cloudflare Pages (sem precisar de npx)
+# Copia o build Web para web-dist/ para deploy automático via GitHub -> Cloudflare Pages (projeto openmoney-new)
 rm -rf "${ROOT_DIR}/web-dist"
 mkdir -p "${ROOT_DIR}/web-dist"
 cp -R "${ROOT_DIR}/build/web/"* "${ROOT_DIR}/web-dist/"
+if [ -d "${ROOT_DIR}/coletor" ]; then
+    cp -R "${ROOT_DIR}/coletor" "${ROOT_DIR}/web-dist/coletor"
+fi
 
 APP_PATH="${ROOT_DIR}/build/macos/Build/Products/Release/openmoney.app"
 if [ ! -d "${APP_PATH}" ]; then
@@ -255,25 +258,21 @@ open /Applications/OpenMoney.app
 EOF
 chmod +x "${ROOT_DIR}/install.sh"
 
-# 4. Commit e Push no próprio repositório openmoney-new
+# 4. Commit e Push no próprio repositório openmoney-new (dispara deploy automático no projeto openmoney-new da Cloudflare Pages)
+cp -f "${VERSION_JSON_FILE}" "${ROOT_DIR}/web-dist/version.json" 2>/dev/null || true
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add .gitignore scripts/ lib/ web/ web-dist/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
+git add .gitignore scripts/ lib/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else
     git commit -m "Release macOS & Web v${VERSION} (Build ${BUILD_NUM}) - ${RELEASE_DATE}"
     git tag -f "v${VERSION}"
-    echo "📤 Enviando release para o GitHub..."
+    echo "📤 Enviando release para o GitHub (Cloudflare Pages openmoney-new atualizará automaticamente)..."
     git push origin main "v${VERSION}" --force
-fi
-
-# 5. Deploy automático na Cloudflare Pages (se wrangler estiver configurado)
-if command -v npx >/dev/null 2>&1 && ! grep -q "SUBSTITUIR_PELO_ID_DO_SEU_D1_NA_CLOUDFLARE" "${ROOT_DIR}/wrangler.toml" 2>/dev/null; then
-    echo "☁️ Publicando versão Web v${VERSION}+${BUILD_NUM} na Cloudflare Pages..."
-    npx wrangler pages deploy "${ROOT_DIR}/build/web" --project-name=openmoney || echo "⚠️ Deploy direto via Wrangler ignorado (ou gerenciado via GitHub Integration na Cloudflare)."
 fi
 
 echo ""
 echo "🎉 Versão macOS & Web v${VERSION} (Build ${BUILD_NUM}) publicada com sucesso!"
+echo "☁️ Cloudflare Pages (openmoney-new): deploy acionado automaticamente via GitHub Integration."
 echo "🔗 Feed: https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json"
 echo "📥 Download macOS: ${DOWNLOAD_URL}"

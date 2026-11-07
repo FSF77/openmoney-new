@@ -1,1 +1,29 @@
-{"app_name":"openmoney","version":"2.3.0","build_number":"77","package_name":"openmoney"}
+{
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "version": "2.3.0",
+  "web": {
+    "version": "2.3.0",
+    "build": 77,
+    "releaseDate": "07/11/2026"
+  },
+  "build": 77,
+  "notes": "build com rollback sincronismo, disponível apenas na versão web em https://openmoney.app.br , melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
+  "releaseDate": "07/11/2026",
+  "windows": {
+    "build": 72,
+    "version": "2.3.0",
+    "sizeMb": 13,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.0.zip",
+    "sha256": "ee8ac64f512415ba79d3f5dc93a7cef667304aa1f19854561e9d72e325643015",
+    "releaseDate": "07/11/2026"
+  },
+  "macos": {
+    "version": "2.3.0",
+    "build": 77,
+    "releaseDate": "07/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.0.zip",
+    "sha256": "dd1b998f290612538ce9aee76f97983f1e2046328f15d04132c40a9d9c3397e8",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.3.0"
+}
