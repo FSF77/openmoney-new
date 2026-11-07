@@ -933,6 +933,15 @@ class _CashFlowViewState extends State<CashFlowView> {
       ),
     );
 
+    // Espaçador inferior para a barra de rolagem horizontal não sobrepor a última linha
+    rows.add(
+      _CashFlowRowItem(
+        height: 28,
+        left: const SizedBox(height: 28),
+        right: const SizedBox(height: 28),
+      ),
+    );
+
     return rows;
   }
 
@@ -1278,7 +1287,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         : colors.bgPrimary.withValues(alpha: 0.05);
 
     return _CashFlowRowItem(
-      height: _rowHeight(38),
+      height: _rowHeight(isEndingBalance ? 42 : 38),
       left: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,

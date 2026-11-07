@@ -1354,9 +1354,13 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
 
     // Verify modal title is 'Base de Dados Local'
     expect(find.text('Base de Dados Local'), findsWidgets);
+    expect(find.text('Abrir Base Existente'), findsOneWidget);
+    expect(find.text('Criar Nova Base'), findsOneWidget);
+    expect(find.text('Arquivos Recentes'), findsOneWidget);
+    expect(find.text('Fechar'), findsOneWidget);
   });
 
-  testWidgets('28. Inhibit local database shortcut button when Cloud is enabled, and single-line cloud footer', (tester) async {
+  testWidgets('28. Local database footer is single line and recent files persist cleanly', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1364,39 +1368,17 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
 
     final store = MoneyStore(autoBoot: false);
 
-    // Initial state: not authenticated -> dbBtn exists
     await tester.pumpWidget(OpenMoneyApp(store: store));
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Base de Dados Local'), findsWidgets);
 
     // Verify footer single-line text and version
-    final footerText = find.textContaining('Sincronização Cloud • v');
+    final footerText = find.textContaining('Base Local • v');
     expect(footerText, findsOneWidget);
     final textWidget = tester.widget<Text>(footerText);
     expect(textWidget.maxLines, equals(1));
     expect(textWidget.softWrap, isFalse);
-
-    // Simulate Cloud login
-    final cloud = CloudSyncService.instance;
-    cloud.loadSessionFromConfig({
-      'cloudApiBaseUrl': 'https://cloud.openmoney.app',
-      'cloudAuthToken': 'fake_jwt_token',
-      'cloudUserId': 'user123',
-      'cloudUserEmail': 'teste@openmoney.app',
-      'cloudUserName': 'Teste',
-    });
-    await tester.pumpAndSettle();
-
-    // With Cloud enabled: local database shortcut button must be inhibited (hidden)
-    expect(find.byTooltip('Base de Dados Local'), findsNothing);
-
-    // Cleanup session
-    cloud.logout();
-    await tester.pumpAndSettle();
-
-    // After logout, button returns
-    expect(find.byTooltip('Base de Dados Local'), findsWidgets);
   });
 
   testWidgets('29. Cash flow ending balance comments support add, edit, delete, persistence and indicators', (tester) async {

@@ -351,13 +351,6 @@ Future<void> showDatabaseFileManagerModal(
 ) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final colors = OpenMoneyColors(isDark);
-  final defaultCloud = store.defaultCloudOrDocumentsDir();
-  final sep = kIsWeb ? '/' : Platform.pathSeparator;
-  final pathCtrl = TextEditingController(
-    text: store.dbPath.isNotEmpty
-        ? store.dbPath
-        : '$defaultCloud${sep}openmoney.json',
-  );
   String? feedback;
 
   await showDialog(
@@ -376,105 +369,187 @@ Future<void> showDatabaseFileManagerModal(
             ],
           ),
           content: SizedBox(
-            width: 560,
+            width: 540,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Arquivo Ativo: ${store.dbPath.isEmpty ? "Memória Local" : store.dbPath}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.textSecondary,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: colors.bgPrimary,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline, size: 16, color: colors.income),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Base de Dados em Uso',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                store.dbPath.isEmpty ? 'Memória Local' : store.dbPath,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                  color: colors.textPrimary,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: pathCtrl,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Caminho Completo do Arquivo (.json) no Finder / Explorer',
-                      hintText:
-                          'Ex.: .../iCloud Drive/openmoney.json ou C:\\Users\\...\\OneDrive\\openmoney.json',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.folder_open, size: 16),
-                        label: const Text('Procurar no Finder / Explorer'),
-                        onPressed: () async {
-                          final selected = await NativeFilePicker.pickFile(
-                            title: 'Escolher Base OpenMoney (.json)',
-                            allowedExtensions: ['json'],
-                          );
-                          if (selected != null && selected.isNotEmpty) {
-                            setModalState(() {
-                              pathCtrl.text = selected;
-                            });
-                          }
-                        },
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colors.accent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(Icons.folder_open, size: 18),
+                          label: const Text(
+                            'Abrir Base Existente',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          onPressed: () async {
+                            final selected = await NativeFilePicker.pickFile(
+                              title: 'Escolher Base OpenMoney (.json)',
+                              allowedExtensions: ['json'],
+                            );
+                            if (selected != null && selected.isNotEmpty) {
+                              if (store.openDatabaseFromPath(selected)) {
+                                Navigator.pop(ctx);
+                              } else {
+                                setModalState(() {
+                                  feedback =
+                                      'Não foi possível abrir o arquivo "$selected". Verifique se o formato é válido.';
+                                });
+                              }
+                            }
+                          },
+                        ),
                       ),
-                      ActionChip(
-                        avatar: const Icon(Icons.create_new_folder_outlined, size: 16),
-                        label: const Text('Escolher Local para Nova Base'),
-                        onPressed: () async {
-                          final savePath = await NativeFilePicker.saveFile(
-                            title: 'Escolher Local para Salvar Nova Base',
-                            defaultName: 'openmoney.json',
-                          );
-                          if (savePath != null && savePath.isNotEmpty) {
-                            setModalState(() {
-                              pathCtrl.text = savePath;
-                            });
-                          }
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.cloud_outlined, size: 16),
-                        label: const Text('Pasta Nuvem Padrão'),
-                        onPressed: () {
-                          setModalState(() {
-                            pathCtrl.text =
-                                '$defaultCloud${sep}openmoney.json';
-                          });
-                        },
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.textPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: colors.borderGlass),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(Icons.add_circle_outline, size: 18),
+                          label: const Text(
+                            'Criar Nova Base',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          onPressed: () async {
+                            final savePath = await NativeFilePicker.saveFile(
+                              title: 'Escolher Local para Salvar Nova Base',
+                              defaultName: 'openmoney.json',
+                            );
+                            if (savePath != null && savePath.isNotEmpty) {
+                              store.createNewDatabaseAtPath(savePath);
+                              Navigator.pop(ctx);
+                            }
+                          },
+                        ),
                       ),
                     ],
                   ),
-                  if (store.recentFiles.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Arquivos Recentes:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
+                  if (feedback != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colors.expense.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: colors.expense.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, size: 16, color: colors.expense),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              feedback!,
+                              style: TextStyle(color: colors.expense, fontSize: 12),
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Arquivos Recentes',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
                         ),
+                      ),
+                      if (store.recentFiles.isNotEmpty)
                         TextButton.icon(
                           style: TextButton.styleFrom(
                             foregroundColor: colors.expense,
                             visualDensity: VisualDensity.compact,
                           ),
                           icon: const Icon(Icons.delete_sweep_outlined, size: 16),
-                          label: const Text('Limpar Recentes', style: TextStyle(fontSize: 12)),
+                          label: const Text(
+                            'Limpar Recentes',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           onPressed: () {
                             setModalState(() {
                               store.clearRecentFiles();
                             });
                           },
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (store.recentFiles.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          'Nenhum arquivo recente registrado.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
                     ...store.recentFiles.map((item) {
                       final isCurrent = item.path == store.dbPath;
                       return ListTile(
@@ -488,28 +563,40 @@ Future<void> showDatabaseFileManagerModal(
                               isCurrent ? colors.income : colors.textSecondary,
                           size: 18,
                         ),
-                        title: Text(item.displayName),
+                        title: Text(
+                          item.displayName,
+                          style: TextStyle(
+                            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
+                            color: colors.textPrimary,
+                          ),
+                        ),
                         subtitle: Text(
                           item.path,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: colors.textSecondary),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            TextButton(
-                              onPressed: () {
-                                if (store.openDatabaseFromPath(item.path)) {
-                                  Navigator.pop(ctx);
-                                } else {
-                                  setModalState(() {
-                                    feedback =
-                                        'Arquivo não encontrado: ${item.path}';
-                                  });
-                                }
-                              },
-                              child: const Text('Abrir'),
-                            ),
+                            if (!isCurrent)
+                              FilledButton.tonal(
+                                style: FilledButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                ),
+                                onPressed: () {
+                                  if (store.openDatabaseFromPath(item.path)) {
+                                    Navigator.pop(ctx);
+                                  } else {
+                                    setModalState(() {
+                                      feedback =
+                                          'Arquivo não encontrado: ${item.path}';
+                                    });
+                                  }
+                                },
+                                child: const Text('Abrir', style: TextStyle(fontSize: 12)),
+                              ),
                             IconButton(
                               icon: const Icon(Icons.close, size: 16),
                               tooltip: 'Remover da lista',
@@ -523,14 +610,6 @@ Future<void> showDatabaseFileManagerModal(
                         ),
                       );
                     }),
-                  ],
-                  if (feedback != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      feedback!,
-                      style: TextStyle(color: colors.accent, fontSize: 13),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -539,41 +618,6 @@ Future<void> showDatabaseFileManagerModal(
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Fechar'),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.add_circle_outline, size: 18),
-              label: const Text('Criar Nova Base Aqui'),
-              onPressed: () {
-                final p = pathCtrl.text.trim();
-                if (p.isEmpty) return;
-                store.createNewDatabaseAtPath(p);
-                Navigator.pop(ctx);
-              },
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.drive_file_move_outline, size: 18),
-              label: const Text('Mover Base Atual para cá'),
-              onPressed: () {
-                final p = pathCtrl.text.trim();
-                if (p.isEmpty) return;
-                store.moveDatabaseToPath(p);
-                Navigator.pop(ctx);
-              },
-            ),
-            FilledButton.icon(
-              icon: const Icon(Icons.folder_open, size: 18),
-              label: const Text('Abrir Base Existente'),
-              onPressed: () {
-                final p = pathCtrl.text.trim();
-                if (store.openDatabaseFromPath(p)) {
-                  Navigator.pop(ctx);
-                } else {
-                  setModalState(() {
-                    feedback =
-                        'Não foi possível abrir "$p". Verifique se o arquivo existe.';
-                  });
-                }
-              },
             ),
           ],
         );
