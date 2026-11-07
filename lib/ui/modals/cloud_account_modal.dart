@@ -758,9 +758,11 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
                   Flexible(
                     child: SingleChildScrollView(
-                      child: (_cloud.isAuthenticated && !_addingAnotherAccount)
-                          ? _buildConnectedBody(colors)
-                          : _buildDisconnectedBody(colors),
+                      child: _isForgotMode
+                          ? _buildDisconnectedBody(colors)
+                          : (_cloud.isAuthenticated && !_addingAnotherAccount)
+                              ? _buildConnectedBody(colors)
+                              : _buildDisconnectedBody(colors),
                     ),
                   ),
 
@@ -781,14 +783,88 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                               .withValues(alpha: 0.4),
                         ),
                       ),
-                      child: Text(
-                        _statusMsg!,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color:
-                              _isError ? colors.accentRed : colors.accentGreen,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _statusMsg!,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: _isError
+                                  ? colors.accentRed
+                                  : colors.accentGreen,
+                            ),
+                          ),
+                          if (_statusMsg!.contains('Sessão expirada') ||
+                              _statusMsg!.contains('não autenticada')) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () {
+                                    final currentEmail = _cloud.userEmail;
+                                    _cloud.logout();
+                                    setState(() {
+                                      _emailCtrl.text = currentEmail;
+                                      _passwordCtrl.clear();
+                                      _isRegisterMode = false;
+                                      _isForgotMode = false;
+                                      _addingAnotherAccount = false;
+                                      _statusMsg =
+                                          'Digite sua nova senha para reconectar em $currentEmail';
+                                      _isError = false;
+                                    });
+                                  },
+                                  icon: const Icon(Icons.login, size: 14),
+                                  label: const Text(
+                                    'Reconectar com Senha',
+                                    style: TextStyle(fontSize: 11.5),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () {
+                                    final currentEmail = _cloud.userEmail;
+                                    setState(() {
+                                      _emailCtrl.text = currentEmail;
+                                      _isForgotMode = true;
+                                      _forgotStep = 1;
+                                      _statusMsg = null;
+                                      _isError = false;
+                                      _resetCodeCtrl.clear();
+                                      _newForgotPassCtrl.clear();
+                                    });
+                                  },
+                                  icon: const Icon(Icons.mail_outline, size: 14),
+                                  label: const Text(
+                                    'Recuperar Senha por E-mail',
+                                    style: TextStyle(fontSize: 11.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -1410,9 +1486,37 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             obscure: true,
           ),
           const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: _isBusy ? null : _handleChangePassword,
-            child: const Text('Confirmar Nova Senha'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: _isBusy ? null : _handleChangePassword,
+                child: const Text('Confirmar Nova Senha'),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _emailCtrl.text = _cloud.userEmail;
+                    _isForgotMode = true;
+                    _forgotStep = 1;
+                    _statusMsg = null;
+                    _isError = false;
+                    _resetCodeCtrl.clear();
+                    _newForgotPassCtrl.clear();
+                  });
+                },
+                child: Text(
+                  'Esqueci minha senha atual',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.accentBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ],

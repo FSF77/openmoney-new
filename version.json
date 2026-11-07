@@ -1,24 +1,29 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "build":  65,
-    "version":  "2.2.7",
-    "notes":  "Melhorias visuais, ajuste regra abatimento, importar CSV carteira, bloqueio de categorias, sempre abrir a conta de crédito na fatura em aberto, melhorias na visualização no card de patrimônio \u003e\u003e Anteriores: Rotina para importar pastas com recibos digitalizados uso OCR local ou integração com Gemini IA, Melhorias visuais nas telas de lançamento e relatório, inclusão de filtro anual no relatório, Alterar nomes orçamento para limite de gastos…",
-    "releaseDate":  "05/11/2026",
-    "windows":  {
-                    "build":  65,
-                    "version":  "2.2.7",
-                    "sizeMb":  13,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.2.7.zip",
-                    "sha256":  "ae21272b6c581ed5fed744f7df389dd28268520e26b45b68ace3d4ca22f6d9d1",
-                    "releaseDate":  "05/11/2026"
-                },
-    "macos":  {
-                  "version":  "2.2.7",
-                  "build":  65,
-                  "releaseDate":  "05/11/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.2.7.zip",
-                  "sha256":  "ed7efe7a1ea4c0ffcb2a3c8bac0b497db6fe1cd07072e99f834767b89522af34",
-                  "sizeMb":  11
-              },
-    "title":  "OpenMoney Flutter v2.2.7"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "build": 66,
+  "version": "2.3.0",
+  "notes": "Liberado a opção para sincronização online, seus dados estão seguros com login e senha, uso de criptografia AES-256-GCM + PBKDF2, versão web em https://openmoney.app.br , aplicação e base hospedados na Cloudflare, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
+  "releaseDate": "06/11/2026",
+  "windows": {
+    "build": 65,
+    "version": "2.2.7",
+    "sizeMb": 13,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.2.7.zip",
+    "sha256": "ae21272b6c581ed5fed744f7df389dd28268520e26b45b68ace3d4ca22f6d9d1",
+    "releaseDate": "05/11/2026"
+  },
+  "macos": {
+    "version": "2.3.0",
+    "build": 66,
+    "releaseDate": "06/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.0.zip",
+    "sha256": "94f4bec61e021de7956caa6d19474d213c49e3551c77c3e7f14aa4b43b4a2624",
+    "sizeMb": 11
+  },
+  "title": "OpenMoney Flutter v2.3.0",
+  "web": {
+    "version": "2.3.0",
+    "build": 66,
+    "releaseDate": "06/11/2026"
+  }
 }

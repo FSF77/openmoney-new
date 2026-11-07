@@ -557,7 +557,9 @@ class CloudSyncService extends ChangeNotifier {
       final res = await platformHttpRequest(
         method: 'POST',
         url: _endpoint('/api/auth/forgot-password'),
-        headers: _headers(),
+        headers: const <String, String>{
+          'Content-Type': 'application/json; charset=utf-8',
+        },
         body: jsonEncode({'email': cleanEmail}),
       );
       final decoded = _tryDecodeJson(res.body);
@@ -608,7 +610,9 @@ class CloudSyncService extends ChangeNotifier {
       final res = await platformHttpRequest(
         method: 'POST',
         url: _endpoint('/api/auth/reset-password'),
-        headers: _headers(),
+        headers: const <String, String>{
+          'Content-Type': 'application/json; charset=utf-8',
+        },
         body: jsonEncode({
           'email': cleanEmail,
           'code': cleanCode,
