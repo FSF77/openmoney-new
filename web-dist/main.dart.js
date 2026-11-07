@@ -31652,7 +31652,7 @@ s=7
 return A.w(A.and(),$async$SB)
 case 7:n=b
 if(n.c.length!==0){m=A.bH(n.d,null)
-if(A.biK(n.c,m,"2.3.0",69)||n.c==="2.3.0"){$.Fa=n.c
+if(A.biK(n.c,m,"2.3.0",70)||n.c==="2.3.0"){$.Fa=n.c
 if(m!=null)$.SA=m}}p=2
 s=6
 break
@@ -124896,7 +124896,7 @@ $.ue=A.b([],A.aH("J<nH>"))
 $.rf=A.o(t.N,t.H3)
 $.aVn=A.o(t.N,t.CG)
 $.Fa="2.3.0"
-$.SA=69
+$.SA=70
 $.b45=!1
 $.b48=null
 $.b7g=null
