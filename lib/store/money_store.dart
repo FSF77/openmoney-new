@@ -354,6 +354,7 @@ class MoneyStore extends ChangeNotifier {
           : 'openmoney.json';
       if (CloudSyncService.instance.isAuthenticated) {
         // Carrega cache instantâneo do usuário enquanto conecta o motor Sync v2 em tempo real
+        bool loadedFromCache = false;
         final cachedRaw = webLocalStorageGet(
           'openmoney_web_cache_${CloudSyncService.instance.userId}',
         );
@@ -363,6 +364,7 @@ class MoneyStore extends ChangeNotifier {
             if (cached is Map<String, dynamic> &&
                 cached['payload'] is Map<String, dynamic>) {
               db = Database.fromJson(cached['payload'] as Map<String, dynamic>);
+              loadedFromCache = true;
             }
           } catch (_) {}
         }
@@ -375,7 +377,10 @@ class MoneyStore extends ChangeNotifier {
           selectedAccountId = db.accounts.first.id;
         }
         notifyListeners();
-        SyncEngine.instance.start(this);
+        SyncEngine.instance.start(
+          this,
+          hasValidLocalCache: loadedFromCache,
+        );
         return;
       }
 
@@ -1063,6 +1068,37 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
+  /// Aplica diretamente um CloudDatabaseSnapshot já baixado (ex: após restaurar backup diário)
+  void applyCloudSnapshot(CloudDatabaseSnapshot snap) {
+    cancelPendingSave();
+    db = Database.fromJson(snap.payload);
+    if (snap.preferences.isNotEmpty) {
+      applyPreferencesMap(snap.preferences);
+      final cfg = _readConfig();
+      cfg.addAll(snap.preferences);
+      _writeConfig(cfg);
+    }
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+    }
+    migrate();
+    syncRecs();
+    syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
+    rebuildIndexes();
+    if (db.accounts.isNotEmpty && accById(selectedAccountId) == null) {
+      selectedAccountId = db.accounts.first.id;
+    }
+    if (kIsWeb) {
+      SyncEngine.instance.onFullDatabaseReplaced(
+        db: db,
+        prefs: exportPreferencesMap(),
+        revision: snap.syncSeq > snap.revision ? snap.syncSeq : snap.revision,
+      );
+    }
+    saveCloudSessionToConfig();
+    notifyListeners();
+  }
+
   /// Sincroniza a sessão atual a partir da nuvem via SyncEngine v2 (Web) ou fetchDatabase
   Future<bool> syncFromCloud() async {
     cancelPendingSave();
@@ -1070,7 +1106,11 @@ class MoneyStore extends ChangeNotifier {
 
     if (kIsWeb) {
       dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
-      SyncEngine.instance.start(this);
+      SyncEngine.instance.start(
+        this,
+        triggerInitialSync: false,
+        hasValidLocalCache: false,
+      );
       final ok = await SyncEngine.instance.syncNow(forceFullPull: true);
       if (ok) {
         saveCloudSessionToConfig();
@@ -1120,7 +1160,11 @@ class MoneyStore extends ChangeNotifier {
     );
     if (ok) {
       if (kIsWeb) {
-        SyncEngine.instance.resetForAccountSwitch(db, exportPreferencesMap());
+        SyncEngine.instance.onFullDatabaseReplaced(
+          db: db,
+          prefs: exportPreferencesMap(),
+          revision: CloudSyncService.instance.revision,
+        );
       }
       saveCloudSessionToConfig();
       notifyListeners();

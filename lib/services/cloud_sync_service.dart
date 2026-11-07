@@ -50,14 +50,19 @@ class CloudDatabaseSnapshot {
   final Map<String, dynamic> payload;
   final Map<String, dynamic> preferences;
   final int revision;
+  final int syncSeq;
+  final int snapshotSeq;
   final String updatedAt;
 
   const CloudDatabaseSnapshot({
     required this.payload,
     required this.preferences,
     required this.revision,
+    int? syncSeq,
+    int? snapshotSeq,
     required this.updatedAt,
-  });
+  })  : syncSeq = syncSeq ?? revision,
+        snapshotSeq = snapshotSeq ?? revision;
 }
 
 class SavedCloudAccount {
@@ -790,9 +795,13 @@ class CloudSyncService extends ChangeNotifier {
 
         final rev =
             int.tryParse(res.headers['x-openmoney-revision'] ?? '') ?? 1;
+        final syncSeq =
+            int.tryParse(res.headers['x-openmoney-sync-seq'] ?? '') ?? rev;
+        final snapshotSeq =
+            int.tryParse(res.headers['x-openmoney-snapshot-seq'] ?? '') ?? rev;
         final updatedAt = res.headers['x-openmoney-updated-at'] ?? '';
 
-        _revision = rev;
+        _revision = syncSeq > rev ? syncSeq : rev;
         _lastSyncedAt = DateTime.now();
         _state = CloudSyncState.synced;
         _lastError = null;
@@ -819,6 +828,8 @@ class CloudSyncService extends ChangeNotifier {
           payload: payloadMap,
           preferences: prefsMap,
           revision: rev,
+          syncSeq: syncSeq,
+          snapshotSeq: snapshotSeq,
           updatedAt: updatedAt,
         );
       }
@@ -845,9 +856,11 @@ class CloudSyncService extends ChangeNotifier {
         }
 
         final rev = (decoded['revision'] as num?)?.toInt() ?? 1;
+        final syncSeq = (decoded['syncSeq'] as num?)?.toInt() ?? rev;
+        final snapshotSeq = (decoded['snapshotSeq'] as num?)?.toInt() ?? rev;
         final updatedAt = (decoded['updatedAt'] ?? '').toString();
 
-        _revision = rev;
+        _revision = syncSeq > rev ? syncSeq : rev;
         _lastSyncedAt = DateTime.now();
         _state = CloudSyncState.synced;
         _lastError = null;
@@ -861,6 +874,8 @@ class CloudSyncService extends ChangeNotifier {
           payload: payloadMap,
           preferences: prefsMap,
           revision: rev,
+          syncSeq: syncSeq,
+          snapshotSeq: snapshotSeq,
           updatedAt: updatedAt,
         );
       }
@@ -903,6 +918,7 @@ class CloudSyncService extends ChangeNotifier {
     required Map<String, dynamic> payload,
     required Map<String, dynamic> preferences,
     bool force = false,
+    int? compactSeq,
   }) async {
     // Aguarda envio anterior caso exista, evitando gravações concorrentes no D1
     if (_inFlightPush != null) {
@@ -915,6 +931,7 @@ class CloudSyncService extends ChangeNotifier {
       payload: payload,
       preferences: preferences,
       force: force,
+      compactSeq: compactSeq,
     );
     _inFlightPush = future;
     try {
@@ -930,6 +947,7 @@ class CloudSyncService extends ChangeNotifier {
     required Map<String, dynamic> payload,
     required Map<String, dynamic> preferences,
     bool force = false,
+    int? compactSeq,
   }) async {
     final reqUserId = _userId;
     final reqToken = _authToken;
@@ -940,7 +958,7 @@ class CloudSyncService extends ChangeNotifier {
         webLocalStorageSet(
           'openmoney_web_cache_$reqUserId',
           jsonEncode({
-            'revision': _revision,
+            'revision': compactSeq ?? _revision,
             'payload': payload,
             'preferences': preferences,
           }),
@@ -965,8 +983,10 @@ class CloudSyncService extends ChangeNotifier {
       return false;
     }
 
-    _state = CloudSyncState.syncing;
-    notifyListeners();
+    if (compactSeq == null) {
+      _state = CloudSyncState.syncing;
+      notifyListeners();
+    }
 
     try {
       final rawBytes = Uint8List.fromList(utf8.encode(rawJson));
@@ -992,6 +1012,7 @@ class CloudSyncService extends ChangeNotifier {
           'X-OpenMoney-Prefs': prefsB64,
           'X-OpenMoney-Base-Revision': '$_revision',
           if (force) 'X-OpenMoney-Force': 'true',
+          if (compactSeq != null) 'X-OpenMoney-Compact-Seq': '$compactSeq',
         },
         bodyBytes: compressedBytes,
       );
@@ -1083,7 +1104,14 @@ class CloudSyncService extends ChangeNotifier {
       if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
         return await fetchDatabase();
       }
-    } catch (_) {}
+      _lastError =
+          (decoded?['error'] ?? 'Falha ao restaurar backup (${res.statusCode}).')
+              .toString();
+      notifyListeners();
+    } catch (_) {
+      _lastError = 'Erro de conexão ao restaurar backup.';
+      notifyListeners();
+    }
     return null;
   }
 

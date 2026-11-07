@@ -637,7 +637,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     });
     final snap = await _cloud.restoreCloudBackup(b.id);
     if (snap != null && snap.payload.isNotEmpty) {
-      await widget.store.syncFromCloud();
+      widget.store.applyCloudSnapshot(snap);
+      await _loadCloudBackups();
       if (mounted) {
         setState(() {
           _isBusy = false;
@@ -650,7 +651,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
       setState(() {
         _isBusy = false;
         _isError = true;
-        _statusMsg = 'Não foi possível restaurar o backup selecionado.';
+        _statusMsg = _cloud.lastError ??
+            'Não foi possível restaurar o backup selecionado.';
       });
     }
   }
@@ -940,7 +942,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   widget.store.stopPeriodicCloudSync();
                   _cloud.logout();
                   widget.store.saveCloudSessionToConfig();
-                  if (kIsWeb && _cloud.savedAccounts.isEmpty) {
+                  if (kIsWeb) {
                     Navigator.of(context).pop();
                   }
                 },

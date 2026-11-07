@@ -496,6 +496,78 @@ async function decryptUserPayload(storedText, userId, env) {
 
 const MAX_D1_CHUNK_CHARS = 380000; // ~380 KB por query SQL (limite D1 = 1 MB)
 
+function parseChunkRange(rawPayload) {
+  if (!rawPayload || typeof rawPayload !== "string") return null;
+  if (rawPayload.startsWith("chunked:v3:")) {
+    const parts = rawPayload.split(":");
+    const batchSlot = Number(parts[2] || 0);
+    const count = Number(parts[3] || 0);
+    if (batchSlot > 0 && count > 0) {
+      return { start: batchSlot, end: batchSlot + count };
+    }
+  } else if (rawPayload.startsWith("chunked:v2:")) {
+    const parts = rawPayload.split(":");
+    const count = Number(parts[2] || 0);
+    if (count > 0) {
+      return { start: 0, end: count };
+    }
+  }
+  return null;
+}
+
+async function cleanupOrphanedChunksForUser(db, userId) {
+  try {
+    const ranges = [];
+    const mainRow = await db
+      .prepare(`SELECT payload FROM user_databases WHERE user_id = ?1`)
+      .bind(userId)
+      .first();
+    if (mainRow && mainRow.payload) {
+      const r = parseChunkRange(mainRow.payload);
+      if (r) ranges.push(r);
+    }
+
+    const backupRows = await db
+      .prepare(`SELECT payload FROM user_database_backups WHERE user_id = ?1`)
+      .bind(userId)
+      .all();
+    for (const b of (backupRows && backupRows.results) || []) {
+      const r = parseChunkRange(b.payload);
+      if (r) ranges.push(r);
+    }
+
+    const chunkRows = await db
+      .prepare(`SELECT chunk_index FROM user_database_chunks WHERE user_id = ?1`)
+      .bind(userId)
+      .all();
+    const allChunks = (chunkRows && chunkRows.results) || [];
+    const toDelete = [];
+    for (const c of allChunks) {
+      const idx = Number(c.chunk_index);
+      const isReferenced = ranges.some((r) => idx >= r.start && idx < r.end);
+      if (!isReferenced) {
+        toDelete.push(idx);
+      }
+    }
+
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+      const slice = toDelete.slice(i, i + BATCH_SIZE);
+      await db.batch(
+        slice.map((idx) =>
+          db
+            .prepare(
+              `DELETE FROM user_database_chunks WHERE user_id = ?1 AND chunk_index = ?2`
+            )
+            .bind(userId, idx)
+        )
+      );
+    }
+  } catch (e) {
+    console.warn("Aviso ao limpar chunks órfãos:", e);
+  }
+}
+
 async function saveEncryptedPayloadToD1(
   db,
   userId,
@@ -521,11 +593,6 @@ async function saveEncryptedPayloadToD1(
       .bind(userId, nextRev, encryptedPayload, prefsStr, nowIso)
       .run();
 
-    await db
-      .prepare(`DELETE FROM user_database_chunks WHERE user_id = ?1`)
-      .bind(userId)
-      .run();
-
     const backupId = `${userId}_${todayDate}`;
     try {
       await db
@@ -536,7 +603,9 @@ async function saveEncryptedPayloadToD1(
              revision = excluded.revision,
              size_bytes = excluded.size_bytes,
              payload = excluded.payload,
-             created_at = excluded.created_at`
+             created_at = excluded.created_at
+           WHERE excluded.size_bytes >= (user_database_backups.size_bytes / 2)
+              OR user_database_backups.size_bytes < 2000`
         )
         .bind(
           backupId,
@@ -549,6 +618,8 @@ async function saveEncryptedPayloadToD1(
         )
         .run();
     } catch (_) {}
+
+    await cleanupOrphanedChunksForUser(db, userId);
   } else {
     // Copy-On-Write (MVCC): usa um batchSlot exclusivo por gravação para que uploads
     // simultâneos ou interrompidos JAMAIS misturem blocos de IVs AES-GCM diferentes!
@@ -587,17 +658,6 @@ async function saveEncryptedPayloadToD1(
       .bind(userId, nextRev, marker, prefsStr, nowIso)
       .run();
 
-    // Limpa apenas blocos antigos que não pertencem ao batchSlot recém-ativado
-    try {
-      await db
-        .prepare(
-          `DELETE FROM user_database_chunks
-           WHERE user_id = ?1 AND (chunk_index < ?2 OR chunk_index >= ?3)`
-        )
-        .bind(userId, batchSlot, batchSlot + chunks.length)
-        .run();
-    } catch (_) {}
-
     const backupId = `${userId}_${todayDate}`;
     try {
       await db
@@ -608,11 +668,16 @@ async function saveEncryptedPayloadToD1(
              revision = excluded.revision,
              size_bytes = excluded.size_bytes,
              payload = excluded.payload,
-             created_at = excluded.created_at`
+             created_at = excluded.created_at
+           WHERE excluded.size_bytes >= (user_database_backups.size_bytes / 2)
+              OR user_database_backups.size_bytes < 2000`
         )
         .bind(backupId, userId, todayDate, nextRev, sizeBytes, marker, nowIso)
         .run();
     } catch (_) {}
+
+    // Limpa apenas blocos antigos que não são referenciados nem por user_databases nem por user_database_backups
+    await cleanupOrphanedChunksForUser(db, userId);
   }
 }
 
@@ -921,108 +986,6 @@ async function loadDecryptedSyncChangesSince(db, userId, sinceSeq, aesKey) {
     });
   }
   return changes;
-}
-
-async function loadMergedSnapshotForUser(env, userId) {
-  const meta = await ensureUserSyncMeta(env.DB, userId);
-  const row = await env.DB.prepare(
-    `SELECT schema_version, revision, payload, preferences, updated_at
-     FROM user_databases WHERE user_id = ?1`
-  )
-    .bind(userId)
-    .first();
-
-  let payloadObj = defaultOpenMoneyV7Payload();
-  let prefsObj = {};
-
-  if (row) {
-    try {
-      const fullEncrypted = await loadEncryptedPayloadFromD1(
-        env.DB,
-        userId,
-        row.payload
-      );
-      const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
-      payloadObj = JSON.parse(decryptedStr);
-    } catch (_) {
-      payloadObj = defaultOpenMoneyV7Payload();
-    }
-    try {
-      prefsObj = JSON.parse(row.preferences || "{}");
-    } catch (_) {
-      prefsObj = {};
-    }
-  }
-
-  if (meta.seq > meta.snapshotSeq) {
-    const aesKey = await deriveUserAesKey(userId, env);
-    const uncompacted = await loadDecryptedSyncChangesSince(
-      env.DB,
-      userId,
-      meta.snapshotSeq,
-      aesKey
-    );
-    if (uncompacted.length > 0) {
-      applySyncChangesToSnapshot(payloadObj, prefsObj, uncompacted);
-    }
-  }
-
-  return {
-    meta,
-    payloadObj,
-    prefsObj,
-  };
-}
-
-async function compactSyncRecordsToSnapshot(env, userId) {
-  try {
-    const { meta, payloadObj, prefsObj } = await loadMergedSnapshotForUser(
-      env,
-      userId
-    );
-    if (meta.seq <= meta.snapshotSeq) return;
-
-    const nowIso = new Date().toISOString();
-    const todayDate = nowIso.slice(0, 10);
-    const plainJsonStr = JSON.stringify(payloadObj);
-    const sizeBytes = encoder.encode(plainJsonStr).byteLength;
-    const encryptedPayload = await encryptUserPayload(
-      plainJsonStr,
-      userId,
-      env
-    );
-    const prefsStr = JSON.stringify(prefsObj);
-
-    await saveEncryptedPayloadToD1(
-      env.DB,
-      userId,
-      meta.seq,
-      encryptedPayload,
-      prefsStr,
-      nowIso,
-      todayDate,
-      sizeBytes
-    );
-
-    // Mantém os últimos 500 registros de delta para que abas abertas sincronizem
-    // de forma incremental sem precisar baixar o snapshot completo
-    const minKeepSeq = Math.max(meta.baseSeq, meta.seq - 500);
-    await env.DB.batch([
-      env.DB.prepare(
-        `UPDATE user_sync_meta
-         SET snapshot_seq = ?1, base_seq = ?2, updated_at = ?3
-         WHERE user_id = ?4 AND snapshot_seq < ?1`
-      ).bind(meta.seq, minKeepSeq, nowIso, userId),
-      env.DB.prepare(
-        `DELETE FROM user_sync_records WHERE user_id = ?1 AND seq <= ?2`
-      ).bind(userId, minKeepSeq - 1),
-      env.DB.prepare(
-        `DELETE FROM user_sync_ops WHERE user_id = ?1 AND seq < ?2`
-      ).bind(userId, Math.max(1, meta.seq - 200)),
-    ]);
-  } catch (e) {
-    console.warn("Aviso na compactação em background Sync v2:", e);
-  }
 }
 
 async function notifyDurableObjectSync(env, userId, payload) {
@@ -1610,7 +1573,9 @@ export async function onRequest(context) {
         {
           ok: true,
           seq: meta.seq,
+          snapshotSeq: meta.snapshotSeq,
           full: false,
+          fullReloadRequired: false,
           changes: [],
         },
         200,
@@ -1631,7 +1596,9 @@ export async function onRequest(context) {
         {
           ok: true,
           seq: meta.seq,
+          snapshotSeq: meta.snapshotSeq,
           full: false,
+          fullReloadRequired: false,
           changes,
         },
         200,
@@ -1639,18 +1606,16 @@ export async function onRequest(context) {
       );
     }
 
-    // 3. Carga inicial (`since == 0`) ou após reset/importação completa (`since < baseSeq`)
-    const { payloadObj, prefsObj } = await loadMergedSnapshotForUser(
-      env,
-      userId
-    );
+    // 3. Carga inicial (`since == 0`) ou após reset/importação completa (`since < baseSeq`):
+    // Instrui o cliente a baixar o snapshot binário Gzip via GET /api/db?format=binary (0.5ms CPU no Worker)
+    // e aplicar os deltas posteriores a snapshotSeq localmente no navegador.
     return jsonResponse(
       {
         ok: true,
         seq: meta.seq,
-        full: true,
-        payload: payloadObj,
-        preferences: prefsObj,
+        snapshotSeq: meta.snapshotSeq,
+        full: false,
+        fullReloadRequired: true,
         changes: [],
       },
       200,
@@ -1695,6 +1660,7 @@ export async function onRequest(context) {
             duplicate: true,
             opId,
             seq: meta.seq,
+            snapshotSeq: meta.snapshotSeq,
             remoteChanges,
           },
           200,
@@ -1706,14 +1672,31 @@ export async function onRequest(context) {
     // Busca alterações feitas por outros dispositivos desde `clientSince` antes de gravar o lote atual
     let remoteChanges = [];
     let fullReloadRequired = false;
-    if (clientSince > 0 && clientSince < meta.baseSeq) {
+    if (clientSince === 0 || clientSince < meta.baseSeq) {
       fullReloadRequired = true;
-    } else if (clientSince > 0 && clientSince < meta.seq) {
+    } else if (clientSince < meta.seq) {
       remoteChanges = await loadDecryptedSyncChangesSince(
         env.DB,
         userId,
         clientSince,
         aesKey
+      );
+    }
+
+    // Se o cliente ainda não carregou o snapshot base ou está antes de um reset/restore,
+    // exige pull completo antes de aceitar gravações para jamais corromper a base!
+    if (fullReloadRequired) {
+      return jsonResponse(
+        {
+          ok: true,
+          opId,
+          seq: meta.seq,
+          snapshotSeq: meta.snapshotSeq,
+          remoteChanges: [],
+          fullReloadRequired: true,
+        },
+        200,
+        origin
       );
     }
 
@@ -1723,8 +1706,9 @@ export async function onRequest(context) {
           ok: true,
           opId,
           seq: meta.seq,
+          snapshotSeq: meta.snapshotSeq,
           remoteChanges,
-          fullReloadRequired,
+          fullReloadRequired: false,
         },
         200,
         origin
@@ -1792,9 +1776,7 @@ export async function onRequest(context) {
     }
     await env.DB.batch(metaStmts);
 
-    // Compacta no snapshot principal + backup diário em background (0ms de bloqueio na resposta)
     if (typeof context.waitUntil === "function") {
-      context.waitUntil(compactSyncRecordsToSnapshot(env, userId));
       context.waitUntil(
         notifyDurableObjectSync(env, userId, {
           seq: nextSeq,
@@ -1803,8 +1785,6 @@ export async function onRequest(context) {
           changes: broadcastChanges,
         })
       );
-    } else {
-      await compactSyncRecordsToSnapshot(env, userId);
     }
 
     return jsonResponse(
@@ -1812,9 +1792,10 @@ export async function onRequest(context) {
         ok: true,
         opId,
         seq: nextSeq,
+        snapshotSeq: meta.snapshotSeq,
         updatedAt: nowIso,
         remoteChanges,
-        fullReloadRequired,
+        fullReloadRequired: false,
       },
       200,
       origin
@@ -1825,8 +1806,7 @@ export async function onRequest(context) {
   // 4. GET /api/db (Leitura isolada e descriptografada do openmoney.json)
   // ==========================================================================
   if (path === "/api/db" && request.method === "GET") {
-    // Garante que alterações granulares de /api/sync estejam compactadas no snapshot
-    await compactSyncRecordsToSnapshot(env, userId);
+    const meta = await ensureUserSyncMeta(env.DB, userId);
     const row = await env.DB.prepare(
       "SELECT schema_version, revision, payload, preferences, updated_at FROM user_databases WHERE user_id = ?1"
     )
@@ -1846,6 +1826,8 @@ export async function onRequest(context) {
             "Content-Type": "application/octet-stream",
             "X-OpenMoney-Compression": "gzip",
             "X-OpenMoney-Revision": "1",
+            "X-OpenMoney-Sync-Seq": String(meta.seq),
+            "X-OpenMoney-Snapshot-Seq": String(meta.snapshotSeq),
             "X-OpenMoney-Updated-At": new Date().toISOString(),
             "X-OpenMoney-Prefs": base64UrlEncode("{}"),
           },
@@ -1855,6 +1837,8 @@ export async function onRequest(context) {
         {
           schemaVersion: 7,
           revision: 1,
+          syncSeq: meta.seq,
+          snapshotSeq: meta.snapshotSeq,
           payload: initial,
           preferences: {},
           updatedAt: new Date().toISOString(),
@@ -1871,6 +1855,10 @@ export async function onRequest(context) {
         row.payload
       );
 
+      const snapshotRev = Number(row.revision || 1);
+      const syncSeq = Math.max(meta.seq, snapshotRev);
+      const snapshotSeq = Math.min(meta.snapshotSeq, syncSeq);
+
       if (wantBinary) {
         // Caminho binário ultrarrápido: retorna os bytes Gzip direto sem JSON.parse/decompress no Worker
         const gzipBytes = await decryptUserPayloadToGzipBytes(
@@ -1884,7 +1872,9 @@ export async function onRequest(context) {
             ...corsHeaders(origin),
             "Content-Type": "application/octet-stream",
             "X-OpenMoney-Compression": "gzip",
-            "X-OpenMoney-Revision": String(row.revision || 1),
+            "X-OpenMoney-Revision": String(snapshotRev),
+            "X-OpenMoney-Sync-Seq": String(syncSeq),
+            "X-OpenMoney-Snapshot-Seq": String(snapshotSeq),
             "X-OpenMoney-Updated-At": String(row.updated_at || ""),
             "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
           },
@@ -1892,12 +1882,7 @@ export async function onRequest(context) {
       }
 
       const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
-      let parsedPayload = {};
-      try {
-        parsedPayload = JSON.parse(decryptedStr);
-      } catch (_) {
-        parsedPayload = defaultOpenMoneyV7Payload();
-      }
+      const parsedPayload = JSON.parse(decryptedStr);
 
       let parsedPrefs = {};
       try {
@@ -1907,7 +1892,9 @@ export async function onRequest(context) {
       return jsonResponse(
         {
           schemaVersion: Number(row.schema_version || 7),
-          revision: Number(row.revision || 1),
+          revision: snapshotRev,
+          syncSeq,
+          snapshotSeq,
           payload: parsedPayload,
           preferences: parsedPrefs,
           updatedAt: row.updated_at,
@@ -1916,62 +1903,19 @@ export async function onRequest(context) {
         origin
       );
     } catch (decryptErr) {
-      // Auto-recuperação (Self-Healing) caso blocos antigos (chunked:v2) tenham sofrido gravação concorrente interrompida
-      console.warn(
-        "Auto-recuperando base com falha de descriptografia para user_id:",
+      // NUNCA sobrescreve user_databases ou apaga chunks em caso de erro de leitura/CPU!
+      console.error(
+        "Erro ao ler/descriptografar base para user_id:",
         userId,
         decryptErr
       );
-      const initial = defaultOpenMoneyV7Payload();
-      const nowIso = new Date().toISOString();
-      const healedEncrypted = await encryptUserPayload(
-        JSON.stringify(initial),
-        userId,
-        env
-      );
-      const nextRev = Number(row.revision || 1) + 1;
-      try {
-        await env.DB.batch([
-          env.DB.prepare(
-            `DELETE FROM user_database_chunks WHERE user_id = ?1`
-          ).bind(userId),
-          env.DB.prepare(
-            `UPDATE user_databases SET revision = ?1, payload = ?2, updated_at = ?3 WHERE user_id = ?4`
-          ).bind(nextRev, healedEncrypted, nowIso, userId),
-        ]);
-      } catch (_) {}
-
-      if (wantBinary) {
-        const gzipBytes = await compressGzip(JSON.stringify(initial));
-        return new Response(gzipBytes, {
-          status: 200,
-          headers: {
-            ...corsHeaders(origin),
-            "Content-Type": "application/octet-stream",
-            "X-OpenMoney-Compression": "gzip",
-            "X-OpenMoney-Revision": String(nextRev),
-            "X-OpenMoney-Updated-At": nowIso,
-            "X-OpenMoney-Prefs": base64UrlEncode(row.preferences || "{}"),
-            "X-OpenMoney-Self-Healed": "true",
-          },
-        });
-      }
-
-      let parsedPrefs = {};
-      try {
-        parsedPrefs = JSON.parse(row.preferences || "{}");
-      } catch (_) {}
-
       return jsonResponse(
         {
-          schemaVersion: 7,
-          revision: nextRev,
-          payload: initial,
-          preferences: parsedPrefs,
-          updatedAt: nowIso,
-          selfHealed: true,
+          error: `Erro temporário ao ler base criptografada na nuvem: ${
+            decryptErr.message || decryptErr
+          }`,
         },
-        200,
+        500,
         origin
       );
     }
@@ -2034,7 +1978,7 @@ export async function onRequest(context) {
 
     const meta = await ensureUserSyncMeta(env.DB, userId);
     const current = await env.DB.prepare(
-      "SELECT revision FROM user_databases WHERE user_id = ?1"
+      "SELECT revision, payload FROM user_databases WHERE user_id = ?1"
     )
       .bind(userId)
       .first();
@@ -2044,12 +1988,87 @@ export async function onRequest(context) {
       current ? Number(current.revision || 1) : 0
     );
 
-    // Proteção estrita contra sobrescrita e perda de dados (Concorrência Optimista)
-    const baseRevHeader = request.headers.get("X-OpenMoney-Base-Revision");
     const isForce =
       request.headers.get("X-OpenMoney-Force") === "true" ||
       url.searchParams.get("force") === "true";
 
+    // Proteção absoluta contra perda de dados: se a base atual no D1 é grande (chunked)
+    // e o envio não tem force=true explícito, bloqueia qualquer payload vazio/minúsculo (<2KB)!
+    const currentIsChunked =
+      current &&
+      typeof current.payload === "string" &&
+      current.payload.startsWith("chunked:");
+    if (currentIsChunked && sizeBytes < 2000 && !isForce) {
+      return jsonResponse(
+        {
+          error:
+            "Proteção anti-perda ativada: tentativa de sobrescrever base grande com payload vazio bloqueada.",
+        },
+        409,
+        origin
+      );
+    }
+
+    // Modo de compactação em background enviado pelo cliente após aplicar deltas Sync v2
+    const compactSeqHeader =
+      request.headers.get("X-OpenMoney-Compact-Seq") ||
+      url.searchParams.get("compactSeq");
+    if (compactSeqHeader !== null && compactSeqHeader !== undefined) {
+      const compactSeq = parseInt(compactSeqHeader, 10);
+      if (isNaN(compactSeq) || compactSeq < meta.seq) {
+        return jsonResponse(
+          {
+            ok: false,
+            skipped: true,
+            seq: meta.seq,
+          },
+          200,
+          origin
+        );
+      }
+      const nowIso = new Date().toISOString();
+      const todayDate = nowIso.slice(0, 10);
+
+      await saveEncryptedPayloadToD1(
+        env.DB,
+        userId,
+        compactSeq,
+        encryptedPayload,
+        prefsStr,
+        nowIso,
+        todayDate,
+        sizeBytes
+      );
+
+      const minKeepSeq = Math.max(1, compactSeq - 500);
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE user_sync_meta
+           SET snapshot_seq = ?1, base_seq = ?2, updated_at = ?3
+           WHERE user_id = ?4 AND seq = ?1`
+        ).bind(compactSeq, minKeepSeq, nowIso, userId),
+        env.DB.prepare(
+          `DELETE FROM user_sync_records WHERE user_id = ?1 AND seq < ?2`
+        ).bind(userId, minKeepSeq),
+        env.DB.prepare(
+          `DELETE FROM user_sync_ops WHERE user_id = ?1 AND seq < ?2`
+        ).bind(userId, Math.max(1, compactSeq - 200)),
+      ]);
+
+      return jsonResponse(
+        {
+          ok: true,
+          compacted: true,
+          revision: compactSeq,
+          updatedAt: nowIso,
+        },
+        200,
+        origin
+      );
+    }
+
+    // Proteção estrita contra sobrescrita e perda de dados (Concorrência Optimista)
+    const baseRevHeader = request.headers.get("X-OpenMoney-Base-Revision");
     let clientBaseRev = 0;
     if (baseRevHeader !== null && baseRevHeader !== undefined) {
       clientBaseRev = parseInt(baseRevHeader, 10);
@@ -2165,6 +2184,18 @@ export async function onRequest(context) {
       return jsonResponse(
         { error: "Backup não encontrado para este usuário." },
         404,
+        origin
+      );
+    }
+
+    try {
+      await loadEncryptedPayloadFromD1(env.DB, userId, backupRow.payload);
+    } catch (chunkErr) {
+      return jsonResponse(
+        {
+          error: `Não foi possível restaurar este backup porque seus blocos foram substituídos anteriormente (${chunkErr.message}). Tente restaurar outro snapshot ou importar seu arquivo .json.`,
+        },
+        422,
         origin
       );
     }

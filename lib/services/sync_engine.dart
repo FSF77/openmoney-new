@@ -50,9 +50,12 @@ class SyncEngine extends ChangeNotifier {
   final Map<String, SyncChange> _outbox = <String, SyncChange>{};
 
   int _lastSeq = 0;
+  bool _hasLoadedRemoteState = false;
   bool _isRunning = false;
   bool _isSyncing = false;
   bool _isApplyingRemote = false;
+  bool _pendingForceFullPull = false;
+  Future<bool>? _activeSyncFuture;
   bool _wsConnected = false;
   int _wsFailCount = 0;
   DateTime? _nextWsAttemptAt;
@@ -60,9 +63,11 @@ class SyncEngine extends ChangeNotifier {
   Timer? _deltaPollTimer;
   Timer? _wsPingTimer;
   Timer? _flushTimer;
+  Timer? _compactTimer;
   PlatformWebSocket? _ws;
 
   int get lastSeq => _lastSeq;
+  bool get hasLoadedRemoteState => _hasLoadedRemoteState;
   int get pendingOutboxCount => _outbox.length;
   bool get isSyncing => _isSyncing;
   bool get isWsConnected => _wsConnected;
@@ -366,7 +371,11 @@ class SyncEngine extends ChangeNotifier {
     });
   }
 
-  void start(MoneyStore store) {
+  void start(
+    MoneyStore store, {
+    bool triggerInitialSync = true,
+    bool hasValidLocalCache = false,
+  }) {
     if (!kIsWeb) return;
     _store = store;
     final cloud = CloudSyncService.instance;
@@ -375,21 +384,27 @@ class SyncEngine extends ChangeNotifier {
       return;
     }
 
-    _loadPersistedState(cloud.userId);
+    _loadPersistedState(
+      cloud.userId,
+      hasValidLocalCache: hasValidLocalCache,
+    );
 
-    // Se há alterações pendentes na outbox offline de sessão anterior, aplica-as na memória
-    if (_outbox.isNotEmpty) {
-      final prefs = store.exportPreferencesMap();
-      applyChangesToDatabase(
-        db: store.db,
-        prefs: prefs,
-        changes: _outbox.values.toList(),
-        baseline: _baseline,
-      );
-      store.onRemoteChangesApplied(updatedPrefs: prefs);
+    if (_hasLoadedRemoteState) {
+      // Se há alterações pendentes na outbox offline de sessão anterior e o cache local é válido, aplica-as na memória
+      if (_outbox.isNotEmpty) {
+        final prefs = store.exportPreferencesMap();
+        applyChangesToDatabase(
+          db: store.db,
+          prefs: prefs,
+          changes: _outbox.values.toList(),
+          baseline: _baseline,
+        );
+        store.onRemoteChangesApplied(updatedPrefs: prefs);
+      }
+      seedBaseline(store.db, store.exportPreferencesMap());
+    } else {
+      _baseline.clear();
     }
-
-    seedBaseline(store.db, store.exportPreferencesMap());
 
     registerWebSyncListeners(
       onOnline: () {
@@ -423,28 +438,55 @@ class SyncEngine extends ChangeNotifier {
     _isRunning = true;
     _startTimers();
     _ensureWebSocket();
-    syncNow();
+    if (triggerInitialSync) {
+      syncNow(forceFullPull: !_hasLoadedRemoteState);
+    }
   }
 
   void stop() {
     _isRunning = false;
+    _hasLoadedRemoteState = false;
+    _lastSeq = 0;
+    _baseline.clear();
+    _outbox.clear();
     _deltaPollTimer?.cancel();
     _deltaPollTimer = null;
     _wsPingTimer?.cancel();
     _wsPingTimer = null;
     _flushTimer?.cancel();
     _flushTimer = null;
+    _compactTimer?.cancel();
+    _compactTimer = null;
     _ws?.close();
     _ws = null;
     _wsConnected = false;
   }
 
+  /// Sincroniza o estado interno do SyncEngine imediatamente após upload completo (PUT /api/db) ou restauração de backup
+  void onFullDatabaseReplaced({
+    required Database db,
+    required Map<String, dynamic> prefs,
+    required int revision,
+  }) {
+    _outbox.clear();
+    _lastSeq = revision;
+    _hasLoadedRemoteState = revision > 0;
+    seedBaseline(db, prefs);
+    _persistState();
+    _persistLocalCache();
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      broadcastWebSyncSignal(
+        'sync:${CloudSyncService.instance.userId}:$_lastSeq',
+      );
+    }
+  }
+
   void resetForAccountSwitch(Database db, Map<String, dynamic> prefs) {
     _outbox.clear();
+    _baseline.clear();
     _lastSeq = 0;
-    seedBaseline(db, prefs);
+    _hasLoadedRemoteState = false;
     if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
-      _loadPersistedState(CloudSyncService.instance.userId);
       _ws?.close();
       _ws = null;
       _wsConnected = false;
@@ -453,10 +495,22 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
-  void _loadPersistedState(String userId) {
+  void _loadPersistedState(
+    String userId, {
+    required bool hasValidLocalCache,
+  }) {
     if (!kIsWeb || userId.isEmpty) return;
-    final rawSeq = webLocalStorageGet(_seqStorageKey(userId));
-    _lastSeq = rawSeq != null ? (int.tryParse(rawSeq) ?? 0) : 0;
+
+    if (hasValidLocalCache) {
+      final rawSeq = webLocalStorageGet(_seqStorageKey(userId));
+      _lastSeq = rawSeq != null ? (int.tryParse(rawSeq) ?? 0) : 0;
+      _hasLoadedRemoteState = _lastSeq > 0;
+    } else {
+      // Se não há cache local válido carregado em memória (ex: bases >2MB ou novo login),
+      // obriga pull completo do snapshot binário antes de habilitar diffs locais!
+      _lastSeq = 0;
+      _hasLoadedRemoteState = false;
+    }
 
     _outbox.clear();
     final rawOutbox = webLocalStorageGet(_outboxStorageKey(userId));
@@ -481,7 +535,9 @@ class SyncEngine extends ChangeNotifier {
     if (!kIsWeb) return;
     final userId = CloudSyncService.instance.userId;
     if (userId.isEmpty) return;
-    webLocalStorageSet(_seqStorageKey(userId), _lastSeq.toString());
+    if (_lastSeq > 0) {
+      webLocalStorageSet(_seqStorageKey(userId), _lastSeq.toString());
+    }
     if (_outbox.isEmpty) {
       webLocalStorageRemove(_outboxStorageKey(userId));
     } else {
@@ -491,20 +547,51 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void _persistLocalCache() {
-    if (!kIsWeb || _store == null) return;
+    if (!kIsWeb || _store == null || !_hasLoadedRemoteState) return;
     final userId = CloudSyncService.instance.userId;
     if (userId.isEmpty) return;
     try {
-      webLocalStorageSet(
-        _cacheStorageKey(userId),
-        jsonEncode({
-          'revision': _lastSeq,
-          'updatedAt': DateTime.now().toIso8601String(),
-          'payload': _store!.db.toJson(),
-          'preferences': _store!.exportPreferencesMap(),
-        }),
-      );
+      final payloadMap = _store!.db.toJson();
+      final encoded = jsonEncode({
+        'revision': _lastSeq,
+        'updatedAt': DateTime.now().toIso8601String(),
+        'payload': payloadMap,
+        'preferences': _store!.exportPreferencesMap(),
+      });
+      if (encoded.length < 2000000) {
+        webLocalStorageSet(_cacheStorageKey(userId), encoded);
+      } else {
+        webLocalStorageRemove(_cacheStorageKey(userId));
+      }
     } catch (_) {}
+  }
+
+  void _scheduleClientCompaction() {
+    if (!kIsWeb) return;
+    _compactTimer?.cancel();
+    _compactTimer = Timer(const Duration(seconds: 4), () async {
+      if (!_isRunning ||
+          _isSyncing ||
+          !_hasLoadedRemoteState ||
+          _outbox.isNotEmpty ||
+          _lastSeq <= 0 ||
+          _store == null) {
+        return;
+      }
+      final cloud = CloudSyncService.instance;
+      if (!cloud.isAuthenticated || !webIsOnline()) return;
+      // Proteção extra: nunca compacta se a memória estiver vazia mas o baseline era grande
+      if (_baseline.length > 20 &&
+          _store!.db.txs.isEmpty &&
+          _store!.db.accounts.length <= 1) {
+        return;
+      }
+      await cloud.pushDatabase(
+        payload: _store!.db.toJson(),
+        preferences: _store!.exportPreferencesMap(),
+        compactSeq: _lastSeq,
+      );
+    });
   }
 
   // ==========================================================================
@@ -512,9 +599,15 @@ class SyncEngine extends ChangeNotifier {
   // ==========================================================================
 
   void onLocalSave(Database db, Map<String, dynamic> prefs) {
-    if (!kIsWeb || _isApplyingRemote) return;
+    if (!kIsWeb || _isApplyingRemote || !_hasLoadedRemoteState) return;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated) return;
+
+    // Trava de segurança: bloqueia geração acidental de tombstones em massa se a memória
+    // foi reiniciada sem passar pelo fluxo explícito de resetToBlankDatabaseAndSync
+    if (_baseline.length > 20 && db.txs.isEmpty && db.accounts.length <= 1) {
+      return;
+    }
 
     final diffs = computeDiff(
       baseline: _baseline,
@@ -645,7 +738,8 @@ class SyncEngine extends ChangeNotifier {
           return;
         }
         final rawChanges = decoded['changes'];
-        if (rawChanges is List &&
+        if (_hasLoadedRemoteState &&
+            rawChanges is List &&
             rawChanges.isNotEmpty &&
             remoteSeq == _lastSeq + 1) {
           final changes = rawChanges
@@ -671,10 +765,43 @@ class SyncEngine extends ChangeNotifier {
       );
       return false;
     }
-    if (_isSyncing) return true;
 
+    if (_activeSyncFuture != null) {
+      if (forceFullPull) {
+        _pendingForceFullPull = true;
+      }
+      final prevResult = await _activeSyncFuture!;
+      if (_pendingForceFullPull) {
+        _pendingForceFullPull = false;
+        return await syncNow(forceFullPull: true);
+      }
+      return prevResult;
+    }
+
+    final future = _executeSyncNow(forceFullPull: forceFullPull);
+    _activeSyncFuture = future;
+    try {
+      final result = await future;
+      if (_pendingForceFullPull) {
+        _pendingForceFullPull = false;
+        _activeSyncFuture = null;
+        return await syncNow(forceFullPull: true);
+      }
+      return result;
+    } finally {
+      if (identical(_activeSyncFuture, future)) {
+        _activeSyncFuture = null;
+      }
+    }
+  }
+
+  Future<bool> _executeSyncNow({required bool forceFullPull}) async {
+    final cloud = CloudSyncService.instance;
     _isSyncing = true;
-    if (_outbox.isNotEmpty || _lastSeq == 0 || forceFullPull) {
+    if (_outbox.isNotEmpty ||
+        !_hasLoadedRemoteState ||
+        _lastSeq == 0 ||
+        forceFullPull) {
       cloud.setSyncEngineStatus(
         state: CloudSyncState.syncing,
         pendingCount: _outbox.length,
@@ -682,9 +809,10 @@ class SyncEngine extends ChangeNotifier {
     }
 
     try {
-      // 1. Se ainda não carregou a sequência inicial (ou foi solicitado pull completo), baixa estado consolidado
-      if (_lastSeq == 0 || forceFullPull) {
-        final pulled = await _pullDeltaOrSnapshot(since: 0);
+      // 1. Se ainda não carregou o estado inicial em memória (ou foi solicitado pull completo),
+      // baixa o snapshot binário Gzip (0.5ms CPU no Worker) + deltas posteriores
+      if (!_hasLoadedRemoteState || _lastSeq == 0 || forceFullPull) {
+        final pulled = await _pullFullSnapshotAndDeltas();
         if (!pulled) return false;
       }
 
@@ -694,7 +822,7 @@ class SyncEngine extends ChangeNotifier {
         if (!pushed) return false;
       } else {
         // 3. Caso contrário, consulta delta incremental leve desde _lastSeq
-        final pulled = await _pullDeltaOrSnapshot(since: _lastSeq);
+        final pulled = await _pullDeltaIncremental(since: _lastSeq);
         if (!pulled) return false;
       }
 
@@ -717,7 +845,37 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
-  Future<bool> _pullDeltaOrSnapshot({required int since}) async {
+  /// Baixa o snapshot base via stream binário Gzip (suporta bases de 10MB+ sem limite de CPU no Worker)
+  /// e aplica em seguida quaisquer registros de delta gravados em user_sync_records.
+  Future<bool> _pullFullSnapshotAndDeltas() async {
+    final cloud = CloudSyncService.instance;
+    final snap = await cloud.fetchDatabase();
+    if (snap == null || snap.payload.isEmpty) {
+      return false;
+    }
+
+    final baseSeq = snap.snapshotSeq > 0 ? snap.snapshotSeq : snap.revision;
+    _applyFullSnapshot(
+      payload: snap.payload,
+      preferences: snap.preferences,
+      newSeq: baseSeq,
+    );
+
+    if (snap.syncSeq > baseSeq) {
+      final deltaOk = await _pullDeltaIncremental(
+        since: baseSeq,
+        allowRecursiveFullPull: false,
+      );
+      if (!deltaOk) return false;
+      _scheduleClientCompaction();
+    }
+    return true;
+  }
+
+  Future<bool> _pullDeltaIncremental({
+    required int since,
+    bool allowRecursiveFullPull = true,
+  }) async {
     final cloud = CloudSyncService.instance;
     final base = cloud.resolvedBaseUrl;
     if (base.isEmpty) return false;
@@ -751,17 +909,10 @@ class SyncEngine extends ChangeNotifier {
     if (decoded is! Map<String, dynamic>) return false;
 
     final remoteSeq = (decoded['seq'] as num?)?.toInt() ?? _lastSeq;
-    final isFull = decoded['full'] == true;
+    final needFullReload = decoded['fullReloadRequired'] == true;
 
-    if (isFull && decoded['payload'] is Map) {
-      _applyFullSnapshot(
-        payload: Map<String, dynamic>.from(decoded['payload'] as Map),
-        preferences: decoded['preferences'] is Map
-            ? Map<String, dynamic>.from(decoded['preferences'] as Map)
-            : <String, dynamic>{},
-        newSeq: remoteSeq,
-      );
-      return true;
+    if (needFullReload && allowRecursiveFullPull) {
+      return await _pullFullSnapshotAndDeltas();
     }
 
     final rawChanges = decoded['changes'];
@@ -780,7 +931,9 @@ class SyncEngine extends ChangeNotifier {
   }
 
   Future<bool> _flushOutboxBatch() async {
-    if (_outbox.isEmpty || _store == null) return true;
+    if (_outbox.isEmpty || _store == null || !_hasLoadedRemoteState) {
+      return true;
+    }
     final cloud = CloudSyncService.instance;
     final base = cloud.resolvedBaseUrl;
     if (base.isEmpty) return false;
@@ -817,6 +970,11 @@ class SyncEngine extends ChangeNotifier {
       return false;
     }
 
+    final needFullReload = decoded['fullReloadRequired'] == true;
+    if (needFullReload) {
+      return await _pullFullSnapshotAndDeltas();
+    }
+
     // Remove da outbox apenas os itens que não sofreram nova edição local durante o request
     batchEntries.forEach((key, sentChange) {
       final currentInOutbox = _outbox[key];
@@ -826,12 +984,6 @@ class SyncEngine extends ChangeNotifier {
     });
 
     final newSeq = (decoded['seq'] as num?)?.toInt() ?? _lastSeq;
-    final needFullReload = decoded['fullReloadRequired'] == true;
-
-    if (needFullReload) {
-      await _pullDeltaOrSnapshot(since: 0);
-      return true;
-    }
 
     final rawRemote = decoded['remoteChanges'];
     if (rawRemote is List && rawRemote.isNotEmpty) {
@@ -845,6 +997,9 @@ class SyncEngine extends ChangeNotifier {
       _persistState();
       _persistLocalCache();
     }
+
+    // Agenda compactação binária Gzip em background pelo cliente (zero CPU no Worker)
+    _scheduleClientCompaction();
 
     // Notifica outras abas do mesmo navegador instantaneamente (0ms)
     broadcastWebSyncSignal('sync:${cloud.userId}:$_lastSeq');
@@ -876,7 +1031,8 @@ class SyncEngine extends ChangeNotifier {
 
       store.onRemoteChangesApplied(updatedPrefs: mergedPrefs);
       seedBaseline(store.db, store.exportPreferencesMap());
-      _lastSeq = newSeq;
+      _lastSeq = newSeq > 0 ? newSeq : 1;
+      _hasLoadedRemoteState = true;
       _persistState();
       _persistLocalCache();
     } finally {
@@ -908,7 +1064,10 @@ class SyncEngine extends ChangeNotifier {
           seedBaseline(store.db, store.exportPreferencesMap());
         }
       }
-      _lastSeq = newSeq;
+      if (newSeq > 0) {
+        _lastSeq = newSeq;
+      }
+      _hasLoadedRemoteState = true;
       _persistState();
       _persistLocalCache();
     } finally {
