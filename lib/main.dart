@@ -14,13 +14,18 @@ void main() async {
   await OpenMoneyVersion.init();
 
   final store = MoneyStore(autoBoot: false);
+  if (kIsWeb) {
+    store.boot();
+  }
 
   runApp(OpenMoneyApp(store: store));
 
-  // Inicializa a base logo após o primeiro frame estar desenhado na tela
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    store.boot();
-  });
+  if (!kIsWeb) {
+    // Inicializa a base local logo após o primeiro frame estar desenhado na tela
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      store.boot();
+    });
+  }
 }
 
 class OpenMoneyApp extends StatelessWidget {

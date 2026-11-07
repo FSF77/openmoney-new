@@ -135,12 +135,22 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.store,
+      listenable: Listenable.merge([
+        widget.store,
+        CloudSyncService.instance,
+        SyncEngine.instance,
+      ]),
       builder: (context, _) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final colors = OpenMoneyColors(isDark);
         final width = MediaQuery.of(context).size.width;
         final isDesktopOrTablet = width >= 860;
+
+        if (kIsWeb &&
+            CloudSyncService.instance.isAuthenticated &&
+            !SyncEngine.instance.hasLoadedRemoteState) {
+          return _buildCloudLoadingScreen(context, colors);
+        }
 
         if (widget.store.showWelcomeScreen) {
           return WelcomeDatabaseSelectionScreen(store: widget.store);
@@ -1282,6 +1292,110 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCloudLoadingScreen(
+    BuildContext context,
+    OpenMoneyColors colors,
+  ) {
+    final cloud = CloudSyncService.instance;
+    final sync = SyncEngine.instance;
+    final hasError = cloud.state == CloudSyncState.error && !sync.isSyncing;
+    final email = cloud.userEmail.isNotEmpty ? cloud.userEmail : 'sua conta';
+
+    return Scaffold(
+      backgroundColor: colors.bgPrimary,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: (hasError ? colors.warning : colors.income)
+                          .withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: hasError
+                          ? Icon(
+                              Icons.cloud_off_rounded,
+                              size: 32,
+                              color: colors.warning,
+                            )
+                          : SizedBox(
+                              width: 30,
+                              height: 30,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: colors.income,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    hasError
+                        ? 'Falha ao carregar dados da nuvem'
+                        : 'Carregando seus dados...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    hasError
+                        ? (cloud.lastError ??
+                            'Não foi possível conectar ao servidor no momento. Verifique sua conexão e tente novamente.')
+                        : 'Sincronizando e descriptografando a base de $email na nuvem. Isso leva apenas alguns segundos...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                  if (hasError) ...[
+                    const SizedBox(height: 22),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Tentar Novamente'),
+                          onPressed: () {
+                            SyncEngine.instance.syncNow(forceFullPull: true);
+                          },
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.cloud_outlined, size: 18),
+                          label: const Text('Conta Cloud'),
+                          onPressed: () {
+                            showCloudAccountModal(context, widget.store);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
