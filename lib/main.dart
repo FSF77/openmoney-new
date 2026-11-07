@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'services/cloud_sync_service.dart';
+import 'services/shortcut_url_service.dart';
 import 'services/update_service.dart';
 import 'store/money_store.dart';
 import 'ui/app_shell.dart';
@@ -9,6 +10,7 @@ import 'ui/views/auth_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ShortcutUrlService.instance.captureFromCurrentUrl();
   await OpenMoneyVersion.init();
 
   final store = MoneyStore(autoBoot: false);

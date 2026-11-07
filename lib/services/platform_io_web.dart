@@ -28,6 +28,47 @@ String webWindowOrigin() {
   return '';
 }
 
+String webWindowSearch() {
+  try {
+    final loc = _window.getProperty<JSObject?>('location'.toJS);
+    if (loc != null) {
+      return loc.getProperty<JSString?>('search'.toJS)?.toDart ?? '';
+    }
+  } catch (_) {}
+  return '';
+}
+
+String webWindowHash() {
+  try {
+    final loc = _window.getProperty<JSObject?>('location'.toJS);
+    if (loc != null) {
+      return loc.getProperty<JSString?>('hash'.toJS)?.toDart ?? '';
+    }
+  } catch (_) {}
+  return '';
+}
+
+void webClearUrlQueryParams() {
+  try {
+    final loc = _window.getProperty<JSObject?>('location'.toJS);
+    final history = _window.getProperty<JSObject?>('history'.toJS);
+    if (loc != null && history != null) {
+      final pathname =
+          loc.getProperty<JSString?>('pathname'.toJS)?.toDart ?? '/';
+      final hash = loc.getProperty<JSString?>('hash'.toJS)?.toDart ?? '';
+      final cleanHash = hash.contains('?recibo=') || hash.contains('&recibo=')
+          ? hash.split('?').first
+          : hash;
+      history.callMethod<JSAny?>(
+        'replaceState'.toJS,
+        null,
+        ''.toJS,
+        '$pathname$cleanHash'.toJS,
+      );
+    }
+  } catch (_) {}
+}
+
 String? webLocalStorageGet(String key) {
   try {
     final storage = _window.getProperty<JSObject?>('localStorage'.toJS);

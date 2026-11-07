@@ -18,6 +18,12 @@ void webLocalStorageRemove(String key) {}
 
 String webWindowOrigin() => '';
 
+String webWindowSearch() => '';
+
+String webWindowHash() => '';
+
+void webClearUrlQueryParams() {}
+
 void webOpenExternalUrl(String url) {
   try {
     if (Platform.isMacOS) {

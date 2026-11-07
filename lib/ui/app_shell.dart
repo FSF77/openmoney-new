@@ -5,6 +5,9 @@ import '../models/openmoney_models.dart';
 import '../services/bank_logo_registry.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/native_file_picker.dart';
+import '../services/platform_io.dart';
+import '../services/shortcut_url_service.dart';
+import '../services/sync_engine.dart';
 import '../services/update_service.dart';
 import '../store/money_store.dart';
 import 'modals/about_modal.dart';
@@ -40,11 +43,94 @@ class OpenMoneyAppShell extends StatefulWidget {
 }
 
 class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
+  late final Listenable _shortcutReadinessListenable;
+
   @override
   void initState() {
     super.initState();
+    _shortcutReadinessListenable = Listenable.merge([
+      widget.store,
+      CloudSyncService.instance,
+      SyncEngine.instance,
+      ShortcutUrlService.instance,
+    ]);
+    _shortcutReadinessListenable.addListener(_onShortcutReadinessChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ShortcutUrlService.instance.captureFromCurrentUrl();
+      _maybeOpenPendingShortcutModal();
       UpdateService.showUpdateDialog(context, manual: false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _shortcutReadinessListenable.removeListener(_onShortcutReadinessChanged);
+    super.dispose();
+  }
+
+  void _onShortcutReadinessChanged() {
+    _maybeOpenPendingShortcutModal();
+  }
+
+  void _maybeOpenPendingShortcutModal() {
+    if (!mounted) return;
+    final shortcutSvc = ShortcutUrlService.instance;
+    if (!shortcutSvc.hasPendingDraft) {
+      shortcutSvc.captureFromCurrentUrl();
+    }
+    if (!shortcutSvc.hasPendingDraft || shortcutSvc.isModalOpen) return;
+    if (widget.store.showWelcomeScreen ||
+        widget.store.showMissingDatabasePrompt) {
+      return;
+    }
+
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      final syncReady = SyncEngine.instance.hasLoadedRemoteState ||
+          (!webIsOnline() && widget.store.db.accounts.isNotEmpty);
+      if (!syncReady) return;
+    } else if (widget.store.db.accounts.isEmpty) {
+      return;
+    }
+
+    final draft = shortcutSvc.consumePendingDraft();
+    if (draft == null) return;
+
+    shortcutSvc.setModalOpen(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        shortcutSvc.setModalOpen(false);
+        return;
+      }
+      try {
+        final resolved = ShortcutUrlService.resolveDraft(draft, widget.store);
+        widget.store.navigateTo(
+          NavModule.account,
+          accountId: resolved.accountId,
+        );
+        final acc = widget.store.accById(resolved.accountId);
+        if (acc != null && acc.type == kCardType && acc.card != null) {
+          widget.store.month = invKeyFor(acc.card!, resolved.dateIso);
+        } else if (resolved.dateIso.length >= 7) {
+          widget.store.month = resolved.dateIso.substring(0, 7);
+        }
+
+        await showTransactionCreateModal(
+          context,
+          widget.store,
+          initialAccountId: resolved.accountId,
+          initialDateIso: resolved.dateIso,
+          initialPayee: resolved.payee,
+          initialAmountCents: resolved.amountCents,
+          initialCategory: resolved.category,
+          initialMemo: resolved.memo,
+          initialIsExpense: resolved.isExpense,
+          shortcutRawAccountName: resolved.rawAccountName,
+          fromShortcut: true,
+        );
+      } finally {
+        shortcutSvc.setModalOpen(false);
+      }
     });
   }
 

@@ -8,12 +8,28 @@ Future<void> showTransactionCreateModal(
   BuildContext context,
   MoneyStore store, {
   String? initialAccountId,
+  String? initialDateIso,
+  String? initialPayee,
+  int? initialAmountCents,
+  String? initialCategory,
+  String? initialMemo,
+  bool? initialIsExpense,
+  String? shortcutRawAccountName,
+  bool fromShortcut = false,
 }) async {
   await showDialog(
     context: context,
     builder: (ctx) => _TransactionCreateDialog(
       store: store,
       initialAccountId: initialAccountId,
+      initialDateIso: initialDateIso,
+      initialPayee: initialPayee,
+      initialAmountCents: initialAmountCents,
+      initialCategory: initialCategory,
+      initialMemo: initialMemo,
+      initialIsExpense: initialIsExpense,
+      shortcutRawAccountName: shortcutRawAccountName,
+      fromShortcut: fromShortcut,
     ),
   );
 }
@@ -585,10 +601,26 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
 class _TransactionCreateDialog extends StatefulWidget {
   final MoneyStore store;
   final String? initialAccountId;
+  final String? initialDateIso;
+  final String? initialPayee;
+  final int? initialAmountCents;
+  final String? initialCategory;
+  final String? initialMemo;
+  final bool? initialIsExpense;
+  final String? shortcutRawAccountName;
+  final bool fromShortcut;
 
   const _TransactionCreateDialog({
     required this.store,
     this.initialAccountId,
+    this.initialDateIso,
+    this.initialPayee,
+    this.initialAmountCents,
+    this.initialCategory,
+    this.initialMemo,
+    this.initialIsExpense,
+    this.shortcutRawAccountName,
+    this.fromShortcut = false,
   });
 
   @override
@@ -627,14 +659,34 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       _accId = available.isNotEmpty ? available.first.id : 'a1';
     }
 
-    _dateCtrl = TextEditingController(text: fmtDate(todayISO()));
-    _payeeCtrl = TextEditingController();
-    _memoCtrl = TextEditingController();
-    _amtCtrl = TextEditingController();
-    _isExpense = true;
+    final effectiveDateIso =
+        (widget.initialDateIso != null && widget.initialDateIso!.isNotEmpty)
+            ? widget.initialDateIso!
+            : todayISO();
+    final initialPayeeText = (widget.initialPayee ?? '').trim();
+    final initialMemoText = (widget.initialMemo ?? '').trim();
+    final initialCents = widget.initialAmountCents ?? 0;
 
-    final catPaths = widget.store.allCategoryPaths('Despesa');
-    _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+    _dateCtrl = TextEditingController(text: fmtDate(effectiveDateIso));
+    _payeeCtrl = TextEditingController(text: initialPayeeText);
+    _memoCtrl = TextEditingController(text: initialMemoText);
+    _amtCtrl = TextEditingController(
+      text: initialCents > 0 ? formatInputCents(initialCents) : '',
+    );
+    _isExpense = widget.initialIsExpense ?? true;
+
+    final catPaths =
+        widget.store.allCategoryPaths(_isExpense ? 'Despesa' : 'Receita');
+    if (widget.initialCategory != null &&
+        widget.initialCategory!.trim().isNotEmpty) {
+      _catSelection = widget.initialCategory!.trim();
+    } else {
+      _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+    }
+
+    if (initialPayeeText.isNotEmpty) {
+      _suggestions = widget.store.payeeSuggestions(initialPayeeText);
+    }
 
     final oneYearAhead = DateTime.now().add(const Duration(days: 365));
     _endDateCtrl =
@@ -642,7 +694,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
 
     final curAcc = widget.store.accById(_accId);
     if (curAcc?.type == kCardType && curAcc?.card != null) {
-      _customIk = invKeyFor(curAcc!.card!, todayISO());
+      _customIk = invKeyFor(curAcc!.card!, effectiveDateIso);
     } else {
       _customIk = null;
     }
@@ -774,6 +826,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         ? _customIk
         : null;
 
+    if (widget.fromShortcut &&
+        widget.shortcutRawAccountName != null &&
+        widget.shortcutRawAccountName!.trim().isNotEmpty) {
+      widget.store.addWalletAlias(widget.shortcutRawAccountName!.trim(), _accId);
+    }
+
     widget.store.addTransaction(
       accId: _accId,
       date: dateStr,
@@ -829,9 +887,17 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       backgroundColor: colors.bgSecondary,
       title: Row(
         children: [
-          Icon(Icons.add_circle, color: colors.accent, size: 20),
+          Icon(
+            widget.fromShortcut ? Icons.bolt_rounded : Icons.add_circle,
+            color: colors.accent,
+            size: 20,
+          ),
           const SizedBox(width: 8),
-          const Text('Novo Lançamento'),
+          Text(
+            widget.fromShortcut
+                ? 'Confirmar Lançamento (Atalho)'
+                : 'Novo Lançamento',
+          ),
         ],
       ),
       content: SizedBox(
@@ -841,6 +907,43 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.fromShortcut) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: colors.accent.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.phone_iphone_rounded,
+                        size: 16,
+                        color: colors.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Dados preenchidos via parâmetro de URL / Atalho. Confira abaixo e clique em Adicionar.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               // Conta do Lançamento
               DropdownButtonFormField<String>(
                 initialValue: _accId,
