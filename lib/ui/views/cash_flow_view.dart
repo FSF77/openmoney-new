@@ -238,7 +238,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     return (base * (1.0 + (widget.store.fontScale - 1.0) * 0.75)).roundToDouble();
   }
 
-  static const double _scrollbarSpacer = 20.0;
+  static const double _scrollbarSpacer = 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -661,23 +661,55 @@ class _CashFlowViewState extends State<CashFlowView> {
                 builder: (context, constraints) {
                   final isCompactGrid = constraints.maxWidth < 640;
                   final scaleBonus = widget.store.fontScale > 1.0 ? (widget.store.fontScale - 1.0) : 0.0;
-                  final catWidth = (isCompactGrid ? 142.0 : 230.0) + (scaleBonus * 40.0);
-                  final colWidth = (((isCompactGrid
-                              ? 104.0
-                              : (_periodKind == CashFlowPeriodKind.daily ? 124.0 : 130.0)) *
-                          widget.store.fontScale))
+                  final catWidth = (isCompactGrid ? 142.0 : 210.0) + (scaleBonus * 25.0);
+
+                  final double baseColWidth;
+                  switch (_periodKind) {
+                    case CashFlowPeriodKind.daily:
+                      baseColWidth = 112.0;
+                      break;
+                    case CashFlowPeriodKind.monthly:
+                      baseColWidth = 86.0;
+                      break;
+                    case CashFlowPeriodKind.quarterly:
+                      baseColWidth = 115.0;
+                      break;
+                    case CashFlowPeriodKind.semiannual:
+                      baseColWidth = 135.0;
+                      break;
+                    case CashFlowPeriodKind.yearly:
+                      baseColWidth = 115.0;
+                      break;
+                  }
+
+                  final totalWidth = ((isCompactGrid ? 110.0 : 135.0) *
+                          (widget.store.fontScale <= 1.0 ? 1.0 : widget.store.fontScale))
                       .roundToDouble();
-                  final totalWidth =
-                      ((isCompactGrid ? 114.0 : 145.0) * widget.store.fontScale)
-                          .roundToDouble();
-                  final gridWidth = (matrix.columns.length * colWidth) + totalWidth + _scrollbarSpacer;
+
+                  final numCols = matrix.columns.length;
+                  final availableForGrid = constraints.maxWidth - catWidth - totalWidth - _scrollbarSpacer;
+                  final fitColWidth = numCols > 0 ? (availableForGrid / numCols).floorToDouble() : baseColWidth;
+
+                  final double colWidth;
+                  if (isCompactGrid) {
+                    colWidth = (78.0 * widget.store.fontScale).roundToDouble();
+                  } else if (_periodKind == CashFlowPeriodKind.monthly && fitColWidth >= baseColWidth) {
+                    // Quando a tela comporta todas as colunas sem rolagem horizontal, distribui com elegância (máximo 108px)
+                    colWidth = fitColWidth.clamp(baseColWidth, 108.0);
+                  } else {
+                    colWidth = (baseColWidth *
+                            (widget.store.fontScale <= 1.0 ? 1.0 : widget.store.fontScale))
+                        .roundToDouble();
+                  }
+
+                  final gridWidth = (numCols * colWidth) + totalWidth + _scrollbarSpacer;
                   final allRows = _buildAllRows(matrix, colors, colWidth, totalWidth);
 
                   return Column(
                     children: [
                       // 1. CABEÇALHO FIXO VERTICALMENTE (Sticky Header Row)
                       Container(
-                        height: _rowHeight(48),
+                        height: _rowHeight(32),
                         decoration: BoxDecoration(
                           color: colors.bgPrimary.withValues(alpha: 0.85),
                           border: Border(
@@ -694,8 +726,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                               child: const Text(
                                 'Categoria / Subcategoria',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
                                 ),
                               ),
                             ),
@@ -716,32 +748,28 @@ class _CashFlowViewState extends State<CashFlowView> {
                                           return SizedBox(
                                             width: colWidth,
                                             child: Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              padding: const EdgeInsets.symmetric(horizontal: 3),
                                               child: _clickable(
-                                                Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
+                                                Tooltip(
+                                                  message: col.title,
+                                                  child: Container(
+                                                    alignment: Alignment.centerRight,
+                                                    child: Text(
                                                       col.shortTitle,
                                                       textAlign: TextAlign.right,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
-                                                        fontWeight: FontWeight.w800,
-                                                        fontSize: 12,
+                                                        fontWeight: col.isCurrent
+                                                            ? FontWeight.w800
+                                                            : FontWeight.w700,
+                                                        fontSize: 10.5,
                                                         color: col.isCurrent
                                                             ? colors.accent
                                                             : colors.textPrimary,
                                                       ),
                                                     ),
-                                                    Text(
-                                                      col.title,
-                                                      textAlign: TextAlign.right,
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: colors.textSecondary,
-                                                      ),
-                                                    ),
-                                                  ],
+                                                  ),
                                                 ),
                                                 () => _showDetail(matrix, col: i),
                                               ),
@@ -752,14 +780,14 @@ class _CashFlowViewState extends State<CashFlowView> {
                                       SizedBox(
                                         width: totalWidth,
                                         child: const Padding(
-                                          padding: EdgeInsets.symmetric(horizontal: 4),
+                                          padding: EdgeInsets.symmetric(horizontal: 3),
                                           child: Align(
                                             alignment: Alignment.centerRight,
                                             child: Text(
                                               'Total',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w800,
-                                                fontSize: 12,
+                                                fontSize: 11,
                                               ),
                                             ),
                                           ),
@@ -936,9 +964,9 @@ class _CashFlowViewState extends State<CashFlowView> {
     // Espaçador inferior para a barra de rolagem horizontal não sobrepor a última linha
     rows.add(
       _CashFlowRowItem(
-        height: 28,
-        left: const SizedBox(height: 28),
-        right: const SizedBox(height: 28),
+        height: 20,
+        left: const SizedBox(height: 20),
+        right: const SizedBox(height: 20),
       ),
     );
 
@@ -947,7 +975,7 @@ class _CashFlowViewState extends State<CashFlowView> {
 
   _CashFlowRowItem _buildSeparator(OpenMoneyColors colors) {
     return _CashFlowRowItem(
-      height: 8,
+      height: 6,
       left: Container(
         color: colors.bgPrimary.withValues(alpha: 0.15),
       ),
@@ -971,7 +999,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     // Section Banner
     rows.add(
       _CashFlowRowItem(
-        height: _rowHeight(32),
+        height: _rowHeight(28),
         left: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
@@ -980,7 +1008,7 @@ class _CashFlowViewState extends State<CashFlowView> {
             section.title.toUpperCase(),
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              fontSize: 12,
+              fontSize: 11,
               color: sectionColor,
             ),
           ),
@@ -998,7 +1026,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       // Category Header Row
       rows.add(
         _CashFlowRowItem(
-          height: _rowHeight(36),
+          height: _rowHeight(30),
           left: InkWell(
             onTap: group.hasSubcategories
                 ? () {
@@ -1025,18 +1053,18 @@ class _CashFlowViewState extends State<CashFlowView> {
                   if (group.hasSubcategories)
                     Icon(
                       isCollapsed ? Icons.chevron_right : Icons.expand_more,
-                      size: 16,
+                      size: 14,
                       color: colors.textSecondary,
                     )
                   else
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 14),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       group.name,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
+                        fontSize: 11,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1060,7 +1088,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                   (i) => SizedBox(
                     width: colWidth,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: _clickable(
                         Text(
                           fmtCashFlowCents(group.periodTotals[i]),
@@ -1068,8 +1096,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                           maxLines: 1,
                           softWrap: false,
                           style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
                             color: colors.textPrimary,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
@@ -1082,7 +1110,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                 SizedBox(
                   width: totalWidth,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: _clickable(
                       Text(
                         fmtCashFlowCents(group.grandTotal, showZero: true),
@@ -1091,7 +1119,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                         softWrap: false,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                          fontSize: 10.5,
                           color: sectionColor,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -1116,14 +1144,14 @@ class _CashFlowViewState extends State<CashFlowView> {
 
           rows.add(
             _CashFlowRowItem(
-              height: _rowHeight(32),
+              height: _rowHeight(24),
               left: Container(
-                padding: const EdgeInsets.only(left: 32, right: 12),
+                padding: const EdgeInsets.only(left: 30, right: 12),
                 alignment: Alignment.centerLeft,
                 child: Text(
                   sub.name,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 10,
                     color: colors.textSecondary,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1136,7 +1164,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     (i) => SizedBox(
                       width: colWidth,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: _clickable(
                           Text(
                             fmtCashFlowCents(sub.periodAmounts[i]),
@@ -1144,7 +1172,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                             maxLines: 1,
                             softWrap: false,
                             style: TextStyle(
-                              fontSize: 11.5,
+                              fontSize: 9.5,
                               color: colors.textSecondary,
                               fontFeatures: const [FontFeature.tabularFigures()],
                             ),
@@ -1163,7 +1191,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                   SizedBox(
                     width: totalWidth,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: _clickable(
                         Text(
                           fmtCashFlowCents(sub.total, showZero: true),
@@ -1172,7 +1200,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                           softWrap: false,
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 11.5,
+                            fontSize: 10,
                             color: colors.textPrimary,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
@@ -1198,7 +1226,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     // Section Total Row
     rows.add(
       _CashFlowRowItem(
-        height: _rowHeight(38),
+        height: _rowHeight(30),
         left: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
@@ -1207,7 +1235,7 @@ class _CashFlowViewState extends State<CashFlowView> {
             'Total ${section.title}',
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              fontSize: 12.5,
+              fontSize: 11,
               color: sectionColor,
             ),
           ),
@@ -1221,7 +1249,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                 (i) => SizedBox(
                   width: colWidth,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: _clickable(
                       Text(
                         fmtCashFlowCents(section.periodTotals[i], showZero: true),
@@ -1229,8 +1257,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                         maxLines: 1,
                         softWrap: false,
                         style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
                           color: sectionColor,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -1243,7 +1271,7 @@ class _CashFlowViewState extends State<CashFlowView> {
               SizedBox(
                 width: totalWidth,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: _clickable(
                     Text(
                       fmtCashFlowCents(section.grandTotal, showZero: true),
@@ -1251,8 +1279,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                       maxLines: 1,
                       softWrap: false,
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10.5,
                         color: sectionColor,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
@@ -1287,7 +1315,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         : colors.bgPrimary.withValues(alpha: 0.05);
 
     return _CashFlowRowItem(
-      height: _rowHeight(isEndingBalance ? 42 : 38),
+      height: _rowHeight(isEndingBalance ? 36 : 32),
       left: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,
@@ -1296,7 +1324,7 @@ class _CashFlowViewState extends State<CashFlowView> {
           label,
           style: TextStyle(
             fontWeight: FontWeight.w800,
-            fontSize: 12.5,
+            fontSize: 11,
             color: colors.textPrimary,
           ),
         ),
@@ -1313,7 +1341,7 @@ class _CashFlowViewState extends State<CashFlowView> {
               final hasComment = comment != null && comment.trim().isNotEmpty;
 
               Widget content = Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1321,10 +1349,10 @@ class _CashFlowViewState extends State<CashFlowView> {
                     if (hasComment) ...[
                       Icon(
                         Icons.comment_outlined,
-                        size: 11,
+                        size: 10,
                         color: colors.accent,
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 2),
                     ],
                     Flexible(
                       child: Text(
@@ -1334,7 +1362,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                         softWrap: false,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                          fontSize: 10,
                           color: c,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -1372,7 +1400,7 @@ class _CashFlowViewState extends State<CashFlowView> {
             SizedBox(
               width: totalWidth,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Text(
                   fmtCashFlowCents(grandTotal, showZero: true),
                   textAlign: TextAlign.right,
@@ -1380,7 +1408,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                   softWrap: false,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    fontSize: 12.5,
+                    fontSize: 10.5,
                     color: grandTotal >= 0 ? colors.income : colors.expense,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),

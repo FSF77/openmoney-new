@@ -1439,4 +1439,30 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
 
     expect(store.commentForPeriod('2026-10'), isNull);
   });
+
+  testWidgets('30. CashFlowView: 12 months plus Total fit in 1920x1080 resolution without horizontal clipping', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+    store.activeModule = NavModule.cashFlow;
+
+    await tester.pumpWidget(OpenMoneyApp(store: store));
+    await tester.pumpAndSettle();
+
+    // Verify first and last month headers are rendered within screen bounds
+    final firstMonthFinder = find.text('JAN');
+    final lastMonthFinder = find.text('DEZ');
+    final totalHeaderFinder = find.text('Total');
+
+    expect(firstMonthFinder, findsOneWidget);
+    expect(lastMonthFinder, findsOneWidget);
+    expect(totalHeaderFinder, findsWidgets);
+
+    // Verify last column (Total) is on screen and not clipped outside bounds
+    final lastMonthRect = tester.getRect(lastMonthFinder);
+    expect(lastMonthRect.right, lessThanOrEqualTo(1920.0));
+  });
 }

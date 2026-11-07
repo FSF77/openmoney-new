@@ -481,7 +481,7 @@ class CashFlowEngine {
           final m = idx + 1;
           final ymPrefix = '${year.toString().padLeft(4, '0')}-${pad2(m)}';
           final title = '${pad2(m)}/${year.toString().padLeft(4, '0')}';
-          final short = '${monthNames[m - 1]}/${pad2(year % 100)}';
+          final short = monthNames[m - 1].toUpperCase();
           return CashFlowColumnDef(
             id: ymPrefix,
             title: title,
@@ -506,7 +506,7 @@ class CashFlowEngine {
           return CashFlowColumnDef(
             id: 'Q$q-$year',
             title: '$qº Trimestre',
-            shortTitle: '$qº Trim',
+            shortTitle: '$qº TRIM',
             isCurrent: isCurrentQ,
             matchesDate: (d) => ymPrefixes.any((p) => d.startsWith(p)),
           );
@@ -527,7 +527,7 @@ class CashFlowEngine {
           return CashFlowColumnDef(
             id: 'S$s-$year',
             title: '$sº Semestre',
-            shortTitle: '$sº Sem',
+            shortTitle: '$sº SEM',
             isCurrent: isCurrentS,
             matchesDate: (d) => ymPrefixes.any((p) => d.startsWith(p)),
           );
