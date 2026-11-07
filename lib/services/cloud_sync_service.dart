@@ -120,6 +120,7 @@ class CloudSyncService extends ChangeNotifier {
   DateTime? _lastSyncedAt;
   String? _lastError;
   CloudSyncState _state = CloudSyncState.disconnected;
+  int _pendingOutboxCount = 0;
   bool _webOfflineGuestMode = false;
   bool _webAuthFlowInProgress = false;
   Future<bool>? _inFlightPush;
@@ -132,6 +133,7 @@ class CloudSyncService extends ChangeNotifier {
   String get userEmail => _userEmail;
   String get userName => _userName;
   int get revision => _revision;
+  int get pendingOutboxCount => _pendingOutboxCount;
   DateTime? get lastSyncedAt => _lastSyncedAt;
   String? get lastError => _lastError;
   CloudSyncState get state => _state;
@@ -144,6 +146,27 @@ class CloudSyncService extends ChangeNotifier {
   void setWebAuthFlowInProgress(bool value) {
     if (_webAuthFlowInProgress == value) return;
     _webAuthFlowInProgress = value;
+    notifyListeners();
+  }
+
+  void setSyncEngineStatus({
+    required CloudSyncState state,
+    int? revision,
+    int pendingCount = 0,
+    String? error,
+  }) {
+    _state = state;
+    _pendingOutboxCount = pendingCount;
+    if (revision != null && revision > 0) {
+      _revision = revision;
+    }
+    if (state == CloudSyncState.synced) {
+      _lastSyncedAt = DateTime.now();
+      _lastError = null;
+      _upsertCurrentAccountToSavedList();
+    } else if (error != null && error.isNotEmpty) {
+      _lastError = error;
+    }
     notifyListeners();
   }
 
@@ -167,13 +190,17 @@ class CloudSyncService extends ChangeNotifier {
       case CloudSyncState.connecting:
         return 'Conectando...';
       case CloudSyncState.syncing:
-        return 'Sincronizando...';
+        return _pendingOutboxCount > 0
+            ? 'Sincronizando ($_pendingOutboxCount)...'
+            : 'Sincronizando...';
       case CloudSyncState.synced:
-        return 'Sincronizado (r$_revision)';
+        return 'Tempo Real (r$_revision)';
       case CloudSyncState.conflict:
-        return 'Conflito de Revisão';
+        return 'Sincronizando...';
       case CloudSyncState.error:
-        return 'Offline / Pendente';
+        return _pendingOutboxCount > 0
+            ? 'Offline ($_pendingOutboxCount na fila)'
+            : 'Reconectando...';
     }
   }
 

@@ -66,6 +66,40 @@ async function ensureSchema(db) {
         used INTEGER NOT NULL DEFAULT 0
       )
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_sync_meta (
+        user_id TEXT PRIMARY KEY,
+        seq INTEGER NOT NULL DEFAULT 1,
+        base_seq INTEGER NOT NULL DEFAULT 1,
+        snapshot_seq INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_sync_records (
+        user_id TEXT NOT NULL,
+        coll TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        encrypted_data TEXT,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        seq INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, coll, record_id)
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_user_sync_records_seq
+      ON user_sync_records (user_id, seq)
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_sync_ops (
+        user_id TEXT NOT NULL,
+        op_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, op_id)
+      )
+    `),
   ]);
   schemaInitialized = true;
 }
@@ -75,7 +109,7 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs",
+      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force",
     "Access-Control-Expose-Headers":
       "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
@@ -657,12 +691,370 @@ function defaultOpenMoneyV7Payload() {
   };
 }
 
+async function encryptRecordWithKey(plainJsonStr, aesKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    encoder.encode(plainJsonStr)
+  );
+  return `rec:v1:${bytesToBase64(iv)}:${bytesToBase64(
+    new Uint8Array(cipherBuf)
+  )}`;
+}
+
+async function decryptRecordWithKey(storedStr, aesKey) {
+  if (!storedStr) return null;
+  if (storedStr.startsWith("rec:v1:")) {
+    const parts = storedStr.split(":");
+    if (parts.length !== 4) return null;
+    const iv = base64ToBytes(parts[2]);
+    const cipherBytes = base64ToBytes(parts[3]);
+    const plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      aesKey,
+      cipherBytes
+    );
+    return JSON.parse(decoder.decode(plainBuf));
+  }
+  return JSON.parse(storedStr);
+}
+
+function catIdOf(c) {
+  if (typeof c === "string") return c;
+  if (!c || typeof c !== "object") return "";
+  const p = c.parent ? String(c.parent).trim() : "";
+  const n = c.name ? String(c.name).trim() : "";
+  return p ? `${p} › ${n}` : n;
+}
+
+function applySyncChangesToSnapshot(payloadObj, prefsObj, changes) {
+  if (!payloadObj || typeof payloadObj !== "object") return;
+  if (!Array.isArray(changes) || changes.length === 0) return;
+
+  if (!Array.isArray(payloadObj.accounts)) payloadObj.accounts = [];
+  if (!Array.isArray(payloadObj.cats)) payloadObj.cats = [];
+  if (!Array.isArray(payloadObj.txs)) payloadObj.txs = [];
+  if (!Array.isArray(payloadObj.recs)) payloadObj.recs = [];
+  if (!payloadObj.budgets || typeof payloadObj.budgets !== "object") {
+    payloadObj.budgets = {};
+  }
+  if (!payloadObj.comments || typeof payloadObj.comments !== "object") {
+    payloadObj.comments = {};
+  }
+
+  let accMap = null;
+  let catMap = null;
+  let txMap = null;
+  let recMap = null;
+  let pendingAccountOrder = null;
+
+  for (const ch of changes) {
+    if (!ch || !ch.coll || ch.id === undefined || ch.id === null) continue;
+    const coll = String(ch.coll);
+    const id = String(ch.id);
+    const isDel = Boolean(ch.deleted) || ch.data === null || ch.data === undefined;
+
+    if (coll === "txs") {
+      if (!txMap) {
+        txMap = new Map();
+        for (const t of payloadObj.txs) {
+          if (t && t.id !== undefined) txMap.set(String(t.id), t);
+        }
+      }
+      if (isDel) {
+        txMap.delete(id);
+      } else {
+        txMap.set(id, ch.data);
+      }
+    } else if (coll === "accounts") {
+      if (!accMap) {
+        accMap = new Map();
+        for (const a of payloadObj.accounts) {
+          if (a && a.id !== undefined) accMap.set(String(a.id), a);
+        }
+      }
+      if (isDel) {
+        accMap.delete(id);
+      } else {
+        accMap.set(id, ch.data);
+      }
+    } else if (coll === "cats") {
+      if (!catMap) {
+        catMap = new Map();
+        for (const c of payloadObj.cats) {
+          const cid = catIdOf(c);
+          if (cid) catMap.set(cid, c);
+        }
+      }
+      if (isDel) {
+        catMap.delete(id);
+      } else {
+        catMap.set(id, ch.data);
+      }
+    } else if (coll === "recs") {
+      if (!recMap) {
+        recMap = new Map();
+        for (const r of payloadObj.recs) {
+          if (r && r.id !== undefined) recMap.set(String(r.id), r);
+        }
+      }
+      if (isDel) {
+        recMap.delete(id);
+      } else {
+        recMap.set(id, ch.data);
+      }
+    } else if (coll === "budgets") {
+      if (isDel) {
+        delete payloadObj.budgets[id];
+      } else {
+        payloadObj.budgets[id] = Number(ch.data) || 0;
+      }
+    } else if (coll === "comments") {
+      if (isDel) {
+        delete payloadObj.comments[id];
+      } else {
+        payloadObj.comments[id] = String(ch.data);
+      }
+    } else if (coll === "meta") {
+      if (id === "predMode" && !isDel) {
+        payloadObj.predMode = ch.data === "invoice" ? "invoice" : "month";
+      } else if (id === "accountOrder" && Array.isArray(ch.data)) {
+        pendingAccountOrder = ch.data.map((x) => String(x));
+      }
+    } else if (coll === "prefs") {
+      if (id === "userPrefs" && ch.data && typeof ch.data === "object") {
+        Object.assign(prefsObj, ch.data);
+      }
+    }
+  }
+
+  if (txMap) payloadObj.txs = Array.from(txMap.values());
+  if (accMap) payloadObj.accounts = Array.from(accMap.values());
+  if (catMap) payloadObj.cats = Array.from(catMap.values());
+  if (recMap) payloadObj.recs = Array.from(recMap.values());
+
+  if (pendingAccountOrder && Array.isArray(payloadObj.accounts)) {
+    const byId = new Map();
+    for (const a of payloadObj.accounts) {
+      if (a && a.id !== undefined) byId.set(String(a.id), a);
+    }
+    const ordered = [];
+    for (const aid of pendingAccountOrder) {
+      if (byId.has(aid)) {
+        ordered.push(byId.get(aid));
+        byId.delete(aid);
+      }
+    }
+    for (const rem of byId.values()) {
+      ordered.push(rem);
+    }
+    payloadObj.accounts = ordered;
+  }
+}
+
+async function ensureUserSyncMeta(db, userId) {
+  let meta = await db
+    .prepare(
+      `SELECT seq, base_seq, snapshot_seq, updated_at FROM user_sync_meta WHERE user_id = ?1`
+    )
+    .bind(userId)
+    .first();
+  if (meta) {
+    return {
+      seq: Number(meta.seq || 1),
+      baseSeq: Number(meta.base_seq || 1),
+      snapshotSeq: Number(meta.snapshot_seq || 1),
+      updatedAt: String(meta.updated_at || new Date().toISOString()),
+    };
+  }
+  const dbRow = await db
+    .prepare(`SELECT revision, updated_at FROM user_databases WHERE user_id = ?1`)
+    .bind(userId)
+    .first();
+  const initialSeq = dbRow ? Math.max(1, Number(dbRow.revision || 1)) : 1;
+  const nowIso = dbRow?.updated_at || new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO user_sync_meta (user_id, seq, base_seq, snapshot_seq, updated_at)
+       VALUES (?1, ?2, ?2, ?2, ?3)
+       ON CONFLICT(user_id) DO NOTHING`
+    )
+    .bind(userId, initialSeq, nowIso)
+    .run();
+  return {
+    seq: initialSeq,
+    baseSeq: initialSeq,
+    snapshotSeq: initialSeq,
+    updatedAt: nowIso,
+  };
+}
+
+async function loadDecryptedSyncChangesSince(db, userId, sinceSeq, aesKey) {
+  const res = await db
+    .prepare(
+      `SELECT coll, record_id, encrypted_data, deleted, seq, updated_at
+       FROM user_sync_records
+       WHERE user_id = ?1 AND seq > ?2
+       ORDER BY seq ASC`
+    )
+    .bind(userId, sinceSeq)
+    .all();
+  const rows = (res && res.results) || [];
+  const changes = [];
+  for (const r of rows) {
+    const isDel = Number(r.deleted || 0) === 1 || !r.encrypted_data;
+    let data = null;
+    if (!isDel) {
+      try {
+        data = await decryptRecordWithKey(r.encrypted_data, aesKey);
+      } catch (_) {
+        continue;
+      }
+    }
+    changes.push({
+      coll: String(r.coll),
+      id: String(r.record_id),
+      data: isDel ? null : data,
+      deleted: isDel,
+      seq: Number(r.seq || 0),
+    });
+  }
+  return changes;
+}
+
+async function loadMergedSnapshotForUser(env, userId) {
+  const meta = await ensureUserSyncMeta(env.DB, userId);
+  const row = await env.DB.prepare(
+    `SELECT schema_version, revision, payload, preferences, updated_at
+     FROM user_databases WHERE user_id = ?1`
+  )
+    .bind(userId)
+    .first();
+
+  let payloadObj = defaultOpenMoneyV7Payload();
+  let prefsObj = {};
+
+  if (row) {
+    try {
+      const fullEncrypted = await loadEncryptedPayloadFromD1(
+        env.DB,
+        userId,
+        row.payload
+      );
+      const decryptedStr = await decryptUserPayload(fullEncrypted, userId, env);
+      payloadObj = JSON.parse(decryptedStr);
+    } catch (_) {
+      payloadObj = defaultOpenMoneyV7Payload();
+    }
+    try {
+      prefsObj = JSON.parse(row.preferences || "{}");
+    } catch (_) {
+      prefsObj = {};
+    }
+  }
+
+  if (meta.seq > meta.snapshotSeq) {
+    const aesKey = await deriveUserAesKey(userId, env);
+    const uncompacted = await loadDecryptedSyncChangesSince(
+      env.DB,
+      userId,
+      meta.snapshotSeq,
+      aesKey
+    );
+    if (uncompacted.length > 0) {
+      applySyncChangesToSnapshot(payloadObj, prefsObj, uncompacted);
+    }
+  }
+
+  return {
+    meta,
+    payloadObj,
+    prefsObj,
+  };
+}
+
+async function compactSyncRecordsToSnapshot(env, userId) {
+  try {
+    const { meta, payloadObj, prefsObj } = await loadMergedSnapshotForUser(
+      env,
+      userId
+    );
+    if (meta.seq <= meta.snapshotSeq) return;
+
+    const nowIso = new Date().toISOString();
+    const todayDate = nowIso.slice(0, 10);
+    const plainJsonStr = JSON.stringify(payloadObj);
+    const sizeBytes = encoder.encode(plainJsonStr).byteLength;
+    const encryptedPayload = await encryptUserPayload(
+      plainJsonStr,
+      userId,
+      env
+    );
+    const prefsStr = JSON.stringify(prefsObj);
+
+    await saveEncryptedPayloadToD1(
+      env.DB,
+      userId,
+      meta.seq,
+      encryptedPayload,
+      prefsStr,
+      nowIso,
+      todayDate,
+      sizeBytes
+    );
+
+    // Mantém os últimos 500 registros de delta para que abas abertas sincronizem
+    // de forma incremental sem precisar baixar o snapshot completo
+    const minKeepSeq = Math.max(meta.baseSeq, meta.seq - 500);
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE user_sync_meta
+         SET snapshot_seq = ?1, base_seq = ?2, updated_at = ?3
+         WHERE user_id = ?4 AND snapshot_seq < ?1`
+      ).bind(meta.seq, minKeepSeq, nowIso, userId),
+      env.DB.prepare(
+        `DELETE FROM user_sync_records WHERE user_id = ?1 AND seq <= ?2`
+      ).bind(userId, minKeepSeq - 1),
+      env.DB.prepare(
+        `DELETE FROM user_sync_ops WHERE user_id = ?1 AND seq < ?2`
+      ).bind(userId, Math.max(1, meta.seq - 200)),
+    ]);
+  } catch (e) {
+    console.warn("Aviso na compactação em background Sync v2:", e);
+  }
+}
+
+async function notifyDurableObjectSync(env, userId, payload) {
+  if (!env.SYNC) return;
+  try {
+    const id = env.SYNC.idFromName(userId);
+    const stub = env.SYNC.get(id);
+    await stub.fetch("https://sync.internal/notify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-OpenMoney-User-Id": userId,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (_) {}
+}
+
 async function authenticateRequest(request, env) {
   const auth = request.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) return null;
-  const token = auth.slice(7).trim();
-  if (!token) return null;
-  return verifyJwt(token, env);
+  if (auth.startsWith("Bearer ")) {
+    const token = auth.slice(7).trim();
+    if (token) return verifyJwt(token, env);
+  }
+  try {
+    const url = new URL(request.url);
+    const queryToken = (url.searchParams.get("token") || "").trim();
+    if (queryToken) {
+      return verifyJwt(queryToken, env);
+    }
+  } catch (_) {}
+  return null;
 }
 
 export async function onRequest(context) {
@@ -1162,16 +1554,9 @@ export async function onRequest(context) {
     (path === "/api/db/revision" && request.method === "GET") ||
     (path === "/api/db" && request.method === "HEAD")
   ) {
-    const row = await env.DB.prepare(
-      "SELECT revision, updated_at FROM user_databases WHERE user_id = ?1"
-    )
-      .bind(userId)
-      .first();
-
-    const currentRev = row ? Number(row.revision || 1) : 1;
-    const updatedAt = row
-      ? String(row.updated_at || "")
-      : new Date().toISOString();
+    const meta = await ensureUserSyncMeta(env.DB, userId);
+    const currentRev = meta.seq;
+    const updatedAt = meta.updatedAt;
 
     if (request.method === "HEAD") {
       return new Response(null, {
@@ -1196,9 +1581,252 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
+  // 3.8. GET & POST /api/sync (Motor Sync v2 Granular por Registro em Tempo Real)
+  // ==========================================================================
+  if (path === "/api/sync" && request.method === "GET") {
+    const upgradeHeader = (request.headers.get("Upgrade") || "").toLowerCase();
+    if (upgradeHeader === "websocket") {
+      if (env.SYNC) {
+        const doId = env.SYNC.idFromName(userId);
+        const stub = env.SYNC.get(doId);
+        return stub.fetch(request);
+      }
+      return jsonResponse(
+        { ok: false, wsSupported: false, message: "Durable Object não vinculado; usando canal delta rápido." },
+        426,
+        origin
+      );
+    }
+
+    const since = Math.max(
+      0,
+      parseInt(url.searchParams.get("since") || "0", 10) || 0
+    );
+    const meta = await ensureUserSyncMeta(env.DB, userId);
+
+    // 1. Caminho ultrarrápido: cliente já está na sequência exata da nuvem
+    if (since > 0 && since >= meta.seq && since >= meta.baseSeq) {
+      return jsonResponse(
+        {
+          ok: true,
+          seq: meta.seq,
+          full: false,
+          changes: [],
+        },
+        200,
+        origin
+      );
+    }
+
+    // 2. Sincronização incremental (Delta): retorna apenas os registros alterados desde `since`
+    if (since > 0 && since >= meta.baseSeq && since < meta.seq) {
+      const aesKey = await deriveUserAesKey(userId, env);
+      const changes = await loadDecryptedSyncChangesSince(
+        env.DB,
+        userId,
+        since,
+        aesKey
+      );
+      return jsonResponse(
+        {
+          ok: true,
+          seq: meta.seq,
+          full: false,
+          changes,
+        },
+        200,
+        origin
+      );
+    }
+
+    // 3. Carga inicial (`since == 0`) ou após reset/importação completa (`since < baseSeq`)
+    const { payloadObj, prefsObj } = await loadMergedSnapshotForUser(
+      env,
+      userId
+    );
+    return jsonResponse(
+      {
+        ok: true,
+        seq: meta.seq,
+        full: true,
+        payload: payloadObj,
+        preferences: prefsObj,
+        changes: [],
+      },
+      200,
+      origin
+    );
+  }
+
+  if (path === "/api/sync" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido em /api/sync." }, 400, origin);
+    }
+
+    const opId = String(body.opId || "").trim();
+    const clientSince = Math.max(0, Number(body.since || 0));
+    const incomingChanges = Array.isArray(body.changes) ? body.changes : [];
+    const meta = await ensureUserSyncMeta(env.DB, userId);
+    const aesKey = await deriveUserAesKey(userId, env);
+
+    // Verifica idempotência por opId (evita duplicação em retentativas de rede)
+    if (opId) {
+      const existingOp = await env.DB.prepare(
+        `SELECT seq FROM user_sync_ops WHERE user_id = ?1 AND op_id = ?2`
+      )
+        .bind(userId, opId)
+        .first();
+      if (existingOp) {
+        const remoteChanges =
+          clientSince >= meta.baseSeq && clientSince < meta.seq
+            ? await loadDecryptedSyncChangesSince(
+                env.DB,
+                userId,
+                clientSince,
+                aesKey
+              )
+            : [];
+        return jsonResponse(
+          {
+            ok: true,
+            duplicate: true,
+            opId,
+            seq: meta.seq,
+            remoteChanges,
+          },
+          200,
+          origin
+        );
+      }
+    }
+
+    // Busca alterações feitas por outros dispositivos desde `clientSince` antes de gravar o lote atual
+    let remoteChanges = [];
+    let fullReloadRequired = false;
+    if (clientSince > 0 && clientSince < meta.baseSeq) {
+      fullReloadRequired = true;
+    } else if (clientSince > 0 && clientSince < meta.seq) {
+      remoteChanges = await loadDecryptedSyncChangesSince(
+        env.DB,
+        userId,
+        clientSince,
+        aesKey
+      );
+    }
+
+    if (incomingChanges.length === 0) {
+      return jsonResponse(
+        {
+          ok: true,
+          opId,
+          seq: meta.seq,
+          remoteChanges,
+          fullReloadRequired,
+        },
+        200,
+        origin
+      );
+    }
+
+    const nextSeq = meta.seq + 1;
+    const nowIso = new Date().toISOString();
+    const stmts = [];
+    const broadcastChanges = [];
+
+    for (const ch of incomingChanges) {
+      if (!ch || !ch.coll || ch.id === undefined || ch.id === null) continue;
+      const coll = String(ch.coll).trim();
+      const recId = String(ch.id);
+      if (!coll || !recId) continue;
+
+      const isDel =
+        Boolean(ch.deleted) || ch.data === null || ch.data === undefined;
+      let encData = null;
+      if (!isDel) {
+        encData = await encryptRecordWithKey(JSON.stringify(ch.data), aesKey);
+      }
+
+      stmts.push(
+        env.DB.prepare(
+          `INSERT INTO user_sync_records (user_id, coll, record_id, encrypted_data, deleted, seq, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(user_id, coll, record_id) DO UPDATE SET
+             encrypted_data = excluded.encrypted_data,
+             deleted = excluded.deleted,
+             seq = excluded.seq,
+             updated_at = excluded.updated_at`
+        ).bind(userId, coll, recId, encData, isDel ? 1 : 0, nextSeq, nowIso)
+      );
+
+      broadcastChanges.push({
+        coll,
+        id: recId,
+        data: isDel ? null : ch.data,
+        deleted: isDel,
+        seq: nextSeq,
+      });
+    }
+
+    // Executa em lotes seguros para o D1
+    const BATCH_LIMIT = 75;
+    for (let i = 0; i < stmts.length; i += BATCH_LIMIT) {
+      await env.DB.batch(stmts.slice(i, i + BATCH_LIMIT));
+    }
+
+    const metaStmts = [
+      env.DB.prepare(
+        `UPDATE user_sync_meta SET seq = ?1, updated_at = ?2 WHERE user_id = ?3`
+      ).bind(nextSeq, nowIso, userId),
+    ];
+    if (opId) {
+      metaStmts.push(
+        env.DB.prepare(
+          `INSERT INTO user_sync_ops (user_id, op_id, seq, created_at)
+           VALUES (?1, ?2, ?3, ?4)
+           ON CONFLICT(user_id, op_id) DO UPDATE SET seq = excluded.seq`
+        ).bind(userId, opId, nextSeq, nowIso)
+      );
+    }
+    await env.DB.batch(metaStmts);
+
+    // Compacta no snapshot principal + backup diário em background (0ms de bloqueio na resposta)
+    if (typeof context.waitUntil === "function") {
+      context.waitUntil(compactSyncRecordsToSnapshot(env, userId));
+      context.waitUntil(
+        notifyDurableObjectSync(env, userId, {
+          seq: nextSeq,
+          opId,
+          reset: false,
+          changes: broadcastChanges,
+        })
+      );
+    } else {
+      await compactSyncRecordsToSnapshot(env, userId);
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        opId,
+        seq: nextSeq,
+        updatedAt: nowIso,
+        remoteChanges,
+        fullReloadRequired,
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
   // 4. GET /api/db (Leitura isolada e descriptografada do openmoney.json)
   // ==========================================================================
   if (path === "/api/db" && request.method === "GET") {
+    // Garante que alterações granulares de /api/sync estejam compactadas no snapshot
+    await compactSyncRecordsToSnapshot(env, userId);
     const row = await env.DB.prepare(
       "SELECT schema_version, revision, payload, preferences, updated_at FROM user_databases WHERE user_id = ?1"
     )
@@ -1404,13 +2032,17 @@ export async function onRequest(context) {
       prefsStr = JSON.stringify(prefsObj);
     }
 
+    const meta = await ensureUserSyncMeta(env.DB, userId);
     const current = await env.DB.prepare(
       "SELECT revision FROM user_databases WHERE user_id = ?1"
     )
       .bind(userId)
       .first();
 
-    const currentRev = current ? Number(current.revision || 1) : 0;
+    const currentRev = Math.max(
+      meta.seq,
+      current ? Number(current.revision || 1) : 0
+    );
 
     // Proteção estrita contra sobrescrita e perda de dados (Concorrência Optimista)
     const baseRevHeader = request.headers.get("X-OpenMoney-Base-Revision");
@@ -1449,6 +2081,31 @@ export async function onRequest(context) {
       todayDate,
       sizeBytes
     );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM user_sync_records WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `INSERT INTO user_sync_meta (user_id, seq, base_seq, snapshot_seq, updated_at)
+         VALUES (?1, ?2, ?2, ?2, ?3)
+         ON CONFLICT(user_id) DO UPDATE SET
+           seq = excluded.seq,
+           base_seq = excluded.base_seq,
+           snapshot_seq = excluded.snapshot_seq,
+           updated_at = excluded.updated_at`
+      ).bind(userId, nextRev, nowIso),
+    ]);
+
+    if (typeof context.waitUntil === "function") {
+      context.waitUntil(
+        notifyDurableObjectSync(env, userId, {
+          seq: nextRev,
+          reset: true,
+          changes: [],
+        })
+      );
+    }
 
     try {
       await env.DB.prepare(
@@ -1512,19 +2169,37 @@ export async function onRequest(context) {
       );
     }
 
+    const meta = await ensureUserSyncMeta(env.DB, userId);
     const current = await env.DB.prepare(
       "SELECT revision FROM user_databases WHERE user_id = ?1"
     )
       .bind(userId)
       .first();
-    const nextRev = (current ? Number(current.revision || 1) : 1) + 1;
+    const nextRev =
+      Math.max(meta.seq, current ? Number(current.revision || 1) : 1) + 1;
     const nowIso = new Date().toISOString();
 
-    await env.DB.prepare(
-      `UPDATE user_databases SET revision = ?1, payload = ?2, updated_at = ?3 WHERE user_id = ?4`
-    )
-      .bind(nextRev, backupRow.payload, nowIso, userId)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE user_databases SET revision = ?1, payload = ?2, updated_at = ?3 WHERE user_id = ?4`
+      ).bind(nextRev, backupRow.payload, nowIso, userId),
+      env.DB.prepare(
+        `DELETE FROM user_sync_records WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `UPDATE user_sync_meta SET seq = ?1, base_seq = ?1, snapshot_seq = ?1, updated_at = ?2 WHERE user_id = ?3`
+      ).bind(nextRev, nowIso, userId),
+    ]);
+
+    if (typeof context.waitUntil === "function") {
+      context.waitUntil(
+        notifyDurableObjectSync(env, userId, {
+          seq: nextRev,
+          reset: true,
+          changes: [],
+        })
+      );
+    }
 
     return jsonResponse(
       {
@@ -1567,6 +2242,15 @@ export async function onRequest(context) {
     if (mode === "full_account") {
       await env.DB.batch([
         env.DB.prepare(
+          `DELETE FROM user_sync_records WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
+          `DELETE FROM user_sync_ops WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
+          `DELETE FROM user_sync_meta WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
           `DELETE FROM user_database_chunks WHERE user_id = ?1`
         ).bind(userId),
         env.DB.prepare(
@@ -1588,6 +2272,8 @@ export async function onRequest(context) {
     }
 
     // Modo db_only: apaga todos os lançamentos/blocos/backups da nuvem e recria base limpa v7
+    const meta = await ensureUserSyncMeta(env.DB, userId);
+    const nextRev = meta.seq + 1;
     const nowIso = new Date().toISOString();
     const freshPayload = await encryptUserPayload(
       JSON.stringify(defaultOpenMoneyV7Payload()),
@@ -1597,6 +2283,21 @@ export async function onRequest(context) {
 
     await env.DB.batch([
       env.DB.prepare(
+        `DELETE FROM user_sync_records WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `DELETE FROM user_sync_ops WHERE user_id = ?1`
+      ).bind(userId),
+      env.DB.prepare(
+        `INSERT INTO user_sync_meta (user_id, seq, base_seq, snapshot_seq, updated_at)
+         VALUES (?1, ?2, ?2, ?2, ?3)
+         ON CONFLICT(user_id) DO UPDATE SET
+           seq = excluded.seq,
+           base_seq = excluded.base_seq,
+           snapshot_seq = excluded.snapshot_seq,
+           updated_at = excluded.updated_at`
+      ).bind(userId, nextRev, nowIso),
+      env.DB.prepare(
         `DELETE FROM user_database_chunks WHERE user_id = ?1`
       ).bind(userId),
       env.DB.prepare(
@@ -1604,20 +2305,30 @@ export async function onRequest(context) {
       ).bind(userId),
       env.DB.prepare(
         `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
-         VALUES (?1, 7, 1, ?2, '{}', ?3)
+         VALUES (?1, 7, ?2, ?3, '{}', ?4)
          ON CONFLICT(user_id) DO UPDATE SET
            schema_version = 7,
-           revision = 1,
+           revision = excluded.revision,
            payload = excluded.payload,
            updated_at = excluded.updated_at`
-      ).bind(userId, freshPayload, nowIso),
+      ).bind(userId, nextRev, freshPayload, nowIso),
     ]);
+
+    if (typeof context.waitUntil === "function") {
+      context.waitUntil(
+        notifyDurableObjectSync(env, userId, {
+          seq: nextRev,
+          reset: true,
+          changes: [],
+        })
+      );
+    }
 
     return jsonResponse(
       {
         ok: true,
         deletedAccount: false,
-        revision: 1,
+        revision: nextRev,
       },
       200,
       origin

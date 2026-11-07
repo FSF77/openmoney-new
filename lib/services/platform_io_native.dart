@@ -118,3 +118,30 @@ Future<({int statusCode, Uint8List bodyBytes, Map<String, String> headers})>
     client.close();
   }
 }
+
+bool webIsOnline() => true;
+
+bool webIsDocumentVisible() => true;
+
+void registerWebSyncListeners({
+  required void Function() onOnline,
+  required void Function() onOffline,
+  required void Function() onVisibleOrFocus,
+  required void Function(String data) onBroadcastMessage,
+}) {}
+
+void broadcastWebSyncSignal(String message) {}
+
+class PlatformWebSocket {
+  static PlatformWebSocket? connect(
+    String wsUrl, {
+    required void Function() onOpen,
+    required void Function(String message) onMessage,
+    required void Function() onClose,
+  }) =>
+      null;
+
+  bool get isOpen => false;
+  void send(String message) {}
+  void close() {}
+}

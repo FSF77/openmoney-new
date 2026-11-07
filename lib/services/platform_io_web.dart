@@ -770,3 +770,181 @@ class HttpClient {
 
   void close({bool force = false}) {}
 }
+
+bool webIsOnline() {
+  try {
+    final nav = _window.getProperty<JSObject?>('navigator'.toJS);
+    if (nav != null) {
+      final online = nav.getProperty<JSBoolean?>('onLine'.toJS)?.toDart;
+      if (online != null) return online;
+    }
+  } catch (_) {}
+  return true;
+}
+
+bool webIsDocumentVisible() {
+  try {
+    final state =
+        _document.getProperty<JSString?>('visibilityState'.toJS)?.toDart;
+    if (state != null) {
+      return state != 'hidden';
+    }
+  } catch (_) {}
+  return true;
+}
+
+JSObject? _broadcastChannel;
+bool _webSyncListenersRegistered = false;
+
+void registerWebSyncListeners({
+  required void Function() onOnline,
+  required void Function() onOffline,
+  required void Function() onVisibleOrFocus,
+  required void Function(String data) onBroadcastMessage,
+}) {
+  if (_webSyncListenersRegistered) return;
+  _webSyncListenersRegistered = true;
+
+  try {
+    _window.callMethod<JSAny?>(
+      'addEventListener'.toJS,
+      'online'.toJS,
+      ((JSAny? _) {
+        onOnline();
+      }).toJS,
+    );
+    _window.callMethod<JSAny?>(
+      'addEventListener'.toJS,
+      'offline'.toJS,
+      ((JSAny? _) {
+        onOffline();
+      }).toJS,
+    );
+    _window.callMethod<JSAny?>(
+      'addEventListener'.toJS,
+      'focus'.toJS,
+      ((JSAny? _) {
+        onVisibleOrFocus();
+      }).toJS,
+    );
+    _document.callMethod<JSAny?>(
+      'addEventListener'.toJS,
+      'visibilitychange'.toJS,
+      ((JSAny? _) {
+        if (webIsDocumentVisible()) {
+          onVisibleOrFocus();
+        }
+      }).toJS,
+    );
+  } catch (_) {}
+
+  try {
+    final bcCtor = _window.getProperty<JSFunction?>('BroadcastChannel'.toJS);
+    if (bcCtor != null) {
+      _broadcastChannel =
+          bcCtor.callAsConstructor<JSObject>('openmoney_sync_v2'.toJS);
+      _broadcastChannel?.setProperty(
+        'onmessage'.toJS,
+        ((JSObject event) {
+          try {
+            final msg = event.getProperty<JSString?>('data'.toJS)?.toDart;
+            if (msg != null && msg.isNotEmpty) {
+              onBroadcastMessage(msg);
+            }
+          } catch (_) {}
+        }).toJS,
+      );
+    }
+  } catch (_) {}
+}
+
+void broadcastWebSyncSignal(String message) {
+  try {
+    _broadcastChannel?.callMethod<JSAny?>('postMessage'.toJS, message.toJS);
+  } catch (_) {}
+}
+
+class PlatformWebSocket {
+  JSObject? _ws;
+  bool _closedByClient = false;
+
+  PlatformWebSocket._(this._ws);
+
+  static PlatformWebSocket? connect(
+    String wsUrl, {
+    required void Function() onOpen,
+    required void Function(String message) onMessage,
+    required void Function() onClose,
+  }) {
+    try {
+      final wsCtor = _window.getProperty<JSFunction?>('WebSocket'.toJS);
+      if (wsCtor == null) return null;
+      final wsObj = wsCtor.callAsConstructor<JSObject>(wsUrl.toJS);
+      final wrapper = PlatformWebSocket._(wsObj);
+
+      wsObj.setProperty(
+        'onopen'.toJS,
+        ((JSAny? _) {
+          if (!wrapper._closedByClient) onOpen();
+        }).toJS,
+      );
+
+      wsObj.setProperty(
+        'onmessage'.toJS,
+        ((JSObject event) {
+          if (wrapper._closedByClient) return;
+          try {
+            final data = event.getProperty<JSString?>('data'.toJS)?.toDart;
+            if (data != null && data.isNotEmpty) {
+              onMessage(data);
+            }
+          } catch (_) {}
+        }).toJS,
+      );
+
+      wsObj.setProperty(
+        'onclose'.toJS,
+        ((JSAny? _) {
+          if (!wrapper._closedByClient) onClose();
+        }).toJS,
+      );
+
+      wsObj.setProperty(
+        'onerror'.toJS,
+        ((JSAny? _) {
+          // onclose será chamado em seguida pelo navegador
+        }).toJS,
+      );
+
+      return wrapper;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get isOpen {
+    try {
+      if (_ws == null || _closedByClient) return false;
+      final state = _ws!.getProperty<JSNumber?>('readyState'.toJS)?.toDartInt;
+      return state == 1; // OPEN
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void send(String message) {
+    try {
+      if (isOpen) {
+        _ws?.callMethod<JSAny?>('send'.toJS, message.toJS);
+      }
+    } catch (_) {}
+  }
+
+  void close() {
+    _closedByClient = true;
+    try {
+      _ws?.callMethod<JSAny?>('close'.toJS);
+    } catch (_) {}
+    _ws = null;
+  }
+}

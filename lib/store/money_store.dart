@@ -9,6 +9,7 @@ import '../services/cloud_sync_service.dart';
 import '../services/importers_exporters.dart';
 import '../services/native_file_picker.dart';
 import '../services/platform_io.dart';
+import '../services/sync_engine.dart';
 
 enum NavModule {
   account,
@@ -352,7 +353,7 @@ class MoneyStore extends ChangeNotifier {
           ? 'cloud://${CloudSyncService.instance.userEmail}'
           : 'openmoney.json';
       if (CloudSyncService.instance.isAuthenticated) {
-        // Carrega cache instantâneo do usuário enquanto busca a revisão mais recente na nuvem
+        // Carrega cache instantâneo do usuário enquanto conecta o motor Sync v2 em tempo real
         final cachedRaw = webLocalStorageGet(
           'openmoney_web_cache_${CloudSyncService.instance.userId}',
         );
@@ -374,7 +375,7 @@ class MoneyStore extends ChangeNotifier {
           selectedAccountId = db.accounts.first.id;
         }
         notifyListeners();
-        syncFromCloud();
+        SyncEngine.instance.start(this);
         return;
       }
 
@@ -472,11 +473,18 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
+  void _syncPreferencesOnWeb() {
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      SyncEngine.instance.onLocalSave(db, exportPreferencesMap());
+    }
+  }
+
   void toggleThemeMode() {
     isDarkMode = !isDarkMode;
     final cfg = _readConfig();
     cfg['isDarkMode'] = isDarkMode;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -492,6 +500,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['fontScale'] = fontScale;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -533,6 +542,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['isSidebarVisible'] = isSidebarVisible;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -541,6 +551,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['sidebarShowFavorites'] = sidebarShowFavorites;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -549,6 +560,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['sidebarShowActiveAccounts'] = sidebarShowActiveAccounts;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -557,6 +569,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['sidebarShowInactiveAccounts'] = sidebarShowInactiveAccounts;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -565,6 +578,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['sidebarShowPlanning'] = sidebarShowPlanning;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -573,6 +587,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['sidebarShowModules'] = sidebarShowModules;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -581,6 +596,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['hidePatrimonyBalance'] = hidePatrimonyBalance;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -589,6 +605,7 @@ class MoneyStore extends ChangeNotifier {
     final cfg = _readConfig();
     cfg['reminderDaysAhead'] = reminderDaysAhead;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
@@ -988,11 +1005,11 @@ class MoneyStore extends ChangeNotifier {
 
     if (kIsWeb) {
       if (immediate) {
-        _performCloudPush();
+        SyncEngine.instance.onLocalSave(db, exportPreferencesMap());
         return;
       }
       _debounceSaveTimer = Timer(const Duration(milliseconds: 350), () {
-        _performCloudPush();
+        SyncEngine.instance.onLocalSave(db, exportPreferencesMap());
       });
       return;
     }
@@ -1009,42 +1026,59 @@ class MoneyStore extends ChangeNotifier {
     });
   }
 
+  /// Aplica alterações recebidas em tempo real do servidor sem disparar eco de save()
+  void onRemoteChangesApplied({Map<String, dynamic>? updatedPrefs}) {
+    if (updatedPrefs != null && updatedPrefs.isNotEmpty) {
+      applyPreferencesMap(updatedPrefs);
+      final cfg = _readConfig();
+      cfg.addAll(updatedPrefs);
+      _writeConfig(cfg);
+    }
+    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+    }
+    migrate();
+    syncRecs();
+    syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
+    rebuildIndexes();
+    if (db.accounts.isNotEmpty && accById(selectedAccountId) == null) {
+      selectedAccountId = db.accounts.first.id;
+    }
+    saveCloudSessionToConfig();
+    notifyListeners();
+  }
+
   Timer? _periodicSyncTimer;
 
   void startPeriodicCloudSync() {
     if (!kIsWeb) return;
-    _periodicSyncTimer?.cancel();
-    _periodicSyncTimer =
-        Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (!CloudSyncService.instance.isAuthenticated) return;
-      final remoteRev = await CloudSyncService.instance.checkRemoteRevision();
-      if (remoteRev != null &&
-          remoteRev > CloudSyncService.instance.revision) {
-        debugPrint(
-            '🔄 [CloudSync] Nova revisão detectada na nuvem (r$remoteRev). Sincronizando...');
-        await syncFromCloud();
-      }
-    });
+    SyncEngine.instance.start(this);
   }
 
   void stopPeriodicCloudSync() {
     _periodicSyncTimer?.cancel();
     _periodicSyncTimer = null;
+    if (kIsWeb) {
+      SyncEngine.instance.stop();
+    }
   }
 
-  Future<void> _performCloudPush({bool force = false}) async {
-    await CloudSyncService.instance.pushDatabase(
-      payload: db.toJson(),
-      preferences: exportPreferencesMap(),
-      force: force,
-    );
-    saveCloudSessionToConfig();
-  }
-
-  /// Baixa a base openmoney.json da nuvem para a sessão atual e grava em disco (se Desktop/Mobile)
+  /// Sincroniza a sessão atual a partir da nuvem via SyncEngine v2 (Web) ou fetchDatabase
   Future<bool> syncFromCloud() async {
     cancelPendingSave();
     if (!CloudSyncService.instance.isAuthenticated) return false;
+
+    if (kIsWeb) {
+      dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+      SyncEngine.instance.start(this);
+      final ok = await SyncEngine.instance.syncNow(forceFullPull: true);
+      if (ok) {
+        saveCloudSessionToConfig();
+        notifyListeners();
+      }
+      return ok;
+    }
+
     final snap = await CloudSyncService.instance.fetchDatabase();
     if (snap == null || snap.payload.isEmpty) return false;
 
@@ -1055,9 +1089,6 @@ class MoneyStore extends ChangeNotifier {
         final cfg = _readConfig();
         cfg.addAll(snap.preferences);
         _writeConfig(cfg);
-      }
-      if (kIsWeb) {
-        dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
       }
       migrate();
       syncRecs();
@@ -1078,7 +1109,7 @@ class MoneyStore extends ChangeNotifier {
     }
   }
 
-  /// Envia a base atual em memória para a conta Cloud do usuário
+  /// Envia uma nova base completa (ex: após importar .json ou criar base limpa) para a conta Cloud
   Future<bool> pushLocalToCloud({bool force = false}) async {
     cancelPendingSave();
     if (!CloudSyncService.instance.isAuthenticated) return false;
@@ -1088,6 +1119,9 @@ class MoneyStore extends ChangeNotifier {
       force: force,
     );
     if (ok) {
+      if (kIsWeb) {
+        SyncEngine.instance.resetForAccountSwitch(db, exportPreferencesMap());
+      }
       saveCloudSessionToConfig();
       notifyListeners();
     }

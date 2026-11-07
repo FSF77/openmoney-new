@@ -608,39 +608,6 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     }
   }
 
-  Future<void> _handlePullFromCloud() async {
-    setState(() {
-      _isBusy = true;
-      _statusMsg = null;
-    });
-    final ok = await widget.store.syncFromCloud();
-    if (!mounted) return;
-    setState(() {
-      _isBusy = false;
-      _isError = !ok;
-      _statusMsg = ok
-          ? '✓ Base atualizada a partir da nuvem (Revisão r${_cloud.revision}).'
-          : (_cloud.lastError ?? 'Falha ao buscar dados da nuvem.');
-    });
-  }
-
-  Future<void> _handlePushToCloud() async {
-    setState(() {
-      _isBusy = true;
-      _statusMsg = null;
-    });
-    final ok = await widget.store.pushLocalToCloud(force: true);
-    await _loadCloudBackups();
-    if (!mounted) return;
-    setState(() {
-      _isBusy = false;
-      _isError = !ok;
-      _statusMsg = ok
-          ? '✓ Base enviada e criptografada na nuvem (Revisão r${_cloud.revision}).'
-          : (_cloud.lastError ?? 'Falha ao enviar base para a nuvem.');
-    });
-  }
-
   Future<void> _handleChangePassword() async {
     setState(() {
       _isBusy = true;
@@ -970,6 +937,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
               ),
               TextButton.icon(
                 onPressed: () {
+                  widget.store.stopPeriodicCloudSync();
                   _cloud.logout();
                   widget.store.saveCloudSessionToConfig();
                   if (kIsWeb && _cloud.savedAccounts.isEmpty) {
@@ -1206,29 +1174,68 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
         ),
         const SizedBox(height: 14),
 
-        // Botões de Sincronização e Import/Export .json
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isBusy ? null : _handlePullFromCloud,
-                icon: const Icon(Icons.cloud_download_outlined, size: 17),
-                label: const Text('Baixar da Nuvem'),
-              ),
+        // Status de Sincronismo Automático em Tempo Real (Sync v2) e Import/Export .json
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: (_cloud.state == CloudSyncState.error
+                    ? Colors.orange
+                    : colors.accentGreen)
+                .withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: (_cloud.state == CloudSyncState.error
+                      ? Colors.orange
+                      : colors.accentGreen)
+                  .withValues(alpha: 0.38),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colors.accentBlue,
-                  foregroundColor: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _cloud.state == CloudSyncState.syncing
+                    ? Icons.sync_rounded
+                    : (_cloud.state == CloudSyncState.error
+                        ? Icons.cloud_queue_rounded
+                        : Icons.verified_rounded),
+                size: 20,
+                color: _cloud.state == CloudSyncState.error
+                    ? Colors.orange
+                    : colors.accentGreen,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _cloud.state == CloudSyncState.syncing
+                          ? 'Sincronizando alterações automaticamente...'
+                          : (_cloud.state == CloudSyncState.error
+                              ? (_cloud.pendingOutboxCount > 0
+                                  ? 'Modo Offline • ${_cloud.pendingOutboxCount} alteração(ões) na fila segura'
+                                  : 'Reconectando ao canal em tempo real...')
+                              : 'Sincronização Automática em Tempo Real Ativa (r${_cloud.revision})'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Cada lançamento, conta ou categoria é salvo e mesclado automaticamente por registro entre seus navegadores sem risco de sobrescrita.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                 ),
-                onPressed: _isBusy ? null : _handlePushToCloud,
-                icon: const Icon(Icons.cloud_upload_outlined, size: 17),
-                label: const Text('Enviar para Nuvem'),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 10),
         Row(
