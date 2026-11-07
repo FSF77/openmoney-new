@@ -670,6 +670,34 @@ class CloudSyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Consulta rápida e leve da revisão remota na nuvem (sem payload de dados)
+  Future<int?> checkRemoteRevision() async {
+    if (!isAuthenticated) return null;
+    try {
+      final res = await platformHttpRequest(
+        method: 'GET',
+        url: _endpoint('/api/db/revision'),
+        headers: {
+          'Authorization': 'Bearer $_authToken',
+          'Accept': 'application/json',
+        },
+      );
+      if (res.statusCode == 401) {
+        logout();
+        return null;
+      }
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final decoded = _tryDecodeJson(res.body);
+        if (decoded != null && decoded['revision'] is num) {
+          return (decoded['revision'] as num).toInt();
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Baixa o openmoney.json (Schema v7) exclusivo do usuário autenticado via stream binário Gzip
   Future<CloudDatabaseSnapshot?> fetchDatabase() async {
     if (!isAuthenticated) return null;
@@ -935,6 +963,8 @@ class CloudSyncService extends ChangeNotifier {
           'X-OpenMoney-Compression': 'gzip',
           'X-OpenMoney-Raw-Size': '${rawBytes.length}',
           'X-OpenMoney-Prefs': prefsB64,
+          'X-OpenMoney-Base-Revision': '$_revision',
+          if (force) 'X-OpenMoney-Force': 'true',
         },
         bodyBytes: compressedBytes,
       );
@@ -952,8 +982,10 @@ class CloudSyncService extends ChangeNotifier {
       final decoded = _tryDecodeJson(bodyText);
       if (res.statusCode == 409) {
         _state = CloudSyncState.conflict;
+        final sRev = decoded?['currentRevision'] ?? (_revision + 1);
         _lastError =
-            'Existe uma versão mais recente na nuvem. Sincronize antes de sobrescrever.';
+            decoded?['error']?.toString() ??
+            'Existe uma versão mais recente na nuvem (r$sRev). Sincronize antes de sobrescrever.';
         notifyListeners();
         return false;
       }

@@ -1156,6 +1156,46 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
+  // 3.5. GET /api/db/revision ou HEAD /api/db (Consulta leve de revisão remota sem tráfego de dados)
+  // ==========================================================================
+  if (
+    (path === "/api/db/revision" && request.method === "GET") ||
+    (path === "/api/db" && request.method === "HEAD")
+  ) {
+    const row = await env.DB.prepare(
+      "SELECT revision, updated_at FROM user_databases WHERE user_id = ?1"
+    )
+      .bind(userId)
+      .first();
+
+    const currentRev = row ? Number(row.revision || 1) : 1;
+    const updatedAt = row
+      ? String(row.updated_at || "")
+      : new Date().toISOString();
+
+    if (request.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          ...corsHeaders(origin),
+          "X-OpenMoney-Revision": String(currentRev),
+          "X-OpenMoney-Updated-At": updatedAt,
+        },
+      });
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        revision: currentRev,
+        updatedAt: updatedAt,
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
   // 4. GET /api/db (Leitura isolada e descriptografada do openmoney.json)
   // ==========================================================================
   if (path === "/api/db" && request.method === "GET") {
@@ -1371,7 +1411,31 @@ export async function onRequest(context) {
       .first();
 
     const currentRev = current ? Number(current.revision || 1) : 0;
-    const nextRev = currentRev + 1;
+
+    // Proteção estrita contra sobrescrita e perda de dados (Concorrência Optimista)
+    const baseRevHeader = request.headers.get("X-OpenMoney-Base-Revision");
+    const isForce =
+      request.headers.get("X-OpenMoney-Force") === "true" ||
+      url.searchParams.get("force") === "true";
+
+    let clientBaseRev = 0;
+    if (baseRevHeader !== null && baseRevHeader !== undefined) {
+      clientBaseRev = parseInt(baseRevHeader, 10);
+      if (!isNaN(clientBaseRev) && currentRev > clientBaseRev && !isForce) {
+        return jsonResponse(
+          {
+            error: `Conflito de sincronização: existe uma versão mais recente na nuvem (r${currentRev} vs r${clientBaseRev}). Sincronize antes de sobrescrever.`,
+            conflict: true,
+            currentRevision: currentRev,
+            clientRevision: clientBaseRev,
+          },
+          409,
+          origin
+        );
+      }
+    }
+
+    const nextRev = Math.max(currentRev, isNaN(clientBaseRev) ? 0 : clientBaseRev) + 1;
     const nowIso = new Date().toISOString();
     const todayDate = nowIso.slice(0, 10); // YYYY-MM-DD
 

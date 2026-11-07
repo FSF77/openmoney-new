@@ -459,10 +459,15 @@ class MoneyStore extends ChangeNotifier {
       selectedAccountId = db.accounts.first.id;
     }
 
-    save(immediate: true);
+    _performDiskWrite();
     registerRecentFile(targetPath);
     _setupFileWatcher(targetPath);
     notifyListeners();
+
+    startPeriodicCloudSync();
+    if (CloudSyncService.instance.isAuthenticated) {
+      syncFromCloud();
+    }
   }
 
   void toggleThemeMode() {
@@ -1006,6 +1011,28 @@ class MoneyStore extends ChangeNotifier {
         _performCloudPush();
       }
     });
+  }
+
+  Timer? _periodicSyncTimer;
+
+  void startPeriodicCloudSync() {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (!CloudSyncService.instance.isAuthenticated) return;
+      final remoteRev = await CloudSyncService.instance.checkRemoteRevision();
+      if (remoteRev != null &&
+          remoteRev > CloudSyncService.instance.revision) {
+        debugPrint(
+            '🔄 [CloudSync] Nova revisão detectada na nuvem (r$remoteRev). Sincronizando...');
+        await syncFromCloud();
+      }
+    });
+  }
+
+  void stopPeriodicCloudSync() {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = null;
   }
 
   Future<void> _performCloudPush({bool force = false}) async {
