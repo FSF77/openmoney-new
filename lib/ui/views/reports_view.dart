@@ -280,7 +280,6 @@ class _ReportsViewState extends State<ReportsView> {
                   child: KpiMetricCard(
                     label: 'Taxa de Poupança',
                     value: '${data.savingsRate}%',
-                    subtitle: isAnnual ? 'Renda poupada no ano' : 'Renda poupada no mês',
                     valueColor: colors.accent,
                     icon: Icons.savings_outlined,
                   ),
