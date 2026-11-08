@@ -362,6 +362,7 @@ class MoneyStore extends ChangeNotifier {
   }
 
   void boot() {
+    AuditLogManager.instance.defaultAppSupportDirPath = _appSupportDirPath;
     final cfg = _readConfig();
     applyPreferencesMap(cfg);
     CloudSyncService.instance.loadSessionFromConfig(cfg);
@@ -1589,11 +1590,15 @@ class MoneyStore extends ChangeNotifier {
     BackupManager.instance.revealInFinder(_appSupportDirPath);
   }
 
-  String get logFilePath => AuditLogManager.instance.logFilePathForDatabase(dbPath);
+  String get logFilePath => AuditLogManager.instance.logFilePathForDatabase(
+        dbPath,
+        appSupportDirPath: _appSupportDirPath,
+      );
 
   Future<List<AuditLogEntry>> readRecentAuditLogs({int limit = 500}) async {
     return await AuditLogManager.instance.readRecentLogs(
       dbPath: dbPath,
+      appSupportDirPath: _appSupportDirPath,
       limit: limit,
     );
   }

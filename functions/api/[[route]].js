@@ -117,6 +117,22 @@ async function ensureSchema(db) {
         PRIMARY KEY (user_id, op_id)
       )
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_audit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        entity TEXT NOT NULL,
+        target_id TEXT,
+        summary TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_audit_user_created
+      ON user_audit_logs (user_id, created_at DESC)
+    `),
   ]);
   schemaInitialized = true;
 }
@@ -3001,6 +3017,102 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
+  // 7b. GET /api/audit-logs (Busca logs de auditoria do próprio usuário)
+  // ==========================================================================
+  if (path === "/api/audit-logs" && request.method === "GET") {
+    const rawLimit = Number(url.searchParams.get("limit") || 500);
+    const limit = Math.min(Math.max(rawLimit, 1), 1000);
+
+    const res = await env.DB.prepare(
+      `SELECT id, action, entity, target_id, summary, details, created_at
+       FROM user_audit_logs
+       WHERE user_id = ?1
+       ORDER BY created_at DESC
+       LIMIT ?2`
+    )
+      .bind(userId, limit)
+      .all();
+
+    const logs = ((res && res.results) || []).map((row) => {
+      let parsedDetails = null;
+      if (row.details) {
+        try {
+          parsedDetails = JSON.parse(row.details);
+        } catch (_) {}
+      }
+      return {
+        id: row.target_id || row.id,
+        action: row.action,
+        entity: row.entity,
+        summary: row.summary,
+        details: parsedDetails,
+        ts: row.created_at,
+      };
+    });
+
+    return jsonResponse({ ok: true, logs }, 200, origin);
+  }
+
+  // ==========================================================================
+  // 7c. POST /api/audit-logs (Registra entradas de log de auditoria no D1)
+  // ==========================================================================
+  if (path === "/api/audit-logs" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const rawList = Array.isArray(body.logs)
+      ? body.logs
+      : body.log
+      ? [body.log]
+      : [];
+
+    if (rawList.length === 0) {
+      return jsonResponse({ ok: true, count: 0 }, 200, origin);
+    }
+
+    const statements = [];
+    const nowIso = new Date().toISOString();
+
+    for (const item of rawList.slice(0, 100)) {
+      if (!item || typeof item !== "object") continue;
+      const logId = `aud_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const action = String(item.action || "create").trim();
+      const entity = String(item.entity || "transaction").trim();
+      const targetId = item.id ? String(item.id) : null;
+      const summary = String(item.summary || "").trim();
+      const detailsStr =
+        item.details && typeof item.details === "object"
+          ? JSON.stringify(item.details)
+          : null;
+      const ts = String(item.ts || nowIso);
+
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO user_audit_logs (id, user_id, action, entity, target_id, summary, details, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+        ).bind(logId, userId, action, entity, targetId, summary, detailsStr, ts)
+      );
+    }
+
+    if (statements.length > 0) {
+      // Retenção de segurança de 30 dias: expurga registros anteriores
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      statements.push(
+        env.DB.prepare(
+          `DELETE FROM user_audit_logs WHERE user_id = ?1 AND created_at < ?2`
+        ).bind(userId, cutoff)
+      );
+      await env.DB.batch(statements);
+    }
+
+    return jsonResponse({ ok: true, count: statements.length }, 200, origin);
+  }
+
+  // ==========================================================================
   // 8. POST /api/db/delete ou DELETE /api/db (Exclui base existente ou conta completa)
   // ==========================================================================
   if (
@@ -3119,6 +3231,9 @@ export async function onRequest(context) {
         ).bind(userId),
         env.DB.prepare(
           `DELETE FROM user_database_backups WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
+          `DELETE FROM user_audit_logs WHERE user_id = ?1`
         ).bind(userId),
         env.DB.prepare(
           `DELETE FROM user_databases WHERE user_id = ?1`

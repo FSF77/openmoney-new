@@ -176,7 +176,9 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Histórico detalhado mantido pelos últimos 30 dias (${widget.store.logFilePath.split(RegExp(r"[/\\]")).last})',
+                          widget.store.isCloudMode
+                              ? 'Banco Online (Cloudflare D1) • Histórico de 30 dias (${widget.store.dbPath.replaceFirst("cloud://", "")})'
+                              : 'Histórico detalhado mantido pelos últimos 30 dias (${widget.store.logFilePath.split(RegExp(r"[/\\]")).last})',
                           style: TextStyle(
                             fontSize: isMobile ? 11 : 12,
                             color: colors.textSecondary,

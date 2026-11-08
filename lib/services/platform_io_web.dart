@@ -486,6 +486,18 @@ class File extends FileSystemEntity {
   bool existsSync() => _webVirtualFiles.containsKey(path);
   Future<bool> exists() async => existsSync();
 
+  void createSync({bool recursive = false}) {
+    if (!_webVirtualFiles.containsKey(path)) {
+      _webVirtualFiles[path] = Uint8List(0);
+      _webVirtualFileModified[path] = DateTime.now();
+    }
+  }
+
+  Future<File> create({bool recursive = false}) async {
+    createSync(recursive: recursive);
+    return this;
+  }
+
   int lengthSync() => _webVirtualFiles[path]?.length ?? 0;
   Future<int> length() async => lengthSync();
 

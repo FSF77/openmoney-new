@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'cloud_sync_service.dart';
 import 'platform_io.dart';
 
 enum AuditAction {
@@ -118,9 +120,27 @@ class AuditLogManager {
   static final AuditLogManager instance = AuditLogManager._();
   AuditLogManager._();
 
-  /// Resolve o arquivo de log a partir do caminho da base
-  String logFilePathForDatabase(String dbPath) {
+  String? defaultAppSupportDirPath;
+  final List<AuditLogEntry> _pendingCloudLogs = [];
+  Timer? _cloudFlushTimer;
+
+  /// Resolve o arquivo de log a partir do caminho da base (local ou nuvem no desktop)
+  String logFilePathForDatabase(String dbPath, {String? appSupportDirPath}) {
     if (dbPath.isEmpty) return '';
+    if (dbPath.startsWith('cloud://')) {
+      final baseDir = appSupportDirPath ?? defaultAppSupportDirPath;
+      if (baseDir == null || baseDir.isEmpty) return '';
+      final email = dbPath.replaceFirst('cloud://', '').trim();
+      final clean = email.replaceAll(RegExp(r'[^a-zA-Z0-9_\.-]'), '_');
+      final sep = Platform.pathSeparator;
+      final dir = Directory('$baseDir${sep}AuditLogs');
+      if (!dir.existsSync()) {
+        try {
+          dir.createSync(recursive: true);
+        } catch (_) {}
+      }
+      return '${dir.path}${sep}openmoney-cloud-$clean.log';
+    }
     final dotIdx = dbPath.lastIndexOf('.');
     if (dotIdx == -1) {
       return '$dbPath.log';
@@ -128,17 +148,38 @@ class AuditLogManager {
     return '${dbPath.substring(0, dotIdx)}.log';
   }
 
-  /// Grava uma entrada de auditoria de forma assíncrona append-only sem travar a UI
+  void _enqueueCloudLog(AuditLogEntry entry) {
+    _pendingCloudLogs.add(entry);
+    _cloudFlushTimer?.cancel();
+    _cloudFlushTimer = Timer(const Duration(milliseconds: 400), () {
+      flushCloudLogs();
+    });
+  }
+
+  /// Força o envio imediato de logs pendentes para o banco online D1
+  Future<void> flushCloudLogs() async {
+    _cloudFlushTimer?.cancel();
+    _cloudFlushTimer = null;
+    if (_pendingCloudLogs.isEmpty) return;
+    final toSend = List<AuditLogEntry>.from(_pendingCloudLogs);
+    _pendingCloudLogs.clear();
+    try {
+      await CloudSyncService.instance.sendAuditLogs(toSend);
+    } catch (e) {
+      debugPrint('[AuditLogManager] Erro ao enviar logs para a nuvem: $e');
+    }
+  }
+
+  /// Grava uma entrada de auditoria de forma assíncrona (localmente e no banco online se Cloud)
   void logAsync({
     required String dbPath,
+    String? appSupportDirPath,
     required AuditAction action,
     required AuditEntity entity,
     String? id,
     required String summary,
     Map<String, dynamic>? details,
   }) {
-    if (kIsWeb || dbPath.isEmpty) return;
-
     final entry = AuditLogEntry(
       timestamp: DateTime.now(),
       action: action,
@@ -148,28 +189,65 @@ class AuditLogManager {
       details: details,
     );
 
-    // Executa em microtask/async I/O
-    Future.microtask(() async {
-      try {
-        final logPath = logFilePathForDatabase(dbPath);
-        if (logPath.isEmpty) return;
-        final file = File(logPath);
-        final line = '${jsonEncode(entry.toJson())}\n';
-        await file.writeAsString(line, mode: FileMode.writeOnlyAppend, flush: false);
-      } catch (e) {
-        debugPrint('[AuditLogManager] Erro ao gravar log: $e');
-      }
-    });
+    // 1. Se estiver em modo online ou autenticado no CloudSync, enfileira para salvar no banco D1
+    final isCloud = dbPath.startsWith('cloud://') ||
+        CloudSyncService.instance.isAuthenticated;
+    if (isCloud) {
+      _enqueueCloudLog(entry);
+    }
+
+    // 2. Se não estiver na Web, grava também no arquivo local .log (incluindo base cloud no desktop)
+    if (!kIsWeb) {
+      Future.microtask(() async {
+        try {
+          final logPath = logFilePathForDatabase(
+            dbPath,
+            appSupportDirPath: appSupportDirPath,
+          );
+          if (logPath.isEmpty) return;
+          final file = File(logPath);
+          if (!file.existsSync()) {
+            file.createSync(recursive: true);
+          }
+          final line = '${jsonEncode(entry.toJson())}\n';
+          await file.writeAsString(line,
+              mode: FileMode.writeOnlyAppend, flush: false);
+        } catch (e) {
+          debugPrint('[AuditLogManager] Erro ao gravar log: $e');
+        }
+      });
+    }
   }
 
   /// Lê os logs mais recentes (até `limit` registros, decrescente)
+  /// Se a base for online, busca do banco online Cloudflare D1
   Future<List<AuditLogEntry>> readRecentLogs({
     required String dbPath,
+    String? appSupportDirPath,
     int limit = 500,
   }) async {
-    if (kIsWeb || dbPath.isEmpty) return [];
+    final isCloud = dbPath.startsWith('cloud://') ||
+        (kIsWeb && CloudSyncService.instance.isAuthenticated) ||
+        CloudSyncService.instance.isAuthenticated;
+
+    // 1. Em modo Cloud, busca os logs direto do banco online D1
+    if (isCloud && CloudSyncService.instance.isAuthenticated) {
+      await flushCloudLogs();
+      final remoteLogs =
+          await CloudSyncService.instance.fetchAuditLogs(limit: limit);
+      if (remoteLogs.isNotEmpty) {
+        return remoteLogs;
+      }
+    }
+
+    // 2. Fallback offline ou base estritamente local
+    if (kIsWeb) return [];
     try {
-      final logPath = logFilePathForDatabase(dbPath);
+      final logPath = logFilePathForDatabase(
+        dbPath,
+        appSupportDirPath: appSupportDirPath,
+      );
+      if (logPath.isEmpty) return [];
       final file = File(logPath);
       if (!await file.exists()) return [];
 
@@ -195,11 +273,16 @@ class AuditLogManager {
   /// Expura logs com mais de `retentionDays` dias (padrão 30 dias)
   Future<void> pruneOldLogs({
     required String dbPath,
+    String? appSupportDirPath,
     int retentionDays = 30,
   }) async {
     if (kIsWeb || dbPath.isEmpty) return;
     try {
-      final logPath = logFilePathForDatabase(dbPath);
+      final logPath = logFilePathForDatabase(
+        dbPath,
+        appSupportDirPath: appSupportDirPath,
+      );
+      if (logPath.isEmpty) return;
       final file = File(logPath);
       if (!await file.exists()) return;
 

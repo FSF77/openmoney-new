@@ -48,3 +48,17 @@ CREATE TABLE IF NOT EXISTS user_database_backups (
 );
 
 CREATE INDEX IF NOT EXISTS idx_backups_user_date ON user_database_backups(user_id, backup_date DESC);
+
+-- 4. Logs de Auditoria e Alterações por Usuário (Isolamento Estrito)
+CREATE TABLE IF NOT EXISTS user_audit_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  target_id TEXT,
+  summary TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_user_created ON user_audit_logs(user_id, created_at DESC);

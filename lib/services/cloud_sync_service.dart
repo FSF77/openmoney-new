@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'audit_log_manager.dart';
 import 'platform_io.dart';
 
 enum CloudSyncState {
@@ -1411,6 +1412,47 @@ class CloudSyncService extends ChangeNotifier {
       notifyListeners();
     }
     return null;
+  }
+
+  /// Envia logs de auditoria e alterações para o banco online D1
+  Future<bool> sendAuditLogs(List<AuditLogEntry> entries) async {
+    if (!isAuthenticated || entries.isEmpty) return false;
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/audit-logs'),
+        headers: _headers(),
+        body: jsonEncode({
+          'logs': entries.map((e) => e.toJson()).toList(),
+        }),
+      );
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Busca os logs de auditoria gravados no banco online D1
+  Future<List<AuditLogEntry>> fetchAuditLogs({int limit = 500}) async {
+    if (!isAuthenticated) return const [];
+    try {
+      final res = await platformHttpRequest(
+        method: 'GET',
+        url: _endpoint('/api/audit-logs?limit=$limit'),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['logs'] is List) {
+        return (decoded['logs'] as List)
+            .whereType<Map>()
+            .map((m) => AuditLogEntry.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
   }
 
   /// Exclui os dados da base na nuvem (ou a conta completa + base) após confirmação de segurança
