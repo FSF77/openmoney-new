@@ -51,32 +51,59 @@ class BackupManager {
     return dir;
   }
 
-  /// Garante que exista ao menos 1 backup em .zip para o dia atual e expurga os que têm mais de 7 dias
+  /// Garante que exista ao menos 1 backup em .zip para o dia atual e expurga os que têm mais de 7 dias.
+  /// Suporta bases locais em disco ou bases na nuvem via `jsonContent`.
   Future<void> ensureDailyBackup({
     required String appSupportDirPath,
     required String databasePath,
+    String? jsonContent,
     bool force = false,
   }) async {
-    if (kIsWeb || databasePath.isEmpty) return;
-    final dbFile = File(databasePath);
-    if (!dbFile.existsSync()) return;
+    if (kIsWeb) return;
+    final hasDiskFile = databasePath.isNotEmpty &&
+        !databasePath.startsWith('cloud://') &&
+        File(databasePath).existsSync();
+    final hasJson = jsonContent != null && jsonContent.trim().isNotEmpty;
+
+    if (!hasDiskFile && !hasJson) return;
 
     final backupsDir = getBackupsDirectory(appSupportDirPath);
     final today = todayISO(); // YYYY-MM-DD
-    final baseName = dbFile.uri.pathSegments.last.replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+    final String baseName;
+    if (databasePath.startsWith('cloud://')) {
+      final email = databasePath.replaceFirst('cloud://', '').trim();
+      final clean = email.replaceAll(RegExp(r'[^a-zA-Z0-9_\.-]'), '_');
+      baseName = clean.isNotEmpty ? 'openmoney-cloud-$clean' : 'openmoney-cloud';
+    } else if (hasDiskFile) {
+      final dbFile = File(databasePath);
+      baseName = dbFile.uri.pathSegments.last
+          .replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+    } else {
+      baseName = 'openmoney';
+    }
+
     final sep = Platform.pathSeparator;
     final zipFilename = '$baseName-backup-$today.zip';
     final destZipFile = File('${backupsDir.path}$sep$zipFilename');
 
-    if (!force && destZipFile.existsSync()) {
+    if (!force && destZipFile.existsSync() && destZipFile.lengthSync() > 200) {
       return;
     }
 
     try {
-      final success = await createZipArchive(
-        sourcePath: databasePath,
-        destinationZipPath: destZipFile.path,
-      );
+      bool success = false;
+      if (hasDiskFile) {
+        success = await createZipArchive(
+          sourcePath: databasePath,
+          destinationZipPath: destZipFile.path,
+        );
+      } else if (hasJson) {
+        success = await createZipArchiveFromBytes(
+          bytes: utf8.encode(jsonContent!),
+          entryFileName: 'openmoney.json',
+          destinationZipPath: destZipFile.path,
+        );
+      }
       if (success) {
         pruneBackups(
           appSupportDirPath: appSupportDirPath,
@@ -89,15 +116,21 @@ class BackupManager {
     }
   }
 
-  /// Cria um backup pontual em .zip (por exemplo, manual ou pré-exclusão)
+  /// Cria um backup pontual em .zip (por exemplo, manual ou pré-exclusão).
+  /// Suporta tanto bases locais em disco quanto bases na nuvem via `jsonContent`.
   Future<String?> createTimestampedBackup({
     required String appSupportDirPath,
     required String databasePath,
+    String? jsonContent,
     String prefix = 'backup',
   }) async {
-    if (kIsWeb || databasePath.isEmpty) return null;
-    final dbFile = File(databasePath);
-    if (!dbFile.existsSync()) return null;
+    if (kIsWeb) return null;
+    final hasDiskFile = databasePath.isNotEmpty &&
+        !databasePath.startsWith('cloud://') &&
+        File(databasePath).existsSync();
+    final hasJson = jsonContent != null && jsonContent.trim().isNotEmpty;
+
+    if (!hasDiskFile && !hasJson) return null;
 
     final backupsDir = getBackupsDirectory(appSupportDirPath);
     final now = DateTime.now();
@@ -108,15 +141,37 @@ class BackupManager {
         '${now.minute.toString().padLeft(2, "0")}'
         '${now.second.toString().padLeft(2, "0")}';
 
-    final baseName = dbFile.uri.pathSegments.last.replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+    final String baseName;
+    if (databasePath.startsWith('cloud://')) {
+      final email = databasePath.replaceFirst('cloud://', '').trim();
+      final clean = email.replaceAll(RegExp(r'[^a-zA-Z0-9_\.-]'), '_');
+      baseName = clean.isNotEmpty ? 'openmoney-cloud-$clean' : 'openmoney-cloud';
+    } else if (hasDiskFile) {
+      final dbFile = File(databasePath);
+      baseName = dbFile.uri.pathSegments.last
+          .replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+    } else {
+      baseName = 'openmoney';
+    }
+
     final sep = Platform.pathSeparator;
     final zipFilename = '$baseName-$prefix-$ts.zip';
     final destZipFile = File('${backupsDir.path}$sep$zipFilename');
 
-    final success = await createZipArchive(
-      sourcePath: databasePath,
-      destinationZipPath: destZipFile.path,
-    );
+    bool success = false;
+    if (hasDiskFile) {
+      success = await createZipArchive(
+        sourcePath: databasePath,
+        destinationZipPath: destZipFile.path,
+      );
+    } else if (hasJson) {
+      success = await createZipArchiveFromBytes(
+        bytes: utf8.encode(jsonContent!),
+        entryFileName: 'openmoney.json',
+        destinationZipPath: destZipFile.path,
+      );
+    }
+
     if (success) {
       // Backups manuais, de segurança ou de atualização nunca são expurgados pelo prune diário
       if (!prefix.contains('manual') &&
@@ -267,6 +322,62 @@ class BackupManager {
       return true;
     } catch (e) {
       debugPrint('[BackupManager] Erro ao criar zip archive: $e');
+      return false;
+    }
+  }
+
+  /// Compacta uma sequência de bytes (ex: JSON serializado da memória) diretamente em um arquivo .zip
+  Future<bool> createZipArchiveFromBytes({
+    required List<int> bytes,
+    required String entryFileName,
+    required String destinationZipPath,
+  }) async {
+    if (kIsWeb) return false;
+    try {
+      final destFile = File(destinationZipPath);
+      destFile.parent.createSync(recursive: true);
+
+      // No macOS tenta usar /usr/bin/zip nativo criando arquivo temporário
+      if (Platform.isMacOS) {
+        try {
+          final parentDir = Directory.systemTemp.createTempSync('om_stage_');
+          final stagedFile =
+              File('${parentDir.path}${Platform.pathSeparator}$entryFileName');
+          stagedFile.writeAsBytesSync(bytes, flush: true);
+
+          if (destFile.existsSync()) {
+            try {
+              destFile.deleteSync();
+            } catch (_) {}
+          }
+
+          final res = await Process.run(
+            '/usr/bin/zip',
+            ['-q', '-9', destinationZipPath, entryFileName],
+            workingDirectory: parentDir.path,
+          );
+
+          try {
+            parentDir.deleteSync(recursive: true);
+          } catch (_) {}
+
+          if (res.exitCode == 0 &&
+              destFile.existsSync() &&
+              destFile.lengthSync() > 0) {
+            return true;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback multiplataforma via pacote archive
+      final archive = Archive();
+      archive.addFile(ArchiveFile(entryFileName, bytes.length, bytes));
+      final zipData = ZipEncoder().encode(archive);
+      if (zipData == null) return false;
+      destFile.writeAsBytesSync(zipData, flush: true);
+      return destFile.existsSync() && destFile.lengthSync() > 0;
+    } catch (e) {
+      debugPrint('[BackupManager] Erro ao criar zip a partir de bytes: $e');
       return false;
     }
   }

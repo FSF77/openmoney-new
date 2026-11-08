@@ -437,6 +437,7 @@ class MoneyStore extends ChangeNotifier {
       if (db.accounts.isNotEmpty) {
         selectedAccountId = db.accounts.first.id;
       }
+      ensureDailyLocalBackup();
       notifyListeners();
       SyncEngine.instance.start(
         this,
@@ -1157,6 +1158,7 @@ class MoneyStore extends ChangeNotifier {
     if (db.accounts.isNotEmpty && accById(selectedAccountId) == null) {
       selectedAccountId = db.accounts.first.id;
     }
+    ensureDailyLocalBackup();
     saveCloudSessionToConfig();
     notifyListeners();
   }
@@ -1225,6 +1227,7 @@ class MoneyStore extends ChangeNotifier {
     );
     final ok = await SyncEngine.instance.syncNow(forceFullPull: true);
     if (ok) {
+      ensureDailyLocalBackup();
       saveCloudSessionToConfig();
       notifyListeners();
     }
@@ -1471,6 +1474,7 @@ class MoneyStore extends ChangeNotifier {
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
     }
+    ensureDailyLocalBackup();
     notifyListeners();
 
     SyncEngine.instance.start(this, hasValidLocalCache: loadedFromCache);
@@ -1532,28 +1536,45 @@ class MoneyStore extends ChangeNotifier {
   String get appSupportDirPath => _appSupportDirPath;
 
   void _ensureDailyBackup(File dbFile) {
+    ensureDailyLocalBackup();
+  }
+
+  /// Garante a criação do backup local diário (.zip), tanto para bases locais em disco
+  /// quanto para contas online (Cloud Sync v2), preservando uma cópia de segurança no computador.
+  void ensureDailyLocalBackup({bool force = false}) {
     if (kIsWeb || _appSupportDirPath.isEmpty) return;
+    if (db.accounts.isEmpty && db.txs.isEmpty) return;
+
+    final jsonStr = jsonEncode(db.toJson());
     BackupManager.instance.ensureDailyBackup(
       appSupportDirPath: _appSupportDirPath,
-      databasePath: dbFile.path,
+      databasePath: dbPath,
+      jsonContent: jsonStr,
+      force: force,
     );
-    AuditLogManager.instance.pruneOldLogs(dbPath: dbFile.path, retentionDays: 30);
+    if (!dbPath.startsWith('cloud://') && dbPath.isNotEmpty) {
+      AuditLogManager.instance.pruneOldLogs(dbPath: dbPath, retentionDays: 30);
+    }
   }
 
   Future<String?> createManualZipBackup() async {
-    if (kIsWeb || dbPath.isEmpty) return null;
+    if (kIsWeb) return null;
+    final jsonStr = jsonEncode(db.toJson());
     return await BackupManager.instance.createTimestampedBackup(
       appSupportDirPath: _appSupportDirPath,
       databasePath: dbPath,
+      jsonContent: jsonStr,
       prefix: 'manual',
     );
   }
 
   Future<String?> createAutomaticPreDeleteBackup() async {
-    if (kIsWeb || dbPath.isEmpty) return null;
+    if (kIsWeb) return null;
+    final jsonStr = jsonEncode(db.toJson());
     return await BackupManager.instance.createTimestampedBackup(
       appSupportDirPath: _appSupportDirPath,
       databasePath: dbPath,
+      jsonContent: jsonStr,
       prefix: 'backup-pre-exclusao',
     );
   }
@@ -1623,7 +1644,12 @@ class MoneyStore extends ChangeNotifier {
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
     }
-    save(immediate: true);
+    if (isCloudMode) {
+      await pushLocalToCloud(force: true);
+    } else {
+      save(immediate: true);
+    }
+    ensureDailyLocalBackup(force: true);
     notifyListeners();
     return true;
   }

@@ -1464,4 +1464,50 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     final lastMonthRect = tester.getRect(lastMonthFinder);
     expect(lastMonthRect.right, lessThanOrEqualTo(1920.0));
   });
+
+  test('31. BackupManager supports local daily & manual backups for Cloud mode databases', () async {
+    final tempDir = Directory.systemTemp.createTempSync('om_cloud_backup_test_');
+    final db = Database(
+      accounts: [Account(id: 'a1', name: 'Nuvem CC', type: 'Corrente', opening: 5000)],
+      cats: [CategoryItem(name: 'Alimentação', type: 'Despesa')],
+      txs: [Transaction(id: 't1', acc: 'a1', date: '2026-11-08', payee: 'Mercado', cat: 'Alimentação', memo: '', amt: -1500, rec: true)],
+      recs: [],
+      budgets: {},
+      v: 7,
+    );
+    final jsonStr = jsonEncode(db.toJson());
+
+    // 1. Manual backup from Cloud database
+    final manualPath = await BackupManager.instance.createTimestampedBackup(
+      appSupportDirPath: tempDir.path,
+      databasePath: 'cloud://usuario@email.com',
+      jsonContent: jsonStr,
+      prefix: 'manual',
+    );
+    expect(manualPath != null, true);
+    expect(File(manualPath!).existsSync(), true);
+    expect(manualPath.contains('openmoney-cloud-usuario_email.com-manual'), true);
+
+    // 2. Daily backup from Cloud database
+    await BackupManager.instance.ensureDailyBackup(
+      appSupportDirPath: tempDir.path,
+      databasePath: 'cloud://usuario@email.com',
+      jsonContent: jsonStr,
+      force: true,
+    );
+
+    final backups = BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path);
+    expect(backups.length >= 2, true);
+
+    // 3. Extract and restore
+    final restored = await BackupManager.instance.extractDatabase(zipPath: manualPath);
+    expect(restored != null, true);
+    expect(restored!.accounts.first.name, 'Nuvem CC');
+    expect(restored.txs.first.payee, 'Mercado');
+    expect(restored.txs.first.amt, -1500);
+
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
+  });
 }

@@ -30,6 +30,7 @@ class _BackupsHistoryDialogState extends State<_BackupsHistoryDialog> {
   @override
   void initState() {
     super.initState();
+    widget.store.ensureDailyLocalBackup();
     _refreshList();
   }
 
@@ -162,7 +163,7 @@ class _BackupsHistoryDialogState extends State<_BackupsHistoryDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Cópias diárias compactadas (.zip) com retenção de segurança de 7 dias.',
+                          'Cópias locais compactadas (.zip) no seu computador (base local ou nuvem).',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,
@@ -237,7 +238,7 @@ class _BackupsHistoryDialogState extends State<_BackupsHistoryDialog> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Os backups diários são gerados automaticamente na primeira gravação do dia.',
+                                'Os backups diários são gerados automaticamente na inicialização do app e em gravações.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: colors.textSecondary,
