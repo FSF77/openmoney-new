@@ -267,7 +267,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ? null
                   : AppBar(
                       backgroundColor: colors.bgSecondary,
-                      leadingWidth: 96,
+                      leadingWidth: 100,
                       titleSpacing: 2,
                       leading: Builder(
                         builder: (ctx) => Row(
@@ -275,18 +275,23 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                           children: [
                             const SizedBox(width: 4),
                             IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Menu Lateral',
-                              icon: const Icon(Icons.menu),
+                              icon: Icon(
+                                Icons.menu,
+                                color: colors.textPrimary,
+                              ),
                               onPressed: () => Scaffold.of(ctx).openDrawer(),
                             ),
                             IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Tela Inicial',
-                              icon: Icon(
-                                _isMobileHomeActive
-                                    ? Icons.home_rounded
-                                    : Icons.home_outlined,
-                                color:
-                                    _isMobileHomeActive ? colors.accent : null,
+                              icon: _HomeVectorIcon(
+                                size: 21,
+                                filled: _isMobileHomeActive,
+                                color: _isMobileHomeActive
+                                    ? colors.accent
+                                    : colors.textPrimary,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -2151,5 +2156,81 @@ class _SidebarAccountTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _HomeVectorIcon extends StatelessWidget {
+  final double size;
+  final Color color;
+  final bool filled;
+
+  const _HomeVectorIcon({
+    required this.size,
+    required this.color,
+    this.filled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _HomeVectorPainter(color: color, filled: filled),
+    );
+  }
+}
+
+class _HomeVectorPainter extends CustomPainter {
+  final Color color;
+  final bool filled;
+
+  const _HomeVectorPainter({
+    required this.color,
+    required this.filled,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Roof overhang + house body
+    final roofPath = Path()
+      ..moveTo(w * 0.10, h * 0.48)
+      ..lineTo(w * 0.50, h * 0.13)
+      ..lineTo(w * 0.90, h * 0.48);
+
+    final houseBody = Path()
+      ..moveTo(w * 0.22, h * 0.42)
+      ..lineTo(w * 0.50, h * 0.17)
+      ..lineTo(w * 0.78, h * 0.42)
+      ..lineTo(w * 0.78, h * 0.85)
+      ..lineTo(w * 0.58, h * 0.85)
+      ..lineTo(w * 0.58, h * 0.58)
+      ..lineTo(w * 0.42, h * 0.58)
+      ..lineTo(w * 0.42, h * 0.85)
+      ..lineTo(w * 0.22, h * 0.85)
+      ..close();
+
+    if (filled) {
+      final fillPaint = Paint()
+        ..color = color.withValues(alpha: 0.22)
+        ..style = PaintingStyle.fill;
+      canvas.drawPath(houseBody, fillPaint);
+    }
+
+    canvas.drawPath(roofPath, strokePaint);
+    canvas.drawPath(houseBody, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeVectorPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.filled != filled;
   }
 }
