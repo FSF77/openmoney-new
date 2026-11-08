@@ -660,10 +660,201 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = OpenMoneyColors(widget.store.isDarkMode);
+    final isSmallScreen = MediaQuery.of(context).size.width < 640;
 
     return AnimatedBuilder(
       animation: _cloud,
       builder: (context, _) {
+        final headerRow = Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: Image.asset(
+                'logo/openmoney_app_icon.png',
+                width: isSmallScreen ? 34 : 40,
+                height: isSmallScreen ? 34 : 40,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'OpenMoney Cloud & Sincronização',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 15 : 17,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    _cloud.isAuthenticated
+                        ? 'Conectado como ${_cloud.userEmail} • ${_cloud.statusLabel}'
+                        : 'Sincronize e alterne entre múltiplas contas e bases openmoney.json',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 11.5 : 12,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.help_outline_rounded,
+                color: colors.accentBlue,
+                size: 20,
+              ),
+              tooltip: 'Guia de Ajuda da Sincronização',
+              onPressed: () => showCloudSyncHelpModal(context, colors),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close, color: colors.textSecondary),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+
+        final bodyContent = _isForgotMode
+            ? _buildDisconnectedBody(colors)
+            : (_cloud.isAuthenticated && !_addingAnotherAccount)
+                ? _buildConnectedBody(colors)
+                : _buildDisconnectedBody(colors);
+
+        final statusBanner = _statusMsg != null
+            ? Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (_isError ? colors.accentRed : colors.accentGreen)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (_isError ? colors.accentRed : colors.accentGreen)
+                        .withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _statusMsg!,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            _isError ? colors.accentRed : colors.accentGreen,
+                      ),
+                    ),
+                    if (_statusMsg!.contains('Sessão expirada') ||
+                        _statusMsg!.contains('não autenticada')) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              final currentEmail = _cloud.userEmail;
+                              _cloud.logout();
+                              setState(() {
+                                _emailCtrl.text = currentEmail;
+                                _passwordCtrl.clear();
+                                _isRegisterMode = false;
+                                _isForgotMode = false;
+                                _addingAnotherAccount = false;
+                                _statusMsg =
+                                    'Digite sua nova senha para reconectar em $currentEmail';
+                                _isError = false;
+                              });
+                            },
+                            icon: const Icon(Icons.login, size: 14),
+                            label: const Text(
+                              'Reconectar com Senha',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              final currentEmail = _cloud.userEmail;
+                              setState(() {
+                                _emailCtrl.text = currentEmail;
+                                _isForgotMode = true;
+                                _forgotStep = 1;
+                                _statusMsg = null;
+                                _isError = false;
+                                _resetCodeCtrl.clear();
+                                _newForgotPassCtrl.clear();
+                              });
+                            },
+                            icon: const Icon(Icons.mail_outline, size: 14),
+                            label: const Text(
+                              'Recuperar Senha por E-mail',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            : null;
+
+        if (isSmallScreen) {
+          return Dialog.fullscreen(
+            backgroundColor: colors.bgSecondary,
+            child: Scaffold(
+              backgroundColor: colors.bgSecondary,
+              resizeToAvoidBottomInset: true,
+              body: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                      child: headerRow,
+                    ),
+                    Divider(color: colors.borderGlass, height: 1),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            bodyContent,
+                            if (statusBanner != null) statusBanner,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         return Dialog(
           backgroundColor: colors.bgSecondary,
           shape: RoundedRectangleBorder(
@@ -678,174 +869,16 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Cabeçalho com Logo Oficial da Aplicação
-                  Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(11),
-                        child: Image.asset(
-                          'logo/openmoney_app_icon.png',
-                          width: 40,
-                          height: 40,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'OpenMoney Cloud & Sincronização',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                color: colors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              _cloud.isAuthenticated
-                                  ? 'Conectado como ${_cloud.userEmail} • ${_cloud.statusLabel}'
-                                  : 'Sincronize e alterne entre múltiplas contas e bases openmoney.json',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.help_outline_rounded,
-                          color: colors.accentBlue,
-                          size: 20,
-                        ),
-                        tooltip: 'Guia de Ajuda da Sincronização',
-                        onPressed: () => showCloudSyncHelpModal(context, colors),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close, color: colors.textSecondary),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
+                  headerRow,
                   const SizedBox(height: 16),
                   Divider(color: colors.borderGlass, height: 1),
                   const SizedBox(height: 16),
-
                   Flexible(
                     child: SingleChildScrollView(
-                      child: _isForgotMode
-                          ? _buildDisconnectedBody(colors)
-                          : (_cloud.isAuthenticated && !_addingAnotherAccount)
-                              ? _buildConnectedBody(colors)
-                              : _buildDisconnectedBody(colors),
+                      child: bodyContent,
                     ),
                   ),
-
-                  if (_statusMsg != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: (_isError
-                                ? colors.accentRed
-                                : colors.accentGreen)
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: (_isError
-                                  ? colors.accentRed
-                                  : colors.accentGreen)
-                              .withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _statusMsg!,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: _isError
-                                  ? colors.accentRed
-                                  : colors.accentGreen,
-                            ),
-                          ),
-                          if (_statusMsg!.contains('Sessão expirada') ||
-                              _statusMsg!.contains('não autenticada')) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: [
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: () {
-                                    final currentEmail = _cloud.userEmail;
-                                    _cloud.logout();
-                                    setState(() {
-                                      _emailCtrl.text = currentEmail;
-                                      _passwordCtrl.clear();
-                                      _isRegisterMode = false;
-                                      _isForgotMode = false;
-                                      _addingAnotherAccount = false;
-                                      _statusMsg =
-                                          'Digite sua nova senha para reconectar em $currentEmail';
-                                      _isError = false;
-                                    });
-                                  },
-                                  icon: const Icon(Icons.login, size: 14),
-                                  label: const Text(
-                                    'Reconectar com Senha',
-                                    style: TextStyle(fontSize: 11.5),
-                                  ),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: () {
-                                    final currentEmail = _cloud.userEmail;
-                                    setState(() {
-                                      _emailCtrl.text = currentEmail;
-                                      _isForgotMode = true;
-                                      _forgotStep = 1;
-                                      _statusMsg = null;
-                                      _isError = false;
-                                      _resetCodeCtrl.clear();
-                                      _newForgotPassCtrl.clear();
-                                    });
-                                  },
-                                  icon: const Icon(Icons.mail_outline, size: 14),
-                                  label: const Text(
-                                    'Recuperar Senha por E-mail',
-                                    style: TextStyle(fontSize: 11.5),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+                  if (statusBanner != null) statusBanner,
                 ],
               ),
             ),
@@ -976,10 +1009,14 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.switch_account_rounded,
@@ -987,12 +1024,14 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         color: colors.accentBlue,
                       ),
                       const SizedBox(width: 7),
-                      Text(
-                        'Alternar entre Contas e Bases (${savedAccounts.length})',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: colors.textPrimary,
+                      Flexible(
+                        child: Text(
+                          'Alternar entre Contas e Bases (${savedAccounts.length})',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textPrimary,
+                          ),
                         ),
                       ),
                     ],
@@ -1244,6 +1283,12 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 10,
+                  ),
+                ),
                 onPressed: _isBusy
                     ? null
                     : () async {
@@ -1258,12 +1303,22 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         }
                       },
                 icon: const Icon(Icons.download_outlined, size: 17),
-                label: const Text('Exportar .json'),
+                label: const Text(
+                  'Exportar\n.json',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.15),
+                ),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 10,
+                  ),
+                ),
                 onPressed: _isBusy
                     ? null
                     : () async {
@@ -1292,7 +1347,11 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         }
                       },
                 icon: const Icon(Icons.upload_file_outlined, size: 17),
-                label: const Text('Importar .json'),
+                label: const Text(
+                  'Importar\n.json',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.15),
+                ),
               ),
             ),
           ],
@@ -1349,7 +1408,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                           : () => _confirmCreateNewBlankDatabase(colors),
                       icon: const Icon(Icons.note_add_outlined, size: 16),
                       label: const Text(
-                        'Criar Nova Base Limpa',
+                        'Criar nova',
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -1368,7 +1427,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                           : () => _confirmDeleteExistingDatabase(colors),
                       icon: const Icon(Icons.delete_forever_outlined, size: 16),
                       label: const Text(
-                        'Excluir Base Existente...',
+                        'Excluir',
                         style: TextStyle(fontSize: 12),
                       ),
                     ),

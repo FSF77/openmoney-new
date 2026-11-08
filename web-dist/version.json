@@ -3,10 +3,10 @@
     "version":  "2.3.0",
     "web":  {
                 "version":  "2.3.0",
-                "build":  82,
+                "build":  83,
                 "releaseDate":  "08/11/2026"
             },
-    "build":  82,
+    "build":  83,
     "notes":  "build com rollback sincronismo, disponível apenas na versão web em https://openmoney.app.br , melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
     "releaseDate":  "07/11/2026",
     "windows":  {
