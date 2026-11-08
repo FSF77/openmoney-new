@@ -39,6 +39,9 @@ class Win32Window {
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
+  // Saves the current position, size and maximized state of the window to registry.
+  static void SaveWindowState(HWND hwnd);
+
   // Release OS resources associated with window.
   void Destroy();
 

@@ -51,6 +51,13 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_EXITSIZEMOVE || message == WM_CLOSE || message == WM_DESTROY) {
+    Win32Window::SaveWindowState(hwnd);
+  } else if (message == WM_SYSCOMMAND &&
+             ((wparam & 0xFFF0) == SC_MAXIMIZE || (wparam & 0xFFF0) == SC_RESTORE)) {
+    Win32Window::SaveWindowState(hwnd);
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

@@ -16,8 +16,15 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
 
-    if let screen = self.screen ?? NSScreen.main {
-      self.setFrame(screen.visibleFrame, display: true)
+    let autosaveName = "OpenMoneyMainWindow"
+    self.setFrameAutosaveName(autosaveName)
+
+    // Se houver posição e tamanho previamente salvos, restaura.
+    // Se não houver informação salva (primeira execução), abre maximizado ocupando o visibleFrame da tela.
+    if !self.setFrameUsingName(autosaveName) {
+      if let screen = self.screen ?? NSScreen.main {
+        self.setFrame(screen.visibleFrame, display: true)
+      }
     }
   }
 }

@@ -120,6 +120,108 @@ Win32Window::~Win32Window() {
   Destroy();
 }
 
+constexpr const wchar_t kWindowStateRegKey[] = L"Software\\OpenMoney";
+constexpr const wchar_t kRegValueInitialized[] = L"WindowInitialized";
+constexpr const wchar_t kRegValueMaximized[] = L"WindowMaximized";
+constexpr const wchar_t kRegValueX[] = L"WindowX";
+constexpr const wchar_t kRegValueY[] = L"WindowY";
+constexpr const wchar_t kRegValueWidth[] = L"WindowWidth";
+constexpr const wchar_t kRegValueHeight[] = L"WindowHeight";
+
+void Win32Window::SaveWindowState(HWND hwnd) {
+  if (!hwnd || !IsWindow(hwnd)) return;
+
+  HKEY key;
+  if (RegCreateKeyExW(HKEY_CURRENT_USER, kWindowStateRegKey, 0, nullptr,
+                      REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &key,
+                      nullptr) != ERROR_SUCCESS) {
+    return;
+  }
+
+  DWORD dwOne = 1;
+  RegSetValueExW(key, kRegValueInitialized, 0, REG_DWORD,
+                 reinterpret_cast<const BYTE*>(&dwOne), sizeof(DWORD));
+
+  bool is_max = IsZoomed(hwnd);
+  DWORD dwMax = is_max ? 1 : 0;
+  RegSetValueExW(key, kRegValueMaximized, 0, REG_DWORD,
+                 reinterpret_cast<const BYTE*>(&dwMax), sizeof(DWORD));
+
+  if (!is_max) {
+    RECT rect{};
+    if (GetWindowRect(hwnd, &rect)) {
+      LONG x = rect.left;
+      LONG y = rect.top;
+      LONG w = rect.right - rect.left;
+      LONG h = rect.bottom - rect.top;
+
+      RegSetValueExW(key, kRegValueX, 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&x), sizeof(DWORD));
+      RegSetValueExW(key, kRegValueY, 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&y), sizeof(DWORD));
+      RegSetValueExW(key, kRegValueWidth, 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&w), sizeof(DWORD));
+      RegSetValueExW(key, kRegValueHeight, 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&h), sizeof(DWORD));
+    }
+  }
+
+  RegCloseKey(key);
+}
+
+static bool ReadSavedWindowState(RECT& out_rect, bool& out_is_maximized) {
+  HKEY key;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kWindowStateRegKey, 0, KEY_READ, &key) !=
+      ERROR_SUCCESS) {
+    return false;
+  }
+
+  DWORD initialized = 0;
+  DWORD size = sizeof(DWORD);
+  LSTATUS status = RegQueryValueExW(key, kRegValueInitialized, nullptr, nullptr,
+                                    reinterpret_cast<BYTE*>(&initialized), &size);
+  if (status != ERROR_SUCCESS || initialized == 0) {
+    RegCloseKey(key);
+    return false;
+  }
+
+  DWORD is_max = 0;
+  size = sizeof(DWORD);
+  RegQueryValueExW(key, kRegValueMaximized, nullptr, nullptr,
+                   reinterpret_cast<BYTE*>(&is_max), &size);
+  out_is_maximized = (is_max != 0);
+
+  LONG x = 0, y = 0, w = 0, h = 0;
+  size = sizeof(DWORD);
+  bool has_pos = (RegQueryValueExW(key, kRegValueX, nullptr, nullptr,
+                                   reinterpret_cast<BYTE*>(&x), &size) == ERROR_SUCCESS);
+  size = sizeof(DWORD);
+  has_pos = has_pos && (RegQueryValueExW(key, kRegValueY, nullptr, nullptr,
+                                         reinterpret_cast<BYTE*>(&y), &size) == ERROR_SUCCESS);
+  size = sizeof(DWORD);
+  has_pos = has_pos && (RegQueryValueExW(key, kRegValueWidth, nullptr, nullptr,
+                                         reinterpret_cast<BYTE*>(&w), &size) == ERROR_SUCCESS);
+  size = sizeof(DWORD);
+  has_pos = has_pos && (RegQueryValueExW(key, kRegValueHeight, nullptr, nullptr,
+                                         reinterpret_cast<BYTE*>(&h), &size) == ERROR_SUCCESS);
+
+  RegCloseKey(key);
+
+  if (has_pos && w >= 600 && h >= 400) {
+    out_rect.left = x;
+    out_rect.top = y;
+    out_rect.right = x + w;
+    out_rect.bottom = y + h;
+
+    HMONITOR hMon = MonitorFromRect(&out_rect, MONITOR_DEFAULTTONULL);
+    if (hMon != nullptr) {
+      return true;
+    }
+  }
+
+  return out_is_maximized;
+}
+
 bool Win32Window::Create(const std::wstring& title,
                          const Point& origin,
                          const Size& size) {
@@ -128,16 +230,33 @@ bool Win32Window::Create(const std::wstring& title,
   const wchar_t* window_class =
       WindowClassRegistrar::GetInstance()->GetWindowClass();
 
-  const POINT target_point = {static_cast<LONG>(origin.x),
-                              static_cast<LONG>(origin.y)};
-  HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
-  UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
-  double scale_factor = dpi / 96.0;
+  RECT saved_rect{};
+  bool saved_is_max = false;
+  bool has_saved_state = ReadSavedWindowState(saved_rect, saved_is_max);
+
+  int window_x, window_y, window_w, window_h;
+
+  if (has_saved_state && (saved_rect.right > saved_rect.left)) {
+    window_x = saved_rect.left;
+    window_y = saved_rect.top;
+    window_w = saved_rect.right - saved_rect.left;
+    window_h = saved_rect.bottom - saved_rect.top;
+  } else {
+    const POINT target_point = {static_cast<LONG>(origin.x),
+                                static_cast<LONG>(origin.y)};
+    HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
+    UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+    double scale_factor = dpi / 96.0;
+
+    window_x = Scale(origin.x, scale_factor);
+    window_y = Scale(origin.y, scale_factor);
+    window_w = Scale(size.width, scale_factor);
+    window_h = Scale(size.height, scale_factor);
+  }
 
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      window_x, window_y, window_w, window_h,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
@@ -150,7 +269,17 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  RECT saved_rect{};
+  bool saved_is_max = false;
+  if (ReadSavedWindowState(saved_rect, saved_is_max)) {
+    if (saved_is_max) {
+      return ShowWindow(window_handle_, SW_MAXIMIZE);
+    } else {
+      return ShowWindow(window_handle_, SW_NORMAL);
+    }
+  }
+  // Se não houver informação salva (primeira execução), abre maximizado:
+  return ShowWindow(window_handle_, SW_MAXIMIZE);
 }
 
 // static
@@ -179,7 +308,24 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_EXITSIZEMOVE:
+      SaveWindowState(hwnd);
+      break;
+
+    case WM_SYSCOMMAND:
+      if ((wparam & 0xFFF0) == SC_MAXIMIZE || (wparam & 0xFFF0) == SC_RESTORE) {
+        LRESULT res = DefWindowProc(hwnd, message, wparam, lparam);
+        SaveWindowState(hwnd);
+        return res;
+      }
+      break;
+
+    case WM_CLOSE:
+      SaveWindowState(hwnd);
+      break;
+
     case WM_DESTROY:
+      SaveWindowState(hwnd);
       window_handle_ = nullptr;
       Destroy();
       if (quit_on_close_) {
