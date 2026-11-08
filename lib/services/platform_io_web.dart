@@ -486,6 +486,9 @@ class File extends FileSystemEntity {
   bool existsSync() => _webVirtualFiles.containsKey(path);
   Future<bool> exists() async => existsSync();
 
+  int lengthSync() => _webVirtualFiles[path]?.length ?? 0;
+  Future<int> length() async => lengthSync();
+
   DateTime lastModifiedSync() =>
       _webVirtualFileModified[path] ?? DateTime.now();
 
