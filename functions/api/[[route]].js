@@ -585,6 +585,8 @@ function buildAccountDeletionEmailHtml({ name, email, mode, hasBackupAttachment 
 </body>
 </html>`;
 }
+
+function buildPasswordResetEmailHtml({ code, email, name }) {
   const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
