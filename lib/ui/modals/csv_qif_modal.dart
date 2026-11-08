@@ -615,6 +615,18 @@ Future<void> showDatabaseFileManagerModal(
             ),
           ),
           actions: [
+            if (store.hasConfiguredLocalDatabase)
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.expense,
+                ),
+                onPressed: () {
+                  store.disconnectLocalDatabase();
+                  Navigator.pop(ctx);
+                },
+                icon: const Icon(Icons.link_off, size: 16),
+                label: const Text('Desconectar Base Local'),
+              ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Fechar'),

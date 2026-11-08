@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import 'cloud_account_modal.dart';
 
 /// Tela inicial de Boas-Vindas apresentada quando nenhuma base de dados estiver configurada ainda
 class WelcomeDatabaseSelectionScreen extends StatefulWidget {
@@ -83,6 +85,15 @@ class _WelcomeDatabaseSelectionScreenState
     }
   }
 
+  Future<void> _handleOpenCloudModal() async {
+    await showCloudAccountModal(context, widget.store);
+    if (CloudSyncService.instance.isAuthenticated) {
+      await widget.store.switchToCloudMode();
+      widget.store.showWelcomeScreen = false;
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = OpenMoneyColors(widget.store.isDarkMode);
@@ -91,11 +102,11 @@ class _WelcomeDatabaseSelectionScreenState
       backgroundColor: colors.bgPrimary,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 580),
+            constraints: const BoxConstraints(maxWidth: 620),
             child: GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -104,86 +115,101 @@ class _WelcomeDatabaseSelectionScreenState
                     borderRadius: BorderRadius.circular(20),
                     child: Image.asset(
                       'logo/openmoney_app_icon.png',
-                      width: 72,
-                      height: 72,
+                      width: 68,
+                      height: 68,
                       filterQuality: FilterQuality.medium,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Text(
                     'Bem-vindo ao OpenMoney',
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 23,
                       fontWeight: FontWeight.w900,
                       color: colors.textPrimary,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Controle financeiro rigoroso com total privacidade.\nSeus dados permanecem sempre sob o seu controle em um arquivo .json próprio.',
+                    'Controle financeiro rigoroso com total privacidade.\nEscolha como deseja iniciar e armazenar seus dados:',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13.5,
                       color: colors.textSecondary,
-                      height: 1.45,
+                      height: 1.4,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 26),
                   if (_isLoading) ...[
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
                     Text(
-                      'Aguardando seleção de arquivo...',
+                      'Aguardando seleção...',
                       style: TextStyle(color: colors.textSecondary),
                     ),
                   ] else ...[
-                    // Opção 1: Abrir base existente via gerenciador nativo
+                    // ========================================================
+                    // Bloco 1: Base Local (.json)
+                    // ========================================================
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'USO LOCAL (ARQUIVO NO COMPUTADOR)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: colors.textMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     InkWell(
                       borderRadius: BorderRadius.circular(14),
                       onTap: _handleOpenExistingFile,
                       child: Container(
-                        padding: const EdgeInsets.all(18),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: colors.surfaceCard,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: colors.accent.withValues(alpha: 0.4),
+                            color: colors.accent.withValues(alpha: 0.35),
                             width: 1.5,
                           ),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: colors.accent.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.folder_open_rounded,
                                 color: colors.accent,
-                                size: 28,
+                                size: 24,
                               ),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Já tenho uma base de dados',
+                                    'Abrir base local existente (.json)',
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 14.5,
                                       fontWeight: FontWeight.w700,
                                       color: colors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 3),
                                   Text(
-                                    'Procurar meu arquivo openmoney.json no Finder (iCloud Drive, OneDrive, etc.)',
+                                    'Procurar arquivo openmoney.json no seu computador, iCloud Drive ou OneDrive',
                                     style: TextStyle(
-                                      fontSize: 12.5,
+                                      fontSize: 12,
                                       color: colors.textSecondary,
                                     ),
                                   ),
@@ -192,20 +218,19 @@ class _WelcomeDatabaseSelectionScreenState
                             ),
                             Icon(
                               Icons.arrow_forward_ios,
-                              size: 16,
+                              size: 15,
                               color: colors.textMuted,
                             ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    // Opção 2: Criar nova base escolhendo onde salvar via gerenciador nativo
+                    const SizedBox(height: 10),
                     InkWell(
                       borderRadius: BorderRadius.circular(14),
                       onTap: _handleCreateNewFile,
                       child: Container(
-                        padding: const EdgeInsets.all(18),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: colors.surfaceCard,
                           borderRadius: BorderRadius.circular(14),
@@ -217,35 +242,35 @@ class _WelcomeDatabaseSelectionScreenState
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: colors.income.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.add_circle_outline_rounded,
                                 color: colors.income,
-                                size: 28,
+                                size: 24,
                               ),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Criar uma nova base em branco',
+                                    'Criar nova base local em branco (.json)',
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 14.5,
                                       fontWeight: FontWeight.w700,
                                       color: colors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 3),
                                   Text(
-                                    'Escolher a pasta no Finder para salvar o novo arquivo openmoney.json',
+                                    'Escolher onde salvar um novo arquivo openmoney.json no computador',
                                     style: TextStyle(
-                                      fontSize: 12.5,
+                                      fontSize: 12,
                                       color: colors.textSecondary,
                                     ),
                                   ),
@@ -254,7 +279,86 @@ class _WelcomeDatabaseSelectionScreenState
                             ),
                             Icon(
                               Icons.arrow_forward_ios,
-                              size: 16,
+                              size: 15,
+                              color: colors.textMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 22),
+
+                    // ========================================================
+                    // Bloco 2: OpenMoney Cloud (Sync v2 em Tempo Real)
+                    // ========================================================
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'OPENMONEY CLOUD (SINCRONIZAÇÃO EM TEMPO REAL)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: colors.accentGreen,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: _handleOpenCloudModal,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceCard,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: colors.accentGreen.withValues(alpha: 0.35),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: colors.accentGreen.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.cloud_sync_rounded,
+                                color: colors.accentGreen,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Conectar em Conta Online ou Criar Nova Conta',
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Sincronize automaticamente seus lançamentos em tempo real entre Web, Mac, Windows e iPhone',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 15,
                               color: colors.textMuted,
                             ),
                           ],
@@ -263,7 +367,7 @@ class _WelcomeDatabaseSelectionScreenState
                     ),
                   ],
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -291,7 +395,7 @@ class _WelcomeDatabaseSelectionScreenState
                       ),
                     ),
                   ],
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
                   TextButton.icon(
                     icon: Icon(
                       widget.store.isDarkMode

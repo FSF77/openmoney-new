@@ -653,7 +653,9 @@ class Database {
                 opening: 0,
               )
             ],
-        cats = cats ?? List<CategoryItem>.from(kDefaultCats),
+        cats = (cats != null && cats.isNotEmpty)
+            ? cats
+            : List<CategoryItem>.from(kDefaultCats),
         txs = txs ?? [],
         recs = recs ?? [],
         budgets = budgets ?? {},
@@ -719,7 +721,9 @@ class Database {
                 opening: 0,
               )
             ],
-      cats: parsedCats ?? List<CategoryItem>.from(kDefaultCats),
+      cats: (parsedCats != null && parsedCats.isNotEmpty)
+          ? parsedCats
+          : List<CategoryItem>.from(kDefaultCats),
       txs: parsedTxs ?? [],
       recs: parsedRecs ?? [],
       budgets: parsedBudgets,

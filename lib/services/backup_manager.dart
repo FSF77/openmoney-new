@@ -118,14 +118,100 @@ class BackupManager {
       destinationZipPath: destZipFile.path,
     );
     if (success) {
-      pruneBackups(
-        appSupportDirPath: appSupportDirPath,
-        retentionDays: 7,
-        minBackupsToKeep: 7,
-      );
+      // Backups manuais, de segurança ou de atualização nunca são expurgados pelo prune diário
+      if (!prefix.contains('manual') &&
+          !prefix.contains('pre-update') &&
+          !prefix.contains('safety')) {
+        pruneBackups(
+          appSupportDirPath: appSupportDirPath,
+          retentionDays: 7,
+          minBackupsToKeep: 7,
+        );
+      }
       return destZipFile.path;
     }
     return null;
+  }
+
+  /// Cria um backup imutável de segurança pré-operação (ou pré-atualização de versão/build)
+  Future<String?> createSafetyBackup({
+    required String appSupportDirPath,
+    required String reason,
+    String? databasePath,
+    String? jsonContent,
+  }) async {
+    if (kIsWeb) return null;
+    try {
+      final backupsDir = getBackupsDirectory(appSupportDirPath);
+      final now = DateTime.now();
+      final ts = '${now.year.toString().padLeft(4, "0")}-'
+          '${now.month.toString().padLeft(2, "0")}-'
+          '${now.day.toString().padLeft(2, "0")}_'
+          '${now.hour.toString().padLeft(2, "0")}'
+          '${now.minute.toString().padLeft(2, "0")}'
+          '${now.second.toString().padLeft(2, "0")}';
+
+      final cleanReason = reason.replaceAll(RegExp(r'[^a-zA-Z0-9_\.-]'), '_');
+      final sep = Platform.pathSeparator;
+
+      // Se temos o arquivo no disco, compactamos em .zip
+      if (databasePath != null && databasePath.isNotEmpty) {
+        final f = File(databasePath);
+        if (f.existsSync() && f.lengthSync() > 0) {
+          final zipFilename = 'openmoney-safety-$cleanReason-$ts.zip';
+          final destZip = File('${backupsDir.path}$sep$zipFilename');
+          final ok = await createZipArchive(
+            sourcePath: databasePath,
+            destinationZipPath: destZip.path,
+          );
+          if (ok && destZip.existsSync() && destZip.lengthSync() > 0) {
+            debugPrint('[BackupManager] Safety backup gravado com sucesso: ${destZip.path}');
+            return destZip.path;
+          }
+        }
+      }
+
+      // Se temos o JSON em memória, gravamos direto como .json de segurança
+      if (jsonContent != null && jsonContent.trim().isNotEmpty) {
+        final jsonFilename = 'openmoney-safety-$cleanReason-$ts.json';
+        final destJson = File('${backupsDir.path}$sep$jsonFilename');
+        destJson.writeAsStringSync(jsonContent, flush: true);
+        if (destJson.existsSync() && destJson.lengthSync() > 0) {
+          debugPrint('[BackupManager] Safety JSON backup gravado: ${destJson.path}');
+          return destJson.path;
+        }
+      }
+    } catch (e) {
+      debugPrint('[BackupManager] Falha ao criar safety backup ($reason): $e');
+    }
+    return null;
+  }
+
+  /// Trava Anti-Wipe (Anti-Zeramento Inviolável):
+  /// Impede que uma base populada seja zerada por efeito colateral acidental de sync, save ou reload.
+  static void assertSafeDatabaseMutation({
+    required int existingTxCount,
+    required int newTxCount,
+    required String operation,
+    bool userExplicitlyConfirmed = false,
+    void Function()? onViolation,
+  }) {
+    if (existingTxCount > 0 && newTxCount == 0 && !userExplicitlyConfirmed) {
+      onViolation?.call();
+      throw StateError(
+        '[AntiWipeGuard] Bloqueio de segurança acionado: tentativa de zerar '
+        'base com $existingTxCount lançamentos durante "$operation" sem confirmação explícita do usuário.',
+      );
+    }
+    if (existingTxCount >= 20 &&
+        newTxCount < (existingTxCount * 0.4).round() &&
+        !userExplicitlyConfirmed) {
+      onViolation?.call();
+      throw StateError(
+        '[AntiWipeGuard] Bloqueio de segurança acionado: queda abrupta de '
+        '$existingTxCount para $newTxCount lançamentos durante "$operation" sem confirmação explícita do usuário.',
+      );
+    }
   }
 
   /// Compacta o arquivo JSON de origem em um arquivo .zip
@@ -256,6 +342,14 @@ class BackupManager {
 
       for (final e in entities) {
         if (e is File && e.path.toLowerCase().endsWith('.zip')) {
+          final fname = e.uri.pathSegments.last.toLowerCase();
+          // Backups imutáveis nunca entram na lista de expurgo
+          if (fname.contains('safety') ||
+              fname.contains('pre-update') ||
+              fname.contains('manual') ||
+              fname.contains('pre-exclusao')) {
+            continue;
+          }
           try {
             final stat = e.statSync();
             zipFiles.add((file: e, date: stat.modified));

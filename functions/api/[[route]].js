@@ -67,6 +67,23 @@ async function ensureSchema(db) {
       )
     `),
     db.prepare(`
+      CREATE TABLE IF NOT EXISTS email_verification_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        email TEXT NOT NULL,
+        type TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        pending_payload TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_email_verification_tokens
+      ON email_verification_tokens (email, type, used)
+    `),
+    db.prepare(`
       CREATE TABLE IF NOT EXISTS user_sync_meta (
         user_id TEXT PRIMARY KEY,
         seq INTEGER NOT NULL DEFAULT 1,
@@ -308,7 +325,91 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-async function sendResendEmail({ env, to, subject, htmlText }) {
+// Tabela CRC32 pré-calculada para ZIP
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i;
+  for (let j = 0; j < 8; j++) {
+    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+  }
+  CRC32_TABLE[i] = c;
+}
+
+function calculateCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createSingleFileZip(filename, fileBytes) {
+  const nameBytes = encoder.encode(filename);
+  const crc = calculateCrc32(fileBytes);
+  const size = fileBytes.length;
+
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+  const localHeader = new Uint8Array(30 + nameBytes.length);
+  const lv = new DataView(localHeader.buffer);
+  lv.setUint32(0, 0x04034b50, true);
+  lv.setUint16(4, 20, true);
+  lv.setUint16(6, 0, true);
+  lv.setUint16(8, 0, true);
+  lv.setUint16(10, dosTime, true);
+  lv.setUint16(12, dosDate, true);
+  lv.setUint32(14, crc, true);
+  lv.setUint32(18, size, true);
+  lv.setUint32(22, size, true);
+  lv.setUint16(26, nameBytes.length, true);
+  lv.setUint16(28, 0, true);
+  localHeader.set(nameBytes, 30);
+
+  const cdHeader = new Uint8Array(46 + nameBytes.length);
+  const cv = new DataView(cdHeader.buffer);
+  cv.setUint32(0, 0x02014b50, true);
+  cv.setUint16(4, 20, true);
+  cv.setUint16(6, 20, true);
+  cv.setUint16(8, 0, true);
+  cv.setUint16(10, 0, true);
+  cv.setUint16(12, dosTime, true);
+  cv.setUint16(14, dosDate, true);
+  cv.setUint32(16, crc, true);
+  cv.setUint32(20, size, true);
+  cv.setUint32(24, size, true);
+  cv.setUint16(28, nameBytes.length, true);
+  cv.setUint16(30, 0, true);
+  cv.setUint16(32, 0, true);
+  cv.setUint16(34, 0, true);
+  cv.setUint16(36, 0, true);
+  cv.setUint32(38, 0, true);
+  cv.setUint32(42, 0, true);
+  cdHeader.set(nameBytes, 46);
+
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, 1, true);
+  ev.setUint16(10, 1, true);
+  ev.setUint32(12, cdHeader.length, true);
+  ev.setUint32(16, localHeader.length + size, true);
+  ev.setUint16(20, 0, true);
+
+  const totalZipLen = localHeader.length + size + cdHeader.length + eocd.length;
+  const zip = new Uint8Array(totalZipLen);
+  let offset = 0;
+  zip.set(localHeader, offset); offset += localHeader.length;
+  zip.set(fileBytes, offset); offset += size;
+  zip.set(cdHeader, offset); offset += cdHeader.length;
+  zip.set(eocd, offset);
+  return zip;
+}
+
+async function sendResendEmail({ env, to, subject, htmlText, attachments }) {
   const apiKey = (env.RESEND_API_KEY || "").trim();
   if (!apiKey) {
     throw new Error(
@@ -319,18 +420,23 @@ async function sendResendEmail({ env, to, subject, htmlText }) {
     (env.RESEND_FROM_EMAIL || "").trim() ||
     "OpenMoney <seguranca@openmoney.app.br>";
 
+  const emailPayload = {
+    from,
+    to: [to],
+    subject,
+    html: htmlText,
+  };
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    emailPayload.attachments = attachments;
+  }
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      html: htmlText,
-    }),
+    body: JSON.stringify(emailPayload),
   });
 
   if (!res.ok) {
@@ -342,7 +448,143 @@ async function sendResendEmail({ env, to, subject, htmlText }) {
   return await res.json().catch(() => ({}));
 }
 
-function buildPasswordResetEmailHtml({ code, email, name }) {
+function buildRegistrationEmailHtml({ code, email, name }) {
+  const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Confirmação de Cadastro - OpenMoney</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#1e293b;border-radius:14px;border:1px solid #334155;padding:32px 28px;text-align:left;" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <h1 style="margin:0;font-size:22px;color:#38bdf8;font-weight:800;letter-spacing:-0.5px;">OpenMoney Cloud</h1>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Sincronização & Gestão Financeira Segura</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:14px;line-height:1.6;color:#cbd5e1;">
+              <p style="margin:0 0 14px;">${greeting}</p>
+              <p style="margin:0 0 14px;">Para concluir a criação da sua conta com o e-mail <strong>${escapeHtml(email)}</strong>, informe o código de verificação abaixo no aplicativo:</p>
+              <div style="background-color:#0f172a;border:1px solid #38bdf8;border-radius:10px;padding:18px;text-align:center;margin-bottom:20px;">
+                <span style="font-size:32px;font-weight:800;letter-spacing:8px;color:#38bdf8;font-family:monospace;">${code}</span>
+              </div>
+              <p style="margin:0 0 10px;font-size:13px;color:#94a3b8;">⏱️ Este código expira em <strong>15 minutos</strong>.</p>
+              <p style="margin:0;font-size:12.5px;color:#64748b;">Se você não solicitou este cadastro, nenhuma conta foi criada e você pode ignorar esta mensagem.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:24px;border-top:1px solid #334155;font-size:11.5px;color:#64748b;text-align:center;">
+              OpenMoney • Criptografia AES-256-GCM + PBKDF2 • openmoney.app.br
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildChangeEmailHtml({ code, currentEmail, newEmail, name }) {
+  const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Confirmação de Novo E-mail - OpenMoney</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#1e293b;border-radius:14px;border:1px solid #334155;padding:32px 28px;text-align:left;" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <h1 style="margin:0;font-size:22px;color:#38bdf8;font-weight:800;letter-spacing:-0.5px;">OpenMoney Cloud</h1>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Sincronização & Gestão Financeira Segura</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:14px;line-height:1.6;color:#cbd5e1;">
+              <p style="margin:0 0 14px;">${greeting}</p>
+              <p style="margin:0 0 14px;">Recebemos uma solicitação para alterar o e-mail da sua conta de <strong>${escapeHtml(currentEmail)}</strong> para <strong>${escapeHtml(newEmail)}</strong>.</p>
+              <p style="margin:0 0 20px;">Utilize o código de verificação abaixo no aplicativo para confirmar o novo endereço:</p>
+              <div style="background-color:#0f172a;border:1px solid #38bdf8;border-radius:10px;padding:18px;text-align:center;margin-bottom:20px;">
+                <span style="font-size:32px;font-weight:800;letter-spacing:8px;color:#38bdf8;font-family:monospace;">${code}</span>
+              </div>
+              <p style="margin:0 0 10px;font-size:13px;color:#94a3b8;">⏱️ Este código expira em <strong>15 minutos</strong>.</p>
+              <p style="margin:0;font-size:12.5px;color:#64748b;">Se você não solicitou esta alteração, recomendamos alterar a senha da sua conta imediatamente.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:24px;border-top:1px solid #334155;font-size:11.5px;color:#64748b;text-align:center;">
+              OpenMoney • Criptografia AES-256-GCM + PBKDF2 • openmoney.app.br
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildAccountDeletionEmailHtml({ name, email, mode, hasBackupAttachment }) {
+  const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
+  const isFullAccount = mode === "full_account";
+  const title = isFullAccount ? "Exclusão Definitiva da Conta" : "Exclusão da Base de Dados na Nuvem";
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>${title} - OpenMoney</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#1e293b;border-radius:14px;border:1px solid #e11d48;padding:32px 28px;text-align:left;" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <h1 style="margin:0;font-size:22px;color:#fb7185;font-weight:800;letter-spacing:-0.5px;">OpenMoney Cloud</h1>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Confirmação de Exclusão de Dados</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:14px;line-height:1.6;color:#cbd5e1;">
+              <p style="margin:0 0 14px;">${greeting}</p>
+              <p style="margin:0 0 14px;">Confirmamos que a seguinte ação irreversível foi concluída para a conta <strong>${escapeHtml(email)}</strong>:</p>
+              <div style="background-color:#4c0519;border:1px solid #f43f5e;border-radius:10px;padding:14px;margin-bottom:18px;color:#ffe4e6;font-weight:600;font-size:13.5px;">
+                ⚠️ ${isFullAccount ? "Exclusão definitiva e permanente da conta, login, base e todos os backups da nuvem." : "Exclusão permanente de todos os lançamentos e backups da nuvem (conta reiniciada com base limpa)."}
+              </div>
+              ${hasBackupAttachment ? `
+              <p style="margin:0 0 12px;"><strong>Cópia de Segurança em Anexo:</strong></p>
+              <p style="margin:0 0 12px;">Para sua total proteção e para que você não perca seu histórico financeiro, anexamos a este e-mail o arquivo compactado <strong>openmoney-backup-pre-exclusao.zip</strong> contendo toda a sua base em formato <code>openmoney.json</code> imediatamente antes da exclusão.</p>
+              <p style="margin:0 0 14px;font-size:12px;color:#94a3b8;">Você pode descompactar e abrir esse arquivo localmente no aplicativo OpenMoney sempre que desejar.</p>
+              ` : `
+              <p style="margin:0 0 14px;font-size:12px;color:#94a3b8;">Não havia dados armazenados para anexar cópia de segurança.</p>
+              `}
+              <p style="margin:18px 0 0;font-size:11px;color:#64748b;">Ação solicitada pelo usuário e confirmada via aplicativo OpenMoney.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:24px;border-top:1px solid #334155;font-size:11.5px;color:#64748b;text-align:center;">
+              OpenMoney • Segurança e Privacidade Financeira • openmoney.app.br
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
   const greeting = name ? `Olá, <strong>${escapeHtml(name)}</strong>!` : `Olá!`;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -740,15 +982,77 @@ function defaultOpenMoneyV7Payload() {
       },
     ],
     cats: [
-      { name: "Alimentação:Supermercado", type: "D" },
-      { name: "Alimentação:Restaurante", type: "D" },
-      { name: "Moradia:Aluguel/Condomínio", type: "D" },
-      { name: "Moradia:Energia/Água/Internet", type: "D" },
-      { name: "Transporte:Combustível", type: "D" },
-      { name: "Saúde:Farmácia/Médico", type: "D" },
-      { name: "Lazer:Assinaturas/Viagens", type: "D" },
-      { name: "Salário:Proventos", type: "R" },
-      { name: "Investimentos:Rendimentos", type: "R" },
+      { name: "Alimentação", parent: null, type: "Despesa" },
+      { name: "Bares e Restaurantes", parent: "Alimentação", type: "Despesa" },
+      { name: "Mercado", parent: "Alimentação", type: "Despesa" },
+      { name: "Assinaturas e Serviços", parent: null, type: "Despesa" },
+      { name: "Apple", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Games", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Google", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "IA", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Microsoft", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Nintendo", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Sites e Domínios", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Streaming", parent: "Assinaturas e Serviços", type: "Despesa" },
+      { name: "Casa", parent: null, type: "Despesa" },
+      { name: "Água, Esgoto", parent: "Casa", type: "Despesa" },
+      { name: "Condomínio", parent: "Casa", type: "Despesa" },
+      { name: "Despesas da casa", parent: "Casa", type: "Despesa" },
+      { name: "Eletricidade", parent: "Casa", type: "Despesa" },
+      { name: "Gás", parent: "Casa", type: "Despesa" },
+      { name: "Internet", parent: "Casa", type: "Despesa" },
+      { name: "IPTU", parent: "Casa", type: "Despesa" },
+      { name: "Telefonia", parent: "Casa", type: "Despesa" },
+      { name: "TV", parent: "Casa", type: "Despesa" },
+      { name: "Compras", parent: null, type: "Despesa" },
+      { name: "Automóveis", parent: "Compras", type: "Despesa" },
+      { name: "Eletrodomésticos", parent: "Compras", type: "Despesa" },
+      { name: "Eletrônicos e Informática", parent: "Compras", type: "Despesa" },
+      { name: "Móveis", parent: "Compras", type: "Despesa" },
+      { name: "Músicas & Filmes", parent: "Compras", type: "Despesa" },
+      { name: "Softwares", parent: "Compras", type: "Despesa" },
+      { name: "Videogames", parent: "Compras", type: "Despesa" },
+      { name: "Cuidados pessoais", parent: null, type: "Despesa" },
+      { name: "Educação", parent: null, type: "Despesa" },
+      { name: "Família", parent: null, type: "Despesa" },
+      { name: "Festas", parent: null, type: "Despesa" },
+      { name: "Impostos e Taxas", parent: null, type: "Despesa" },
+      { name: "Investimentos (D)", parent: null, type: "Despesa" },
+      { name: "Lazer e hobbies", parent: null, type: "Despesa" },
+      { name: "Academia", parent: "Lazer e hobbies", type: "Despesa" },
+      { name: "Cinema, Teatro", parent: "Lazer e hobbies", type: "Despesa" },
+      { name: "Diversão", parent: "Lazer e hobbies", type: "Despesa" },
+      { name: "Saúde", parent: null, type: "Despesa" },
+      { name: "Medicamentos", parent: "Saúde", type: "Despesa" },
+      { name: "Médicos", parent: "Saúde", type: "Despesa" },
+      { name: "Plano de saúde", parent: "Saúde", type: "Despesa" },
+      { name: "Seguro de Vida", parent: "Saúde", type: "Despesa" },
+      { name: "Terapeutas", parent: "Saúde", type: "Despesa" },
+      { name: "Transporte", parent: null, type: "Despesa" },
+      { name: "Combustível", parent: "Transporte", type: "Despesa" },
+      { name: "Documentação", parent: "Transporte", type: "Despesa" },
+      { name: "Estacionamento, Pedágio", parent: "Transporte", type: "Despesa" },
+      { name: "Manutenção, Serviços", parent: "Transporte", type: "Despesa" },
+      { name: "Metro, Ônibus, Taxi", parent: "Transporte", type: "Despesa" },
+      { name: "Multas", parent: "Transporte", type: "Despesa" },
+      { name: "Seguro Auto", parent: "Transporte", type: "Despesa" },
+      { name: "Viagem", parent: null, type: "Despesa" },
+      { name: "Cashback", parent: null, type: "Receita" },
+      { name: "Investimentos (C)", parent: null, type: "Receita" },
+      { name: "Renda", parent: null, type: "Receita" },
+      { name: "Distribuição de Lucros", parent: "Renda", type: "Receita" },
+      { name: "Pró-labore", parent: "Renda", type: "Receita" },
+      { name: "Outras Rendas", parent: null, type: "Receita" },
+      { name: "Benefícios", parent: "Outras Rendas", type: "Receita" },
+      { name: "Devolução de impostos", parent: "Outras Rendas", type: "Receita" },
+      { name: "Prestação de Serviços", parent: "Outras Rendas", type: "Receita" },
+      { name: "Reembolso", parent: "Outras Rendas", type: "Receita" },
+      { name: "Rendimentos", parent: null, type: "Receita" },
+      { name: "Vendas", parent: null, type: "Receita" },
+      { name: "Automóveis", parent: "Vendas", type: "Receita" },
+      { name: "Eletrodomésticos", parent: "Vendas", type: "Receita" },
+      { name: "Eletrônicos e Informática", parent: "Vendas", type: "Receita" },
+      { name: "Móveis", parent: "Vendas", type: "Receita" },
     ],
     txs: [],
     recs: [],
@@ -1052,6 +1356,255 @@ export async function onRequest(context) {
 
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "");
+
+  // ==========================================================================
+  // 1.0. POST /api/auth/register-request (Envia código de 6 dígitos para o e-mail)
+  // ==========================================================================
+  if (path === "/api/auth/register-request" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const name = String(body.name || "").trim();
+    const password = String(body.password || "");
+    const inviteCode = String(body.inviteCode || "").trim();
+
+    const requiredInvite = String(env.INVITE_CODE || "").trim();
+    if (requiredInvite && inviteCode !== requiredInvite) {
+      return jsonResponse(
+        { error: "Código de convite inválido ou não autorizado." },
+        403,
+        origin
+      );
+    }
+
+    if (!email || !email.includes("@")) {
+      return jsonResponse({ error: "E-mail inválido." }, 400, origin);
+    }
+    if (password.length < 8) {
+      return jsonResponse(
+        { error: "A senha deve ter no mínimo 8 caracteres." },
+        400,
+        origin
+      );
+    }
+
+    const maxUsers = Number(env.MAX_USERS || 60);
+    const countRow = await env.DB.prepare(
+      "SELECT COUNT(*) as total FROM users"
+    ).first();
+    if (countRow && Number(countRow.total) >= maxUsers) {
+      return jsonResponse(
+        {
+          error: `Limite máximo de usuários atingido (${maxUsers}). Contate o administrador.`,
+        },
+        403,
+        origin
+      );
+    }
+
+    const existing = await env.DB.prepare(
+      "SELECT id FROM users WHERE email = ?1"
+    )
+      .bind(email)
+      .first();
+
+    if (existing) {
+      return jsonResponse(
+        { error: "Este endereço de e-mail já está cadastrado." },
+        409,
+        origin
+      );
+    }
+
+    const code = generateSixDigitCode();
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+    const tokenId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const nowIso = new Date().toISOString();
+    const expiresAtIso = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    const initialObj =
+      body.initialPayload && typeof body.initialPayload === "object"
+        ? body.initialPayload
+        : defaultOpenMoneyV7Payload();
+
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const saltB64 = bytesToBase64(saltBytes);
+    const passwordHash = await hashPasswordPBKDF2(password, saltB64);
+
+    const pendingPayload = JSON.stringify({
+      name,
+      email,
+      passwordHash,
+      saltB64,
+      initialObj,
+    });
+
+    await env.DB.prepare(
+      "UPDATE email_verification_tokens SET used = 1 WHERE email = ?1 AND type = 'register' AND used = 0"
+    )
+      .bind(email)
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO email_verification_tokens (id, user_id, email, type, code_hash, pending_payload, created_at, expires_at, used)
+       VALUES (?1, NULL, ?2, 'register', ?3, ?4, ?5, ?6, 0)`
+    )
+      .bind(tokenId, email, codeHash, pendingPayload, nowIso, expiresAtIso)
+      .run();
+
+    try {
+      const htmlText = buildRegistrationEmailHtml({
+        code,
+        email,
+        name,
+      });
+      await sendResendEmail({
+        env,
+        to: email,
+        subject: `OpenMoney: Código de Confirmação de Cadastro (${code})`,
+        htmlText,
+      });
+    } catch (err) {
+      return jsonResponse(
+        {
+          error:
+            err.message ||
+            "Não foi possível enviar o e-mail de confirmação. Verifique a configuração do Resend na Cloudflare.",
+        },
+        500,
+        origin
+      );
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        step: "verify_code",
+        message: "Código de confirmação enviado para o seu e-mail!",
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 1.1. POST /api/auth/register-confirm (Valida código e cria conta)
+  // ==========================================================================
+  if (path === "/api/auth/register-confirm" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const code = String(body.code || "").trim();
+
+    if (!email || !code) {
+      return jsonResponse(
+        { error: "E-mail e código de verificação são obrigatórios." },
+        400,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+    const nowIso = new Date().toISOString();
+
+    const tokenRow = await env.DB.prepare(
+      `SELECT id, pending_payload FROM email_verification_tokens
+       WHERE email = ?1 AND code_hash = ?2 AND type = 'register' AND used = 0 AND expires_at > ?3`
+    )
+      .bind(email, codeHash, nowIso)
+      .first();
+
+    if (!tokenRow) {
+      return jsonResponse(
+        { error: "Código inválido ou expirado. Solicite um novo código." },
+        400,
+        origin
+      );
+    }
+
+    let pendingData = null;
+    try {
+      pendingData = JSON.parse(tokenRow.pending_payload);
+    } catch (_) {
+      return jsonResponse(
+        { error: "Dados de cadastro pendente corrompidos." },
+        500,
+        origin
+      );
+    }
+
+    const existing = await env.DB.prepare(
+      "SELECT id FROM users WHERE email = ?1"
+    )
+      .bind(email)
+      .first();
+
+    if (existing) {
+      return jsonResponse(
+        { error: "Este endereço de e-mail já está cadastrado." },
+        409,
+        origin
+      );
+    }
+
+    const userId = crypto.randomUUID();
+    const encryptedPayload = await encryptUserPayload(
+      JSON.stringify(pendingData.initialObj || defaultOpenMoneyV7Payload()),
+      userId,
+      env
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO users (id, email, name, password_hash, password_salt, failed_attempts, created_at, last_login_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6)`
+      ).bind(
+        userId,
+        email,
+        pendingData.name || "",
+        pendingData.passwordHash,
+        pendingData.saltB64,
+        nowIso
+      ),
+      env.DB.prepare(
+        `INSERT INTO user_databases (user_id, schema_version, revision, payload, preferences, updated_at)
+         VALUES (?1, 7, 1, ?2, '{}', ?3)`
+      ).bind(userId, encryptedPayload, nowIso),
+      env.DB.prepare(
+        "UPDATE email_verification_tokens SET used = 1 WHERE id = ?1"
+      ).bind(tokenRow.id),
+    ]);
+
+    const token = await signJwt(
+      { sub: userId, email, name: pendingData.name || "" },
+      env
+    );
+    return jsonResponse(
+      {
+        token,
+        revision: 1,
+        user: { id: userId, email, name: pendingData.name || "" },
+      },
+      201,
+      origin
+    );
+  }
 
   // ==========================================================================
   // 1. POST /api/auth/register
@@ -1464,6 +2017,209 @@ export async function onRequest(context) {
     );
   }
   const userId = String(claims.sub);
+
+  // ==========================================================================
+  // 2.4 POST /api/auth/change-email-request (Solicita troca de e-mail autenticado)
+  // ==========================================================================
+  if (path === "/api/auth/change-email-request" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const newEmail = String(body.newEmail || "").trim().toLowerCase();
+    const currentPassword = String(body.password || "");
+
+    if (!newEmail || !newEmail.includes("@")) {
+      return jsonResponse(
+        { error: "Informe um novo endereço de e-mail válido." },
+        400,
+        origin
+      );
+    }
+
+    if (!currentPassword) {
+      return jsonResponse(
+        { error: "Informe sua senha atual para confirmar a troca de e-mail." },
+        400,
+        origin
+      );
+    }
+
+    const user = await env.DB.prepare(
+      "SELECT id, email, name, password_hash, password_salt FROM users WHERE id = ?1"
+    )
+      .bind(userId)
+      .first();
+
+    if (!user) {
+      return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+    }
+
+    if (newEmail === String(user.email).toLowerCase()) {
+      return jsonResponse(
+        { error: "O novo e-mail deve ser diferente do e-mail atual." },
+        400,
+        origin
+      );
+    }
+
+    const validPass = await verifyPasswordPBKDF2(
+      currentPassword,
+      user.password_hash,
+      user.password_salt
+    );
+    if (!validPass) {
+      return jsonResponse({ error: "Senha incorreta." }, 403, origin);
+    }
+
+    const existingNew = await env.DB.prepare(
+      "SELECT id FROM users WHERE email = ?1"
+    )
+      .bind(newEmail)
+      .first();
+
+    if (existingNew) {
+      return jsonResponse(
+        {
+          error:
+            "Este novo endereço de e-mail já está sendo utilizado por outra conta.",
+        },
+        409,
+        origin
+      );
+    }
+
+    const code = generateSixDigitCode();
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, newEmail, secret);
+    const tokenId = `eml_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const nowIso = new Date().toISOString();
+    const expiresAtIso = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await env.DB.prepare(
+      "UPDATE email_verification_tokens SET used = 1 WHERE user_id = ?1 AND type = 'change_email' AND used = 0"
+    )
+      .bind(user.id)
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO email_verification_tokens (id, user_id, email, type, code_hash, pending_payload, created_at, expires_at, used)
+       VALUES (?1, ?2, ?3, 'change_email', ?4, ?5, ?6, ?7, 0)`
+    )
+      .bind(
+        tokenId,
+        user.id,
+        newEmail,
+        codeHash,
+        JSON.stringify({ currentEmail: user.email, newEmail }),
+        nowIso,
+        expiresAtIso
+      )
+      .run();
+
+    try {
+      const htmlText = buildChangeEmailHtml({
+        code,
+        currentEmail: user.email,
+        newEmail,
+        name: user.name,
+      });
+      await sendResendEmail({
+        env,
+        to: newEmail,
+        subject: `OpenMoney: Código para Confirmação do Novo E-mail (${code})`,
+        htmlText,
+      });
+    } catch (err) {
+      return jsonResponse(
+        {
+          error:
+            err.message ||
+            "Não foi possível enviar o e-mail para o novo endereço. Verifique o e-mail digitado.",
+        },
+        500,
+        origin
+      );
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        message: `Código de verificação enviado para o novo e-mail (${newEmail})!`,
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 2.5 POST /api/auth/change-email-confirm (Confirma e altera o e-mail)
+  // ==========================================================================
+  if (path === "/api/auth/change-email-confirm" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const newEmail = String(body.newEmail || "").trim().toLowerCase();
+    const code = String(body.code || "").trim();
+
+    if (!newEmail || !code) {
+      return jsonResponse(
+        { error: "Novo e-mail e código de verificação são obrigatórios." },
+        400,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, newEmail, secret);
+    const nowIso = new Date().toISOString();
+
+    const tokenRow = await env.DB.prepare(
+      `SELECT id FROM email_verification_tokens
+       WHERE user_id = ?1 AND email = ?2 AND code_hash = ?3 AND type = 'change_email' AND used = 0 AND expires_at > ?4`
+    )
+      .bind(userId, newEmail, codeHash, nowIso)
+      .first();
+
+    if (!tokenRow) {
+      return jsonResponse(
+        { error: "Código inválido ou expirado. Solicite um novo código." },
+        400,
+        origin
+      );
+    }
+
+    const user = await env.DB.prepare(
+      "SELECT id, name FROM users WHERE id = ?1"
+    )
+      .bind(userId)
+      .first();
+
+    if (!user) {
+      return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+    }
+
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET email = ?1 WHERE id = ?2").bind(
+        newEmail,
+        user.id
+      ),
+      env.DB.prepare(
+        "UPDATE email_verification_tokens SET used = 1 WHERE id = ?1"
+      ).bind(tokenRow.id),
+    ]);
+
+    const token = await signJwt(
+      { sub: user.id, email: newEmail, name: user.name },
+      env
+    );
+    return jsonResponse(
+      {
+        ok: true,
+        token,
+        newEmail,
+        user: { id: user.id, email: newEmail, name: user.name },
+        message: "E-mail da conta atualizado com sucesso!",
+      },
+      200,
+      origin
+    );
+  }
 
   // ==========================================================================
   // 3. POST /api/auth/change-password
@@ -2270,7 +3026,82 @@ export async function onRequest(context) {
 
     const mode = String(body.mode || "db_only").trim();
 
+    // 1. Obtém dados do usuário e base para gerar backup preventivo imutável por e-mail
+    const userRow = await env.DB.prepare(
+      "SELECT name, email FROM users WHERE id = ?1"
+    )
+      .bind(userId)
+      .first();
+
+    const targetEmail = (userRow && userRow.email) || claims.email;
+    const targetName = (userRow && userRow.name) || claims.name || "";
+
+    let backupZipBase64 = null;
+    let hasBackupData = false;
+
+    try {
+      const dbRow = await env.DB.prepare(
+        "SELECT payload FROM user_databases WHERE user_id = ?1"
+      )
+        .bind(userId)
+        .first();
+
+      if (dbRow && dbRow.payload) {
+        const fullEncrypted = await loadEncryptedPayloadFromD1(
+          env.DB,
+          userId,
+          dbRow.payload
+        );
+        const decryptedJson = await decryptUserPayload(
+          fullEncrypted,
+          userId,
+          env
+        );
+        if (decryptedJson && decryptedJson.length > 20) {
+          const zipBytes = createSingleFileZip(
+            "openmoney.json",
+            encoder.encode(decryptedJson)
+          );
+          backupZipBase64 = bytesToBase64(zipBytes);
+          hasBackupData = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Não foi possível gerar backup pré-exclusão para e-mail:", e.message);
+    }
+
     if (mode === "full_account") {
+      let emailDispatched = false;
+      // Envia e-mail notificando a exclusão definitiva da conta e com o backup .zip ANTES de apagar
+      if (targetEmail) {
+        try {
+          const htmlText = buildAccountDeletionEmailHtml({
+            name: targetName,
+            email: targetEmail,
+            mode: "full_account",
+            hasBackupAttachment: hasBackupData,
+          });
+          const attachments = hasBackupData && backupZipBase64
+            ? [
+                {
+                  filename: "openmoney-backup-pre-exclusao.zip",
+                  content: backupZipBase64,
+                },
+              ]
+            : [];
+          await sendResendEmail({
+            env,
+            to: targetEmail,
+            subject: "OpenMoney: Confirmação de Exclusão da Conta e Backup de Segurança",
+            htmlText,
+            attachments,
+          });
+          emailDispatched = true;
+        } catch (mailErr) {
+          console.warn("Falha no disparo do e-mail de exclusão:", mailErr.message);
+        }
+      }
+
       await env.DB.batch([
         env.DB.prepare(
           `DELETE FROM user_sync_records WHERE user_id = ?1`
@@ -2292,10 +3123,12 @@ export async function onRequest(context) {
         ).bind(userId),
         env.DB.prepare(`DELETE FROM users WHERE id = ?1`).bind(userId),
       ]);
+
       return jsonResponse(
         {
           ok: true,
           deletedAccount: true,
+          backupEmailed: emailDispatched,
         },
         200,
         origin
@@ -2355,11 +3188,43 @@ export async function onRequest(context) {
       );
     }
 
+    // Envia e-mail notificando a reinicialização da base e com o backup .zip
+    let emailDispatched = false;
+    if (targetEmail) {
+      try {
+        const htmlText = buildAccountDeletionEmailHtml({
+          name: targetName,
+          email: targetEmail,
+          mode: "db_only",
+          hasBackupAttachment: hasBackupData,
+        });
+        const attachments = hasBackupData && backupZipBase64
+          ? [
+              {
+                filename: "openmoney-backup-pre-exclusao.zip",
+                content: backupZipBase64,
+              },
+            ]
+          : [];
+        await sendResendEmail({
+          env,
+          to: targetEmail,
+          subject: "OpenMoney: Confirmação de Exclusão da Base e Backup de Segurança",
+          htmlText,
+          attachments,
+        });
+        emailDispatched = true;
+      } catch (mailErr) {
+        console.warn("Falha no disparo do e-mail de exclusão de base:", mailErr.message);
+      }
+    }
+
     return jsonResponse(
       {
         ok: true,
         deletedAccount: false,
         revision: nextRev,
+        backupEmailed: emailDispatched,
       },
       200,
       origin

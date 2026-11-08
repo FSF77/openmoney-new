@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../models/openmoney_models.dart';
 import '../store/money_store.dart';
+import 'backup_manager.dart';
 import 'cloud_sync_service.dart';
 import 'platform_io.dart';
 
@@ -41,7 +43,7 @@ class SyncChange {
   }
 }
 
-class SyncEngine extends ChangeNotifier {
+class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   SyncEngine._();
   static final SyncEngine instance = SyncEngine._();
 
@@ -376,13 +378,16 @@ class SyncEngine extends ChangeNotifier {
     bool triggerInitialSync = true,
     bool hasValidLocalCache = false,
   }) {
-    if (!kIsWeb) return;
     _store = store;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated) {
       stop();
       return;
     }
+
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (_) {}
 
     _loadPersistedState(
       cloud.userId,
@@ -443,7 +448,20 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isRunning) {
+      if (CloudSyncService.instance.isAuthenticated) {
+        _ensureWebSocket();
+        syncNow();
+      }
+    }
+  }
+
   void stop() {
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+    } catch (_) {}
     _isRunning = false;
     _hasLoadedRemoteState = false;
     _lastSeq = 0;
@@ -474,7 +492,7 @@ class SyncEngine extends ChangeNotifier {
     seedBaseline(db, prefs);
     _persistState();
     _persistLocalCache();
-    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+    if (CloudSyncService.instance.isAuthenticated) {
       broadcastWebSyncSignal(
         'sync:${CloudSyncService.instance.userId}:$_lastSeq',
       );
@@ -486,7 +504,7 @@ class SyncEngine extends ChangeNotifier {
     _baseline.clear();
     _lastSeq = 0;
     _hasLoadedRemoteState = false;
-    if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+    if (CloudSyncService.instance.isAuthenticated) {
       _ws?.close();
       _ws = null;
       _wsConnected = false;
@@ -499,14 +517,14 @@ class SyncEngine extends ChangeNotifier {
     String userId, {
     required bool hasValidLocalCache,
   }) {
-    if (!kIsWeb || userId.isEmpty) return;
+    if (userId.isEmpty) return;
 
     if (hasValidLocalCache) {
       final rawSeq = webLocalStorageGet(_seqStorageKey(userId));
       _lastSeq = rawSeq != null ? (int.tryParse(rawSeq) ?? 0) : 0;
       _hasLoadedRemoteState = _lastSeq > 0;
     } else {
-      // Se não há cache local válido carregado em memória (ex: bases >2MB ou novo login),
+      // Se não há cache local válido carregado em memória (ex: bases grandes na Web ou novo login),
       // obriga pull completo do snapshot binário antes de habilitar diffs locais!
       _lastSeq = 0;
       _hasLoadedRemoteState = false;
@@ -532,7 +550,6 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void _persistState() {
-    if (!kIsWeb) return;
     final userId = CloudSyncService.instance.userId;
     if (userId.isEmpty) return;
     if (_lastSeq > 0) {
@@ -547,7 +564,7 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void _persistLocalCache() {
-    if (!kIsWeb || _store == null || !_hasLoadedRemoteState) return;
+    if (_store == null || !_hasLoadedRemoteState) return;
     final userId = CloudSyncService.instance.userId;
     if (userId.isEmpty) return;
     try {
@@ -558,16 +575,20 @@ class SyncEngine extends ChangeNotifier {
         'payload': payloadMap,
         'preferences': _store!.exportPreferencesMap(),
       });
-      if (encoded.length < 2000000) {
-        webLocalStorageSet(_cacheStorageKey(userId), encoded);
+      if (kIsWeb) {
+        if (encoded.length < 2000000) {
+          webLocalStorageSet(_cacheStorageKey(userId), encoded);
+        } else {
+          webLocalStorageRemove(_cacheStorageKey(userId));
+        }
       } else {
-        webLocalStorageRemove(_cacheStorageKey(userId));
+        // No Desktop/Mobile, grava no arquivo de cache isolado sem limite de 2MB
+        webLocalStorageSet(_cacheStorageKey(userId), encoded);
       }
     } catch (_) {}
   }
 
   void _scheduleClientCompaction() {
-    if (!kIsWeb) return;
     _compactTimer?.cancel();
     _compactTimer = Timer(const Duration(seconds: 4), () async {
       if (!_isRunning ||
@@ -599,7 +620,7 @@ class SyncEngine extends ChangeNotifier {
   // ==========================================================================
 
   void onLocalSave(Database db, Map<String, dynamic> prefs) {
-    if (!kIsWeb || _isApplyingRemote || !_hasLoadedRemoteState) return;
+    if (_isApplyingRemote || !_hasLoadedRemoteState) return;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated) return;
 
@@ -672,7 +693,7 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void _ensureWebSocket() {
-    if (!kIsWeb || !_isRunning) return;
+    if (!_isRunning) return;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated || !webIsOnline()) return;
     if (_ws != null && _ws!.isOpen) return;
@@ -755,7 +776,7 @@ class SyncEngine extends ChangeNotifier {
   }
 
   Future<bool> syncNow({bool forceFullPull = false}) async {
-    if (!kIsWeb || _store == null) return false;
+    if (_store == null) return false;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated) return false;
     if (!webIsOnline()) {
@@ -1013,6 +1034,29 @@ class SyncEngine extends ChangeNotifier {
   }) {
     final store = _store;
     if (store == null) return;
+
+    final existingTxCount = store.db.txs.length;
+    final incomingTxs = (payload['txs'] as List?)?.length ?? 0;
+
+    // Anti-Wipe Guard: se a base local já possui lançamentos e o snapshot remoto veio vazio com revisão zero,
+    // aborta a substituição destrutiva para proteger a integridade dos dados locais
+    if (existingTxCount >= 10 && incomingTxs == 0 && newSeq == 0) {
+      debugPrint(
+        '[SyncEngine] Anti-Wipe: snapshot remoto vazio ignorado pois base local possui $existingTxCount lançamentos.',
+      );
+      return;
+    }
+
+    // Safety Backup pré-substituição remota
+    if (existingTxCount > 0 && !kIsWeb) {
+      try {
+        BackupManager.instance.createSafetyBackup(
+          appSupportDirPath: store.appSupportDirPath,
+          reason: 'pre-remote-snapshot',
+          jsonContent: jsonEncode(store.db.toJson()),
+        );
+      } catch (_) {}
+    }
 
     _isApplyingRemote = true;
     try {

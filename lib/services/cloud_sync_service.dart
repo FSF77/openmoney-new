@@ -182,7 +182,7 @@ class CloudSyncService extends ChangeNotifier {
       final origin = webWindowOrigin().trim().replaceAll(RegExp(r'/+$'), '');
       return origin;
     }
-    return '';
+    return defaultApiBaseUrl;
   }
 
   String get statusLabel {
@@ -454,6 +454,263 @@ class CloudSyncService extends ChangeNotifier {
       _lastError = msg;
       notifyListeners();
       return (ok: false, error: msg);
+    }
+  }
+
+  /// Etapa 1 do Cadastro: valida dados e solicita envio do token de 6 dígitos para o e-mail
+  Future<({bool ok, String? error, String? message})> requestRegister({
+    required String name,
+    required String email,
+    required String password,
+    String? inviteCode,
+    String? customApiUrl,
+    Map<String, dynamic>? initialPayload,
+  }) async {
+    if (customApiUrl != null) {
+      _apiBaseUrl = customApiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanName = name.trim();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      return (
+        ok: false,
+        error: 'Informe um endereço de e-mail válido.',
+        message: null,
+      );
+    }
+    if (password.length < 8) {
+      return (
+        ok: false,
+        error: 'A senha deve ter pelo menos 8 caracteres para sua segurança.',
+        message: null,
+      );
+    }
+    if (!kIsWeb && resolvedBaseUrl.isEmpty) {
+      return (
+        ok: false,
+        error: 'Informe a URL do seu servidor Cloudflare Pages.',
+        message: null,
+      );
+    }
+
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/register-request'),
+        headers: _headers(),
+        body: jsonEncode({
+          'name': cleanName,
+          'email': cleanEmail,
+          'password': password,
+          if (inviteCode != null && inviteCode.trim().isNotEmpty)
+            'inviteCode': inviteCode.trim(),
+          if (initialPayload != null) 'initialPayload': initialPayload,
+        }),
+      );
+
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        return (
+          ok: true,
+          error: null,
+          message: decoded['message']?.toString() ??
+              'Código de confirmação enviado para o seu e-mail!',
+        );
+      }
+
+      final errMsg = (decoded?['error'] ??
+              'Erro ao solicitar cadastro (HTTP ${res.statusCode}).')
+          .toString();
+      return (ok: false, error: errMsg, message: null);
+    } catch (e) {
+      return (
+        ok: false,
+        error: 'Não foi possível conectar ao servidor. Verifique sua conexão.',
+        message: null,
+      );
+    }
+  }
+
+  /// Etapa 2 do Cadastro: valida o token de 6 dígitos e ativa a conta com login automático
+  Future<({bool ok, String? error})> confirmRegister({
+    required String email,
+    required String code,
+    String? customApiUrl,
+  }) async {
+    if (customApiUrl != null) {
+      _apiBaseUrl = customApiUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanCode = code.trim();
+    if (cleanCode.length != 6) {
+      return (
+        ok: false,
+        error: 'O código de confirmação deve ter exatamente 6 dígitos.',
+      );
+    }
+
+    _state = CloudSyncState.connecting;
+    _lastError = null;
+    notifyListeners();
+
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/register-confirm'),
+        headers: _headers(),
+        body: jsonEncode({
+          'email': cleanEmail,
+          'code': cleanCode,
+        }),
+      );
+
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['token'] != null) {
+        _authToken = (decoded['token'] ?? '').toString();
+        final user = decoded['user'] as Map<String, dynamic>? ?? {};
+        _userId = (user['id'] ?? '').toString();
+        _userEmail = (user['email'] ?? cleanEmail).toString();
+        _userName = (user['name'] ?? '').toString();
+        _revision = (decoded['revision'] as num?)?.toInt() ?? 1;
+        _webOfflineGuestMode = false;
+        _state = CloudSyncState.synced;
+        _lastError = null;
+        _upsertCurrentAccountToSavedList();
+        if (kIsWeb) {
+          exportSessionToConfig({});
+        }
+        notifyListeners();
+        return (ok: true, error: null);
+      }
+
+      final errMsg =
+          (decoded?['error'] ?? 'Código inválido ou expirado.').toString();
+      _state = CloudSyncState.disconnected;
+      _lastError = errMsg;
+      notifyListeners();
+      return (ok: false, error: errMsg);
+    } catch (e) {
+      const msg = 'Falha de comunicação com o servidor ao confirmar cadastro.';
+      _state = CloudSyncState.error;
+      _lastError = msg;
+      notifyListeners();
+      return (ok: false, error: msg);
+    }
+  }
+
+  /// Etapa 1 da Troca de E-mail: envia código de 6 dígitos para o novo e-mail
+  Future<({bool ok, String? error, String? message})> requestChangeEmail({
+    required String newEmail,
+    required String password,
+  }) async {
+    if (!isAuthenticated) {
+      return (ok: false, error: 'Sessão não autenticada.', message: null);
+    }
+    final cleanEmail = newEmail.trim().toLowerCase();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      return (
+        ok: false,
+        error: 'Informe um novo endereço de e-mail válido.',
+        message: null,
+      );
+    }
+
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/change-email-request'),
+        headers: _headers(),
+        body: jsonEncode({
+          'newEmail': cleanEmail,
+          'password': password,
+        }),
+      );
+
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        return (
+          ok: true,
+          error: null,
+          message: decoded['message']?.toString() ??
+              'Código enviado para o novo e-mail!',
+        );
+      }
+
+      final errMsg = (decoded?['error'] ??
+              'Erro ao solicitar troca de e-mail (${res.statusCode}).')
+          .toString();
+      return (ok: false, error: errMsg, message: null);
+    } catch (e) {
+      return (
+        ok: false,
+        error: 'Falha de comunicação com o servidor.',
+        message: null,
+      );
+    }
+  }
+
+  /// Etapa 2 da Troca de E-mail: valida o código e efetiva a alteração do e-mail
+  Future<({bool ok, String? error})> confirmChangeEmail({
+    required String newEmail,
+    required String code,
+  }) async {
+    if (!isAuthenticated) {
+      return (ok: false, error: 'Sessão não autenticada.');
+    }
+    final cleanEmail = newEmail.trim().toLowerCase();
+    final cleanCode = code.trim();
+    if (cleanCode.length != 6) {
+      return (
+        ok: false,
+        error: 'O código de confirmação deve ter exatamente 6 dígitos.',
+      );
+    }
+
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/auth/change-email-confirm'),
+        headers: _headers(),
+        body: jsonEncode({
+          'newEmail': cleanEmail,
+          'code': cleanCode,
+        }),
+      );
+
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        if (decoded['token'] != null) {
+          _authToken = decoded['token'].toString();
+        }
+        _userEmail = cleanEmail;
+        _upsertCurrentAccountToSavedList();
+        if (kIsWeb) {
+          exportSessionToConfig({});
+        }
+        notifyListeners();
+        return (ok: true, error: null);
+      }
+
+      final errMsg =
+          (decoded?['error'] ?? 'Código inválido ou expirado.').toString();
+      return (ok: false, error: errMsg);
+    } catch (e) {
+      return (
+        ok: false,
+        error: 'Falha de comunicação ao confirmar alteração de e-mail.',
+      );
     }
   }
 
@@ -769,8 +1026,14 @@ class CloudSyncService extends ChangeNotifier {
         // Descomprime Gzip localmente no cliente (suporta bases de 12MB+ sem estourar CPU do Worker)
         final isGzip =
             (res.headers['x-openmoney-compression'] ?? '').toLowerCase() ==
-                'gzip';
-        final rawBytes = isGzip
+                'gzip' ||
+            (res.bodyBytes.length >= 2 &&
+                res.bodyBytes[0] == 0x1f &&
+                res.bodyBytes[1] == 0x8b);
+        final rawBytes = (isGzip &&
+                res.bodyBytes.length >= 2 &&
+                res.bodyBytes[0] == 0x1f &&
+                res.bodyBytes[1] == 0x8b)
             ? await platformGzipDecompress(res.bodyBytes)
             : res.bodyBytes;
         if (_userId != reqUserId || _authToken != reqToken) {
@@ -806,8 +1069,22 @@ class CloudSyncService extends ChangeNotifier {
         _state = CloudSyncState.synced;
         _lastError = null;
 
-        if (kIsWeb && _userId.isNotEmpty && payloadMap.isNotEmpty) {
-          if (rawJson.length < 2000000) {
+        if (_userId.isNotEmpty && payloadMap.isNotEmpty) {
+          if (kIsWeb) {
+            if (rawJson.length < 2000000) {
+              webLocalStorageSet(
+                'openmoney_web_cache_$_userId',
+                jsonEncode({
+                  'revision': _revision,
+                  'payload': payloadMap,
+                  'preferences': prefsMap,
+                }),
+              );
+            } else {
+              // Bases >2MB excedem a cota de 5MB do localStorage do navegador; mantemos apenas na nuvem/memória
+              webLocalStorageRemove('openmoney_web_cache_$_userId');
+            }
+          } else {
             webLocalStorageSet(
               'openmoney_web_cache_$_userId',
               jsonEncode({
@@ -816,9 +1093,6 @@ class CloudSyncService extends ChangeNotifier {
                 'preferences': prefsMap,
               }),
             );
-          } else {
-            // Bases >2MB excedem a cota de 5MB do localStorage do navegador; mantemos apenas na nuvem/memória
-            webLocalStorageRemove('openmoney_web_cache_$_userId');
           }
           exportSessionToConfig({});
         }
@@ -893,8 +1167,8 @@ class CloudSyncService extends ChangeNotifier {
       notifyListeners();
     }
 
-    // Fallback para o cache local do próprio usuário na Web se estiver sem rede
-    if (kIsWeb && _userId == reqUserId && _userId.isNotEmpty) {
+    // Fallback para o cache local do próprio usuário se estiver sem rede
+    if (_userId == reqUserId && _userId.isNotEmpty) {
       final cachedRaw = webLocalStorageGet('openmoney_web_cache_$_userId');
       if (cachedRaw != null && cachedRaw.isNotEmpty) {
         final cached = _tryDecodeJson(cachedRaw);
@@ -953,8 +1227,21 @@ class CloudSyncService extends ChangeNotifier {
     final reqToken = _authToken;
     final rawJson = jsonEncode(payload);
 
-    if (kIsWeb && reqUserId.isNotEmpty) {
-      if (rawJson.length < 2000000) {
+    if (reqUserId.isNotEmpty) {
+      if (kIsWeb) {
+        if (rawJson.length < 2000000) {
+          webLocalStorageSet(
+            'openmoney_web_cache_$reqUserId',
+            jsonEncode({
+              'revision': compactSeq ?? _revision,
+              'payload': payload,
+              'preferences': preferences,
+            }),
+          );
+        } else {
+          webLocalStorageRemove('openmoney_web_cache_$reqUserId');
+        }
+      } else {
         webLocalStorageSet(
           'openmoney_web_cache_$reqUserId',
           jsonEncode({
@@ -963,8 +1250,6 @@ class CloudSyncService extends ChangeNotifier {
             'preferences': preferences,
           }),
         );
-      } else {
-        webLocalStorageRemove('openmoney_web_cache_$reqUserId');
       }
     } else if (kIsWeb && _webOfflineGuestMode) {
       if (rawJson.length < 2000000) {
@@ -1026,7 +1311,19 @@ class CloudSyncService extends ChangeNotifier {
         return false;
       }
 
-      final bodyText = utf8.decode(res.bodyBytes, allowMalformed: true);
+      String bodyText;
+      if (res.bodyBytes.length >= 2 &&
+          res.bodyBytes[0] == 0x1f &&
+          res.bodyBytes[1] == 0x8b) {
+        try {
+          final decomp = await platformGzipDecompress(res.bodyBytes);
+          bodyText = utf8.decode(decomp, allowMalformed: true);
+        } catch (_) {
+          bodyText = utf8.decode(res.bodyBytes, allowMalformed: true);
+        }
+      } else {
+        bodyText = utf8.decode(res.bodyBytes, allowMalformed: true);
+      }
       final decoded = _tryDecodeJson(bodyText);
       if (res.statusCode == 409) {
         _state = CloudSyncState.conflict;
@@ -1038,8 +1335,9 @@ class CloudSyncService extends ChangeNotifier {
         return false;
       }
 
-      if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
-        _revision = (decoded['revision'] as num?)?.toInt() ?? (_revision + 1);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final rev = (decoded?['revision'] as num?)?.toInt() ?? (_revision + 1);
+        _revision = rev;
         _lastSyncedAt = DateTime.now();
         _state = CloudSyncState.synced;
         _lastError = null;
@@ -1116,7 +1414,8 @@ class CloudSyncService extends ChangeNotifier {
   }
 
   /// Exclui os dados da base na nuvem (ou a conta completa + base) após confirmação de segurança
-  Future<({bool ok, bool deletedAccount, String? error})> deleteCloudDatabase({
+  Future<({bool ok, bool deletedAccount, bool backupEmailed, String? error})>
+      deleteCloudDatabase({
     required String confirmText,
     bool deleteFullAccount = false,
   }) async {
@@ -1124,6 +1423,7 @@ class CloudSyncService extends ChangeNotifier {
       return (
         ok: false,
         deletedAccount: false,
+        backupEmailed: false,
         error: 'Sessão não autenticada.',
       );
     }
@@ -1131,6 +1431,7 @@ class CloudSyncService extends ChangeNotifier {
       return (
         ok: false,
         deletedAccount: false,
+        backupEmailed: false,
         error: 'Digite exatamente EXCLUIR para confirmar a exclusão.',
       );
     }
@@ -1147,13 +1448,19 @@ class CloudSyncService extends ChangeNotifier {
         }),
       );
       final decoded = _tryDecodeJson(res.body);
+      final backupEmailed = decoded?['backupEmailed'] == true;
       if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
         if (kIsWeb && currentId.isNotEmpty) {
           webLocalStorageRemove('openmoney_web_cache_$currentId');
         }
         if (deleteFullAccount) {
           removeSavedAccount(currentId);
-          return (ok: true, deletedAccount: true, error: null);
+          return (
+            ok: true,
+            deletedAccount: true,
+            backupEmailed: backupEmailed,
+            error: null,
+          );
         } else {
           _revision = 1;
           _lastSyncedAt = DateTime.now();
@@ -1164,17 +1471,28 @@ class CloudSyncService extends ChangeNotifier {
             exportSessionToConfig({});
           }
           notifyListeners();
-          return (ok: true, deletedAccount: false, error: null);
+          return (
+            ok: true,
+            deletedAccount: false,
+            backupEmailed: backupEmailed,
+            error: null,
+          );
         }
       }
       final err =
           (decoded?['error'] ?? 'Falha ao excluir base (HTTP ${res.statusCode}).')
               .toString();
-      return (ok: false, deletedAccount: false, error: err);
+      return (
+        ok: false,
+        deletedAccount: false,
+        backupEmailed: false,
+        error: err,
+      );
     } catch (_) {
       return (
         ok: false,
         deletedAccount: false,
+        backupEmailed: false,
         error: 'Erro de conexão com o servidor Cloudflare.',
       );
     }

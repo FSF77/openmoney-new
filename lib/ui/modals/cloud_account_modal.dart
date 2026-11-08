@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../models/openmoney_models.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
@@ -27,10 +28,13 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   final CloudSyncService _cloud = CloudSyncService.instance;
 
   bool _isRegisterMode = false;
+  bool _registerStep2 = false;
   bool _isForgotMode = false;
   int _forgotStep = 1;
   bool _isBusy = false;
   bool _showPasswordChange = false;
+  bool _showEmailChange = false;
+  bool _changeEmailStep2 = false;
   bool _addingAnotherAccount = false;
   bool _registerWithBlankBase = true;
   String? _statusMsg;
@@ -47,6 +51,10 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   final _inviteCtrl = TextEditingController();
   final _curPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
+  final _registerCodeCtrl = TextEditingController();
+  final _newEmailCtrl = TextEditingController();
+  final _changeEmailPassCtrl = TextEditingController();
+  final _changeEmailCodeCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -71,6 +79,10 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     _inviteCtrl.dispose();
     _curPassCtrl.dispose();
     _newPassCtrl.dispose();
+    _registerCodeCtrl.dispose();
+    _newEmailCtrl.dispose();
+    _changeEmailPassCtrl.dispose();
+    _changeEmailCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -180,7 +192,25 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     }
   }
 
-  Future<void> _handleAuth() async {
+  Future<void> _handleRequestRegister() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe um endereço de e-mail válido.';
+      });
+      return;
+    }
+    if (password.length < 8) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'A senha deve ter pelo menos 8 caracteres.';
+      });
+      return;
+    }
+
     setState(() {
       _isBusy = true;
       _statusMsg = null;
@@ -188,53 +218,238 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     });
 
     final serverUrl = _serverCtrl.text.trim();
-    if (_isRegisterMode) {
-      final res = await _cloud.register(
-        name: _nameCtrl.text,
-        email: _emailCtrl.text,
-        password: _passwordCtrl.text,
-        inviteCode: _inviteCtrl.text,
-        customApiUrl: serverUrl,
-      );
-      if (!mounted) return;
+    final initialDb = _registerWithBlankBase
+        ? Database(
+            accounts: [
+              Account(
+                id: 'a1',
+                name: 'Conta Corrente',
+                type: 'Corrente',
+                opening: 0,
+              ),
+            ],
+            cats: List<CategoryItem>.from(kDefaultCats),
+            txs: [],
+            recs: [],
+            budgets: {},
+            v: 7,
+          )
+        : widget.store.db;
+
+    final res = await _cloud.requestRegister(
+      name: name,
+      email: email,
+      password: password,
+      inviteCode: _inviteCtrl.text.trim(),
+      customApiUrl: serverUrl.isEmpty ? null : serverUrl,
+      initialPayload: initialDb.toJson(),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
       if (res.ok) {
-        widget.store.saveCloudSessionToConfig();
-        if (_registerWithBlankBase) {
-          await widget.store.resetToBlankDatabaseAndSync(pushToCloud: true);
-        } else {
-          await widget.store.pushLocalToCloud(force: true);
+        _registerStep2 = true;
+        _isError = false;
+        _statusMsg = res.message ?? 'Código de verificação enviado para o seu e-mail!';
+      } else {
+        _isError = true;
+        _statusMsg = res.error;
+      }
+    });
+  }
+
+  Future<void> _handleConfirmRegister() async {
+    final code = _registerCodeCtrl.text.trim();
+    if (code.isEmpty || code.length < 6) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe o código de 6 dígitos enviado para o seu e-mail.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+
+    final serverUrl = _serverCtrl.text.trim();
+    final res = await _cloud.confirmRegister(
+      email: _emailCtrl.text.trim(),
+      code: code,
+      customApiUrl: serverUrl.isEmpty ? null : serverUrl,
+    );
+
+    if (!mounted) return;
+    if (res.ok) {
+      widget.store.saveCloudSessionToConfig();
+      await widget.store.switchToCloudMode();
+      if (_registerWithBlankBase) {
+        await widget.store.resetToBlankDatabaseAndSync(pushToCloud: true);
+      } else {
+        await widget.store.pushLocalToCloud(force: true);
+      }
+      await _loadCloudBackups();
+      if (widget.store.showWelcomeScreen) {
+        widget.store.showWelcomeScreen = false;
+        if (mounted) {
+          Navigator.of(context).pop();
         }
-        await _loadCloudBackups();
+        return;
+      }
+      if (mounted) {
         setState(() {
+          _isBusy = false;
           _addingAnotherAccount = false;
+          _registerStep2 = false;
           _isError = false;
           _statusMsg = _registerWithBlankBase
-              ? '✓ Nova conta criada com base em branco pronta para uso!'
-              : '✓ Conta criada e base openmoney.json sincronizada na nuvem!';
+              ? '✓ Conta criada com sucesso e base em branco pronta para uso!'
+              : '✓ Conta criada com sucesso e base sincronizada na nuvem!';
         });
-      } else {
+      }
+    } else {
+      if (mounted) {
         setState(() {
+          _isBusy = false;
           _isError = true;
           _statusMsg = res.error;
         });
       }
-    } else {
-      final res = await _cloud.login(
-        email: _emailCtrl.text,
-        password: _passwordCtrl.text,
-        customApiUrl: serverUrl,
-      );
-      if (!mounted) return;
+    }
+  }
+
+  Future<void> _handleRequestChangeEmail() async {
+    final newEmail = _newEmailCtrl.text.trim();
+    final password = _changeEmailPassCtrl.text;
+    if (newEmail.isEmpty || !newEmail.contains('@')) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe um novo endereço de e-mail válido.';
+      });
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe sua senha atual para autorizar a alteração.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+
+    final res = await _cloud.requestChangeEmail(
+      newEmail: newEmail,
+      password: password,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
       if (res.ok) {
+        _changeEmailStep2 = true;
+        _isError = false;
+        _statusMsg = res.message ?? 'Código enviado para o novo e-mail!';
+      } else {
+        _isError = true;
+        _statusMsg = res.error;
+      }
+    });
+  }
+
+  Future<void> _handleConfirmChangeEmail() async {
+    final code = _changeEmailCodeCtrl.text.trim();
+    if (code.isEmpty || code.length < 6) {
+      setState(() {
+        _isError = true;
+        _statusMsg = 'Informe o código de 6 dígitos recebido no novo e-mail.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+
+    final newEmail = _newEmailCtrl.text.trim();
+    final res = await _cloud.confirmChangeEmail(
+      newEmail: newEmail,
+      code: code,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
+      if (res.ok) {
+        widget.store.dbPath = 'cloud://${_cloud.userEmail}';
         widget.store.saveCloudSessionToConfig();
-        await widget.store.syncFromCloud();
-        await _loadCloudBackups();
+        _showEmailChange = false;
+        _changeEmailStep2 = false;
+        _newEmailCtrl.clear();
+        _changeEmailPassCtrl.clear();
+        _changeEmailCodeCtrl.clear();
+        _isError = false;
+        _statusMsg = '✓ E-mail da conta alterado com sucesso para ${_cloud.userEmail}!';
+      } else {
+        _isError = true;
+        _statusMsg = res.error;
+      }
+    });
+  }
+
+  Future<void> _handleAuth() async {
+    if (_isRegisterMode) {
+      if (!_registerStep2) {
+        await _handleRequestRegister();
+      } else {
+        await _handleConfirmRegister();
+      }
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _statusMsg = null;
+      _isError = false;
+    });
+
+    final serverUrl = _serverCtrl.text.trim();
+    final res = await _cloud.login(
+      email: _emailCtrl.text,
+      password: _passwordCtrl.text,
+      customApiUrl: serverUrl,
+    );
+    if (!mounted) return;
+    if (res.ok) {
+      widget.store.saveCloudSessionToConfig();
+      await widget.store.switchToCloudMode();
+      await widget.store.syncFromCloud();
+      await _loadCloudBackups();
+      if (widget.store.showWelcomeScreen) {
+        widget.store.showWelcomeScreen = false;
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+      if (mounted) {
         setState(() {
           _addingAnotherAccount = false;
           _isError = false;
           _statusMsg = '✓ Conectado em ${_cloud.userEmail} e sincronizado!';
         });
-      } else {
+      }
+    } else {
+      if (mounted) {
         setState(() {
           _isError = true;
           _statusMsg = res.error;
@@ -460,7 +675,8 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                       ),
                     ),
                     child: Text(
-                      '🚨 AVISO IRREVERSÍVEL: Esta ação apagará permanentemente os dados financeiros e os backups diários na nuvem da conta ${_cloud.userEmail}.\n\nRecomendamos fortemente exportar uma cópia do seu arquivo openmoney.json antes de prosseguir.',
+                      '🚨 AVISO IRREVERSÍVEL: Esta ação apagará permanentemente os dados financeiros e os backups na nuvem da conta ${_cloud.userEmail}.\n\n'
+                      '📧 Por segurança e para não perder seu histórico financeiro, enviaremos um e-mail de confirmação para ${_cloud.userEmail} com uma cópia compactada openmoney-backup-pre-exclusao.zip contendo sua base completa em .json antes da exclusão.',
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
@@ -583,9 +799,13 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
     if (!mounted) return;
     if (res.ok) {
-      await widget.store.resetToBlankDatabaseAndSync(pushToCloud: false);
-      widget.store.saveCloudSessionToConfig();
-      if (!fullAcc) {
+      if (fullAcc) {
+        _cloud.logout();
+        await widget.store.resetToBlankDatabaseAndSync(pushToCloud: false);
+        widget.store.saveCloudSessionToConfig();
+      } else {
+        await widget.store.resetToBlankDatabaseAndSync(pushToCloud: false);
+        widget.store.saveCloudSessionToConfig();
         await _loadCloudBackups();
       }
       if (!mounted) return;
@@ -593,8 +813,12 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
         _isBusy = false;
         _isError = false;
         _statusMsg = fullAcc
-            ? '✓ Conta e base excluídas permanentemente.'
-            : '✓ Base existente e backups excluídos! Conta reiniciada com base limpa.';
+            ? (res.backupEmailed
+                ? '✓ Conta e base excluídas permanentemente.\n📧 Cópia de segurança .zip enviada por e-mail.'
+                : '✓ Conta e base excluídas permanentemente.')
+            : (res.backupEmailed
+                ? '✓ Base na nuvem excluída e reiniciada.\n📧 Cópia de segurança .zip enviada por e-mail.'
+                : '✓ Base existente e backups excluídos! Conta reiniciada com base limpa.');
       });
       if (fullAcc && kIsWeb) {
         Navigator.of(context).pop();
@@ -975,9 +1199,12 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   widget.store.stopPeriodicCloudSync();
                   _cloud.logout();
                   widget.store.saveCloudSessionToConfig();
-                  if (kIsWeb) {
-                    Navigator.of(context).pop();
+                  if (widget.store.hasConfiguredLocalDatabase) {
+                    widget.store.switchToLocalMode();
+                  } else {
+                    widget.store.disconnectLocalDatabase();
                   }
+                  Navigator.of(context).pop();
                 },
                 icon: Icon(
                   Icons.logout,
@@ -985,7 +1212,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   color: colors.accentRed,
                 ),
                 label: Text(
-                  'Sair',
+                  'Desconectar',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
@@ -1528,6 +1755,112 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
         const SizedBox(height: 10),
 
+        // Alteração de E-mail da Conta
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() {
+              _showEmailChange = !_showEmailChange;
+              _changeEmailStep2 = false;
+              _changeEmailCodeCtrl.clear();
+              _newEmailCtrl.clear();
+              _changeEmailPassCtrl.clear();
+            }),
+            icon: Icon(
+              Icons.alternate_email_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
+            label: Text(
+              _showEmailChange
+                  ? 'Cancelar alteração de e-mail'
+                  : 'Alterar meu e-mail de acesso',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            ),
+          ),
+        ),
+        if (_showEmailChange) ...[
+          const SizedBox(height: 8),
+          if (!_changeEmailStep2) ...[
+            _buildInput(
+              colors: colors,
+              controller: _newEmailCtrl,
+              label: 'Novo E-mail',
+            ),
+            const SizedBox(height: 8),
+            _buildInput(
+              colors: colors,
+              controller: _changeEmailPassCtrl,
+              label: 'Sua Senha Atual',
+              obscure: true,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ElevatedButton.icon(
+                onPressed: _isBusy ? null : _handleRequestChangeEmail,
+                icon: const Icon(Icons.send_rounded, size: 15),
+                label: Text(
+                  _isBusy
+                      ? 'Enviando...'
+                      : 'Enviar Código para o Novo E-mail',
+                ),
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colors.accentBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colors.accentBlue.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                'Enviamos um código de 6 dígitos para o novo e-mail:\n${_newEmailCtrl.text.trim()}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildInput(
+              colors: colors,
+              controller: _changeEmailCodeCtrl,
+              label: 'Código de Confirmação (6 dígitos)',
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.accentGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _isBusy ? null : _handleConfirmChangeEmail,
+                  icon: const Icon(Icons.check, size: 16),
+                  label: Text(
+                    _isBusy ? 'Confirmando...' : 'Confirmar Alteração de E-mail',
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _changeEmailStep2 = false),
+                  child: const Text(
+                    'Voltar / Corrigir E-mail',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+
+        const SizedBox(height: 4),
+
         // Alteração de Senha
         Align(
           alignment: Alignment.centerLeft,
@@ -1839,149 +2172,230 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           ),
           const SizedBox(height: 12),
         ],
-        Row(
-          children: [
-            ChoiceChip(
-              label: const Text('Já tenho conta'),
-              selected: !_isRegisterMode,
-              onSelected: (_) => setState(() => _isRegisterMode = false),
-            ),
-            const SizedBox(width: 8),
-            ChoiceChip(
-              label: const Text('Criar nova conta / base'),
-              selected: _isRegisterMode,
-              onSelected: (_) => setState(() => _isRegisterMode = true),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_isRegisterMode) ...[
-          _buildInput(
-            colors: colors,
-            controller: _nameCtrl,
-            label: 'Nome',
-          ),
-          const SizedBox(height: 10),
-        ],
-        _buildInput(
-          colors: colors,
-          controller: _emailCtrl,
-          label: 'E-mail',
-        ),
-        const SizedBox(height: 10),
-        _buildInput(
-          colors: colors,
-          controller: _passwordCtrl,
-          label: 'Senha',
-          obscure: true,
-        ),
-        if (!_isRegisterMode) ...[
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () {
-                setState(() {
-                  _isForgotMode = true;
-                  _forgotStep = 1;
-                  _statusMsg = null;
-                  _isError = false;
-                  _resetCodeCtrl.clear();
-                  _newForgotPassCtrl.clear();
-                });
-              },
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                'Esqueci minha senha',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: colors.accentBlue,
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (_isRegisterMode) ...[
-          const SizedBox(height: 10),
-          _buildInput(
-            colors: colors,
-            controller: _inviteCtrl,
-            label: 'Código de Convite (se configurado)',
-          ),
-          const SizedBox(height: 10),
+        if (_isRegisterMode && _registerStep2) ...[
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colors.bgPrimary.withValues(alpha: 0.45),
+              color: colors.accentBlue.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: colors.borderGlass),
+              border: Border.all(
+                color: colors.accentBlue.withValues(alpha: 0.35),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  'Dados iniciais para esta nova conta:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: colors.textPrimary,
-                  ),
+                Icon(
+                  Icons.mark_email_unread_outlined,
+                  color: colors.accentBlue,
+                  size: 24,
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    ChoiceChip(
-                      label: const Text(
-                        'Criar Nova Base em Branco (Limpa)',
-                        style: TextStyle(fontSize: 11.5),
-                      ),
-                      selected: _registerWithBlankBase,
-                      onSelected: (_) =>
-                          setState(() => _registerWithBlankBase = true),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Enviamos um código de confirmação de 6 dígitos para:\n${_emailCtrl.text.trim()}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
                     ),
-                    ChoiceChip(
-                      label: const Text(
-                        'Copiar Dados Atualmente na Tela',
-                        style: TextStyle(fontSize: 11.5),
-                      ),
-                      selected: !_registerWithBlankBase,
-                      onSelected: (_) =>
-                          setState(() => _registerWithBlankBase = false),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 42,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colors.accentBlue,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: _isBusy ? null : _handleAuth,
-            icon: Icon(_isRegisterMode ? Icons.person_add : Icons.login),
-            label: Text(
-              _isBusy
-                  ? 'Conectando...'
-                  : (_isRegisterMode
-                      ? (_registerWithBlankBase
-                          ? 'Criar Nova Conta e Base em Branco'
-                          : 'Criar Conta e Enviar Base Atual')
-                      : 'Conectar e Sincronizar'),
+          const SizedBox(height: 12),
+          _buildInput(
+            colors: colors,
+            controller: _registerCodeCtrl,
+            label: 'Código de Confirmação (6 dígitos)',
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 42,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.accentGreen,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _isBusy ? null : _handleConfirmRegister,
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              label: Text(
+                _isBusy ? 'Ativando Conta...' : 'Confirmar e Ativar Conta',
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: _isBusy ? null : _handleRequestRegister,
+                icon: const Icon(Icons.refresh, size: 14),
+                label: const Text(
+                  'Reenviar Código',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _registerStep2 = false),
+                child: const Text(
+                  'Voltar / Corrigir Dados',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          Row(
+            children: [
+              ChoiceChip(
+                label: const Text('Já tenho conta'),
+                selected: !_isRegisterMode,
+                onSelected: (_) => setState(() {
+                  _isRegisterMode = false;
+                  _registerStep2 = false;
+                }),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Criar nova conta / base'),
+                selected: _isRegisterMode,
+                onSelected: (_) => setState(() {
+                  _isRegisterMode = true;
+                  _registerStep2 = false;
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isRegisterMode) ...[
+            _buildInput(
+              colors: colors,
+              controller: _nameCtrl,
+              label: 'Nome',
+            ),
+            const SizedBox(height: 10),
+          ],
+          _buildInput(
+            colors: colors,
+            controller: _emailCtrl,
+            label: 'E-mail',
+          ),
+          const SizedBox(height: 10),
+          _buildInput(
+            colors: colors,
+            controller: _passwordCtrl,
+            label: 'Senha',
+            obscure: true,
+          ),
+          if (!_isRegisterMode) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _isForgotMode = true;
+                    _forgotStep = 1;
+                    _statusMsg = null;
+                    _isError = false;
+                    _resetCodeCtrl.clear();
+                    _newForgotPassCtrl.clear();
+                  });
+                },
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Esqueci minha senha',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.accentBlue,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (_isRegisterMode) ...[
+            const SizedBox(height: 10),
+            _buildInput(
+              colors: colors,
+              controller: _inviteCtrl,
+              label: 'Código de Convite (se configurado)',
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: colors.bgPrimary.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dados iniciais para esta nova conta:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ChoiceChip(
+                        label: const Text(
+                          'Criar Nova Base em Branco (Limpa)',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        selected: _registerWithBlankBase,
+                        onSelected: (_) =>
+                            setState(() => _registerWithBlankBase = true),
+                      ),
+                      ChoiceChip(
+                        label: const Text(
+                          'Copiar Dados Atualmente na Tela',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        selected: !_registerWithBlankBase,
+                        onSelected: (_) =>
+                            setState(() => _registerWithBlankBase = false),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 42,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.accentBlue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _isBusy ? null : _handleAuth,
+              icon: Icon(_isRegisterMode ? Icons.mail_outline : Icons.login),
+              label: Text(
+                _isBusy
+                    ? 'Processando...'
+                    : (_isRegisterMode
+                        ? 'Continuar (Enviar Código por E-mail)'
+                        : 'Conectar e Sincronizar'),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

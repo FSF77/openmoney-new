@@ -544,12 +544,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ],
               ),
               const SizedBox(height: 6),
-              RichText(
-                text: TextSpan(
+              Text.rich(
+                TextSpan(
                   style: TextStyle(
-                    fontSize: 13.5,
-                    fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+                    fontSize: 12.5,
                     color: colors.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                   children: [
                     const TextSpan(
@@ -565,30 +565,63 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         color: widget.store.hidePatrimonyBalance
                             ? colors.textPrimary
                             : (totalReal >= 0 ? colors.income : colors.expense),
-                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 3),
-              Text(
-                'Previsto no mês: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPred)}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: colors.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  children: [
+                    const TextSpan(
+                      text: 'Previsto no mês: ',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    TextSpan(
+                      text: widget.store.hidePatrimonyBalance
+                          ? '••••••'
+                          : brl(totalPred),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: widget.store.hidePatrimonyBalance
+                            ? colors.textPrimary
+                            : (totalPred >= 0 ? colors.income : colors.expense),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Previsto no ano: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPredYear)}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(height: 3),
+              Text.rich(
+                TextSpan(
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: colors.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  children: [
+                    const TextSpan(
+                      text: 'Previsto no ano: ',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    TextSpan(
+                      text: widget.store.hidePatrimonyBalance
+                          ? '••••••'
+                          : brl(totalPredYear),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: widget.store.hidePatrimonyBalance
+                            ? colors.textPrimary
+                            : (totalPredYear >= 0 ? colors.income : colors.expense),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -981,12 +1014,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    RichText(
-                      text: TextSpan(
+                    Text.rich(
+                      TextSpan(
                         style: TextStyle(
                           fontSize: 12,
-                          fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
                           color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                         children: [
                           const TextSpan(
@@ -1002,30 +1035,63 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                               color: widget.store.hidePatrimonyBalance
                                   ? colors.textPrimary
                                   : (totalReal >= 0 ? colors.income : colors.expense),
-                              fontFeatures: const [FontFeature.tabularFigures()],
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Previsto no mês: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPred)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: colors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'Previsto no mês: ',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          TextSpan(
+                            text: widget.store.hidePatrimonyBalance
+                                ? '••••••'
+                                : brl(totalPred),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: widget.store.hidePatrimonyBalance
+                                  ? colors.textPrimary
+                                  : (totalPred >= 0 ? colors.income : colors.expense),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Previsto no ano: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPredYear)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: colors.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    Text.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'Previsto no ano: ',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          TextSpan(
+                            text: widget.store.hidePatrimonyBalance
+                                ? '••••••'
+                                : brl(totalPredYear),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: widget.store.hidePatrimonyBalance
+                                  ? colors.textPrimary
+                                  : (totalPredYear >= 0 ? colors.income : colors.expense),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1483,106 +1549,239 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             ],
           ),
         ),
-        if (!kIsWeb)
-          Tooltip(
-            message:
-                'OpenMoney v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
-            child: InkWell(
-              onTap: () => showDatabaseFileManagerModal(context, widget.store),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: colors.borderGlass)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.folder_open_rounded,
-                      size: 15,
-                      color: colors.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Base Local • v${OpenMoneyVersion.version}',
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 15,
-                      color: colors.textSecondary.withValues(alpha: 0.5),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-        else
-          ListenableBuilder(
-          listenable: CloudSyncService.instance,
+        // ====================================================================
+        // Seletor Simples Local ↔ Online no Rodapé da Barra Lateral
+        // ====================================================================
+        ListenableBuilder(
+          listenable: Listenable.merge(
+            [widget.store, CloudSyncService.instance, SyncEngine.instance],
+          ),
           builder: (context, _) {
+            final isCloud = widget.store.isCloudMode;
             final cloud = CloudSyncService.instance;
-            final labelText = cloud.isAuthenticated
-                ? '${cloud.userEmail} • ${cloud.statusLabel} • v${OpenMoneyVersion.version}'
-                : 'Sincronização Cloud • v${OpenMoneyVersion.version}';
-            return Tooltip(
-              message: cloud.isAuthenticated
-                  ? '${cloud.userEmail} • ${cloud.statusLabel} • v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})'
-                  : 'Sincronização Cloud • v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
-              child: InkWell(
-                onTap: () => showCloudAccountModal(context, widget.store),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: colors.borderGlass)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        cloud.isAuthenticated
-                            ? Icons.cloud_done_rounded
-                            : Icons.cloud_outlined,
-                        size: 15,
-                        color: cloud.isAuthenticated
-                            ? colors.accentGreen
-                            : colors.textSecondary,
+            return Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.borderGlass)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 1. Segmented Control / Pílula de Alternância Rápida
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                    child: Container(
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: colors.bgPrimary.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          labelText,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: cloud.isAuthenticated
-                                ? colors.textPrimary
-                                : colors.textSecondary,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(7),
+                              onTap: () {
+                                if (isCloud) {
+                                  if (widget.store.hasConfiguredLocalDatabase) {
+                                    widget.store.switchToLocalMode();
+                                  } else {
+                                    showDatabaseFileManagerModal(context, widget.store);
+                                  }
+                                } else if (!widget.store.hasConfiguredLocalDatabase) {
+                                  showDatabaseFileManagerModal(context, widget.store);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: !isCloud
+                                      ? colors.accent.withValues(alpha: 0.18)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: !isCloud
+                                      ? Border.all(
+                                          color: colors.accent
+                                              .withValues(alpha: 0.4),
+                                          width: 1,
+                                        )
+                                      : null,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.laptop_mac_rounded,
+                                      size: 13,
+                                      color: !isCloud
+                                          ? colors.accent
+                                          : colors.textMuted,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Local',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: !isCloud
+                                            ? FontWeight.w800
+                                            : FontWeight.w500,
+                                        color: !isCloud
+                                            ? colors.textPrimary
+                                            : colors.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(7),
+                              onTap: () {
+                                if (!isCloud) {
+                                  if (cloud.isAuthenticated) {
+                                    widget.store.switchToCloudMode();
+                                  } else {
+                                    showCloudAccountModal(context, widget.store);
+                                  }
+                                } else if (!cloud.isAuthenticated) {
+                                  showCloudAccountModal(context, widget.store);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isCloud
+                                      ? colors.accentGreen
+                                          .withValues(alpha: 0.18)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: isCloud
+                                      ? Border.all(
+                                          color: colors.accentGreen
+                                              .withValues(alpha: 0.4),
+                                          width: 1,
+                                        )
+                                      : null,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_done_rounded,
+                                      size: 13,
+                                      color: isCloud
+                                          ? colors.accentGreen
+                                          : colors.textMuted,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Online',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: isCloud
+                                            ? FontWeight.w800
+                                            : FontWeight.w500,
+                                        color: isCloud
+                                            ? colors.textPrimary
+                                            : colors.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 2. Linha descritiva clicável (abre o modal correspondente)
+                  if (isCloud)
+                    Tooltip(
+                      message:
+                          '${cloud.userEmail} • ${cloud.statusLabel}\nClique para gerenciar a conta Cloud',
+                      child: InkWell(
+                        onTap: () =>
+                            showCloudAccountModal(context, widget.store),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: cloud.state == CloudSyncState.error
+                                      ? colors.warning
+                                      : colors.accentGreen,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '${cloud.userEmail.isNotEmpty ? cloud.userEmail : "Cloud"} • ${cloud.statusLabel}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right,
+                                  size: 14, color: colors.textSecondary),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 15,
-                        color: colors.textSecondary,
+                    )
+                  else
+                    Tooltip(
+                      message:
+                          'Base Local: ${widget.store.databaseDisplayName}\nClique para gerenciar arquivos e backups locais',
+                      child: InkWell(
+                        onTap: () => showDatabaseFileManagerModal(
+                            context, widget.store),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.folder_open_rounded,
+                                size: 14,
+                                color: colors.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Base Local • v${OpenMoneyVersion.version} • ${widget.store.databaseDisplayName}',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right,
+                                  size: 14, color: colors.textSecondary),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
               ),
             );
           },
