@@ -3,26 +3,26 @@
   "version": "2.3.1",
   "web": {
     "version": "2.3.1",
-    "build": 85,
+    "build": 86,
     "releaseDate": "08/11/2026"
   },
-  "build": 85,
+  "build": 86,
   "notes": "Versão Flutter agora com sincronismo online igual a versão web em https://openmoney.app.br, quer usar online, faça o backup da sua base de dados local antes de iniciar, melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
   "releaseDate": "08/11/2026",
   "windows": {
-    "build": 80,
-    "version": "2.3.0",
+    "build": 85,
+    "version": "2.3.1",
     "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.0.zip",
-    "sha256": "203c5dc2071e2c7ff23006d0b8b268c87b193dff0a3c447ee245024a3ea5dd8e",
-    "releaseDate": "07/11/2026"
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.1.zip",
+    "sha256": "9da429cf7ab90b7c8e2f222a745f4d5a9513e19fd24e302a06c4023530191429",
+    "releaseDate": "08/11/2026"
   },
   "macos": {
     "version": "2.3.1",
-    "build": 85,
+    "build": 86,
     "releaseDate": "08/11/2026",
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.1.zip",
-    "sha256": "249f47c94feaa2acb1cf0e51992e9ae0e10de38806e37b1f22199d59e42c46d6",
+    "sha256": "d100752faa96402c18d522215946dd0580fb37efb43eff5891a04b67c01b7630",
     "sizeMb": 11
   },
   "title": "OpenMoney Flutter v2.3.1"
