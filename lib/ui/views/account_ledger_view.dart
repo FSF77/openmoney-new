@@ -385,7 +385,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Saldo Conciliado (Real)',
+                                'Saldo atual',
                                 style: TextStyle(
                                     fontSize: 10.5,
                                     color: colors.textSecondary),
@@ -421,7 +421,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               Text(
                                 isCard
                                     ? 'Previsto (Fatura)'
-                                    : 'Previsto Final do Mês',
+                                    : 'Saldo previsto',
                                 style: TextStyle(
                                     fontSize: 10.5,
                                     color: colors.textSecondary),
@@ -499,10 +499,11 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
+                            minimumSize: const Size(0, 34),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           icon: const Icon(Icons.auto_fix_high, size: 14),
-                          label: const Text('Ajustar Previsões',
+                          label: const Text('Previsões',
                               style: TextStyle(fontSize: 11.5)),
                           onPressed: () {
                             final res = widget.store
@@ -514,6 +515,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           tooltip: 'Modo de abatimento das previsões',
                           icon: const Icon(Icons.tune, size: 18),
                           padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                           initialValue: widget.store.db.predMode,
                           onSelected: widget.store.setPredMode,
                           itemBuilder: (_) => const [
@@ -524,68 +526,78 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 child: Text('Por fatura (cartão)')),
                           ],
                         ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                        Tooltip(
+                          message: 'Exportar CSV',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(36, 34),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            onPressed: () {
+                              final exportTxs = isCard
+                                  ? widget.store.invoiceTransactions(
+                                      acc.id,
+                                      widget.store.month,
+                                    )
+                                  : monthData.transactions;
+                              final safeAccName = acc.name
+                                  .toLowerCase()
+                                  .replaceAll(' ', '-')
+                                  .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                              final defaultName =
+                                  'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                              final csvContent = CSVExporter.generateCSV(
+                                transactions: exportTxs,
+                                accounts: widget.store.db.accounts,
+                              );
+                              exportCsvWithFeedback(
+                                context,
+                                csv: csvContent,
+                                defaultName: defaultName,
+                                title:
+                                    'Exportar Lançamentos de ${acc.name} (CSV)',
+                              );
+                            },
+                            child: const Icon(Icons.download, size: 16),
                           ),
-                          onPressed: () {
-                            final exportTxs = isCard
-                                ? widget.store.invoiceTransactions(
-                                    acc.id,
-                                    widget.store.month,
-                                  )
-                                : monthData.transactions;
-                            final safeAccName = acc.name
-                                .toLowerCase()
-                                .replaceAll(' ', '-')
-                                .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-                            final defaultName =
-                                'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
-                            final csvContent = CSVExporter.generateCSV(
-                              transactions: exportTxs,
-                              accounts: widget.store.db.accounts,
-                            );
-                            exportCsvWithFeedback(
-                              context,
-                              csv: csvContent,
-                              defaultName: defaultName,
-                              title:
-                                  'Exportar Lançamentos de ${acc.name} (CSV)',
-                            );
-                          },
-                          child: const Icon(Icons.download, size: 16),
                         ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                        Tooltip(
+                          message: isCard
+                              ? 'Exportar Fatura PDF'
+                              : 'Exportar Extrato PDF',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(36, 34),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            onPressed: () {
+                              final exportTxs = isCard
+                                  ? widget.store.invoiceTransactions(
+                                      acc.id,
+                                      widget.store.month,
+                                    )
+                                  : monthData.transactions;
+                              final pdfBytes = PdfReportGenerator
+                                  .buildStatementOrInvoicePdfBytes(
+                                store: widget.store,
+                                account: acc,
+                                monthYM: widget.store.month,
+                                transactions: exportTxs,
+                                invoiceSummary: invSummary,
+                              );
+                              final defaultName = isCard
+                                  ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                                  : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                              PdfReportGenerator.saveAndOpenPdfBytes(
+                                context,
+                                pdfBytes: pdfBytes,
+                                defaultFileName: defaultName,
+                              );
+                            },
+                            child: const Icon(Icons.picture_as_pdf, size: 16),
                           ),
-                          onPressed: () {
-                            final exportTxs = isCard
-                                ? widget.store.invoiceTransactions(
-                                    acc.id,
-                                    widget.store.month,
-                                  )
-                                : monthData.transactions;
-                            final pdfBytes = PdfReportGenerator
-                                .buildStatementOrInvoicePdfBytes(
-                              store: widget.store,
-                              account: acc,
-                              monthYM: widget.store.month,
-                              transactions: exportTxs,
-                              invoiceSummary: invSummary,
-                            );
-                            final defaultName = isCard
-                                ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
-                                : 'Extrato-${acc.name}-${widget.store.month}.pdf';
-                            PdfReportGenerator.saveAndOpenPdfBytes(
-                              context,
-                              pdfBytes: pdfBytes,
-                              defaultFileName: defaultName,
-                            );
-                          },
-                          child: const Icon(Icons.picture_as_pdf, size: 16),
                         ),
                       ],
                     ),
@@ -698,119 +710,17 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  OutlinedButton.icon(
-                                    icon: const Icon(Icons.auto_fix_high, size: 15),
-                                    label: const Text('Ajustar Previsões',
-                                        style: TextStyle(fontSize: 11.5)),
-                                    onPressed: () {
-                                      final res = widget.store
-                                          .adjustPredictions(widget.store.month);
-                                      showPredictionsAdjustModal(context, res);
-                                    },
-                                  ),
-                                  const SizedBox(width: 2),
-                                  PopupMenuButton<String>(
-                                    tooltip:
-                                        'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
-                                    icon: const Icon(Icons.tune, size: 18),
-                                    padding: EdgeInsets.zero,
-                                    initialValue: widget.store.db.predMode,
-                                    onSelected: widget.store.setPredMode,
-                                    itemBuilder: (_) => const [
-                                      PopupMenuItem(
-                                          value: 'month', child: Text('Por mês')),
-                                      PopupMenuItem(
-                                          value: 'invoice',
-                                          child: Text('Por fatura (cartão)')),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              Tooltip(
-                                message: 'Exportar CSV',
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    final exportTxs = isCard
-                                        ? widget.store.invoiceTransactions(
-                                            acc.id,
-                                            widget.store.month,
-                                          )
-                                        : monthData.transactions;
-                                    final safeAccName = acc.name
-                                        .toLowerCase()
-                                        .replaceAll(' ', '-')
-                                        .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-                                    final defaultName =
-                                        'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
-                                    final csvContent = CSVExporter.generateCSV(
-                                      transactions: exportTxs,
-                                      accounts: widget.store.db.accounts,
-                                    );
-                                    exportCsvWithFeedback(
-                                      context,
-                                      csv: csvContent,
-                                      defaultName: defaultName,
-                                      title:
-                                          'Exportar Lançamentos de ${acc.name} (CSV)',
-                                    );
-                                  },
-                                  child: const Icon(Icons.download, size: 18),
-                                ),
-                              ),
-                              Tooltip(
-                                message: isCard
-                                    ? 'Exportar Fatura PDF'
-                                    : 'Exportar Extrato PDF',
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    final exportTxs = isCard
-                                        ? widget.store.invoiceTransactions(
-                                            acc.id,
-                                            widget.store.month,
-                                          )
-                                        : monthData.transactions;
-                                    final pdfBytes =
-                                        PdfReportGenerator.buildStatementOrInvoicePdfBytes(
-                                      store: widget.store,
-                                      account: acc,
-                                      monthYM: widget.store.month,
-                                      transactions: exportTxs,
-                                      invoiceSummary: invSummary,
-                                    );
-                                    final defaultName = isCard
-                                        ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
-                                        : 'Extrato-${acc.name}-${widget.store.month}.pdf';
-                                    PdfReportGenerator.saveAndOpenPdfBytes(
-                                      context,
-                                      pdfBytes: pdfBytes,
-                                      defaultFileName: defaultName,
-                                    );
-                                  },
-                                  child: const Icon(Icons.picture_as_pdf, size: 18),
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Lado direito: Saldo Conciliado (Real) e Previsto
+                    // Lado direito: Saldo atual e Saldo previsto
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         _HeaderBalancePill(
-                          label: 'Saldo Conciliado (Real)',
+                          label: 'Saldo atual',
                           cents: widget.store.balance(acc, predicted: false),
                           colors: colors,
                         ),
@@ -818,11 +728,172 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         _HeaderBalancePill(
                           label: isCard
                               ? 'Previsto (Fatura)'
-                              : 'Previsto Final do Mês',
+                              : 'Saldo previsto',
                           cents: widget.store.balance(acc, predicted: true),
                           colors: colors,
                         ),
                       ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Linha de Controles: Seleção de meses, Previsões, Parâmetros, CSV, PDF e Busca
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    MonthYearPickerBar(
+                      currentMonthYM: widget.store.month,
+                      availableYears: widget.store.allYearsInDatabase(),
+                      onMonthChanged: (ym) => widget.store.month = ym,
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        minimumSize: const Size(0, 34),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      icon: const Icon(Icons.auto_fix_high, size: 14),
+                      label: const Text('Previsões',
+                          style: TextStyle(fontSize: 11.5)),
+                      onPressed: () {
+                        final res = widget.store
+                            .adjustPredictions(widget.store.month);
+                        showPredictionsAdjustModal(context, res);
+                      },
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip:
+                          'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
+                      icon: const Icon(Icons.tune, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      initialValue: widget.store.db.predMode,
+                      onSelected: widget.store.setPredMode,
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                            value: 'month', child: Text('Por mês')),
+                        PopupMenuItem(
+                            value: 'invoice',
+                            child: Text('Por fatura (cartão)')),
+                      ],
+                    ),
+                    Tooltip(
+                      message: 'Exportar CSV',
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: () {
+                          final exportTxs = isCard
+                              ? widget.store.invoiceTransactions(
+                                  acc.id,
+                                  widget.store.month,
+                                )
+                              : monthData.transactions;
+                          final safeAccName = acc.name
+                              .toLowerCase()
+                              .replaceAll(' ', '-')
+                              .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+                          final defaultName =
+                              'openmoney-${safeAccName.isEmpty ? "conta" : safeAccName}-${widget.store.month}.csv';
+                          final csvContent = CSVExporter.generateCSV(
+                            transactions: exportTxs,
+                            accounts: widget.store.db.accounts,
+                          );
+                          exportCsvWithFeedback(
+                            context,
+                            csv: csvContent,
+                            defaultName: defaultName,
+                            title:
+                                'Exportar Lançamentos de ${acc.name} (CSV)',
+                          );
+                        },
+                        child: const Icon(Icons.download, size: 17),
+                      ),
+                    ),
+                    Tooltip(
+                      message: isCard
+                          ? 'Exportar Fatura PDF'
+                          : 'Exportar Extrato PDF',
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: () {
+                          final exportTxs = isCard
+                              ? widget.store.invoiceTransactions(
+                                  acc.id,
+                                  widget.store.month,
+                                )
+                              : monthData.transactions;
+                          final pdfBytes =
+                              PdfReportGenerator.buildStatementOrInvoicePdfBytes(
+                            store: widget.store,
+                            account: acc,
+                            monthYM: widget.store.month,
+                            transactions: exportTxs,
+                            invoiceSummary: invSummary,
+                          );
+                          final defaultName = isCard
+                              ? 'Fatura-${acc.name}-${widget.store.month}.pdf'
+                              : 'Extrato-${acc.name}-${widget.store.month}.pdf';
+                          PdfReportGenerator.saveAndOpenPdfBytes(
+                            context,
+                            pdfBytes: pdfBytes,
+                            defaultFileName: defaultName,
+                          );
+                        },
+                        child: const Icon(Icons.picture_as_pdf, size: 17),
+                      ),
+                    ),
+                    Container(
+                      width: 200,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceGlass,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        style: const TextStyle(fontSize: 12),
+                        textAlignVertical: TextAlignVertical.center,
+                        decoration: InputDecoration(
+                          hintText: 'Filtrar no mês...',
+                          hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: colors.textMuted,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.filter_list,
+                            size: 16,
+                            color: colors.textSecondary,
+                          ),
+                          suffixIcon: _searchCtrl.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 14),
+                                  splashRadius: 14,
+                                  onPressed: () {
+                                    setState(() => _searchCtrl.clear());
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
                     ),
                   ],
                 ),
@@ -930,62 +1001,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     ],
                   ),
                 ],
-                const Divider(height: 18),
-                // Linha de Navegação no Mês & Busca Justificada à Esquerda
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    MonthYearPickerBar(
-                      currentMonthYM: widget.store.month,
-                      availableYears: widget.store.allYearsInDatabase(),
-                      onMonthChanged: (ym) => widget.store.month = ym,
-                    ),
-                    Container(
-                      width: 220,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceGlass,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: colors.borderGlass),
-                      ),
-                      child: TextField(
-                        controller: _searchCtrl,
-                        style: const TextStyle(fontSize: 12.5),
-                        textAlignVertical: TextAlignVertical.center,
-                        decoration: InputDecoration(
-                          hintText: 'Filtrar no mês...',
-                          hintStyle: TextStyle(
-                            fontSize: 12,
-                            color: colors.textMuted,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.filter_list,
-                            size: 16,
-                            color: colors.textSecondary,
-                          ),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 14),
-                                  splashRadius: 14,
-                                  onPressed: () {
-                                    setState(() => _searchCtrl.clear());
-                                  },
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                  ],
-                ),
                 ],
                 if (pendingCount > 0) ...[
                   SizedBox(height: isMobile ? 6 : 10),
@@ -1095,7 +1110,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       ),
                       SizedBox(
-                        width: 142,
+                        width: 118,
                         child: TextField(
                           controller: _dateCtrl,
                           style: const TextStyle(fontSize: 13),
@@ -1103,17 +1118,14 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             labelText: 'Data',
                             labelStyle: const TextStyle(fontSize: 13),
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
+                            contentPadding: const EdgeInsets.fromLTRB(8, 10, 2, 10),
                             border: const OutlineInputBorder(),
                             suffixIconConstraints: const BoxConstraints(
-                              minWidth: 28,
+                              minWidth: 24,
                               maxHeight: 24,
                             ),
                             suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_month, size: 18),
+                              icon: const Icon(Icons.calendar_month, size: 17),
                               tooltip: 'Escolher data no calendário',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -1192,7 +1204,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       ),
                       SizedBox(
-                        width: 140,
+                        width: 118,
                         child: DropdownButtonFormField<String>(
                           initialValue: _mode,
                           isExpanded: true,
@@ -1206,7 +1218,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             isDense: true,
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
+                              horizontal: 8,
                               vertical: 8,
                             ),
                           ),
@@ -1237,7 +1249,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       ),
                       if (_mode == 'installment')
                         SizedBox(
-                          width: 100,
+                          width: 88,
                           child: DropdownButtonFormField<int>(
                             initialValue: _installments,
                             isExpanded: true,
@@ -1251,7 +1263,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               isDense: true,
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10,
+                                horizontal: 8,
                                 vertical: 8,
                               ),
                             ),
@@ -1270,7 +1282,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       if (_mode == 'recurring')
                         SizedBox(
-                          width: 145,
+                          width: 120,
                           child: DropdownButtonFormField<String>(
                             initialValue: _freq,
                             isExpanded: true,
@@ -1284,7 +1296,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               isDense: true,
                               border: OutlineInputBorder(),
                               contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10,
+                                horizontal: 8,
                                 vertical: 8,
                               ),
                             ),
