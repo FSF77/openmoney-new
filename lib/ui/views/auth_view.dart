@@ -292,6 +292,7 @@ class _AuthViewState extends State<AuthView> {
 
       if (!mounted) return;
       if (res.ok) {
+        await widget.store.switchToCloudMode();
         if (_importedInitialJson != null) {
           widget.store.loadFromJsonMap(
             _importedInitialJson!,
@@ -345,6 +346,7 @@ class _AuthViewState extends State<AuthView> {
         customApiUrl: customUrl.isEmpty ? null : customUrl,
       );
       if (res.ok) {
+        await store.switchToCloudMode();
         await store.syncFromCloud();
         store.saveCloudSessionToConfig();
         CloudSyncService.instance.setWebAuthFlowInProgress(false);
@@ -515,11 +517,10 @@ class _AuthViewState extends State<AuthView> {
                                   children: [
                                     IconButton(
                                       visualDensity: VisualDensity.compact,
-                                      icon: Icon(
-                                        Icons.delete_outline_rounded,
+                                      icon: const Icon(
+                                        Icons.delete_outline,
                                         size: 18,
-                                        color: colors.accentRed
-                                            .withValues(alpha: 0.8),
+                                        color: Colors.redAccent,
                                       ),
                                       tooltip:
                                           'Remover conta deste dispositivo',

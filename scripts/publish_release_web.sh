@@ -16,7 +16,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  🌐 OpenMoney Web (Cloudflare Pages) — Build v${CURRENT_VERSION}+${CURRENT_BUILD}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-flutter build web --release
+flutter build web --release --no-tree-shake-icons
 
 # Atualiza a pasta web-dist/ para integração direta do Cloudflare Pages via GitHub
 rm -rf "${ROOT_DIR}/web-dist"

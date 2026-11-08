@@ -80,9 +80,18 @@ class MoneyStore extends ChangeNotifier {
   Database db = Database();
   String dbPath = '';
   String _storageMode = 'local';
-  String get storageMode => _storageMode;
-  bool get isCloudMode =>
-      _storageMode == 'cloud' && CloudSyncService.instance.isAuthenticated;
+  String get storageMode {
+    if (isCloudMode) return 'cloud';
+    return _storageMode;
+  }
+  bool get isCloudMode {
+    final cloud = CloudSyncService.instance;
+    if (!cloud.isAuthenticated) return false;
+    if (kIsWeb) return !cloud.isWebOfflineGuestMode;
+    return _storageMode == 'cloud' ||
+        dbPath.startsWith('cloud://') ||
+        !hasConfiguredLocalDatabase;
+  }
   String _lastLocalDbPath = '';
   String get lastLocalDbPath => _lastLocalDbPath;
   bool _allowDestructiveOverwrite = false;
@@ -388,8 +397,11 @@ class MoneyStore extends ChangeNotifier {
     }
 
     // 3. Inicialização no Modo Online (Cloud Sync v2 em Tempo Real)
-    if ((kIsWeb && CloudSyncService.instance.isAuthenticated) ||
-        (!kIsWeb && _storageMode == 'cloud' && CloudSyncService.instance.isAuthenticated)) {
+    if ((kIsWeb && CloudSyncService.instance.isAuthenticated && !CloudSyncService.instance.isWebOfflineGuestMode) ||
+        (CloudSyncService.instance.isAuthenticated &&
+            (_storageMode == 'cloud' ||
+                !hasConfiguredLocalDatabase ||
+                dbPath.startsWith('cloud://')))) {
       _storageMode = 'cloud';
       dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
       cfg['storageMode'] = 'cloud';
@@ -820,6 +832,7 @@ class MoneyStore extends ChangeNotifier {
         v: 7,
       );
       if (isCloudMode || (kIsWeb && CloudSyncService.instance.isAuthenticated)) {
+        _storageMode = 'cloud';
         dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
       }
       rebuildIndexes();
@@ -1134,6 +1147,7 @@ class MoneyStore extends ChangeNotifier {
       _writeConfig(cfg);
     }
     if (kIsWeb && CloudSyncService.instance.isAuthenticated) {
+      _storageMode = 'cloud';
       dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
     }
     migrate();
@@ -1178,6 +1192,7 @@ class MoneyStore extends ChangeNotifier {
       _writeConfig(cfg);
     }
     if (CloudSyncService.instance.isAuthenticated) {
+      _storageMode = 'cloud';
       dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
     }
     migrate();
@@ -1201,6 +1216,7 @@ class MoneyStore extends ChangeNotifier {
     cancelPendingSave();
     if (!CloudSyncService.instance.isAuthenticated) return false;
 
+    _storageMode = 'cloud';
     dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
     SyncEngine.instance.start(
       this,
