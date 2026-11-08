@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/audit_log_manager.dart';
 import '../../store/money_store.dart';
@@ -453,6 +454,26 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  if (kIsWeb) {
+                    return Row(
+                      children: [
+                        Text(
+                          '${_filteredEntries.length} registro(s) exibido(s)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Fechar'),
+                        ),
+                      ],
+                    );
+                  }
+
                   final isCompact = constraints.maxWidth < 560;
                   if (isCompact) {
                     return Row(
