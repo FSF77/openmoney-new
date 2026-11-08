@@ -31947,7 +31947,7 @@ s=7
 return A.t(A.an0(),$async$SA)
 case 7:n=b
 if(n.c.length!==0){m=A.bF(n.d,null)
-if(A.bk5(n.c,m,"2.3.0",83)||n.c==="2.3.0"){$.Sz=n.c
+if(A.bk5(n.c,m,"2.3.1",84)||n.c==="2.3.1"){$.Sz=n.c
 if(m!=null)$.amP=m}}p=2
 s=6
 break
@@ -126980,8 +126980,8 @@ $.hC=A.o(t.N,t.H3)
 $.aWz=A.o(t.N,t.CG)
 $.b8m=null
 $.b9g=!1
-$.Sz="2.3.0"
-$.amP=83
+$.Sz="2.3.1"
+$.amP=84
 $.b5b=!1
 $.b5e=null
 $.b8q=null
