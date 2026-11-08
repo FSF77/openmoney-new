@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/main.dart';
 import 'package:openmoney/models/openmoney_models.dart';
+import 'package:openmoney/services/audit_log_manager.dart';
 import 'package:openmoney/services/backup_manager.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
 import 'package:openmoney/services/importers_exporters.dart';
@@ -1505,6 +1506,46 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(restored!.accounts.first.name, 'Nuvem CC');
     expect(restored.txs.first.payee, 'Mercado');
     expect(restored.txs.first.amt, -1500);
+
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
+  });
+
+  test('32. AuditLogManager handles Cloud mode databases and local/remote audit persistence', () async {
+    final tempDir = Directory.systemTemp.createTempSync('om_audit_test_');
+    AuditLogManager.instance.defaultAppSupportDirPath = tempDir.path;
+
+    // 1. Path resolution for cloud mode
+    final logPath = AuditLogManager.instance.logFilePathForDatabase(
+      'cloud://fabiano@teste.com',
+      appSupportDirPath: tempDir.path,
+    );
+    expect(logPath.contains('openmoney-cloud-fabiano_teste.com.log'), true);
+
+    // 2. Logging in cloud mode
+    AuditLogManager.instance.logAsync(
+      dbPath: 'cloud://fabiano@teste.com',
+      appSupportDirPath: tempDir.path,
+      action: AuditAction.create,
+      entity: AuditEntity.transaction,
+      id: 'tx_cloud_1',
+      summary: 'Lançamento em conta nuvem: Supermercado (R\$ 120,00)',
+      details: {'payee': 'Supermercado', 'amt': -12000},
+    );
+
+    // Allow microtask to finish writing
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    final localLogs = await AuditLogManager.instance.readRecentLogs(
+      dbPath: 'cloud://fabiano@teste.com',
+      appSupportDirPath: tempDir.path,
+      limit: 10,
+    );
+    expect(localLogs.isNotEmpty, true);
+    expect(localLogs.first.summary.contains('Supermercado'), true);
+    expect(localLogs.first.action, AuditAction.create);
+    expect(localLogs.first.entity, AuditEntity.transaction);
 
     try {
       tempDir.deleteSync(recursive: true);
