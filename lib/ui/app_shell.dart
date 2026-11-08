@@ -44,6 +44,7 @@ class OpenMoneyAppShell extends StatefulWidget {
 
 class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
   late final Listenable _shortcutReadinessListenable;
+  bool _isMobileHomeActive = true;
 
   @override
   void initState() {
@@ -101,6 +102,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
       }
       try {
         final resolved = ShortcutUrlService.resolveDraft(draft, widget.store);
+        setState(() {
+          _isMobileHomeActive = false;
+        });
         widget.store.navigateTo(
           NavModule.account,
           accountId: resolved.accountId,
@@ -263,8 +267,40 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ? null
                   : AppBar(
                       backgroundColor: colors.bgSecondary,
+                      leadingWidth: 96,
+                      titleSpacing: 2,
+                      leading: Builder(
+                        builder: (ctx) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 4),
+                            IconButton(
+                              tooltip: 'Menu Lateral',
+                              icon: const Icon(Icons.menu),
+                              onPressed: () => Scaffold.of(ctx).openDrawer(),
+                            ),
+                            IconButton(
+                              tooltip: 'Tela Inicial',
+                              icon: Icon(
+                                _isMobileHomeActive
+                                    ? Icons.home_rounded
+                                    : Icons.home_outlined,
+                                color:
+                                    _isMobileHomeActive ? colors.accent : null,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isMobileHomeActive = true;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                       title: Text(
-                        widget.store.windowTitle,
+                        _isMobileHomeActive
+                            ? 'OpenMoney'
+                            : widget.store.windowTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -273,13 +309,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                       actions: [
-                        Center(
-                          child: ZoomControlPill(
-                            store: widget.store,
-                            colors: colors,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
                         ListenableBuilder(
                           listenable: CloudSyncService.instance,
                           builder: (context, _) {
@@ -328,54 +357,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                     ),
-              bottomNavigationBar: isDesktopOrTablet
-                  ? null
-                  : NavigationBar(
-                      selectedIndex: _mobileNavIndex(widget.store.activeModule),
-                      onDestinationSelected: (idx) {
-                        setState(() {
-                          switch (idx) {
-                            case 0:
-                              widget.store.activeModule = NavModule.account;
-                              break;
-                            case 1:
-                              widget.store.activeModule = NavModule.dueBills;
-                              break;
-                            case 2:
-                              widget.store.activeModule = NavModule.cashFlow;
-                              break;
-                            case 3:
-                              widget.store.activeModule = NavModule.reports;
-                              break;
-                            case 4:
-                              widget.store.activeModule = NavModule.search;
-                              break;
-                          }
-                        });
-                      },
-                      destinations: const [
-                        NavigationDestination(
-                          icon: Icon(Icons.account_balance_wallet_outlined),
-                          label: 'Extrato',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.notifications_active_outlined),
-                          label: 'Vencimentos',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.grid_on_rounded),
-                          label: 'Fluxo',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.pie_chart_outline),
-                          label: 'Relatório',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.search),
-                          label: 'Buscar',
-                        ),
-                      ],
-                    ),
               body: SafeArea(
                 child: Row(
                   children: [
@@ -398,7 +379,11 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: _buildActiveMainView(context),
+                            child: _buildActiveMainView(
+                              context,
+                              isDesktopOrTablet: isDesktopOrTablet,
+                              colors: colors,
+                            ),
                           ),
                           if (isDesktopOrTablet && !widget.store.isSidebarVisible)
                             Positioned(
@@ -419,7 +404,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                                       horizontal: 10,
                                       vertical: 6,
                                     ),
-                                    child: Row(
+                                  child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
@@ -455,25 +440,14 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     );
   }
 
-  int _mobileNavIndex(NavModule m) {
-    switch (m) {
-      case NavModule.account:
-        return 0;
-      case NavModule.dueBills:
-      case NavModule.installments:
-        return 1;
-      case NavModule.cashFlow:
-        return 2;
-      case NavModule.reports:
-      case NavModule.budget:
-      case NavModule.categories:
-        return 3;
-      case NavModule.search:
-        return 4;
+  Widget _buildActiveMainView(
+    BuildContext context, {
+    required bool isDesktopOrTablet,
+    required OpenMoneyColors colors,
+  }) {
+    if (!isDesktopOrTablet && _isMobileHomeActive) {
+      return _buildMobileHomeView(context, colors);
     }
-  }
-
-  Widget _buildActiveMainView(BuildContext context) {
     switch (widget.store.activeModule) {
       case NavModule.account:
         final acc = widget.store.accById(widget.store.selectedAccountId) ??
@@ -503,6 +477,344 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     }
   }
 
+  Widget _buildMobileHomeView(BuildContext context, OpenMoneyColors colors) {
+    final totalReal = widget.store.totalBalance(predicted: false);
+    final totalPred = widget.store.totalBalance(predicted: true);
+    final totalPredYear = widget.store.totalBalancePredictedYear();
+
+    final favAccounts = widget.store.favoriteAccounts;
+    final regActive = widget.store.regularActiveAccounts;
+    final regInactive = widget.store.regularInactiveAccounts;
+
+    void openAccountLedger(String accountId) {
+      setState(() {
+        _isMobileHomeActive = false;
+      });
+      widget.store.navigateTo(NavModule.account, accountId: accountId);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
+      children: [
+        // Card Patrimônio Consolidado
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: colors.surfaceGlass,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Patrimônio consolidado',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: widget.store.toggleHidePatrimonyBalance,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        widget.store.hidePatrimonyBalance
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: 16,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              RichText(
+                text: TextSpan(
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+                    color: colors.textPrimary,
+                  ),
+                  children: [
+                    const TextSpan(
+                      text: 'Real: ',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    TextSpan(
+                      text: widget.store.hidePatrimonyBalance
+                          ? '••••••'
+                          : brl(totalReal),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: widget.store.hidePatrimonyBalance
+                            ? colors.textPrimary
+                            : (totalReal >= 0 ? colors.income : colors.expense),
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'Previsto no mês: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPred)}',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Previsto no ano: ${widget.store.hidePatrimonyBalance ? '••••••' : brl(totalPredYear)}',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Botão Novo Lançamento
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.add_circle, size: 18),
+            label: const Text(
+              'Novo Lançamento',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: 0.2,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 1,
+            ),
+            onPressed: () {
+              showTransactionCreateModal(
+                context,
+                widget.store,
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 1. Contas Favoritas (se houver)
+        if (favAccounts.isNotEmpty) ...[
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: widget.store.toggleSidebarFavorites,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.store.sidebarShowFavorites
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 16,
+                    color: colors.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'CONTAS FAVORITAS ★ (${favAccounts.length})',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (widget.store.sidebarShowFavorites)
+            ...favAccounts.map((a) {
+              final idx = favAccounts.indexOf(a);
+              return _SidebarAccountTile(
+                key: ValueKey('mob_fav_${a.id}'),
+                account: a,
+                balanceCents: widget.store.balance(a, predicted: false),
+                predCents: widget.store.balance(a, predicted: true),
+                selected: false,
+                colors: colors,
+                store: widget.store,
+                isFirstInGroup: idx == 0,
+                isLastInGroup: idx == favAccounts.length - 1,
+                onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                  favAccounts,
+                  a.id,
+                  -1,
+                ),
+                onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                  favAccounts,
+                  a.id,
+                  1,
+                ),
+                onTap: () => openAccountLedger(a.id),
+              );
+            }),
+          const SizedBox(height: 10),
+        ],
+
+        // 2. Contas Ativas
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: widget.store.toggleSidebarActiveAccounts,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      widget.store.sidebarShowActiveAccounts
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      size: 16,
+                      color: colors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'CONTAS ATIVAS (${regActive.length})',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Nova Conta',
+                  icon: Icon(
+                    Icons.add_circle_outline,
+                    size: 18,
+                    color: colors.accent,
+                  ),
+                  onPressed: () => showAccountModal(context, widget.store),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (widget.store.sidebarShowActiveAccounts)
+          ...regActive.map((a) {
+            final idx = regActive.indexOf(a);
+            return _SidebarAccountTile(
+              key: ValueKey('mob_act_${a.id}'),
+              account: a,
+              balanceCents: widget.store.balance(a, predicted: false),
+              predCents: widget.store.balance(a, predicted: true),
+              selected: false,
+              colors: colors,
+              store: widget.store,
+              isFirstInGroup: idx == 0,
+              isLastInGroup: idx == regActive.length - 1,
+              onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                regActive,
+                a.id,
+                -1,
+              ),
+              onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                regActive,
+                a.id,
+                1,
+              ),
+              onTap: () => openAccountLedger(a.id),
+            );
+          }),
+
+        // 3. Contas Inativas
+        if (regInactive.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: widget.store.toggleSidebarInactiveAccounts,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.store.sidebarShowInactiveAccounts
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 16,
+                    color: colors.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'CONTAS INATIVAS (${regInactive.length})',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (widget.store.sidebarShowInactiveAccounts)
+            ...regInactive.map((a) {
+              final idx = regInactive.indexOf(a);
+              return _SidebarAccountTile(
+                key: ValueKey('mob_inact_${a.id}'),
+                account: a,
+                balanceCents: widget.store.balance(a, predicted: false),
+                predCents: widget.store.balance(a, predicted: true),
+                selected: false,
+                colors: colors,
+                store: widget.store,
+                isFirstInGroup: idx == 0,
+                isLastInGroup: idx == regInactive.length - 1,
+                onMoveUp: () => widget.store.moveAccountStepWithinGroup(
+                  regInactive,
+                  a.id,
+                  -1,
+                ),
+                onMoveDown: () => widget.store.moveAccountStepWithinGroup(
+                  regInactive,
+                  a.id,
+                  1,
+                ),
+                onTap: () => openAccountLedger(a.id),
+              );
+            }),
+        ],
+      ],
+    );
+  }
+
   Widget _buildSidebarContent(
     BuildContext context,
     OpenMoneyColors colors, {
@@ -518,6 +830,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     final regInactive = widget.store.regularInactiveAccounts;
 
     void selectModule(NavModule m, {String? accountId}) {
+      setState(() {
+        _isMobileHomeActive = false;
+      });
       widget.store.navigateTo(m, accountId: accountId);
       if (closeDrawerOnSelect) {
         Navigator.of(context).pop();

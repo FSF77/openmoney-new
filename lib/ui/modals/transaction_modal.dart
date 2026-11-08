@@ -296,16 +296,9 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
         ? _catSelection
         : (dropdownItems.isNotEmpty ? dropdownItems.first.value! : '');
 
-    return AlertDialog(
-      backgroundColor: colors.bgSecondary,
-      title: const Text('Editar Lançamento'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isSmallScreen = MediaQuery.of(context).size.width < 640;
+
+    final formFields = <Widget>[
               DropdownButtonFormField<String>(
                 initialValue: _accId,
                 isDense: true,
@@ -506,92 +499,133 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   onSelectionChanged: (s) => setState(() => _scope = s.first),
                 ),
               ],
+            ];
+
+    final copyBtn = widget.tx.auto != true
+        ? TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: colors.accent,
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.copy_rounded, size: 17),
+            label: const Text('Copiar'),
+            onPressed: () {
+              Navigator.pop(context);
+              showTransactionCopyModal(context, widget.store, widget.tx);
+            },
+          )
+        : const SizedBox.shrink();
+
+    final deleteBtn = TextButton.icon(
+      style: TextButton.styleFrom(
+        foregroundColor: colors.expense,
+        visualDensity: VisualDensity.compact,
+      ),
+      icon: const Icon(Icons.delete_outline, size: 17),
+      label: const Text('Excluir'),
+      onPressed: () {
+        Navigator.pop(context);
+        showDeleteTransactionDialog(context, widget.store, widget.tx);
+      },
+    );
+
+    if (isSmallScreen) {
+      return Dialog.fullscreen(
+        backgroundColor: colors.bgSecondary,
+        child: Scaffold(
+          backgroundColor: colors.bgSecondary,
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
+            backgroundColor: colors.bgSecondary,
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar',
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: const Text(
+              'Editar Lançamento',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            actions: [
+              if (widget.tx.auto != true) copyBtn,
+              deleteBtn,
             ],
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...formFields,
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Salvar'),
+                          onPressed: _handleSave,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AlertDialog(
+      backgroundColor: colors.bgSecondary,
+      title: const Text('Editar Lançamento'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: formFields,
           ),
         ),
       ),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       actions: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 480;
-            final copyBtn = widget.tx.auto != true
-                ? TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: colors.accent,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    icon: const Icon(Icons.copy_rounded, size: 17),
-                    label: const Text('Copiar'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      showTransactionCopyModal(context, widget.store, widget.tx);
-                    },
-                  )
-                : const SizedBox.shrink();
-
-            final deleteBtn = TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: colors.expense,
-                visualDensity: VisualDensity.compact,
-              ),
-              icon: const Icon(Icons.delete_outline, size: 17),
-              label: const Text('Excluir'),
-              onPressed: () {
-                Navigator.pop(context);
-                showDeleteTransactionDialog(context, widget.store, widget.tx);
-              },
-            );
-
-            final cancelBtn = TextButton(
+        Row(
+          children: [
+            if (widget.tx.auto != true) copyBtn,
+            if (widget.tx.auto != true) const SizedBox(width: 6),
+            deleteBtn,
+            const Spacer(),
+            TextButton(
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancelar'),
-            );
-
-            final saveBtn = FilledButton.icon(
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
               style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
               icon: const Icon(Icons.check, size: 18),
-              label: const Text('Salvar Alterações'),
+              label: const Text('Salvar'),
               onPressed: _handleSave,
-            );
-
-            if (isNarrow) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      if (widget.tx.auto != true) copyBtn,
-                      if (widget.tx.auto != true) const SizedBox(width: 8),
-                      deleteBtn,
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      cancelBtn,
-                      const SizedBox(width: 8),
-                      saveBtn,
-                    ],
-                  ),
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                if (widget.tx.auto != true) copyBtn,
-                if (widget.tx.auto != true) const SizedBox(width: 6),
-                deleteBtn,
-                const Spacer(),
-                cancelBtn,
-                const SizedBox(width: 8),
-                saveBtn,
-              ],
-            );
-          },
+            ),
+          ],
         ),
       ],
     );
@@ -883,30 +917,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         ? _catSelection
         : (dropdownItems.isNotEmpty ? dropdownItems.first.value! : '');
 
-    return AlertDialog(
-      backgroundColor: colors.bgSecondary,
-      title: Row(
-        children: [
-          Icon(
-            widget.fromShortcut ? Icons.bolt_rounded : Icons.add_circle,
-            color: colors.accent,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            widget.fromShortcut
-                ? 'Confirmar Lançamento (Atalho)'
-                : 'Novo Lançamento',
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isSmallScreen = MediaQuery.of(context).size.width < 640;
+
+    final formFields = <Widget>[
               if (widget.fromShortcut) ...[
                 Container(
                   width: double.infinity,
@@ -932,7 +945,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Dados preenchidos via parâmetro de URL / Atalho. Confira abaixo e clique em Adicionar.',
+                          'Dados preenchidos via parâmetro de URL / Atalho. Confira abaixo e clique em Salvar.',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -1299,7 +1312,109 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   ),
                 ],
               ],
-            ],
+            ];
+
+    if (isSmallScreen) {
+      return Dialog.fullscreen(
+        backgroundColor: colors.bgSecondary,
+        child: Scaffold(
+          backgroundColor: colors.bgSecondary,
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
+            backgroundColor: colors.bgSecondary,
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar',
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  widget.fromShortcut ? Icons.bolt_rounded : Icons.add_circle,
+                  color: colors.accent,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    widget.fromShortcut
+                        ? 'Confirmar Lançamento'
+                        : 'Novo Lançamento',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...formFields,
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Salvar'),
+                          onPressed: _commitCreate,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AlertDialog(
+      backgroundColor: colors.bgSecondary,
+      title: Row(
+        children: [
+          Icon(
+            widget.fromShortcut ? Icons.bolt_rounded : Icons.add_circle,
+            color: colors.accent,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            widget.fromShortcut
+                ? 'Confirmar Lançamento (Atalho)'
+                : 'Novo Lançamento',
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: formFields,
           ),
         ),
       ),
@@ -1310,7 +1425,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         ),
         FilledButton.icon(
           icon: const Icon(Icons.check, size: 18),
-          label: const Text('Salvar Lançamento'),
+          label: const Text('Salvar'),
           onPressed: _commitCreate,
         ),
       ],
@@ -1523,22 +1638,9 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         ? _catSelection
         : (dropdownItems.isNotEmpty ? dropdownItems.first.value! : '');
 
-    return AlertDialog(
-      backgroundColor: colors.bgSecondary,
-      title: Row(
-        children: [
-          Icon(Icons.copy_rounded, color: colors.accent, size: 20),
-          const SizedBox(width: 8),
-          const Text('Copiar Lançamento'),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isSmallScreen = MediaQuery.of(context).size.width < 640;
+
+    final formFields = <Widget>[
               // Conta destino
               DropdownButtonFormField<String>(
                 initialValue: _accId,
@@ -1863,7 +1965,89 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   ),
                 ],
               ],
-            ],
+            ];
+
+    if (isSmallScreen) {
+      return Dialog.fullscreen(
+        backgroundColor: colors.bgSecondary,
+        child: Scaffold(
+          backgroundColor: colors.bgSecondary,
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
+            backgroundColor: colors.bgSecondary,
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar',
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.copy_rounded, color: colors.accent, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'Copiar Lançamento',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...formFields,
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Salvar'),
+                          onPressed: _commitCopy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AlertDialog(
+      backgroundColor: colors.bgSecondary,
+      title: Row(
+        children: [
+          Icon(Icons.copy_rounded, color: colors.accent, size: 20),
+          const SizedBox(width: 8),
+          const Text('Copiar Lançamento'),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: formFields,
           ),
         ),
       ),
@@ -1874,7 +2058,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         ),
         FilledButton.icon(
           icon: const Icon(Icons.check, size: 18),
-          label: const Text('Criar Lançamento'),
+          label: const Text('Salvar'),
           onPressed: _commitCopy,
         ),
       ],
