@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../models/openmoney_models.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
@@ -18,6 +19,7 @@ class AuthView extends StatefulWidget {
 
 class _AuthViewState extends State<AuthView> {
   bool _isRegisterMode = false;
+  bool _registerStep2 = false;
   bool _isForgotMode = false;
   int _forgotStep = 1;
   bool _obscurePassword = true;
@@ -31,6 +33,7 @@ class _AuthViewState extends State<AuthView> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _registerCodeCtrl = TextEditingController();
   final _resetCodeCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
   final _inviteCtrl = TextEditingController();
@@ -49,6 +52,7 @@ class _AuthViewState extends State<AuthView> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _registerCodeCtrl.dispose();
     _resetCodeCtrl.dispose();
     _newPasswordCtrl.dispose();
     _inviteCtrl.dispose();
@@ -178,65 +182,178 @@ class _AuthViewState extends State<AuthView> {
     }
   }
 
-  Future<void> _submit() async {
-    if (_isLoading) return;
+  Future<void> _requestRegister() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final password = _passwordCtrl.text;
+    final invite = _inviteCtrl.text.trim();
+    final customUrl = _serverUrlCtrl.text.trim();
+
+    if (name.isEmpty) {
+      setState(() {
+        _errorMessage = 'Informe seu nome para o cadastro.';
+        _infoMessage = null;
+      });
+      return;
+    }
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _errorMessage = 'Informe um endereço de e-mail válido.';
+        _infoMessage = null;
+      });
+      return;
+    }
+    if (password.length < 8) {
+      setState(() {
+        _errorMessage = 'A senha deve ter no mínimo 8 caracteres para sua segurança.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    try {
+      final initialPayload = _importedInitialJson ??
+          Database(
+            accounts: [
+              Account(
+                id: 'a1',
+                name: 'Conta Corrente',
+                type: 'Corrente',
+                opening: 0,
+              ),
+            ],
+            cats: List<CategoryItem>.from(kDefaultCats),
+            txs: [],
+            recs: [],
+            budgets: {},
+            v: 7,
+          ).toJson();
+
+      final res = await CloudSyncService.instance.requestRegister(
+        name: name,
+        email: email,
+        password: password,
+        inviteCode: invite.isEmpty ? null : invite,
+        customApiUrl: customUrl.isEmpty ? null : customUrl,
+        initialPayload: initialPayload,
+      );
+
+      if (!mounted) return;
+      if (res.ok) {
+        setState(() {
+          _registerStep2 = true;
+          _infoMessage = res.message ??
+              'Código de confirmação enviado para seu e-mail! Verifique sua caixa de entrada.';
+          _errorMessage = null;
+        });
+      } else {
+        setState(() {
+          _errorMessage = res.error;
+          _infoMessage = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _confirmRegister() async {
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final code = _registerCodeCtrl.text.trim();
+    final customUrl = _serverUrlCtrl.text.trim();
+
+    if (code.length != 6) {
+      setState(() {
+        _errorMessage = 'O código de confirmação deve ter exatamente 6 dígitos.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    CloudSyncService.instance.setWebAuthFlowInProgress(true);
+    try {
+      final res = await CloudSyncService.instance.confirmRegister(
+        email: email,
+        code: code,
+        customApiUrl: customUrl.isEmpty ? null : customUrl,
+      );
+
+      if (!mounted) return;
+      if (res.ok) {
+        if (_importedInitialJson != null) {
+          widget.store.loadFromJsonMap(
+            _importedInitialJson!,
+            virtualPath: 'cloud://${CloudSyncService.instance.userEmail}',
+          );
+          await widget.store.pushLocalToCloud(force: true);
+        } else {
+          await widget.store.syncFromCloud();
+        }
+        widget.store.saveCloudSessionToConfig();
+        CloudSyncService.instance.setWebAuthFlowInProgress(false);
+        return;
+      } else {
+        setState(() {
+          _errorMessage = res.error;
+          _infoMessage = null;
+        });
+      }
+    } finally {
+      CloudSyncService.instance.setWebAuthFlowInProgress(false);
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_isLoading) return;
+
+    if (_isRegisterMode) {
+      if (!_registerStep2) {
+        await _requestRegister();
+      } else {
+        await _confirmRegister();
+      }
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
     });
 
     final store = widget.store;
-    final importedJson = _importedInitialJson;
     final customUrl = _serverUrlCtrl.text.trim();
     CloudSyncService.instance.setWebAuthFlowInProgress(true);
 
     try {
-      if (_isRegisterMode) {
-        // Cria a conta de forma instantânea e, em seguida, envia a base via stream binário Gzip
-        final res = await CloudSyncService.instance.register(
-          name: _nameCtrl.text,
-          email: _emailCtrl.text,
-          password: _passwordCtrl.text,
-          inviteCode: _inviteCtrl.text,
-          customApiUrl: customUrl.isEmpty ? null : customUrl,
-        );
-        if (res.ok) {
-          if (importedJson != null) {
-            store.loadFromJsonMap(
-              importedJson,
-              virtualPath: 'cloud://${CloudSyncService.instance.userEmail}',
-            );
-            await store.pushLocalToCloud(force: true);
-          } else {
-            await store.syncFromCloud();
-          }
-          store.saveCloudSessionToConfig();
-          CloudSyncService.instance.setWebAuthFlowInProgress(false);
-          return;
-        } else {
-          if (mounted) {
-            setState(() {
-              _errorMessage = res.error;
-            });
-          }
-        }
+      final res = await CloudSyncService.instance.login(
+        email: _emailCtrl.text,
+        password: _passwordCtrl.text,
+        customApiUrl: customUrl.isEmpty ? null : customUrl,
+      );
+      if (res.ok) {
+        await store.syncFromCloud();
+        store.saveCloudSessionToConfig();
+        CloudSyncService.instance.setWebAuthFlowInProgress(false);
+        return;
       } else {
-        final res = await CloudSyncService.instance.login(
-          email: _emailCtrl.text,
-          password: _passwordCtrl.text,
-          customApiUrl: customUrl.isEmpty ? null : customUrl,
-        );
-        if (res.ok) {
-          await store.syncFromCloud();
-          store.saveCloudSessionToConfig();
-          CloudSyncService.instance.setWebAuthFlowInProgress(false);
-          return;
-        } else {
-          if (mounted) {
-            setState(() {
-              _errorMessage = res.error;
-            });
-          }
+        if (mounted) {
+          setState(() {
+            _errorMessage = res.error;
+          });
         }
       }
     } finally {
@@ -381,58 +498,75 @@ class _AuthViewState extends State<AuthView> {
                                     color: colors.textPrimary,
                                   ),
                                 ),
-                                trailing: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: _isLoading
-                                      ? null
-                                      : () async {
-                                          setState(() {
-                                            _isLoading = true;
-                                            _errorMessage = null;
-                                          });
+                                onTap: () {
+                                  setState(() {
+                                    _isRegisterMode = false;
+                                    _isForgotMode = false;
+                                    _registerStep2 = false;
+                                    _emailCtrl.text = acc.email;
+                                    _passwordCtrl.clear();
+                                    _errorMessage = null;
+                                    _infoMessage =
+                                        'Digite a senha da conta ${acc.email} para acessar.';
+                                  });
+                                },
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 18,
+                                        color: colors.accentRed
+                                            .withValues(alpha: 0.8),
+                                      ),
+                                      tooltip:
+                                          'Remover conta deste dispositivo',
+                                      onPressed: () {
+                                        setState(() {
                                           CloudSyncService.instance
-                                              .setWebAuthFlowInProgress(true);
-                                          try {
-                                            CloudSyncService.instance
-                                                .switchToSavedAccount(acc);
-                                            final synced = await widget.store
-                                                .syncFromCloud();
-                                            if (synced) {
-                                              widget.store
-                                                  .saveCloudSessionToConfig();
-                                              return;
-                                            }
-                                            if (mounted) {
-                                              setState(() {
-                                                _emailCtrl.text = acc.email;
-                                                _errorMessage =
-                                                    'Sessão expirada para ${acc.email}. Digite sua senha para reconectar.';
-                                              });
-                                            }
-                                          } finally {
-                                            CloudSyncService.instance
-                                                .setWebAuthFlowInProgress(
-                                                  false,
-                                                );
-                                            if (mounted) {
-                                              setState(
-                                                () => _isLoading = false,
-                                              );
-                                            }
+                                              .removeSavedAccount(acc.userId);
+                                          if (_emailCtrl.text
+                                                  .trim()
+                                                  .toLowerCase() ==
+                                              acc.email.toLowerCase()) {
+                                            _emailCtrl.clear();
+                                            _passwordCtrl.clear();
+                                            _infoMessage = null;
                                           }
-                                        },
-                                  child: const Text(
-                                    'Entrar',
-                                    style: TextStyle(fontSize: 11.5),
-                                  ),
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isRegisterMode = false;
+                                          _isForgotMode = false;
+                                          _registerStep2 = false;
+                                          _emailCtrl.text = acc.email;
+                                          _passwordCtrl.clear();
+                                          _errorMessage = null;
+                                          _infoMessage =
+                                              'Digite a senha da conta ${acc.email} para acessar.';
+                                        });
+                                      },
+                                      child: const Text(
+                                        'Entrar',
+                                        style: TextStyle(fontSize: 11.5),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -443,6 +577,8 @@ class _AuthViewState extends State<AuthView> {
 
                     if (_isForgotMode) ...[
                       _buildForgotPasswordContent(colors),
+                    ] else if (_isRegisterMode && _registerStep2) ...[
+                      _buildRegisterStep2Content(colors),
                     ] else ...[
                       // Seletor Entrar / Criar Conta
                       Container(
@@ -461,6 +597,7 @@ class _AuthViewState extends State<AuthView> {
                                 selected: !_isRegisterMode,
                                 onTap: () => setState(() {
                                   _isRegisterMode = false;
+                                  _registerStep2 = false;
                                   _errorMessage = null;
                                   _infoMessage = null;
                                 }),
@@ -473,6 +610,7 @@ class _AuthViewState extends State<AuthView> {
                                 selected: _isRegisterMode,
                                 onTap: () => setState(() {
                                   _isRegisterMode = true;
+                                  _registerStep2 = false;
                                   _errorMessage = null;
                                   _infoMessage = null;
                                 }),
@@ -657,15 +795,15 @@ class _AuthViewState extends State<AuthView> {
                                 )
                               : Icon(
                                   _isRegisterMode
-                                      ? Icons.person_add_alt_1
+                                      ? Icons.mail_outline
                                       : Icons.login,
                                   size: 18,
                                 ),
                           label: Text(
                             _isLoading
-                                ? 'Autenticando...'
+                                ? 'Processando...'
                                 : (_isRegisterMode
-                                    ? 'Criar Conta Segura'
+                                    ? 'Enviar Código de Confirmação'
                                     : 'Acessar Minha Base'),
                             style: const TextStyle(
                               fontSize: 14,
@@ -816,6 +954,142 @@ class _AuthViewState extends State<AuthView> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRegisterStep2Content(OpenMoneyColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                setState(() {
+                  _registerStep2 = false;
+                  _registerCodeCtrl.clear();
+                  _errorMessage = null;
+                  _infoMessage = null;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back, size: 16, color: colors.accentBlue),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Voltar e corrigir dados',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: colors.accentBlue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Confirmar Cadastro por E-mail',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: colors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Enviamos um código de verificação de 6 dígitos para:\n${_emailCtrl.text.trim()}',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: colors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _registerCodeCtrl,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 8,
+            fontFamily: 'monospace',
+            color: colors.textPrimary,
+          ),
+          decoration: InputDecoration(
+            counterText: '',
+            hintText: '000000',
+            hintStyle: TextStyle(
+              fontSize: 22,
+              letterSpacing: 8,
+              fontFamily: 'monospace',
+              color: colors.textSecondary.withValues(alpha: 0.3),
+            ),
+            filled: true,
+            fillColor: colors.bgPrimary.withValues(alpha: 0.6),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colors.borderGlass),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colors.accentBlue, width: 1.5),
+            ),
+          ),
+          onSubmitted: (_) => _confirmRegister(),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.accentGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(11),
+              ),
+            ),
+            onPressed: _isLoading ? null : _confirmRegister,
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.check_circle_outline, size: 18),
+            label: Text(
+              _isLoading ? 'Validando código...' : 'Confirmar e Ativar Conta',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Center(
+          child: TextButton.icon(
+            onPressed: _isLoading ? null : _requestRegister,
+            icon: const Icon(Icons.refresh, size: 15),
+            label: const Text(
+              'Reenviar código para meu e-mail',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
