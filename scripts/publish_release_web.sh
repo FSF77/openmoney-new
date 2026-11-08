@@ -23,6 +23,11 @@ rm -rf "${ROOT_DIR}/web-dist"
 mkdir -p "${ROOT_DIR}/web-dist"
 cp -R "${ROOT_DIR}/build/web/"* "${ROOT_DIR}/web-dist/"
 
+if [ -d "${ROOT_DIR}/coletor" ]; then
+    mkdir -p "${ROOT_DIR}/web-dist/coletor"
+    cp -R "${ROOT_DIR}/coletor/"* "${ROOT_DIR}/web-dist/coletor/"
+fi
+
 echo "✅ Build Web atualizado em: ${ROOT_DIR}/web-dist"
 
 if command -v npx >/dev/null 2>&1 && ! grep -q "SUBSTITUIR_PELO_ID_DO_SEU_D1_NA_CLOUDFLARE" "${ROOT_DIR}/wrangler.toml" 2>/dev/null; then
