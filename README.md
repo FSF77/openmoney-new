@@ -1,7 +1,7 @@
-# OpenMoney (Multiplataforma: macOS, Windows, iPhone e iPad)
+# OpenMoney
 
 <p align="center">
-  <strong>Aplicativo financeiro moderno, multiplataforma (Flutter / Dart) e open source para macOS, Windows.</strong>
+  <strong>Aplicativo financeiro moderno, multiplataforma e open source.</strong>
 </p>
 
 <p align="center">
@@ -9,6 +9,10 @@
 </p>
 
 ---
+## 🌐 Acesso Web
+
+Acesso o site https://openmoney.app.br
+
 
 ## ⚡ Instalação Rápida (1-Click / Terminal)
 
