@@ -1480,38 +1480,39 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     badgeColor: colors.accentGreen,
                     onTap: () => showCloudAccountModal(context, widget.store),
                   ),
-                _SidebarNavTile(
-                  icon: Icons.archive_outlined,
-                  label: 'Backups de Segurança',
-                  selected: false,
-                  onTap: () => kIsWeb
-                      ? showCloudAccountModal(context, widget.store)
-                      : showBackupsHistoryModal(context, widget.store),
-                ),
+                if (!kIsWeb)
+                  _SidebarNavTile(
+                    icon: Icons.archive_outlined,
+                    label: 'Backups de Segurança',
+                    selected: false,
+                    onTap: () => showBackupsHistoryModal(context, widget.store),
+                  ),
                 _SidebarNavTile(
                   icon: Icons.history_edu_outlined,
                   label: 'Logs de Alterações',
                   selected: false,
                   onTap: () => showAuditLogsModal(context, widget.store),
                 ),
-                _SidebarNavTile(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Importar Carteira (CSV)',
-                  selected: false,
-                  onTap: () => showWalletImportModal(context, widget.store),
-                ),
-                _SidebarNavTile(
-                  icon: Icons.document_scanner_outlined,
-                  label: 'Importar Comprovantes (OCR)',
-                  selected: false,
-                  onTap: () => showReceiptOcrImportModal(context, widget.store),
-                ),
-                _SidebarNavTile(
-                  icon: Icons.phone_iphone,
-                  label: 'Importar do Celular (.json)',
-                  selected: false,
-                  onTap: () => showMobileInboxImportFlow(context, widget.store),
-                ),
+                if (!kIsWeb) ...[
+                  _SidebarNavTile(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'Importar Carteira (CSV)',
+                    selected: false,
+                    onTap: () => showWalletImportModal(context, widget.store),
+                  ),
+                  _SidebarNavTile(
+                    icon: Icons.document_scanner_outlined,
+                    label: 'Importar Comprovantes (OCR)',
+                    selected: false,
+                    onTap: () => showReceiptOcrImportModal(context, widget.store),
+                  ),
+                  _SidebarNavTile(
+                    icon: Icons.phone_iphone,
+                    label: 'Importar do Celular (.json)',
+                    selected: false,
+                    onTap: () => showMobileInboxImportFlow(context, widget.store),
+                  ),
+                ],
                 _SidebarNavTile(
                   icon: Icons.import_export,
                   label: 'Importar / Exportar (CSV)',
@@ -1524,15 +1525,16 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   selected: false,
                   onTap: () => showBatchDeleteModal(context, widget.store),
                 ),
-                _SidebarNavTile(
-                  icon: Icons.system_update_alt,
-                  label: 'Buscar Atualizações',
-                  selected: false,
-                  onTap: () => UpdateService.showUpdateDialog(
-                    context,
-                    manual: true,
+                if (!kIsWeb)
+                  _SidebarNavTile(
+                    icon: Icons.system_update_alt,
+                    label: 'Buscar Atualizações',
+                    selected: false,
+                    onTap: () => UpdateService.showUpdateDialog(
+                      context,
+                      manual: true,
+                    ),
                   ),
-                ),
                 _SidebarNavTile(
                   icon: Icons.help_outline,
                   label: 'Ajuda e Manual',
