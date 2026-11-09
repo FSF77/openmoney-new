@@ -49,7 +49,67 @@ CREATE TABLE IF NOT EXISTS user_database_backups (
 
 CREATE INDEX IF NOT EXISTS idx_backups_user_date ON user_database_backups(user_id, backup_date DESC);
 
--- 4. Logs de Auditoria e Alterações por Usuário (Isolamento Estrito)
+-- 4. Tokens de Recuperação de Senha (com Lockout Anti-Brute-Force após 5 tentativas)
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used INTEGER NOT NULL DEFAULT 0
+);
+
+-- 5. Tokens de Confirmação de Cadastro e Troca de E-mail (com Lockout Anti-Brute-Force)
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  email TEXT NOT NULL,
+  type TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  pending_payload TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens ON email_verification_tokens (email, type, used);
+
+-- 6. Metadados de Sincronização em Tempo Real (Sync v2 Granular)
+CREATE TABLE IF NOT EXISTS user_sync_meta (
+  user_id TEXT PRIMARY KEY,
+  seq INTEGER NOT NULL DEFAULT 1,
+  base_seq INTEGER NOT NULL DEFAULT 1,
+  snapshot_seq INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL
+);
+
+-- 7. Registros Granulares Criptografados por Usuário
+CREATE TABLE IF NOT EXISTS user_sync_records (
+  user_id TEXT NOT NULL,
+  coll TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  encrypted_data TEXT,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  seq INTEGER NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, coll, record_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sync_records_seq ON user_sync_records (user_id, seq);
+
+-- 8. Log de Idempotência de Operações Sync
+CREATE TABLE IF NOT EXISTS user_sync_ops (
+  user_id TEXT NOT NULL,
+  op_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, op_id)
+);
+
+-- 9. Logs de Auditoria e Alterações por Usuário (Isolamento Estrito)
 CREATE TABLE IF NOT EXISTS user_audit_logs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -61,4 +121,4 @@ CREATE TABLE IF NOT EXISTS user_audit_logs (
   created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_user_created ON user_audit_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user_created ON user_audit_logs (user_id, created_at DESC);

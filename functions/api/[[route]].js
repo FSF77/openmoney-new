@@ -63,6 +63,7 @@ async function ensureSchema(db) {
         code_hash TEXT NOT NULL,
         created_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
         used INTEGER NOT NULL DEFAULT 0
       )
     `),
@@ -76,6 +77,7 @@ async function ensureSchema(db) {
         pending_payload TEXT,
         created_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
         used INTEGER NOT NULL DEFAULT 0
       )
     `),
@@ -134,12 +136,44 @@ async function ensureSchema(db) {
       ON user_audit_logs (user_id, created_at DESC)
     `),
   ]);
+  try {
+    await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
+  } catch (_) {}
+  try {
+    await db.prepare("ALTER TABLE email_verification_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
+  } catch (_) {}
   schemaInitialized = true;
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  if (
+    origin === "https://openmoney.app.br" ||
+    origin === "https://www.openmoney.app.br"
+  ) {
+    return true;
+  }
+  if (
+    /^https:\/\/[a-z0-9-]+\.openmoney-new\.pages\.dev$/.test(origin) ||
+    /^https:\/\/[a-z0-9-]+\.openmoney\.pages\.dev$/.test(origin) ||
+    origin === "https://openmoney-new.pages.dev" ||
+    origin === "https://openmoney.pages.dev"
+  ) {
+    return true;
+  }
+  if (
+    /^http:\/\/localhost(:\d+)?$/.test(origin) ||
+    /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function corsHeaders(origin) {
+  const allowed = isAllowedOrigin(origin) ? origin : "https://openmoney.app.br";
   return {
-    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force",
@@ -147,6 +181,7 @@ function corsHeaders(origin) {
       "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    "Vary": "Origin",
   };
 }
 
@@ -254,11 +289,13 @@ async function hashPasswordPBKDF2(password, saltB64) {
 }
 
 function getMasterSecret(env) {
-  return (
-    env.MASTER_SECRET ||
-    env.JWT_SECRET ||
-    "openmoney-cloudflare-default-master-key-change-in-dashboard-v1"
-  );
+  const secret = (env && (env.MASTER_SECRET || env.JWT_SECRET)) || "";
+  if (!secret || typeof secret !== "string" || secret.trim().length === 0) {
+    throw new Error(
+      "Configuração de segurança pendente: variável MASTER_SECRET não configurada no Cloudflare Pages."
+    );
+  }
+  return secret.trim();
 }
 
 async function signJwt(payload, env) {
@@ -1372,6 +1409,16 @@ export async function onRequest(context) {
       );
     }
 
+    try {
+      getMasterSecret(env);
+    } catch (e) {
+      return jsonResponse(
+        { error: e.message },
+        500,
+        origin
+      );
+    }
+
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "");
 
@@ -1439,6 +1486,28 @@ export async function onRequest(context) {
         409,
         origin
       );
+    }
+
+    // Proteção Anti-Spam / Cooldown: intervalo mínimo de 60 segundos entre solicitações para o mesmo e-mail
+    const recentToken = await env.DB.prepare(
+      `SELECT created_at FROM email_verification_tokens
+       WHERE email = ?1 AND type = 'register'
+       ORDER BY created_at DESC LIMIT 1`
+    )
+      .bind(email)
+      .first();
+
+    if (recentToken && recentToken.created_at) {
+      const diffSec = (Date.now() - new Date(recentToken.created_at).getTime()) / 1000;
+      if (diffSec >= 0 && diffSec < 60) {
+        return jsonResponse(
+          {
+            error: `Aguarde ${Math.ceil(60 - diffSec)} segundo(s) antes de solicitar um novo código de verificação.`,
+          },
+          429,
+          origin
+        );
+      }
     }
 
     const code = generateSixDigitCode();
@@ -1537,21 +1606,60 @@ export async function onRequest(context) {
       );
     }
 
-    const secret = getMasterSecret(env);
-    const codeHash = await hashResetCode(code, email, secret);
     const nowIso = new Date().toISOString();
 
     const tokenRow = await env.DB.prepare(
-      `SELECT id, pending_payload FROM email_verification_tokens
-       WHERE email = ?1 AND code_hash = ?2 AND type = 'register' AND used = 0 AND expires_at > ?3`
+      `SELECT id, code_hash, attempts, pending_payload FROM email_verification_tokens
+       WHERE email = ?1 AND type = 'register' AND used = 0 AND expires_at > ?2
+       ORDER BY created_at DESC LIMIT 1`
     )
-      .bind(email, codeHash, nowIso)
+      .bind(email, nowIso)
       .first();
 
     if (!tokenRow) {
       return jsonResponse(
         { error: "Código inválido ou expirado. Solicite um novo código." },
         400,
+        origin
+      );
+    }
+
+    const attempts = Number(tokenRow.attempts || 0);
+    if (attempts >= 5) {
+      await env.DB.prepare(
+        "UPDATE email_verification_tokens SET used = 2 WHERE id = ?1"
+      )
+        .bind(tokenRow.id)
+        .run();
+      return jsonResponse(
+        {
+          error:
+            "Código bloqueado por excesso de tentativas. Solicite um novo código de confirmação.",
+        },
+        429,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+
+    if (!timingSafeEqual(codeHash, tokenRow.code_hash)) {
+      const nextAttempts = attempts + 1;
+      await env.DB.prepare(
+        "UPDATE email_verification_tokens SET attempts = ?1 WHERE id = ?2"
+      )
+        .bind(nextAttempts, tokenRow.id)
+        .run();
+      const remaining = Math.max(0, 5 - nextAttempts);
+      return jsonResponse(
+        {
+          error:
+            remaining > 0
+              ? `Código de confirmação incorreto. Você tem mais ${remaining} tentativa(s).`
+              : "Código bloqueado por excesso de tentativas. Solicite um novo código de confirmação.",
+        },
+        remaining > 0 ? 400 : 429,
         origin
       );
     }
@@ -1850,6 +1958,28 @@ export async function onRequest(context) {
       );
     }
 
+    // Proteção Anti-Spam / Cooldown: intervalo mínimo de 60 segundos entre solicitações para o mesmo e-mail
+    const recentReset = await env.DB.prepare(
+      `SELECT created_at FROM password_reset_tokens
+       WHERE email = ?1
+       ORDER BY created_at DESC LIMIT 1`
+    )
+      .bind(email)
+      .first();
+
+    if (recentReset && recentReset.created_at) {
+      const diffSec = (Date.now() - new Date(recentReset.created_at).getTime()) / 1000;
+      if (diffSec >= 0 && diffSec < 60) {
+        return jsonResponse(
+          {
+            error: `Aguarde ${Math.ceil(60 - diffSec)} segundo(s) antes de solicitar um novo código de recuperação.`,
+          },
+          429,
+          origin
+        );
+      }
+    }
+
     const code = generateSixDigitCode();
     const secret = getMasterSecret(env);
     const codeHash = await hashResetCode(code, email, secret);
@@ -1916,21 +2046,60 @@ export async function onRequest(context) {
       return jsonResponse({ error: "E-mail e código são obrigatórios." }, 400, origin);
     }
 
-    const secret = getMasterSecret(env);
-    const codeHash = await hashResetCode(code, email, secret);
     const nowIso = new Date().toISOString();
 
     const tokenRow = await env.DB.prepare(
-      `SELECT id FROM password_reset_tokens 
-       WHERE email = ?1 AND code_hash = ?2 AND used = 0 AND expires_at > ?3`
+      `SELECT id, code_hash, attempts FROM password_reset_tokens 
+       WHERE email = ?1 AND used = 0 AND expires_at > ?2
+       ORDER BY created_at DESC LIMIT 1`
     )
-      .bind(email, codeHash, nowIso)
+      .bind(email, nowIso)
       .first();
 
     if (!tokenRow) {
       return jsonResponse(
         { error: "Código inválido ou expirado. Solicite um novo código." },
         400,
+        origin
+      );
+    }
+
+    const attempts = Number(tokenRow.attempts || 0);
+    if (attempts >= 5) {
+      await env.DB.prepare(
+        "UPDATE password_reset_tokens SET used = 2 WHERE id = ?1"
+      )
+        .bind(tokenRow.id)
+        .run();
+      return jsonResponse(
+        {
+          error:
+            "Código bloqueado por excesso de tentativas. Solicite um novo código de recuperação.",
+        },
+        429,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+
+    if (!timingSafeEqual(codeHash, tokenRow.code_hash)) {
+      const nextAttempts = attempts + 1;
+      await env.DB.prepare(
+        "UPDATE password_reset_tokens SET attempts = ?1 WHERE id = ?2"
+      )
+        .bind(nextAttempts, tokenRow.id)
+        .run();
+      const remaining = Math.max(0, 5 - nextAttempts);
+      return jsonResponse(
+        {
+          error:
+            remaining > 0
+              ? `Código de recuperação incorreto. Você tem mais ${remaining} tentativa(s).`
+              : "Código bloqueado por excesso de tentativas. Solicite um novo código de recuperação.",
+        },
+        remaining > 0 ? 400 : 429,
         origin
       );
     }
@@ -1958,21 +2127,60 @@ export async function onRequest(context) {
       );
     }
 
-    const secret = getMasterSecret(env);
-    const codeHash = await hashResetCode(code, email, secret);
     const nowIso = new Date().toISOString();
 
     const tokenRow = await env.DB.prepare(
-      `SELECT id, user_id FROM password_reset_tokens 
-       WHERE email = ?1 AND code_hash = ?2 AND used = 0 AND expires_at > ?3`
+      `SELECT id, user_id, code_hash, attempts FROM password_reset_tokens 
+       WHERE email = ?1 AND used = 0 AND expires_at > ?2
+       ORDER BY created_at DESC LIMIT 1`
     )
-      .bind(email, codeHash, nowIso)
+      .bind(email, nowIso)
       .first();
 
     if (!tokenRow) {
       return jsonResponse(
         { error: "Código inválido ou expirado. Solicite um novo código." },
         400,
+        origin
+      );
+    }
+
+    const attempts = Number(tokenRow.attempts || 0);
+    if (attempts >= 5) {
+      await env.DB.prepare(
+        "UPDATE password_reset_tokens SET used = 2 WHERE id = ?1"
+      )
+        .bind(tokenRow.id)
+        .run();
+      return jsonResponse(
+        {
+          error:
+            "Código bloqueado por excesso de tentativas. Solicite um novo código de recuperação.",
+        },
+        429,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, email, secret);
+
+    if (!timingSafeEqual(codeHash, tokenRow.code_hash)) {
+      const nextAttempts = attempts + 1;
+      await env.DB.prepare(
+        "UPDATE password_reset_tokens SET attempts = ?1 WHERE id = ?2"
+      )
+        .bind(nextAttempts, tokenRow.id)
+        .run();
+      const remaining = Math.max(0, 5 - nextAttempts);
+      return jsonResponse(
+        {
+          error:
+            remaining > 0
+              ? `Código de recuperação incorreto. Você tem mais ${remaining} tentativa(s).`
+              : "Código bloqueado por excesso de tentativas. Solicite um novo código de recuperação.",
+        },
+        remaining > 0 ? 400 : 429,
         origin
       );
     }
@@ -2104,6 +2312,28 @@ export async function onRequest(context) {
       );
     }
 
+    // Proteção Anti-Spam / Cooldown: intervalo mínimo de 60 segundos entre solicitações para o mesmo usuário
+    const recentChange = await env.DB.prepare(
+      `SELECT created_at FROM email_verification_tokens
+       WHERE user_id = ?1 AND type = 'change_email'
+       ORDER BY created_at DESC LIMIT 1`
+    )
+      .bind(user.id)
+      .first();
+
+    if (recentChange && recentChange.created_at) {
+      const diffSec = (Date.now() - new Date(recentChange.created_at).getTime()) / 1000;
+      if (diffSec >= 0 && diffSec < 60) {
+        return jsonResponse(
+          {
+            error: `Aguarde ${Math.ceil(60 - diffSec)} segundo(s) antes de solicitar um novo código de confirmação.`,
+          },
+          429,
+          origin
+        );
+      }
+    }
+
     const code = generateSixDigitCode();
     const secret = getMasterSecret(env);
     const codeHash = await hashResetCode(code, newEmail, secret);
@@ -2183,21 +2413,60 @@ export async function onRequest(context) {
       );
     }
 
-    const secret = getMasterSecret(env);
-    const codeHash = await hashResetCode(code, newEmail, secret);
     const nowIso = new Date().toISOString();
 
     const tokenRow = await env.DB.prepare(
-      `SELECT id FROM email_verification_tokens
-       WHERE user_id = ?1 AND email = ?2 AND code_hash = ?3 AND type = 'change_email' AND used = 0 AND expires_at > ?4`
+      `SELECT id, code_hash, attempts FROM email_verification_tokens
+       WHERE user_id = ?1 AND email = ?2 AND type = 'change_email' AND used = 0 AND expires_at > ?3
+       ORDER BY created_at DESC LIMIT 1`
     )
-      .bind(userId, newEmail, codeHash, nowIso)
+      .bind(userId, newEmail, nowIso)
       .first();
 
     if (!tokenRow) {
       return jsonResponse(
         { error: "Código inválido ou expirado. Solicite um novo código." },
         400,
+        origin
+      );
+    }
+
+    const attempts = Number(tokenRow.attempts || 0);
+    if (attempts >= 5) {
+      await env.DB.prepare(
+        "UPDATE email_verification_tokens SET used = 2 WHERE id = ?1"
+      )
+        .bind(tokenRow.id)
+        .run();
+      return jsonResponse(
+        {
+          error:
+            "Código bloqueado por excesso de tentativas. Solicite um novo código de alteração de e-mail.",
+        },
+        429,
+        origin
+      );
+    }
+
+    const secret = getMasterSecret(env);
+    const codeHash = await hashResetCode(code, newEmail, secret);
+
+    if (!timingSafeEqual(codeHash, tokenRow.code_hash)) {
+      const nextAttempts = attempts + 1;
+      await env.DB.prepare(
+        "UPDATE email_verification_tokens SET attempts = ?1 WHERE id = ?2"
+      )
+        .bind(nextAttempts, tokenRow.id)
+        .run();
+      const remaining = Math.max(0, 5 - nextAttempts);
+      return jsonResponse(
+        {
+          error:
+            remaining > 0
+              ? `Código de confirmação incorreto. Você tem mais ${remaining} tentativa(s).`
+              : "Código bloqueado por excesso de tentativas. Solicite um novo código de alteração de e-mail.",
+        },
+        remaining > 0 ? 400 : 429,
         origin
       );
     }
