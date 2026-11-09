@@ -310,11 +310,20 @@ class CSVExporter {
     required List<Transaction> transactions,
     required List<Account> accounts,
     String? accountFilterId,
+    String? startDate,
+    String? endDate,
   }) {
     final accMap = {for (final a in accounts) a.id: a};
-    final filtered = (accountFilterId != null && accountFilterId.isNotEmpty)
+    var filtered = (accountFilterId != null && accountFilterId.isNotEmpty)
         ? transactions.where((t) => t.acc == accountFilterId).toList()
         : List<Transaction>.from(transactions);
+
+    if (startDate != null && startDate.isNotEmpty) {
+      filtered = filtered.where((t) => t.date.compareTo(startDate) >= 0).toList();
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      filtered = filtered.where((t) => t.date.compareTo(endDate) <= 0).toList();
+    }
 
     filtered.sort((a, b) {
       final dc = a.date.compareTo(b.date);

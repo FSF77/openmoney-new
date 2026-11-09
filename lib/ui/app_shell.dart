@@ -18,10 +18,7 @@ import 'modals/batch_delete_modal.dart';
 import 'modals/cloud_account_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/help_modal.dart';
-import 'modals/mobile_inbox_modal.dart';
-import 'modals/receipt_ocr_import_modal.dart';
 import 'modals/transaction_modal.dart';
-import 'modals/wallet_import_modal.dart';
 import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
 import 'views/account_ledger_view.dart';
@@ -1493,29 +1490,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   selected: false,
                   onTap: () => showAuditLogsModal(context, widget.store),
                 ),
-                if (!kIsWeb) ...[
-                  _SidebarNavTile(
-                    icon: Icons.account_balance_wallet_outlined,
-                    label: 'Importar Carteira (CSV)',
-                    selected: false,
-                    onTap: () => showWalletImportModal(context, widget.store),
-                  ),
-                  _SidebarNavTile(
-                    icon: Icons.document_scanner_outlined,
-                    label: 'Importar Comprovantes (OCR)',
-                    selected: false,
-                    onTap: () => showReceiptOcrImportModal(context, widget.store),
-                  ),
-                  _SidebarNavTile(
-                    icon: Icons.phone_iphone,
-                    label: 'Importar do Celular (.json)',
-                    selected: false,
-                    onTap: () => showMobileInboxImportFlow(context, widget.store),
-                  ),
-                ],
                 _SidebarNavTile(
                   icon: Icons.import_export,
-                  label: 'Importar / Exportar (CSV)',
+                  label: 'Central de Importação / Exportação',
                   selected: false,
                   onTap: () => showCsvQifCenterModal(context, widget.store),
                 ),

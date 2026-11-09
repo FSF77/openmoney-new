@@ -1551,4 +1551,54 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
       tempDir.deleteSync(recursive: true);
     } catch (_) {}
   });
+
+  test('33. CSVExporter & MoneyStore support account filter, start date, and end date filtering', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db.accounts.clear();
+    store.db.txs.clear();
+
+    final cAcc = Account(id: 'acc_cc', name: 'Conta Corrente', type: 'Corrente', opening: 10000);
+    final cardAcc = Account(id: 'acc_card', name: 'Cartão de Crédito', type: kCardType, opening: 0);
+    store.db.accounts.addAll([cAcc, cardAcc]);
+
+    final cId = cAcc.id;
+    final cardId = cardAcc.id;
+
+    // Cria lançamentos em datas diferentes
+    store.db.txs.add(Transaction(id: 't1', acc: cId, date: '2026-01-10', payee: 'Padaria', cat: 'Alimentação', amt: -2500));
+    store.db.txs.add(Transaction(id: 't2', acc: cId, date: '2026-02-15', payee: 'Supermercado', cat: 'Alimentação', amt: -15000));
+    store.db.txs.add(Transaction(id: 't3', acc: cId, date: '2026-03-20', payee: 'Salário', cat: 'Receita', amt: 500000));
+    store.db.txs.add(Transaction(id: 't4', acc: cardId, date: '2026-02-28', payee: 'Restaurante', cat: 'Alimentação', amt: -8000));
+
+    expect(store.db.txs.length, 4);
+
+    // 1. Sem filtros (todos)
+    expect(store.countTransactionsForExport(), 4);
+    final allCsv = store.exportCSVString();
+    expect(allCsv.contains('Padaria'), true);
+    expect(allCsv.contains('Supermercado'), true);
+    expect(allCsv.contains('Salário'), true);
+    expect(allCsv.contains('Restaurante'), true);
+
+    // 2. Filtro por conta
+    expect(store.countTransactionsForExport(accountFilterId: cId), 3);
+    expect(store.countTransactionsForExport(accountFilterId: cardId), 1);
+    final cardCsv = store.exportCSVString(accountFilterId: cardId);
+    expect(cardCsv.contains('Restaurante'), true);
+    expect(cardCsv.contains('Padaria'), false);
+
+    // 3. Filtro por mês (2026-02-01 até 2026-02-31)
+    expect(store.countTransactionsForExport(startDate: '2026-02-01', endDate: '2026-02-31'), 2);
+    final febCsv = store.exportCSVString(startDate: '2026-02-01', endDate: '2026-02-31');
+    expect(febCsv.contains('Supermercado'), true);
+    expect(febCsv.contains('Restaurante'), true);
+    expect(febCsv.contains('Padaria'), false);
+    expect(febCsv.contains('Salário'), false);
+
+    // 4. Filtro por conta + data início/fim
+    expect(store.countTransactionsForExport(accountFilterId: cId, startDate: '2026-02-01', endDate: '2026-02-28'), 1);
+    final cFebCsv = store.exportCSVString(accountFilterId: cId, startDate: '2026-02-01', endDate: '2026-02-28');
+    expect(cFebCsv.contains('Supermercado'), true);
+    expect(cFebCsv.contains('Restaurante'), false);
+  });
 }

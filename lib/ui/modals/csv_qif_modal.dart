@@ -7,7 +7,14 @@ import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'mobile_inbox_modal.dart';
+import 'receipt_ocr_import_modal.dart';
 import 'wallet_import_modal.dart';
+
+enum _ExportPeriodMode {
+  all,
+  month,
+  custom,
+}
 
 Future<void> showCsvQifCenterModal(
   BuildContext context,
@@ -28,84 +35,232 @@ class _CsvQifCenterDialog extends StatefulWidget {
 }
 
 class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
-  String _targetAccountId = 'auto';
-  bool _allowDuplicates = false;
-  late final TextEditingController _filePathCtrl;
+  int _selectedTab = 0; // 0: Importar, 1: Exportar
   String? _statusMessage;
   bool _isError = false;
+
+  // Parâmetros de Importação
+  String _importAccountId = 'auto';
+  bool _allowDuplicates = false;
+
+  // Parâmetros de Exportação
+  String _exportAccountId = 'all';
+  _ExportPeriodMode _periodMode = _ExportPeriodMode.all;
+  late String _exportMonthYM;
+  late DateTime _startDate;
+  late DateTime _endDate;
 
   @override
   void initState() {
     super.initState();
-    final dir = widget.store.defaultCloudOrDocumentsDir();
-    _filePathCtrl = TextEditingController(
-      text: dir.isNotEmpty
-          ? '$dir${kIsWeb ? "/" : Platform.pathSeparator}openmoney-${todayISO()}.csv'
-          : 'openmoney-${todayISO()}.csv',
+    _exportMonthYM = widget.store.month;
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, 1);
+    _endDate = now;
+  }
+
+  String? get _effectiveStartDate {
+    switch (_periodMode) {
+      case _ExportPeriodMode.all:
+        return null;
+      case _ExportPeriodMode.month:
+        return '$_exportMonthYM-01';
+      case _ExportPeriodMode.custom:
+        return '${_startDate.year.toString().padLeft(4, '0')}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}';
+    }
+  }
+
+  String? get _effectiveEndDate {
+    switch (_periodMode) {
+      case _ExportPeriodMode.all:
+        return null;
+      case _ExportPeriodMode.month:
+        return '$_exportMonthYM-31';
+      case _ExportPeriodMode.custom:
+        return '${_endDate.year.toString().padLeft(4, '0')}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}';
+    }
+  }
+
+  int get _exportCount {
+    return widget.store.countTransactionsForExport(
+      accountFilterId: _exportAccountId == 'all' ? null : _exportAccountId,
+      startDate: _effectiveStartDate,
+      endDate: _effectiveEndDate,
     );
   }
 
-  @override
-  void dispose() {
-    _filePathCtrl.dispose();
-    super.dispose();
-  }
-
-  void _importFile({required bool isQif}) {
-    final path = _filePathCtrl.text.trim();
-    if (path.isEmpty || !File(path).existsSync()) {
-      setState(() {
-        _isError = true;
-        _statusMessage = 'Arquivo não localizado em: $path';
-      });
-      return;
-    }
-    try {
-      final bytes = File(path).readAsBytesSync();
-      final targetId = _targetAccountId == 'auto' ? null : _targetAccountId;
-      final summary = isQif
-          ? widget.store.importQIFBytes(bytes, targetAccountId: targetId)
-          : widget.store.importCSVBytes(
-              bytes,
-              targetAccountId: targetId,
-              allowDuplicates: _allowDuplicates,
-            );
-      setState(() {
-        _isError = false;
-        _statusMessage = summary.formattedMessage;
-      });
-    } catch (e) {
-      setState(() {
-        _isError = true;
-        _statusMessage = 'Falha ao importar: $e';
-      });
-    }
-  }
-
-  void _exportCsv() {
-    final filterId = _targetAccountId == 'auto' ? null : _targetAccountId;
-    final csv = widget.store.exportCSVString(accountFilterId: filterId);
-    if (!kIsWeb) {
-      final path = _filePathCtrl.text.trim();
+  Future<void> _handleImportCSV() async {
+    final selected = await NativeFilePicker.pickFile(
+      title: 'Selecionar Arquivo CSV de Lançamentos',
+      allowedExtensions: ['csv'],
+    );
+    if (selected != null && selected.isNotEmpty) {
       try {
-        File(path).writeAsStringSync(csv, flush: true);
+        final bytes = File(selected).readAsBytesSync();
+        final targetId = _importAccountId == 'auto' ? null : _importAccountId;
+        final summary = widget.store.importCSVBytes(
+          bytes,
+          targetAccountId: targetId,
+          allowDuplicates: _allowDuplicates,
+        );
         setState(() {
           _isError = false;
-          _statusMessage = '✓ CSV exportado com sucesso em:\n$path';
+          _statusMessage = '✓ ${summary.formattedMessage}';
         });
-        return;
       } catch (e) {
         setState(() {
           _isError = true;
-          _statusMessage = 'Erro ao gravar arquivo: $e';
+          _statusMessage = 'Falha ao importar CSV: $e';
         });
       }
     }
-    Clipboard.setData(ClipboardData(text: csv));
-    setState(() {
-      _isError = false;
-      _statusMessage = '✓ Conteúdo CSV copiado para a área de transferência!';
-    });
+  }
+
+  Future<void> _handleImportQIF() async {
+    final selected = await NativeFilePicker.pickFile(
+      title: 'Selecionar Arquivo QIF (Money 99 / Quicken)',
+      allowedExtensions: ['qif'],
+    );
+    if (selected != null && selected.isNotEmpty) {
+      try {
+        final bytes = File(selected).readAsBytesSync();
+        final targetId = _importAccountId == 'auto' ? null : _importAccountId;
+        final summary = widget.store.importQIFBytes(
+          bytes,
+          targetAccountId: targetId,
+        );
+        setState(() {
+          _isError = false;
+          _statusMessage = '✓ ${summary.formattedMessage}';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Falha ao importar QIF: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _handleImportCategories() async {
+    final selected = await NativeFilePicker.pickFile(
+      title: 'Selecionar Arquivo CSV de Categorias',
+      allowedExtensions: ['csv'],
+    );
+    if (selected != null && selected.isNotEmpty) {
+      try {
+        final bytes = File(selected).readAsBytesSync();
+        final summary = widget.store.importCategoriesCSVBytes(bytes);
+        setState(() {
+          _isError = false;
+          _statusMessage = '✓ ${summary.formattedMessage}';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Erro ao importar categorias: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _handleExportCSV() async {
+    final count = _exportCount;
+    if (count == 0) {
+      setState(() {
+        _isError = true;
+        _statusMessage =
+            'Nenhum lançamento encontrado para os filtros selecionados.';
+      });
+      return;
+    }
+
+    final targetAcc = _exportAccountId == 'all'
+        ? null
+        : widget.store.accById(_exportAccountId);
+    final accSlug = targetAcc != null
+        ? '-${targetAcc.name.replaceAll(RegExp(r'[^\w\d_-]'), '_')}'
+        : '';
+    final periodSlug = _periodMode == _ExportPeriodMode.all
+        ? '-todos'
+        : (_periodMode == _ExportPeriodMode.month
+            ? '-$_exportMonthYM'
+            : '-periodo');
+    final defaultFileName = 'openmoney$accSlug$periodSlug-${todayISO()}.csv';
+
+    final savePath = await NativeFilePicker.saveFile(
+      title: 'Escolher Local para Salvar CSV de Lançamentos',
+      defaultName: defaultFileName,
+      allowedExtensions: ['csv'],
+    );
+
+    if (savePath != null && savePath.isNotEmpty) {
+      try {
+        final filterId = _exportAccountId == 'all' ? null : _exportAccountId;
+        final csv = widget.store.exportCSVString(
+          accountFilterId: filterId,
+          startDate: _effectiveStartDate,
+          endDate: _effectiveEndDate,
+        );
+        if (!kIsWeb) {
+          final f = File(savePath);
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync(csv, flush: true);
+          setState(() {
+            _isError = false;
+            _statusMessage =
+                '✓ $count lançamentos exportados com sucesso em:\n$savePath';
+          });
+          return;
+        }
+        Clipboard.setData(ClipboardData(text: csv));
+        setState(() {
+          _isError = false;
+          _statusMessage =
+              '✓ $count lançamentos copiados para a área de transferência!';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Erro ao exportar lançamentos: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _handleExportCategories() async {
+    final savePath = await NativeFilePicker.saveFile(
+      title: 'Escolher Local para Salvar CSV de Categorias',
+      defaultName: 'openmoney-categorias-${todayISO()}.csv',
+      allowedExtensions: ['csv'],
+    );
+
+    if (savePath != null && savePath.isNotEmpty) {
+      try {
+        final csv = widget.store.exportCategoriesCSVString();
+        if (!kIsWeb) {
+          final f = File(savePath);
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync(csv, flush: true);
+          setState(() {
+            _isError = false;
+            _statusMessage =
+                '✓ Categorias exportadas com sucesso em:\n$savePath';
+          });
+          return;
+        }
+        Clipboard.setData(ClipboardData(text: csv));
+        setState(() {
+          _isError = false;
+          _statusMessage = '✓ Categorias copiadas para a área de transferência!';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Erro ao exportar categorias: $e';
+        });
+      }
+    }
   }
 
   @override
@@ -115,204 +270,125 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
 
     return AlertDialog(
       backgroundColor: colors.bgSecondary,
-      title: const Row(
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colors.borderGlass),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+      title: Row(
         children: [
-          Icon(Icons.import_export, color: Colors.lightBlueAccent),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text('Central de Importação / Exportação (CSV & QIF)'),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.import_export, color: colors.accent, size: 24),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Central de Importação / Exportação',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Lançamentos, faturas, carteira iOS, OCR e categorias (CSV & QIF)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: () => Navigator.pop(context),
+            tooltip: 'Fechar',
           ),
         ],
       ),
       content: SizedBox(
-        width: 540,
+        width: 660,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: _targetAccountId,
-                decoration: const InputDecoration(
-                  labelText: 'Conta de Destino / Filtro de Exportação',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem(
-                    value: 'auto',
-                    child: Text(
-                        'Automático (Usar coluna "Conta" do CSV / Todas as Contas)'),
+              // Abas Principais: Importar Dados vs Exportar Dados
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment<int>(
+                    value: 0,
+                    icon: Icon(Icons.file_download_outlined, size: 18),
+                    label: Text(
+                      'Importar Dados',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                  ...widget.store.db.accounts.map(
-                    (a) => DropdownMenuItem(value: a.id, child: Text(a.name)),
+                  ButtonSegment<int>(
+                    value: 1,
+                    icon: Icon(Icons.file_upload_outlined, size: 18),
+                    label: Text(
+                      'Exportar Dados',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _targetAccountId = v);
+                selected: {_selectedTab},
+                onSelectionChanged: (newVal) {
+                  setState(() {
+                    _selectedTab = newVal.first;
+                    _statusMessage = null;
+                  });
                 },
               ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Permitir Lançamentos Duplicados'),
-                subtitle: const Text(
-                    'Desativado por padrão (verificação O(1) por conta, data, valor e favorecido)'),
-                value: _allowDuplicates,
-                onChanged: (v) => setState(() => _allowDuplicates = v),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _filePathCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Caminho do Arquivo (.csv ou .qif)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.folder_open, size: 16),
-                    label: const Text('Procurar Arquivo para Importar (Finder)'),
-                    onPressed: () async {
-                      final selected = await NativeFilePicker.pickFile(
-                        title: 'Selecionar Arquivo CSV ou QIF',
-                        allowedExtensions: ['csv', 'qif'],
-                      );
-                      if (selected != null && selected.isNotEmpty) {
-                        setState(() {
-                          _filePathCtrl.text = selected;
-                        });
-                      }
-                    },
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.save_as_outlined, size: 16),
-                    label: const Text('Definir Destino para Exportar CSV'),
-                    onPressed: () async {
-                      final savePath = await NativeFilePicker.saveFile(
-                        title: 'Escolher Destino para Salvar CSV',
-                        defaultName: 'openmoney-${todayISO()}.csv',
-                        allowedExtensions: ['csv'],
-                      );
-                      if (savePath != null && savePath.isNotEmpty) {
-                        setState(() {
-                          _filePathCtrl.text = savePath;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              const Divider(height: 22),
-              const Text(
-                'Coletor Mobile (.json) & Catálogo de Categorias (CSV):',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      size: 16,
-                    ),
-                    label: const Text('Importar da Carteira (Atalhos CSV)'),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await showWalletImportModal(context, widget.store);
-                    },
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.phone_iphone, size: 16),
-                    label: const Text('Importar do Celular (.json)'),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await showMobileInboxImportFlow(context, widget.store);
-                    },
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.category_outlined, size: 16),
-                    label: const Text('Importar Categorias (CSV)'),
-                    onPressed: () async {
-                      final selected = await NativeFilePicker.pickFile(
-                        title: 'Importar Categorias e Subcategorias (CSV)',
-                        allowedExtensions: ['csv'],
-                      );
-                      if (selected != null && selected.isNotEmpty) {
-                        try {
-                          final bytes = File(selected).readAsBytesSync();
-                          final summary =
-                              widget.store.importCategoriesCSVBytes(bytes);
-                          setState(() {
-                            _isError = false;
-                            _statusMessage = summary.formattedMessage;
-                          });
-                        } catch (e) {
-                          setState(() {
-                            _isError = true;
-                            _statusMessage =
-                                'Erro ao importar categorias: $e';
-                          });
-                        }
-                      }
-                    },
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.download_outlined, size: 16),
-                    label: const Text('Exportar Categorias (CSV)'),
-                    onPressed: () async {
-                      final savePath = await NativeFilePicker.saveFile(
-                        title: 'Exportar Categorias e Subcategorias (CSV)',
-                        defaultName: 'openmoney-categorias-${todayISO()}.csv',
-                        allowedExtensions: ['csv'],
-                      );
-                      if (savePath != null && savePath.isNotEmpty) {
-                        try {
-                          final csv = widget.store.exportCategoriesCSVString();
-                          final f = File(savePath);
-                          f.parent.createSync(recursive: true);
-                          f.writeAsStringSync(csv, flush: true);
-                          setState(() {
-                            _isError = false;
-                            _statusMessage =
-                                '✓ Categorias exportadas com sucesso em:\n$savePath';
-                          });
-                        } catch (e) {
-                          setState(() {
-                            _isError = true;
-                            _statusMessage =
-                                'Erro ao exportar categorias: $e';
-                          });
-                        }
-                      }
-                    },
-                  ),
-                ],
-              ),
+              const SizedBox(height: 16),
+
+              if (_selectedTab == 0)
+                _buildImportTab(colors)
+              else
+                _buildExportTab(colors),
+
               if (_statusMessage != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: (_isError ? colors.expense : colors.income)
-                        .withValues(alpha: 0.14),
+                        .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: _isError ? colors.expense : colors.income,
                     ),
                   ),
-                  child: Text(
-                    _statusMessage!,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: _isError ? colors.expense : colors.income,
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _isError
+                            ? Icons.error_outline
+                            : Icons.check_circle_outline,
+                        color: _isError ? colors.expense : colors.income,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _statusMessage!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _isError ? colors.expense : colors.income,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -325,20 +401,573 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Fechar'),
         ),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.upload_file, size: 18),
-          label: const Text('Importar QIF (Money 99)'),
-          onPressed: () => _importFile(isQif: true),
+      ],
+    );
+  }
+
+  Widget _buildImportTab(OpenMoneyColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Card de Configurações para Lançamentos
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Importação Geral de Lançamentos (CSV & QIF)',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _importAccountId,
+                decoration: const InputDecoration(
+                  labelText: 'Conta de Destino',
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: 'auto',
+                    child: Text(
+                        'Automático (usar coluna "Conta" do arquivo / Extrato)'),
+                  ),
+                  ...widget.store.db.accounts.map(
+                    (a) => DropdownMenuItem(value: a.id, child: Text(a.name)),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _importAccountId = v);
+                },
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  'Permitir Lançamentos Duplicados',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  _allowDuplicates
+                      ? 'Atenção: Transações com a mesma conta, data, valor e favorecido serão importadas novamente.'
+                      : 'Proteção ativa: Transações idênticas já existentes na base serão ignoradas automaticamente.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: _allowDuplicates
+                        ? colors.expense
+                        : colors.textSecondary,
+                  ),
+                ),
+                value: _allowDuplicates,
+                onChanged: (v) => setState(() => _allowDuplicates = v),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colors.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.file_open_outlined, size: 18),
+                      label: const Text(
+                        'Importar Lançamentos (CSV)...',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: _handleImportCSV,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: colors.borderGlass),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text(
+                        'Importar QIF (Money 99)...',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: _handleImportQIF,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.file_upload_outlined, size: 18),
-          label: const Text('Importar CSV'),
-          onPressed: () => _importFile(isQif: false),
+        const SizedBox(height: 16),
+
+        // Rotinas Especializadas
+        Text(
+          'Rotinas Especializadas de Importação',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
         ),
-        FilledButton.icon(
-          icon: const Icon(Icons.download, size: 18),
-          label: const Text('Exportar CSV'),
-          onPressed: _exportCsv,
+        const SizedBox(height: 8),
+        _buildSpecialRoutineCard(
+          colors: colors,
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'Importar da Carteira (Atalhos iOS CSV)',
+          subtitle:
+              'Importação assistida de compras e faturas do Apple Wallet via Atalhos com revisão de De/Para de contas.',
+          buttonLabel: 'Abrir Assistente da Carteira',
+          onTap: () {
+            Navigator.pop(context);
+            showWalletImportModal(context, widget.store);
+          },
+        ),
+        const SizedBox(height: 8),
+        _buildSpecialRoutineCard(
+          colors: colors,
+          icon: Icons.document_scanner_outlined,
+          title: 'Importar Comprovantes por OCR (Imagens e PDFs)',
+          subtitle:
+              'Reconhecimento ótico local e IA Gemini para ler cupons fiscais NFC-e, notas e comprovantes bancários.',
+          buttonLabel: 'Abrir Leitor de Comprovantes',
+          onTap: () {
+            Navigator.pop(context);
+            showReceiptOcrImportModal(context, widget.store);
+          },
+        ),
+        const SizedBox(height: 8),
+        _buildSpecialRoutineCard(
+          colors: colors,
+          icon: Icons.phone_iphone,
+          title: 'Importar do Celular (openmoney_inbox.json)',
+          subtitle:
+              'Importação direta de arquivo de lançamentos rápidos capturados no aplicativo móvel.',
+          buttonLabel: 'Importar Arquivo Inbox',
+          onTap: () {
+            Navigator.pop(context);
+            showMobileInboxImportFlow(context, widget.store);
+          },
+        ),
+        const SizedBox(height: 16),
+
+        // Catálogo de Categorias
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.category_outlined,
+                  size: 24, color: colors.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Catálogo de Categorias e Subcategorias',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Importe árvore completa de categorias via arquivo CSV padronizado.',
+                      style:
+                          TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: const Text('Importar Categorias...'),
+                onPressed: _handleImportCategories,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSpecialRoutineCard({
+    required OpenMoneyColors colors,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String buttonLabel,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.bgPrimary,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.borderGlass),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: colors.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style:
+                      TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              side: BorderSide(color: colors.borderGlass),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onPressed: onTap,
+            child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportTab(OpenMoneyColors colors) {
+    final count = _exportCount;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Card de Filtros de Exportação de Lançamentos
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Filtros para Exportação de Lançamentos (CSV)',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 1. Filtro de Conta
+              DropdownButtonFormField<String>(
+                initialValue: _exportAccountId,
+                decoration: const InputDecoration(
+                  labelText: 'Conta',
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(
+                      'Todas as Contas (${widget.store.db.txs.length} lançamentos na base)',
+                    ),
+                  ),
+                  ...widget.store.db.accounts.map((a) {
+                    final accCount = widget.store.db.txs
+                        .where((t) => t.acc == a.id)
+                        .length;
+                    return DropdownMenuItem(
+                      value: a.id,
+                      child: Text('${a.name} ($accCount lançamentos)'),
+                    );
+                  }),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _exportAccountId = v);
+                },
+              ),
+              const SizedBox(height: 14),
+
+              // 2. Filtro de Período
+              Text(
+                'Período dos Lançamentos',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<_ExportPeriodMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: _ExportPeriodMode.all,
+                    label: Text('Todo o Período', style: TextStyle(fontSize: 12)),
+                  ),
+                  ButtonSegment(
+                    value: _ExportPeriodMode.month,
+                    label: Text('Apenas o Mês', style: TextStyle(fontSize: 12)),
+                  ),
+                  ButtonSegment(
+                    value: _ExportPeriodMode.custom,
+                    label: Text('Definir Início e Fim',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+                selected: {_periodMode},
+                onSelectionChanged: (val) {
+                  setState(() => _periodMode = val.first);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Detalhe do período selecionado
+              if (_periodMode == _ExportPeriodMode.month) ...[
+                Row(
+                  children: [
+                    MonthYearPickerBar(
+                      currentMonthYM: _exportMonthYM,
+                      availableYears: widget.store.allYearsInDatabase(),
+                      onMonthChanged: (ym) => setState(() => _exportMonthYM = ym),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _exportMonthYM = todayISO().substring(0, 7);
+                        });
+                      },
+                      child: const Text('Mês Atual',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ] else if (_periodMode == _ExportPeriodMode.custom) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _startDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _startDate = picked;
+                              if (_endDate.isBefore(_startDate)) {
+                                _endDate = _startDate;
+                              }
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Data Inicial',
+                            prefixIcon: Icon(Icons.calendar_today, size: 16),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                          ),
+                          child: Text(
+                            '${_startDate.day.toString().padLeft(2, '0')}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.year}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _endDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _endDate = picked;
+                              if (_startDate.isAfter(_endDate)) {
+                                _startDate = _endDate;
+                              }
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Data Final',
+                            prefixIcon: Icon(Icons.event, size: 16),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                          ),
+                          child: Text(
+                            '${_endDate.day.toString().padLeft(2, '0')}/${_endDate.month.toString().padLeft(2, '0')}/${_endDate.year}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+
+              // Badge de contagem e botão de exportação
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colors.income.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: colors.income.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.list_alt, size: 16, color: colors.income),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$count lançamento${count == 1 ? '' : 's'} filtrado${count == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.income,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.accent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text(
+                      'Exportar Lançamentos (CSV)...',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: count > 0 ? _handleExportCSV : null,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Catálogo de Categorias Exportação
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.folder_shared_outlined,
+                  size: 24, color: colors.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Exportar Categorias e Subcategorias',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Exporta todas as ${widget.store.db.cats.length} categorias em formato CSV compatível.',
+                      style:
+                          TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.download_outlined, size: 16),
+                label: const Text('Exportar Categorias...'),
+                onPressed: _handleExportCategories,
+              ),
+            ],
+          ),
         ),
       ],
     );

@@ -4195,12 +4195,35 @@ class MoneyStore extends ChangeNotifier {
     return sheetResult;
   }
 
-  String exportCSVString({String? accountFilterId}) {
+  String exportCSVString({
+    String? accountFilterId,
+    String? startDate,
+    String? endDate,
+  }) {
     return CSVExporter.generateCSV(
       transactions: db.txs,
       accounts: db.accounts,
       accountFilterId: accountFilterId,
+      startDate: startDate,
+      endDate: endDate,
     );
+  }
+
+  int countTransactionsForExport({
+    String? accountFilterId,
+    String? startDate,
+    String? endDate,
+  }) {
+    var list = (accountFilterId != null && accountFilterId.isNotEmpty)
+        ? db.txs.where((t) => t.acc == accountFilterId)
+        : db.txs;
+    if (startDate != null && startDate.isNotEmpty) {
+      list = list.where((t) => t.date.compareTo(startDate) >= 0);
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      list = list.where((t) => t.date.compareTo(endDate) <= 0);
+    }
+    return list.length;
   }
 
   String exportCategoriesCSVString() {
