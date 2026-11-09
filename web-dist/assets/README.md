@@ -312,13 +312,24 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 ---
 
 ### 11. Central de Importação e Exportação (CSV e QIF Microsoft Money 99)
+- **Menu Lateral "Importação / Exportação"**: Ponto central único no menu lateral esquerdo que consolida todas as rotinas de entrada e saída de dados.
+- **Fluxo Direto Sem Caminhos Manuais**: Eliminação de campos de texto manuais e botões intermediários; o acionamento de importação ou exportação abre diretamente a janela nativa de arquivos do sistema operacional (`NativeFilePicker`).
+- **Filtros Avançados de Exportação**:
+  - Filtro por conta (todas as contas ou conta específica).
+  - Filtro por período: todo o período, apenas o mês selecionado (`MonthYearPickerBar`) ou intervalo customizado (data inicial e final com calendário nativo).
+  - Contador dinâmico com badge de lançamentos filtrados em tempo real antes de exportar.
+- **Rotinas Especializadas Integradas na Central**:
+  - Importação de lançamentos da Carteira (Atalhos iOS CSV com revisão de De/Para).
+  - Importação de comprovantes fiscais e recibos via OCR nativo e IA Gemini.
+  - Importação direta de lotes do coletor mobile (`openmoney_inbox.json`).
+  - Importação e exportação da árvore completa de categorias e subcategorias em CSV.
 - **Compatibilidade QIF (Microsoft Money 99 / Quicken)**:
   - Decodificação universal com fallback para **Windows CP1252 / Latin-1**, preservando caracteres acentuados legados.
   - Reconhecimento automático de transferências `[NomeDaConta]` e criação automática das contas inexistentes.
 - **Importador CSV Resiliente**:
   - Mapeamento flexível de colunas, múltiplos formatos de data e valores numéricos brasileiros ou internacionais.
   - Mapeamento de colunas de fatura/competência de cartão de crédito.
-  - Filtro opcional contra duplicação de lançamentos por chave composta $O(1)$.
+  - Filtro opcional contra duplicação de lançamentos por chave composta $O(1)$ com selo de proteção ativa.
 - **Exportação Completa da Base**:
   - Backup integral da base em JSON puro a qualquer momento.
 
