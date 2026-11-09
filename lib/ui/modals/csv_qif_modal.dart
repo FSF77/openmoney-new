@@ -518,56 +518,56 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-
-        // Rotinas Especializadas
-        Text(
-          'Rotinas Especializadas de Importação',
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-            color: colors.textPrimary,
+        if (!kIsWeb) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Rotinas Especializadas de Importação',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        _buildSpecialRoutineCard(
-          colors: colors,
-          icon: Icons.account_balance_wallet_outlined,
-          title: 'Importar da Carteira (Atalhos iOS CSV)',
-          subtitle:
-              'Importação assistida de compras e faturas do Apple Wallet via Atalhos com revisão de De/Para de contas.',
-          buttonLabel: 'Abrir Assistente da Carteira',
-          onTap: () {
-            Navigator.pop(context);
-            showWalletImportModal(context, widget.store);
-          },
-        ),
-        const SizedBox(height: 8),
-        _buildSpecialRoutineCard(
-          colors: colors,
-          icon: Icons.document_scanner_outlined,
-          title: 'Importar Comprovantes por OCR (Imagens e PDFs)',
-          subtitle:
-              'Reconhecimento ótico local e IA Gemini para ler cupons fiscais NFC-e, notas e comprovantes bancários.',
-          buttonLabel: 'Abrir Leitor de Comprovantes',
-          onTap: () {
-            Navigator.pop(context);
-            showReceiptOcrImportModal(context, widget.store);
-          },
-        ),
-        const SizedBox(height: 8),
-        _buildSpecialRoutineCard(
-          colors: colors,
-          icon: Icons.phone_iphone,
-          title: 'Importar do Celular (openmoney_inbox.json)',
-          subtitle:
-              'Importação direta de arquivo de lançamentos rápidos capturados no aplicativo móvel.',
-          buttonLabel: 'Importar Arquivo Inbox',
-          onTap: () {
-            Navigator.pop(context);
-            showMobileInboxImportFlow(context, widget.store);
-          },
-        ),
+          const SizedBox(height: 8),
+          _buildSpecialRoutineCard(
+            colors: colors,
+            icon: Icons.phone_iphone,
+            title: 'Importar do Celular (openmoney_inbox.json)',
+            subtitle:
+                'Importação direta de arquivo de lançamentos rápidos capturados no aplicativo móvel.',
+            buttonLabel: 'Importar Arquivo Inbox',
+            onTap: () {
+              Navigator.pop(context);
+              showMobileInboxImportFlow(context, widget.store);
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildSpecialRoutineCard(
+            colors: colors,
+            icon: Icons.document_scanner_outlined,
+            title: 'Importar Comprovantes por OCR (Imagens e PDFs)',
+            subtitle:
+                'Reconhecimento ótico local e IA Gemini para ler cupons fiscais NFC-e, notas e comprovantes bancários.',
+            buttonLabel: 'Abrir Leitor de Comprovantes',
+            onTap: () {
+              Navigator.pop(context);
+              showReceiptOcrImportModal(context, widget.store);
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildSpecialRoutineCard(
+            colors: colors,
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Importar da Carteira (Atalhos iOS CSV)',
+            subtitle:
+                'Importação assistida de compras e faturas do Apple Wallet via Atalhos com revisão de De/Para de contas.',
+            buttonLabel: 'Abrir Assistente da Carteira',
+            onTap: () {
+              Navigator.pop(context);
+              showWalletImportModal(context, widget.store);
+            },
+          ),
+        ],
         const SizedBox(height: 16),
 
         // Catálogo de Categorias
