@@ -1492,7 +1492,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
                 _SidebarNavTile(
                   icon: Icons.import_export,
-                  label: 'Central de Importação / Exportação',
+                  label: 'Importação / Exportação',
                   selected: false,
                   onTap: () => showCsvQifCenterModal(context, widget.store),
                 ),
