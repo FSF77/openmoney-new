@@ -22,13 +22,20 @@ Future<void> showCsvQifCenterModal(
 ) async {
   await showDialog(
     context: context,
-    builder: (ctx) => _CsvQifCenterDialog(store: store),
+    builder: (ctx) => _CsvQifCenterDialog(
+      store: store,
+      parentContext: context,
+    ),
   );
 }
 
 class _CsvQifCenterDialog extends StatefulWidget {
   final MoneyStore store;
-  const _CsvQifCenterDialog({required this.store});
+  final BuildContext parentContext;
+  const _CsvQifCenterDialog({
+    required this.store,
+    required this.parentContext,
+  });
 
   @override
   State<_CsvQifCenterDialog> createState() => _CsvQifCenterDialogState();
@@ -537,8 +544,9 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 'Importação direta de arquivo de lançamentos rápidos capturados no aplicativo móvel.',
             buttonLabel: 'Importar Arquivo Inbox',
             onTap: () {
+              final parentCtx = widget.parentContext;
               Navigator.pop(context);
-              showMobileInboxImportFlow(context, widget.store);
+              showMobileInboxImportFlow(parentCtx, widget.store);
             },
           ),
           const SizedBox(height: 8),
@@ -550,8 +558,9 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 'Reconhecimento ótico local e IA Gemini para ler cupons fiscais NFC-e, notas e comprovantes bancários.',
             buttonLabel: 'Abrir Leitor de Comprovantes',
             onTap: () {
+              final parentCtx = widget.parentContext;
               Navigator.pop(context);
-              showReceiptOcrImportModal(context, widget.store);
+              showReceiptOcrImportModal(parentCtx, widget.store);
             },
           ),
           const SizedBox(height: 8),
@@ -563,8 +572,9 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 'Importação assistida de compras e faturas do Apple Wallet via Atalhos com revisão de De/Para de contas.',
             buttonLabel: 'Abrir Assistente da Carteira',
             onTap: () {
+              final parentCtx = widget.parentContext;
               Navigator.pop(context);
-              showWalletImportModal(context, widget.store);
+              showWalletImportModal(parentCtx, widget.store);
             },
           ),
         ],
