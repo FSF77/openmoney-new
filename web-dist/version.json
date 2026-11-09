@@ -1,29 +1,29 @@
 {
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "web": {
-    "version": "2.3.3",
-    "build": 95,
+    "version": "2.3.4",
+    "build": 96,
     "releaseDate": "09/11/2026"
   },
-  "build": 95,
-  "notes": "Melhoria menus, centralizar as importações e exportações em local único, versão Flutter agora com sincronismo online igual a versão web em https://openmoney.app.br, quer usar online, faça o backup da sua base de dados local antes de iniciar, melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
+  "build": 96,
+  "notes": "Tela de lançamentos consolidado, melhoria menus, centralizar as importações e exportações em local único, versão Flutter agora com sincronismo online igual a versão web em https://openmoney.app.br, quer usar online, faça o backup da sua base de dados local antes de iniciar, melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
   "releaseDate": "09/11/2026",
   "windows": {
-    "build": 94,
+    "build": 95,
     "version": "2.3.3",
     "sizeMb": 13,
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.3.zip",
-    "sha256": "35ccfbc39d0898bb6fc7daeb7892c73f64327981573034ee47748e90ff6717e9",
+    "sha256": "e9f97c1da8177b95f18b1eb4c35a98937d3d7f04deca2b9d024b6279815c82cf",
     "releaseDate": "09/11/2026"
   },
   "macos": {
-    "version": "2.3.3",
-    "build": 95,
+    "version": "2.3.4",
+    "build": 96,
     "releaseDate": "09/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.3.zip",
-    "sha256": "137e03796fa17c54bf07871e75ec823c0a4bbf6fbe0cd367ba1afc2c536cd16b",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.4.zip",
+    "sha256": "e1d526a57f0cf12cc02347d3031d6af475b20f109b5703958a8d213f94e5e69f",
     "sizeMb": 12
   },
-  "title": "OpenMoney Flutter v2.3.3"
+  "title": "OpenMoney Flutter v2.3.4"
 }

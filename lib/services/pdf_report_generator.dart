@@ -929,6 +929,246 @@ class PdfReportGenerator {
     return doc.buildBytes();
   }
 
+  /// Gera bytes PDF nativos do relatório consolidado de lançamentos (todas as contas)
+  static Uint8List buildConsolidatedTransactionsPdfBytes({
+    required MoneyStore store,
+    required String periodTitle,
+    required List<Transaction> transactions,
+    required int incomeCents,
+    required int expenseCents,
+    required int netCents,
+  }) {
+    final doc = _SimpleA4PdfDocument();
+    final now = DateTime.now();
+    final emission =
+        '${now.day.toString().padLeft(2, "0")}/${now.month.toString().padLeft(2, "0")}/${now.year} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}';
+
+    const margin = 32.0;
+    const contentWidth = _SimpleA4PdfDocument.pageWidth - margin * 2;
+    const footerY = _SimpleA4PdfDocument.pageHeight - 28.0;
+
+    final accMap = {for (final a in store.db.accounts) a.id: a.name};
+
+    void drawPageHeader(int pageNum) {
+      doc.drawText(
+        'OpenMoney',
+        margin,
+        36,
+        fontSize: 16,
+        bold: true,
+        r: 0.01,
+        g: 0.52,
+        b: 0.78,
+      );
+      doc.drawText(
+        'Lançamentos Consolidados — $periodTitle',
+        margin,
+        52,
+        fontSize: 10.5,
+        bold: true,
+        r: 0.20,
+        g: 0.25,
+        b: 0.33,
+      );
+      doc.drawTextRight(
+        'Base: ${store.databaseDisplayName} • Pág. $pageNum',
+        margin + contentWidth,
+        38,
+        fontSize: 8.5,
+        r: 0.40,
+        g: 0.45,
+        b: 0.55,
+      );
+      doc.drawTextRight(
+        'Emissão: $emission',
+        margin + contentWidth,
+        50,
+        fontSize: 8.5,
+        r: 0.40,
+        g: 0.45,
+        b: 0.55,
+      );
+      doc.drawLine(
+        margin,
+        60,
+        margin + contentWidth,
+        60,
+        r: 0.01,
+        g: 0.52,
+        b: 0.78,
+        lineWidth: 1.5,
+      );
+    }
+
+    int pageNum = 1;
+    drawPageHeader(pageNum);
+    double y = 70;
+
+    // Bloco KPI de Resumo Executivo
+    doc.fillRect(margin, y, contentWidth, 38, r: 0.96, g: 0.97, b: 0.99);
+    doc.strokeRect(margin, y, contentWidth, 38, r: 0.85, g: 0.88, b: 0.92);
+
+    doc.drawText(
+      'Total de Lançamentos: ${transactions.length}',
+      margin + 8,
+      y + 14,
+      fontSize: 8.2,
+      bold: true,
+      r: 0.30,
+      g: 0.35,
+      b: 0.43,
+    );
+    doc.drawText(
+      'Receitas (+): ${brl(incomeCents)}   |   Despesas (−): ${brl(expenseCents)}   |   Resultado: ${brl(netCents)}',
+      margin + 8,
+      y + 29,
+      fontSize: 8.8,
+      bold: true,
+      r: netCents >= 0 ? 0.02 : 0.88,
+      g: netCents >= 0 ? 0.59 : 0.11,
+      b: netCents >= 0 ? 0.40 : 0.28,
+    );
+    y += 48;
+
+    void drawTableHeader(double topY) {
+      doc.fillRect(margin, topY, contentWidth, 16, r: 0.94, g: 0.96, b: 0.98);
+      doc.drawText('St', margin + 4, topY + 11, fontSize: 8, bold: true);
+      doc.drawText('Data', margin + 26, topY + 11, fontSize: 8, bold: true);
+      doc.drawText('Conta', margin + 78, topY + 11, fontSize: 8, bold: true);
+      doc.drawText(
+        'Favorecido / Notas',
+        margin + 175,
+        topY + 11,
+        fontSize: 8,
+        bold: true,
+      );
+      doc.drawText(
+        'Categoria',
+        margin + 355,
+        topY + 11,
+        fontSize: 8,
+        bold: true,
+      );
+      doc.drawTextRight(
+        'Valor (R\$)',
+        margin + contentWidth - 4,
+        topY + 11,
+        fontSize: 8,
+        bold: true,
+      );
+      doc.drawLine(
+        margin,
+        topY + 16,
+        margin + contentWidth,
+        topY + 16,
+        r: 0.75,
+        g: 0.80,
+        b: 0.86,
+      );
+    }
+
+    drawTableHeader(y);
+    y += 24;
+
+    void drawTxRow(Transaction t) {
+      final cleanMemo = t.memo.trim();
+      final hasMemo = cleanMemo.isNotEmpty;
+      final neededHeight = hasMemo ? 22.0 : 14.0;
+
+      if (y + neededHeight > footerY - 32) {
+        doc.newPage();
+        pageNum++;
+        drawPageHeader(pageNum);
+        y = 70;
+        drawTableHeader(y);
+        y += 24;
+      }
+
+      final isIncome = t.amt >= 0;
+      final accName = accMap[t.acc] ?? 'Conta';
+
+      doc.drawText(
+        t.rec ? '[x]' : '[ ]',
+        margin + 4,
+        y,
+        fontSize: 7.5,
+        r: t.rec ? 0.02 : 0.55,
+        g: t.rec ? 0.59 : 0.60,
+        b: t.rec ? 0.40 : 0.65,
+      );
+      doc.drawText(fmtDate(t.date), margin + 26, y, fontSize: 7.8);
+      doc.drawText(
+        accName,
+        margin + 78,
+        y,
+        fontSize: 7.8,
+        bold: true,
+        r: 0.15,
+        g: 0.20,
+        b: 0.30,
+        maxChars: 18,
+      );
+      doc.drawText(
+        t.payee,
+        margin + 175,
+        y,
+        fontSize: 8,
+        bold: true,
+        maxChars: 34,
+      );
+      if (hasMemo) {
+        doc.drawText(
+          cleanMemo,
+          margin + 175,
+          y + 8.5,
+          fontSize: 7.0,
+          r: 0.42,
+          g: 0.47,
+          b: 0.55,
+          maxChars: 42,
+        );
+      }
+      doc.drawText(
+        t.cat.isEmpty ? 'Sem categoria' : t.cat,
+        margin + 355,
+        y,
+        fontSize: 7.8,
+        r: 0.30,
+        g: 0.35,
+        b: 0.43,
+        maxChars: 24,
+      );
+      doc.drawTextRight(
+        brl(t.amt),
+        margin + contentWidth - 4,
+        y,
+        fontSize: 8.2,
+        bold: true,
+        r: isIncome ? 0.02 : 0.88,
+        g: isIncome ? 0.59 : 0.11,
+        b: isIncome ? 0.40 : 0.28,
+      );
+
+      final sepY = hasMemo ? (y + 12.5) : (y + 4.0);
+      doc.drawLine(
+        margin,
+        sepY,
+        margin + contentWidth,
+        sepY,
+        r: 0.93,
+        g: 0.95,
+        b: 0.97,
+      );
+      y += neededHeight;
+    }
+
+    for (final t in transactions) {
+      drawTxRow(t);
+    }
+
+    return doc.buildBytes();
+  }
+
   /// Exporta bytes PDF para arquivo escolhido pelo usuário e abre no visualizador do sistema
   static Future<void> saveAndOpenPdfBytes(
     BuildContext context, {

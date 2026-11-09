@@ -22,6 +22,7 @@ import 'modals/transaction_modal.dart';
 import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
 import 'views/account_ledger_view.dart';
+import 'views/all_transactions_view.dart';
 import 'views/budget_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
@@ -462,6 +463,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     opening: 0,
                   ));
         return AccountLedgerView(store: widget.store, account: acc);
+      case NavModule.transactions:
+        return AllTransactionsView(store: widget.store);
       case NavModule.cashFlow:
         return CashFlowView(store: widget.store);
       case NavModule.reports:
@@ -1383,6 +1386,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               if (widget.store.sidebarShowPlanning) ...[
+                _SidebarNavTile(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Lançamentos',
+                  selected: widget.store.activeModule == NavModule.transactions,
+                  onTap: () => selectModule(NavModule.transactions),
+                ),
                 _SidebarNavTile(
                   icon: Icons.notifications_active_outlined,
                   label: 'Contas a Pagar & Receber',

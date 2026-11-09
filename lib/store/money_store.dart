@@ -14,6 +14,7 @@ import '../services/update_service.dart';
 
 enum NavModule {
   account,
+  transactions,
   cashFlow,
   reports,
   budget,
@@ -4268,6 +4269,144 @@ class MoneyStore extends ChangeNotifier {
       }
     }
     return years.toList()..sort();
+  }
+
+  /// Retorna lançamentos consolidados para a visão multi-contas, filtrados por
+  /// dia, mês ou ano, respeitando a modalidade de cartão (data do lançamento vs. fatura).
+  ({
+    List<Transaction> transactions,
+    int incomeCents,
+    int expenseCents,
+    int netCents,
+  }) consolidatedTransactions({
+    String? dayIso, // Ex: '2026-11-09'
+    String? monthYM, // Ex: '2026-11'
+    int? year, // Ex: 2026
+    bool cardByInvoice = false,
+    Set<String>? accountFilterIds,
+    String searchQuery = '',
+  }) {
+    rebuildIndexesIfNeeded();
+
+    final cardAccounts = {
+      for (final a in db.accounts.where((a) => a.type == kCardType)) a.id: a
+    };
+
+    final query = removeDiacritics(searchQuery.trim()).toLowerCase();
+    final tokens = query.isEmpty
+        ? const <String>[]
+        : query.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+
+    final accNames = {
+      for (final a in db.accounts) a.id: removeDiacritics(a.name).toLowerCase()
+    };
+
+    final filtered = <Transaction>[];
+    int income = 0;
+    int expense = 0;
+
+    for (final tx in db.txs) {
+      if (accountFilterIds != null &&
+          accountFilterIds.isNotEmpty &&
+          !accountFilterIds.contains(tx.acc)) {
+        continue;
+      }
+
+      final isCard = cardAccounts.containsKey(tx.acc);
+
+      // No modo de cartão por fatura, lançamentos automáticos de pagamento de fatura
+      // (tx.auto == true) são desconsiderados para não duplicar compras e pagamentos.
+      if (cardByInvoice && tx.auto == true && isCard) {
+        continue;
+      }
+
+      String effectiveDate = tx.date;
+      if (cardByInvoice && isCard) {
+        final card = cardAccounts[tx.acc]?.card;
+        if (card != null) {
+          final ik = tx.ik ?? invKeyFor(card, tx.date);
+          effectiveDate = cardAccounts[tx.acc]?.invoices?[ik]?.due ??
+              invDates(card, ik).due;
+        }
+      }
+
+      // Verificação temporal baseada na data efetiva
+      if (dayIso != null && dayIso.isNotEmpty) {
+        if (effectiveDate != dayIso) {
+          continue;
+        }
+      } else if (monthYM != null && monthYM.isNotEmpty) {
+        if (!effectiveDate.startsWith('$monthYM-')) {
+          continue;
+        }
+      } else if (year != null) {
+        final yearPrefix = '$year-';
+        if (!effectiveDate.startsWith(yearPrefix)) {
+          continue;
+        }
+      }
+
+      // Filtro de busca textual
+      if (tokens.isNotEmpty) {
+        final payee = removeDiacritics(tx.payee).toLowerCase();
+        final cat = removeDiacritics(tx.cat).toLowerCase();
+        final memo = removeDiacritics(tx.memo).toLowerCase();
+        final accName = accNames[tx.acc] ?? '';
+        final dateStr = tx.date;
+        final effDateStr = effectiveDate;
+        final formattedDate = fmtDate(tx.date).toLowerCase();
+        final formattedEffDate = fmtDate(effectiveDate).toLowerCase();
+        final amtBrl = brl(tx.amt).toLowerCase();
+
+        bool matchAll = true;
+        for (final token in tokens) {
+          if (!(payee.contains(token) ||
+              cat.contains(token) ||
+              memo.contains(token) ||
+              accName.contains(token) ||
+              dateStr.contains(token) ||
+              effDateStr.contains(token) ||
+              formattedDate.contains(token) ||
+              formattedEffDate.contains(token) ||
+              amtBrl.contains(token))) {
+            matchAll = false;
+            break;
+          }
+        }
+        if (!matchAll) continue;
+      }
+
+      final txToDisplay = (cardByInvoice && isCard && effectiveDate != tx.date)
+          ? tx.copyWith(date: effectiveDate)
+          : tx;
+
+      filtered.add(txToDisplay);
+
+      // Soma de Receitas e Despesas (ignora transferências entre contas e auto faturas)
+      if (tx.xfer == null && tx.peer == null && tx.auto != true) {
+        if (tx.amt > 0) {
+          income += tx.amt;
+        } else if (tx.amt < 0) {
+          expense += tx.amt.abs();
+        }
+      }
+    }
+
+    filtered.sort((a, b) {
+      final dc = a.date.compareTo(b.date);
+      if (dc != 0) return dc;
+      final tA = a.createdAt ?? 0.0;
+      final tB = b.createdAt ?? 0.0;
+      if (tA != tB) return tA.compareTo(tB);
+      return a.id.compareTo(b.id);
+    });
+
+    return (
+      transactions: filtered,
+      incomeCents: income,
+      expenseCents: expense,
+      netCents: income - expense,
+    );
   }
 
   List<Transaction> searchTransactions({
