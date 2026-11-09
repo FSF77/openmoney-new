@@ -1566,10 +1566,11 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 1. Segmented Control / Pílula de Alternância Rápida
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                    child: Container(
+                  // 1. Segmented Control / Pílula de Alternância Rápida (Apenas no Desktop)
+                  if (!kIsWeb)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                      child: Container(
                       height: 28,
                       decoration: BoxDecoration(
                         color: colors.bgPrimary.withValues(alpha: 0.5),
@@ -1701,7 +1702,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ),
 
                   // 2. Linha descritiva clicável (abre o modal correspondente)
-                  if (isCloud)
+                  if (isCloud || kIsWeb)
                     Tooltip(
                       message:
                           '${cloud.userEmail} • ${cloud.statusLabel}\nClique para gerenciar a conta Cloud',
@@ -1709,8 +1710,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         onTap: () =>
                             showCloudAccountModal(context, widget.store),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: kIsWeb ? 10 : 6,
+                          ),
                           child: Row(
                             children: [
                               Container(
@@ -1743,7 +1746,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                     )
-                  else
+                  else if (!kIsWeb)
                     Tooltip(
                       message:
                           'Base Local: ${widget.store.databaseDisplayName}\nClique para gerenciar arquivos e backups locais',
