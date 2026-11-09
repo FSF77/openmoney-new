@@ -67,9 +67,14 @@ O **OpenMoney** une o rigor contábil, a previsibilidade e a robustez do lendár
 2. **Sincronização Livre e Transparente**:
    - Salve o arquivo `openmoney.json` no **iCloud Drive**, **OneDrive**, **Google Drive**, **Dropbox**, pen drive ou no disco local.
    - Integração com seletores nativos do sistema (`NSSavePanel` / `NSOpenPanel` no macOS; diálogos Win32 no Windows).
-3. **Precisão Financeira em Centavos Inteiros (`Int`)**:
+3. **OpenMoney Cloud & Sincronização em Tempo Real (Sync v2)**:
+   - Suporte híbrido opcional: use bases locais em arquivo ou conecte sua conta online para sincronização instantânea em tempo real via Cloudflare D1/WebSockets.
+   - **Backups Locais de Segurança:** No Desktop, o app gera backups diários e manuais compactados (`.zip`) no disco do seu computador, mesmo ao utilizar o modo online.
+   - **Logs de Auditoria Centralizados:** Histórico completo de alterações com persistência remota e retenção de 30 dias.
+   - **Segurança de Conta:** Criação e alteração de e-mail validadas por código numérico de 6 dígitos (Resend), com envio preventivo do backup `.zip` em caso de exclusão de dados.
+4. **Precisão Financeira em Centavos Inteiros (`Int`)**:
    - Todos os valores monetários são calculados e armazenados internamente como centavos inteiros (`amt: Int`), eliminando dízimas periódicas e erros de arredondamento de ponto flutuante (`Double` / `Float`).
-4. **Resiliência e Gravação Atômica**:
+5. **Resiliência e Gravação Atômica**:
    - Proteção estrita contra corrupção em quedas de energia: a gravação ocorre em arquivo temporário com substituição atômica imediata.
    - Rotina automatizada de **Backups em ZIP** com histórico e retenção segura.
 
