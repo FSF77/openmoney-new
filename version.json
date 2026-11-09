@@ -1,29 +1,29 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "version":  "2.3.3",
-    "web":  {
-                "version":  "2.3.3",
-                "build":  94,
-                "releaseDate":  "09/11/2026"
-            },
-    "build":  94,
-    "notes":  "Melhoria menus, centralizar as importações e exportações em local único, versão Flutter agora com sincronismo online igual a versão web em https://openmoney.app.br, quer usar online, faça o backup da sua base de dados local antes de iniciar, melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
-    "releaseDate":  "09/11/2026",
-    "windows":  {
-                    "build":  94,
-                    "version":  "2.3.3",
-                    "sizeMb":  13,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.3.zip",
-                    "sha256":  "35ccfbc39d0898bb6fc7daeb7892c73f64327981573034ee47748e90ff6717e9",
-                    "releaseDate":  "09/11/2026"
-                },
-    "macos":  {
-                  "version":  "2.3.3",
-                  "build":  94,
-                  "releaseDate":  "09/11/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.3.zip",
-                  "sha256":  "0e87fc76a6048f6cc3e6911f256d04596aebec5896dae51bd1530cf3dcc746b7",
-                  "sizeMb":  12
-              },
-    "title":  "OpenMoney Flutter v2.3.3"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "version": "2.3.3",
+  "web": {
+    "version": "2.3.3",
+    "build": 95,
+    "releaseDate": "09/11/2026"
+  },
+  "build": 95,
+  "notes": "Melhoria menus, centralizar as importações e exportações em local único, versão Flutter agora com sincronismo online igual a versão web em https://openmoney.app.br, quer usar online, faça o backup da sua base de dados local antes de iniciar, melhorias visuais, é possível incluir comentários no fluxo na última linha (saldo final cumulado)",
+  "releaseDate": "09/11/2026",
+  "windows": {
+    "build": 94,
+    "version": "2.3.3",
+    "sizeMb": 13,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.3.3.zip",
+    "sha256": "35ccfbc39d0898bb6fc7daeb7892c73f64327981573034ee47748e90ff6717e9",
+    "releaseDate": "09/11/2026"
+  },
+  "macos": {
+    "version": "2.3.3",
+    "build": 95,
+    "releaseDate": "09/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.3.3.zip",
+    "sha256": "137e03796fa17c54bf07871e75ec823c0a4bbf6fbe0cd367ba1afc2c536cd16b",
+    "sizeMb": 12
+  },
+  "title": "OpenMoney Flutter v2.3.3"
 }
