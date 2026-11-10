@@ -552,7 +552,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     widget.store.navigateTo(NavModule.dashboard);
                   },
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 8),
                 InkWell(
                   borderRadius: BorderRadius.circular(4),
                   onTap: () {
