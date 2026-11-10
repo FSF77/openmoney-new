@@ -569,10 +569,18 @@ class _SettingsViewState extends State<SettingsView> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  title: const Text('Radar de Vencimentos Próximos'),
-                  subtitle: const Text('Contas e faturas a pagar com botão de quitação rápida.'),
+                  title: const Text('Contas a Pagar'),
+                  subtitle: const Text('Despesas e contas a pagar com botão de quitação rápida.'),
                   value: widget.store.dashboardWidgets['dueBills'] ?? true,
                   onChanged: (v) => widget.store.setDashboardWidget('dueBills', v ?? true),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Contas a Receber'),
+                  subtitle: const Text('Receitas e valores a receber com botão de confirmação rápida.'),
+                  value: widget.store.dashboardWidgets['receivables'] ?? true,
+                  onChanged: (v) => widget.store.setDashboardWidget('receivables', v ?? true),
                 ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,

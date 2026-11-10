@@ -78,7 +78,16 @@ class DashboardOverviewView extends StatelessWidget {
           );
           break;
         case 'dueBills':
-          cardWidget = _buildDueBillsRadarCard(
+          cardWidget = _buildDueBillsPayableCard(
+            context,
+            colors,
+            dueSummary,
+            dueItems,
+            widgetKey: key,
+          );
+          break;
+        case 'receivables':
+          cardWidget = _buildDueBillsReceivableCard(
             context,
             colors,
             dueSummary,
@@ -940,15 +949,18 @@ class DashboardOverviewView extends StatelessWidget {
   }
 
   // =========================================================================
-  // 3. RADAR DE VENCIMENTOS
+  // 3. A PAGAR
   // =========================================================================
-  Widget _buildDueBillsRadarCard(
+  Widget _buildDueBillsPayableCard(
     BuildContext context,
     OpenMoneyColors colors,
     dynamic summary,
-    List<DueBillItem> items, {
+    List<DueBillItem> allItems, {
     required String widgetKey,
   }) {
+    final items = allItems.where((i) => i.isPayable).toList();
+    final overdueCount = items.where((i) => i.isOverdue).length;
+
     return GlassCard(
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(18),
@@ -962,11 +974,11 @@ class DashboardOverviewView extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(Icons.notifications_active_outlined,
-                        color: colors.warning, size: 20),
+                        color: colors.expense, size: 20),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Radar de Vencimentos',
+                        'A Pagar',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -976,24 +988,24 @@ class DashboardOverviewView extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (summary.totalCount > 0) ...[
+                    if (items.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: (summary.overdueCount > 0
+                          color: (overdueCount > 0
                                   ? colors.expense
                                   : colors.warning)
                               .withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          '${summary.totalCount}',
+                          '${items.length}',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: summary.overdueCount > 0
+                            color: overdueCount > 0
                                 ? colors.expense
                                 : colors.warning,
                           ),
@@ -1033,7 +1045,7 @@ class DashboardOverviewView extends StatelessWidget {
                         color: colors.income, size: 32),
                     const SizedBox(height: 8),
                     Text(
-                      'Nenhum vencimento pendente nos próximos ${store.reminderDaysAhead} dias!',
+                      'Nenhuma conta a pagar nos próximos ${store.reminderDaysAhead} dias!',
                       style: TextStyle(
                           fontSize: 13, color: colors.textSecondary),
                       textAlign: TextAlign.center,
@@ -1045,6 +1057,7 @@ class DashboardOverviewView extends StatelessWidget {
           else ...[
             ...items.take(4).map((item) {
               final isOverdue = item.isOverdue;
+              final amt = item.tx.amt < 0 ? item.tx.amt : -item.tx.amt;
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1099,7 +1112,7 @@ class DashboardOverviewView extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      brl(item.tx.amt.abs()),
+                      brl(amt),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
@@ -1113,6 +1126,200 @@ class DashboardOverviewView extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       tooltip: 'Marcar como Pago',
+                      icon: Icon(Icons.check_circle_outline,
+                          size: 18, color: colors.income),
+                      onPressed: () {
+                        store.toggleReconciled(item.tx.id);
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 3.1 A RECEBER
+  // =========================================================================
+  Widget _buildDueBillsReceivableCard(
+    BuildContext context,
+    OpenMoneyColors colors,
+    dynamic summary,
+    List<DueBillItem> allItems, {
+    required String widgetKey,
+  }) {
+    final items = allItems.where((i) => i.isReceivable).toList();
+    final overdueCount = items.where((i) => i.isOverdue).length;
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.event_available_outlined,
+                        color: colors.income, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'A Receber',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (items.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (overdueCount > 0
+                                  ? colors.expense
+                                  : colors.income)
+                              .withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${items.length}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: overdueCount > 0
+                                ? colors.expense
+                                : colors.income,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                    onPressed: () => store.navigateTo(NavModule.dueBills),
+                    child:
+                        const Text('Ver todos →', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(width: 4),
+                  _buildMoveButtons(widgetKey, colors),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        color: colors.income, size: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Nenhuma receita a receber nos próximos ${store.reminderDaysAhead} dias!',
+                      style: TextStyle(
+                          fontSize: 13, color: colors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            ...items.take(4).map((item) {
+              final isOverdue = item.isOverdue;
+              final amt = item.tx.amt.abs();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isOverdue
+                      ? colors.expense.withValues(alpha: 0.08)
+                      : colors.surfaceGlass,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isOverdue
+                        ? colors.expense.withValues(alpha: 0.3)
+                        : colors.borderGlass,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isOverdue
+                          ? Icons.warning_amber_rounded
+                          : Icons.calendar_today_outlined,
+                      size: 16,
+                      color: isOverdue ? colors.expense : colors.income,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.tx.payee.isEmpty
+                                ? 'Sem favorecido'
+                                : item.tx.payee,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Vence: ${item.dueDate != null ? fmtDate(item.dueDate!) : ''} • ${item.accountName}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isOverdue
+                                  ? colors.expense
+                                  : colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      brl(amt),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: colors.income,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Marcar como Recebido',
                       icon: Icon(Icons.check_circle_outline,
                           size: 18, color: colors.income),
                       onPressed: () {

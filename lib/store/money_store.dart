@@ -141,6 +141,7 @@ class MoneyStore extends ChangeNotifier {
     'accounts',
     'investments',
     'dueBills',
+    'receivables',
     'cards',
     'categories',
     'quickActions',
@@ -150,6 +151,7 @@ class MoneyStore extends ChangeNotifier {
     'accounts': true,
     'investments': true,
     'dueBills': true,
+    'receivables': true,
     'cards': true,
     'categories': true,
     'quickActions': true,
@@ -419,14 +421,18 @@ class MoneyStore extends ChangeNotifier {
           'accounts',
           'investments',
           'dueBills',
+          'receivables',
           'cards',
           'categories',
           'quickActions'
         ]) {
           if (!dashboardWidgetsOrder.contains(k)) {
             final accIdx = dashboardWidgetsOrder.indexOf('accounts');
+            final dueIdx = dashboardWidgetsOrder.indexOf('dueBills');
             if (k == 'investments' && accIdx != -1) {
               dashboardWidgetsOrder.insert(accIdx + 1, k);
+            } else if (k == 'receivables' && dueIdx != -1) {
+              dashboardWidgetsOrder.insert(dueIdx + 1, k);
             } else {
               dashboardWidgetsOrder.add(k);
             }
