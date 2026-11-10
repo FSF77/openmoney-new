@@ -11,8 +11,10 @@ import '../services/native_file_picker.dart';
 import '../services/platform_io.dart';
 import '../services/sync_engine.dart';
 import '../services/update_service.dart';
+import '../ui/theme/liquid_glass.dart';
 
 enum NavModule {
+  dashboard,
   account,
   transactions,
   cashFlow,
@@ -22,6 +24,7 @@ enum NavModule {
   search,
   dueBills,
   installments,
+  settings,
 }
 
 enum ScopeChoice {
@@ -122,6 +125,31 @@ class MoneyStore extends ChangeNotifier {
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
   double fontScale = 1.0;
   bool isSidebarVisible = true;
+  String accentColorKey = 'sky';
+  bool isFlatClean = false;
+  String uiDensityMode = 'compact'; // 'compact' | 'comfortable'
+  String sidebarMode = 'expanded'; // 'expanded' | 'miniRail' | 'hidden'
+  String startupView = 'lastAccount'; // 'dashboard' | 'lastAccount'
+  String ledgerViewMode = 'list'; // 'list' | 'table'
+  bool sortAscendingDate = true;
+  bool dashboardAccountsShowActive = true;
+  bool dashboardAccountsShowZeroBalance = true;
+  List<String> dashboardWidgetsOrder = [
+    'patrimony',
+    'accounts',
+    'dueBills',
+    'cards',
+    'categories',
+    'quickActions',
+  ];
+  Map<String, bool> dashboardWidgets = {
+    'patrimony': true,
+    'accounts': true,
+    'dueBills': true,
+    'cards': true,
+    'categories': true,
+    'quickActions': true,
+  };
   bool isGeminiAiEnabled = false;
   String geminiApiKey = '';
   bool sidebarShowFavorites = true;
@@ -300,6 +328,17 @@ class MoneyStore extends ChangeNotifier {
       'isDarkMode': isDarkMode,
       'fontScale': fontScale,
       'isSidebarVisible': isSidebarVisible,
+      'accentColorKey': accentColorKey,
+      'isFlatClean': isFlatClean,
+      'uiDensityMode': uiDensityMode,
+      'sidebarMode': sidebarMode,
+      'startupView': startupView,
+      'ledgerViewMode': ledgerViewMode,
+      'sortAscendingDate': sortAscendingDate,
+      'dashboardAccountsShowActive': dashboardAccountsShowActive,
+      'dashboardAccountsShowZeroBalance': dashboardAccountsShowZeroBalance,
+      'dashboardWidgetsOrder': List<String>.from(dashboardWidgetsOrder),
+      'dashboardWidgets': Map<String, bool>.from(dashboardWidgets),
       'sidebarShowFavorites': sidebarShowFavorites,
       'sidebarShowActiveAccounts': sidebarShowActiveAccounts,
       'sidebarShowInactiveAccounts': sidebarShowInactiveAccounts,
@@ -317,6 +356,63 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['isDarkMode'] is bool) {
       isDarkMode = cfg['isDarkMode'] as bool;
+    }
+    if (cfg['accentColorKey'] is String) {
+      accentColorKey = cfg['accentColorKey'] as String;
+    }
+    OpenMoneyColors.activeAccentKey = accentColorKey;
+    if (cfg['isFlatClean'] is bool) {
+      isFlatClean = cfg['isFlatClean'] as bool;
+    }
+    OpenMoneyColors.activeIsFlatClean = isFlatClean;
+    if (cfg['uiDensityMode'] is String) {
+      uiDensityMode = cfg['uiDensityMode'] as String;
+    }
+    if (cfg['sidebarMode'] is String) {
+      sidebarMode = cfg['sidebarMode'] as String;
+    }
+    if (cfg['startupView'] is String) {
+      startupView = cfg['startupView'] as String;
+    }
+    if (cfg['ledgerViewMode'] is String) {
+      ledgerViewMode = cfg['ledgerViewMode'] as String;
+    }
+    if (cfg['sortAscendingDate'] is bool) {
+      sortAscendingDate = cfg['sortAscendingDate'] as bool;
+    }
+    if (cfg['dashboardAccountsShowActive'] is bool) {
+      dashboardAccountsShowActive = cfg['dashboardAccountsShowActive'] as bool;
+    }
+    if (cfg['dashboardAccountsShowZeroBalance'] is bool) {
+      dashboardAccountsShowZeroBalance =
+          cfg['dashboardAccountsShowZeroBalance'] as bool;
+    }
+    if (cfg['dashboardWidgetsOrder'] is List) {
+      final list = (cfg['dashboardWidgetsOrder'] as List)
+          .map((e) => e.toString())
+          .where((e) => e != 'budget')
+          .toList();
+      if (list.isNotEmpty) {
+        dashboardWidgetsOrder = list;
+        for (final k in [
+          'patrimony',
+          'accounts',
+          'dueBills',
+          'cards',
+          'categories',
+          'quickActions'
+        ]) {
+          if (!dashboardWidgetsOrder.contains(k)) {
+            dashboardWidgetsOrder.add(k);
+          }
+        }
+      }
+    }
+    if (cfg['dashboardWidgets'] is Map) {
+      final map = Map<String, dynamic>.from(cfg['dashboardWidgets'] as Map);
+      map.forEach((k, v) {
+        if (v is bool) dashboardWidgets[k] = v;
+      });
     }
     if (cfg['fontScale'] is num) {
       final s = (cfg['fontScale'] as num).toDouble();
@@ -438,6 +534,9 @@ class MoneyStore extends ChangeNotifier {
       rebuildIndexes();
       if (db.accounts.isNotEmpty) {
         selectedAccountId = db.accounts.first.id;
+        if (startupView == 'dashboard') {
+          activeModule = NavModule.dashboard;
+        }
       }
       ensureDailyLocalBackup();
       notifyListeners();
@@ -544,6 +643,9 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      if (startupView == 'dashboard') {
+        activeModule = NavModule.dashboard;
+      }
     }
 
     _performDiskWrite();
@@ -562,6 +664,145 @@ class MoneyStore extends ChangeNotifier {
     isDarkMode = !isDarkMode;
     final cfg = _readConfig();
     cfg['isDarkMode'] = isDarkMode;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setAccentColorKey(String key) {
+    accentColorKey = key;
+    OpenMoneyColors.activeAccentKey = key;
+    final cfg = _readConfig();
+    cfg['accentColorKey'] = key;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setIsFlatClean(bool value) {
+    isFlatClean = value;
+    OpenMoneyColors.activeIsFlatClean = value;
+    final cfg = _readConfig();
+    cfg['isFlatClean'] = value;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setUiDensityMode(String mode) {
+    uiDensityMode = mode;
+    final cfg = _readConfig();
+    cfg['uiDensityMode'] = mode;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setSidebarMode(String mode) {
+    sidebarMode = mode;
+    isSidebarVisible = mode != 'hidden';
+    final cfg = _readConfig();
+    cfg['sidebarMode'] = mode;
+    cfg['isSidebarVisible'] = isSidebarVisible;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setStartupView(String view) {
+    startupView = view;
+    final cfg = _readConfig();
+    cfg['startupView'] = view;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setLedgerViewMode(String mode) {
+    ledgerViewMode = mode;
+    final cfg = _readConfig();
+    cfg['ledgerViewMode'] = mode;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleSortAscendingDate() {
+    sortAscendingDate = !sortAscendingDate;
+    final cfg = _readConfig();
+    cfg['sortAscendingDate'] = sortAscendingDate;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void reorderDashboardWidgets(int oldIndex, int newIndex) {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = dashboardWidgetsOrder.removeAt(oldIndex);
+    dashboardWidgetsOrder.insert(newIndex, item);
+    final cfg = _readConfig();
+    cfg['dashboardWidgetsOrder'] = List<String>.from(dashboardWidgetsOrder);
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleDashboardAccountsShowActive() {
+    dashboardAccountsShowActive = !dashboardAccountsShowActive;
+    final cfg = _readConfig();
+    cfg['dashboardAccountsShowActive'] = dashboardAccountsShowActive;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setDashboardAccountsShowActive(bool value) {
+    dashboardAccountsShowActive = value;
+    final cfg = _readConfig();
+    cfg['dashboardAccountsShowActive'] = dashboardAccountsShowActive;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleDashboardAccountsShowZeroBalance() {
+    dashboardAccountsShowZeroBalance = !dashboardAccountsShowZeroBalance;
+    final cfg = _readConfig();
+    cfg['dashboardAccountsShowZeroBalance'] = dashboardAccountsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setDashboardAccountsShowZeroBalance(bool value) {
+    dashboardAccountsShowZeroBalance = value;
+    final cfg = _readConfig();
+    cfg['dashboardAccountsShowZeroBalance'] = dashboardAccountsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void moveDashboardWidgetStep(String key, int step) {
+    final idx = dashboardWidgetsOrder.indexOf(key);
+    if (idx == -1) return;
+    final newIdx = (idx + step).clamp(0, dashboardWidgetsOrder.length - 1);
+    if (idx == newIdx) return;
+    final item = dashboardWidgetsOrder.removeAt(idx);
+    dashboardWidgetsOrder.insert(newIdx, item);
+    final cfg = _readConfig();
+    cfg['dashboardWidgetsOrder'] = List<String>.from(dashboardWidgetsOrder);
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setDashboardWidget(String key, bool enabled) {
+    dashboardWidgets[key] = enabled;
+    final cfg = _readConfig();
+    cfg['dashboardWidgets'] = Map<String, bool>.from(dashboardWidgets);
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();
@@ -604,6 +845,14 @@ class MoneyStore extends ChangeNotifier {
 
   void resetZoom() {
     setFontScale(1.0);
+  }
+
+  void setGeminiAiEnabled(bool enabled) {
+    setGeminiConfig(enabled: enabled, apiKey: geminiApiKey);
+  }
+
+  void setGeminiApiKey(String apiKey) {
+    setGeminiConfig(enabled: isGeminiAiEnabled, apiKey: apiKey);
   }
 
   void setGeminiConfig({required bool enabled, required String apiKey}) {
@@ -1407,6 +1656,9 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      if (startupView == 'dashboard') {
+        activeModule = NavModule.dashboard;
+      }
     }
     _setupFileWatcher(targetPath);
     notifyListeners();
@@ -1475,6 +1727,9 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      if (startupView == 'dashboard') {
+        activeModule = NavModule.dashboard;
+      }
     }
     ensureDailyLocalBackup();
     notifyListeners();
@@ -1649,6 +1904,9 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      if (startupView == 'dashboard') {
+        activeModule = NavModule.dashboard;
+      }
     }
     if (isCloudMode) {
       await pushLocalToCloud(force: true);
@@ -2687,6 +2945,9 @@ class MoneyStore extends ChangeNotifier {
     syncCards();
     if (db.accounts.isNotEmpty) {
       selectedAccountId = db.accounts.first.id;
+      if (startupView == 'dashboard') {
+        activeModule = NavModule.dashboard;
+      }
     }
     markIndexesDirty();
     save();

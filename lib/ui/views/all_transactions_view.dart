@@ -9,6 +9,7 @@ import '../modals/batch_delete_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/csv_export.dart';
+import '../widgets/datagrid_transaction_table.dart';
 
 enum ConsolidatedPeriodFilter {
   day,
@@ -116,6 +117,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
     );
 
     final txs = res.transactions;
+    final orderedTxs = widget.store.sortAscendingDate ? txs : txs.reversed.toList();
     final accMap = {for (final a in widget.store.db.accounts) a.id: a};
 
     return Column(
@@ -556,6 +558,66 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
+
+                    // Alternador Lista Diária vs Datagrid + Ordenação de Data
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: widget.store.sortAscendingDate
+                              ? 'Ordem de Data: Mais antigos primeiro (Clique para Mais recentes primeiro)'
+                              : 'Ordem de Data: Mais recentes primeiro (Clique para Mais antigos primeiro)',
+                          icon: Icon(
+                            widget.store.sortAscendingDate
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                            size: 16,
+                            color: colors.accent,
+                          ),
+                          onPressed: widget.store.toggleSortAscendingDate,
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          height: 14,
+                          width: 1,
+                          color: colors.borderGlass,
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Visualização em Lista',
+                          icon: Icon(
+                            Icons.view_agenda_outlined,
+                            size: 16,
+                            color: widget.store.ledgerViewMode == 'list'
+                                ? colors.accent
+                                : colors.textMuted,
+                          ),
+                          onPressed: () =>
+                              widget.store.setLedgerViewMode('list'),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Visualização em Tabela Datagrid',
+                          icon: Icon(
+                            Icons.table_chart_outlined,
+                            size: 16,
+                            color: widget.store.ledgerViewMode == 'table'
+                                ? colors.accent
+                                : colors.textMuted,
+                          ),
+                          onPressed: () =>
+                              widget.store.setLedgerViewMode('table'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -565,7 +627,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
 
         // 2. Listagem Cronológica dos Lançamentos Consolidados
         Expanded(
-          child: txs.isEmpty
+          child: orderedTxs.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -596,13 +658,24 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                     ],
                   ),
                 )
-              : _buildGroupedTransactionsList(
-                  context,
-                  txs: txs,
-                  accMap: accMap,
-                  colors: colors,
-                  isMobile: isMobile,
-                ),
+              : (widget.store.ledgerViewMode == 'table'
+                  ? ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      children: [
+                        DatagridTransactionTable(
+                          transactions: orderedTxs,
+                          store: widget.store,
+                          showAccountColumn: true,
+                        ),
+                      ],
+                    )
+                  : _buildGroupedTransactionsList(
+                      context,
+                      txs: orderedTxs,
+                      accMap: accMap,
+                      colors: colors,
+                      isMobile: isMobile,
+                    )),
         ),
       ],
     );
@@ -623,12 +696,15 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
         monthGroups.putIfAbsent(ym, () => []).add(t);
       }
       final sortedMonths = monthGroups.keys.toList()..sort();
+      final displayMonths = widget.store.sortAscendingDate
+          ? sortedMonths
+          : sortedMonths.reversed.toList();
 
       return ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        itemCount: sortedMonths.length,
+        itemCount: displayMonths.length,
         itemBuilder: (context, idx) {
-          final ym = sortedMonths[idx];
+          final ym = displayMonths[idx];
           final monthTxs = monthGroups[ym]!;
 
           int mInc = 0;

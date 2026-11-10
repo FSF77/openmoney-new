@@ -26,10 +26,13 @@ import 'views/all_transactions_view.dart';
 import 'views/budget_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
+import 'views/dashboard_overview_view.dart';
 import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
 import 'views/reports_view.dart';
+import 'views/settings_view.dart';
+import 'widgets/command_palette_modal.dart';
 import 'widgets/zoom_control_pill.dart';
 
 class OpenMoneyAppShell extends StatefulWidget {
@@ -239,12 +242,34 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             const SingleActivator(LogicalKeyboardKey.numpad0, control: true): () {
               widget.store.resetZoom();
             },
-            // Alternar menu lateral
+            // Alternar menu lateral (Expandida <-> Mini Rail)
             const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () {
-              widget.store.toggleSidebar();
+              if (widget.store.sidebarMode == 'expanded') {
+                widget.store.setSidebarMode('miniRail');
+              } else {
+                widget.store.setSidebarMode('expanded');
+              }
             },
             const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
-              widget.store.toggleSidebar();
+              if (widget.store.sidebarMode == 'expanded') {
+                widget.store.setSidebarMode('miniRail');
+              } else {
+                widget.store.setSidebarMode('expanded');
+              }
+            },
+            // Command Palette (Spotlight / Raycast)
+            const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () {
+              showCommandPaletteModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
+              showCommandPaletteModal(context, widget.store);
+            },
+            // Ajustes & Personalização (Cmd/Ctrl + ,)
+            const SingleActivator(LogicalKeyboardKey.comma, meta: true): () {
+              widget.store.navigateTo(NavModule.settings);
+            },
+            const SingleActivator(LogicalKeyboardKey.comma, control: true): () {
+              widget.store.navigateTo(NavModule.settings);
             },
             // Ajuda e Manual do OpenMoney
             const SingleActivator(LogicalKeyboardKey.f1): () {
@@ -365,71 +390,81 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   children: [
                     if (isDesktopOrTablet && widget.store.isSidebarVisible)
                       Container(
-                        width: 285,
+                        width: widget.store.sidebarMode == 'miniRail' ? 64 : 285,
                         decoration: BoxDecoration(
                           color: colors.bgSecondary,
                           border: Border(
                             right: BorderSide(color: colors.borderGlass),
                           ),
                         ),
-                        child: _buildSidebarContent(
-                          context,
-                          colors,
-                          closeDrawerOnSelect: false,
-                        ),
+                        child: widget.store.sidebarMode == 'miniRail'
+                            ? _buildMiniRailContent(context, colors)
+                            : _buildSidebarContent(
+                                context,
+                                colors,
+                                closeDrawerOnSelect: false,
+                              ),
                       ),
                     Expanded(
-                      child: Stack(
+                      child: Column(
                         children: [
-                          Positioned.fill(
-                            child: _buildActiveMainView(
-                              context,
-                              isDesktopOrTablet: isDesktopOrTablet,
-                              colors: colors,
-                            ),
-                          ),
-                          if (isDesktopOrTablet && !widget.store.isSidebarVisible)
-                            Positioned(
-                              top: 12,
-                              left: 12,
-                              child: Material(
-                                color: colors.bgSecondary.withValues(alpha: 0.92),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: BorderSide(color: colors.borderGlass),
-                                ),
-                                elevation: 4,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(8),
-                                  onTap: widget.store.toggleSidebar,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                  child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.menu,
-                                          size: 16,
-                                          color: colors.textPrimary,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Menu',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: colors.textPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                          if (isDesktopOrTablet)
+                            _buildDesktopTopBar(context, colors),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: _buildActiveMainView(
+                                    context,
+                                    isDesktopOrTablet: isDesktopOrTablet,
+                                    colors: colors,
                                   ),
                                 ),
-                              ),
+                                if (isDesktopOrTablet && !widget.store.isSidebarVisible)
+                                  Positioned(
+                                    top: 12,
+                                    left: 12,
+                                    child: Material(
+                                      color: colors.bgSecondary.withValues(alpha: 0.92),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        side: BorderSide(color: colors.borderGlass),
+                                      ),
+                                      elevation: 4,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: widget.store.toggleSidebar,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.menu,
+                                                size: 16,
+                                                color: colors.textPrimary,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Menu',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: colors.textPrimary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
                     ),
@@ -443,6 +478,474 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     );
   }
 
+  Widget _buildDesktopTopBar(BuildContext context, OpenMoneyColors colors) {
+    String moduleTitle = 'OpenMoney';
+    String? subTitle;
+
+    switch (widget.store.activeModule) {
+      case NavModule.dashboard:
+        moduleTitle = 'Dashboard Geral';
+        subTitle = 'Cockpit';
+        break;
+      case NavModule.account:
+        final acc = widget.store.accById(widget.store.selectedAccountId);
+        moduleTitle = acc?.name ?? 'Conta';
+        subTitle = acc?.type;
+        break;
+      case NavModule.transactions:
+        moduleTitle = 'Lançamentos';
+        subTitle = 'Consolidado';
+        break;
+      case NavModule.cashFlow:
+        moduleTitle = 'Fluxo de Caixa';
+        subTitle = fmtMonth(widget.store.month);
+        break;
+      case NavModule.reports:
+        moduleTitle = 'Relatórios';
+        break;
+      case NavModule.budget:
+        moduleTitle = 'Limite de Gastos';
+        break;
+      case NavModule.categories:
+        moduleTitle = 'Categorias';
+        break;
+      case NavModule.dueBills:
+        moduleTitle = 'Contas a Pagar & Receber';
+        break;
+      case NavModule.installments:
+        moduleTitle = 'Compras Parceladas';
+        break;
+      case NavModule.search:
+        moduleTitle = 'Pesquisa Global';
+        break;
+      case NavModule.settings:
+        moduleTitle = 'Ajustes & Personalização';
+        break;
+    }
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: colors.bgSecondary,
+        border: Border(
+          bottom: BorderSide(color: colors.borderGlass),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Breadcrumbs
+          Flexible(
+            flex: 3,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'OpenMoney',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textMuted,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.chevron_right, size: 14, color: colors.textMuted),
+                ),
+                Flexible(
+                  child: Text(
+                    moduleTitle,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (subTitle != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.chevron_right, size: 14, color: colors.textMuted),
+                  ),
+                  Flexible(
+                    child: Text(
+                      subTitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Spotlight / Command Palette Button
+          Flexible(
+            flex: 2,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => showCommandPaletteModal(context, widget.store),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: colors.surfaceGlass,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colors.borderGlass),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.search, size: 13, color: colors.textSecondary),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Buscar (Cmd+K)...',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: colors.textMuted),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: colors.bgSecondary,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      child: Text(
+                        '⌘K',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Status de Conexão / Nuvem
+          ListenableBuilder(
+            listenable: CloudSyncService.instance,
+            builder: (context, _) {
+              final isCloud = widget.store.isCloudMode;
+              if (isCloud) {
+                return Tooltip(
+                  message: 'Conectado à Nuvem (Cloud Sync v2)',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.income.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: colors.income.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: colors.income,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Online',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: colors.income,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return Tooltip(
+                message:
+                    'Base de dados local ativa: ${widget.store.databaseDisplayName}',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceGlass,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: colors.borderGlass),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.folder_outlined,
+                          size: 13, color: colors.textSecondary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Local',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+
+          // Botão Ajustes e Personalização
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Ajustes & Personalização (Cmd+,)',
+            icon: Icon(
+              Icons.tune,
+              size: 18,
+              color: widget.store.activeModule == NavModule.settings
+                  ? colors.accent
+                  : colors.textSecondary,
+            ),
+            onPressed: () => widget.store.navigateTo(NavModule.settings),
+          ),
+
+          // Botão Alternar Tema
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Alternar Tema Claro / Escuro (Cmd+D)',
+            icon: Icon(
+              widget.store.isDarkMode
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+              size: 18,
+              color: colors.textSecondary,
+            ),
+            onPressed: widget.store.toggleThemeMode,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniRailContent(BuildContext context, OpenMoneyColors colors) {
+    void selectModule(NavModule m, {String? accountId}) {
+      setState(() {
+        _isMobileHomeActive = false;
+      });
+      widget.store.navigateTo(m, accountId: accountId);
+    }
+
+    // Contas favoritas primeiro e depois ativas regulares (sem inativas)
+    final railAccounts = [
+      ...widget.store.favoriteAccounts,
+      ...widget.store.regularActiveAccounts,
+    ];
+
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        // Botão padronizado no topo para expandir o menu lateral
+        Tooltip(
+          message: 'Expandir Menu Lateral (Cmd+B)',
+          child: IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.menu_open, size: 20),
+            onPressed: () => widget.store.setSidebarMode('expanded'),
+          ),
+        ),
+        const SizedBox(height: 6),
+
+        // Logo do App
+        Tooltip(
+          message: 'OpenMoney',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Image.asset(
+              'logo/openmoney_app_icon.png',
+              width: 28,
+              height: 28,
+              filterQuality: FilterQuality.medium,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // 1. Dashboard Icon (posicionado acima do incluir lançamento)
+        Tooltip(
+          message: 'Dashboard Geral',
+          child: IconButton(
+            icon: Icon(
+              Icons.dashboard_outlined,
+              size: 20,
+              color: widget.store.activeModule == NavModule.dashboard
+                  ? colors.accent
+                  : colors.textSecondary,
+            ),
+            onPressed: () => selectModule(NavModule.dashboard),
+          ),
+        ),
+        const SizedBox(height: 4),
+
+        // 2. Botão Novo Lançamento (mesmo tamanho dos demais ícones)
+        Tooltip(
+          message: 'Novo Lançamento',
+          child: IconButton(
+            icon: Icon(
+              Icons.add_circle_outline,
+              size: 20,
+              color: colors.accent,
+            ),
+            onPressed: () => showTransactionCreateModal(context, widget.store),
+          ),
+        ),
+        const Divider(height: 16),
+
+        // Contas Bancárias (Ícones: favoritas e depois ativas regulares)
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            children: [
+              ...railAccounts.map((a) {
+                final isSelected =
+                    widget.store.activeModule == NavModule.account &&
+                        widget.store.selectedAccountId == a.id;
+                final bal = widget.store.balance(a, predicted: false);
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Tooltip(
+                    message: '${a.name}\n${a.type} • Saldo: ${brl(bal)}',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () =>
+                          selectModule(NavModule.account, accountId: a.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? colors.accent.withValues(alpha: 0.22)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color:
+                                isSelected ? colors.accent : Colors.transparent,
+                          ),
+                        ),
+                        child: Center(
+                          child: AccountLogoWidget(
+                            account: a,
+                            size: 24,
+                            cornerRadius: 5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const Divider(height: 16),
+
+              // Atalhos de Módulos
+              Tooltip(
+                message: 'Lançamentos Consolidados',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.receipt_long_outlined,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.transactions
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.transactions),
+                ),
+              ),
+              Tooltip(
+                message: 'Contas a Pagar & Receber',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.notifications_active_outlined,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.dueBills
+                        ? colors.warning
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.dueBills),
+                ),
+              ),
+              Tooltip(
+                message: 'Compras Parceladas',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.credit_score,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.installments
+                        ? colors.accentIndigo
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.installments),
+                ),
+              ),
+              Tooltip(
+                message: 'Fluxo de Caixa',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.grid_on_rounded,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.cashFlow
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.cashFlow),
+                ),
+              ),
+              Tooltip(
+                message: 'Relatórios',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.pie_chart_outline,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.reports
+                        ? colors.income
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.reports),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Rodapé do Mini Rail
+        const Divider(height: 16),
+        Tooltip(
+          message: 'Ajustes & Personalização',
+          child: IconButton(
+            icon: Icon(
+              Icons.tune,
+              size: 20,
+              color: widget.store.activeModule == NavModule.settings
+                  ? colors.accent
+                  : colors.textSecondary,
+            ),
+            onPressed: () => selectModule(NavModule.settings),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
   Widget _buildActiveMainView(
     BuildContext context, {
     required bool isDesktopOrTablet,
@@ -452,6 +955,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
       return _buildMobileHomeView(context, colors);
     }
     switch (widget.store.activeModule) {
+      case NavModule.dashboard:
+        return DashboardOverviewView(store: widget.store);
+      case NavModule.settings:
+        return SettingsView(store: widget.store);
       case NavModule.account:
         final acc = widget.store.accById(widget.store.selectedAccountId) ??
             (widget.store.db.accounts.isNotEmpty
@@ -858,9 +1365,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     OpenMoneyColors colors, {
     required bool closeDrawerOnSelect,
   }) {
-    final totalReal = widget.store.totalBalance(predicted: false);
-    final totalPred = widget.store.totalBalance(predicted: true);
-    final totalPredYear = widget.store.totalBalancePredictedYear();
     final dueSummary = widget.store.dueBillsSummary();
 
     final favAccounts = widget.store.favoriteAccounts;
@@ -948,154 +1452,20 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                           );
                         },
                       ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Alternar Tema Claro / Escuro',
-                        icon: Icon(
-                          widget.store.isDarkMode
-                              ? Icons.light_mode_outlined
-                              : Icons.dark_mode_outlined,
-                          size: 18,
-                        ),
-                        onPressed: widget.store.toggleThemeMode,
-                      ),
                       if (!closeDrawerOnSelect)
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          tooltip: 'Ocultar Menu Lateral (Ctrl/Cmd+B)',
+                          tooltip: 'Recolher para Mini Rail (Ctrl/Cmd+B)',
                           icon: const Icon(Icons.menu_open, size: 18),
-                          onPressed: widget.store.toggleSidebar,
+                          onPressed: () => widget.store.setSidebarMode(
+                            widget.store.sidebarMode == 'expanded'
+                                ? 'miniRail'
+                                : 'expanded',
+                          ),
                         ),
                     ],
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              // Consolidated Patrimony Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colors.surfaceGlass,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: colors.borderGlass),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Patrimônio consolidado',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: widget.store.toggleHidePatrimonyBalance,
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              widget.store.hidePatrimonyBalance
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              size: 15,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        children: [
-                          const TextSpan(
-                            text: 'Real: ',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          TextSpan(
-                            text: widget.store.hidePatrimonyBalance
-                                ? '••••••'
-                                : brl(totalReal),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: widget.store.hidePatrimonyBalance
-                                  ? colors.textPrimary
-                                  : (totalReal >= 0 ? colors.income : colors.expense),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        children: [
-                          const TextSpan(
-                            text: 'Previsto no mês: ',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          TextSpan(
-                            text: widget.store.hidePatrimonyBalance
-                                ? '••••••'
-                                : brl(totalPred),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: widget.store.hidePatrimonyBalance
-                                  ? colors.textPrimary
-                                  : (totalPred >= 0 ? colors.income : colors.expense),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text.rich(
-                      TextSpan(
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        children: [
-                          const TextSpan(
-                            text: 'Previsto no ano: ',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          TextSpan(
-                            text: widget.store.hidePatrimonyBalance
-                                ? '••••••'
-                                : brl(totalPredYear),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: widget.store.hidePatrimonyBalance
-                                  ? colors.textPrimary
-                                  : (totalPredYear >= 0 ? colors.income : colors.expense),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -1105,9 +1475,18 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             children: [
-              // Botão para inclusão de novos lançamentos
+              // 1. Dashboard Geral (posicionado acima do Novo Lançamento)
+              _SidebarNavTile(
+                icon: Icons.dashboard_outlined,
+                label: 'Dashboard Geral',
+                selected: widget.store.activeModule == NavModule.dashboard,
+                onTap: () => selectModule(NavModule.dashboard),
+              ),
+              const SizedBox(height: 6),
+
+              // 2. Botão para inclusão de novos lançamentos (alinhado à esquerda)
               Padding(
-                padding: const EdgeInsets.fromLTRB(2, 4, 2, 10),
+                padding: const EdgeInsets.fromLTRB(2, 2, 2, 10),
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
@@ -1121,11 +1500,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                       ),
                     ),
                     style: FilledButton.styleFrom(
+                      alignment: Alignment.centerLeft,
                       backgroundColor: colors.accent,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         vertical: 10,
-                        horizontal: 12,
+                        horizontal: 14,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(9),
@@ -1149,6 +1529,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   ),
                 ),
               ),
+              const SizedBox(height: 4),
 
               // 1. Contas Favoritas (se houver)
               if (favAccounts.isNotEmpty) ...[
@@ -1429,12 +1810,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   onTap: () => selectModule(NavModule.budget),
                 ),
                 _SidebarNavTile(
-                  icon: Icons.category_outlined,
-                  label: 'Categorias e Subcategorias',
-                  selected: widget.store.activeModule == NavModule.categories,
-                  onTap: () => selectModule(NavModule.categories),
-                ),
-                _SidebarNavTile(
                   icon: Icons.manage_search,
                   label: 'Pesquisa Global',
                   selected: widget.store.activeModule == NavModule.search,
@@ -1475,6 +1850,30 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               if (widget.store.sidebarShowModules) ...[
+                // 1º Categoria e Subcategoria
+                _SidebarNavTile(
+                  icon: Icons.category_outlined,
+                  label: 'Categorias e Subcategorias',
+                  selected: widget.store.activeModule == NavModule.categories,
+                  onTap: () => selectModule(NavModule.categories),
+                ),
+                // 2º Ajustes & Personalização
+                _SidebarNavTile(
+                  icon: Icons.tune,
+                  label: 'Ajustes & Personalização',
+                  selected: widget.store.activeModule == NavModule.settings,
+                  onTap: () => selectModule(NavModule.settings),
+                ),
+                // 3º Gestão de Contas Bancárias
+                _SidebarNavTile(
+                  icon: Icons.account_balance_outlined,
+                  label: 'Gestão de Contas Bancárias',
+                  selected: false,
+                  onTap: () {
+                    if (closeDrawerOnSelect) Navigator.of(context).pop();
+                    showAccountModal(context, widget.store);
+                  },
+                ),
                 if (kIsWeb)
                   _SidebarNavTile(
                     icon: Icons.cloud_sync_outlined,

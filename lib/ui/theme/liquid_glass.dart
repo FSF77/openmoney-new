@@ -3,24 +3,73 @@ import 'package:flutter/material.dart';
 
 class OpenMoneyColors {
   final bool isDark;
-  const OpenMoneyColors(this.isDark);
+  final String accentKey;
+  final bool isFlatClean;
+
+  static String activeAccentKey = 'sky';
+  static bool activeIsFlatClean = false;
+
+  static const Map<String, ({String label, Color darkColor, Color lightColor})>
+      accentPalettes = {
+    'sky': (
+      label: 'Azul Oceano',
+      darkColor: Color(0xFF0EA5E9),
+      lightColor: Color(0xFF0284C7),
+    ),
+    'emerald': (
+      label: 'Esmeralda Financeiro',
+      darkColor: Color(0xFF10B981),
+      lightColor: Color(0xFF059669),
+    ),
+    'indigo': (
+      label: 'Índigo Violeta',
+      darkColor: Color(0xFF6366F1),
+      lightColor: Color(0xFF4F46E5),
+    ),
+    'orange': (
+      label: 'Sunset Laranja',
+      darkColor: Color(0xFFF97316),
+      lightColor: Color(0xFFEA580C),
+    ),
+    'cyan': (
+      label: 'Ciano Futurista',
+      darkColor: Color(0xFF06B6D4),
+      lightColor: Color(0xFF0891B2),
+    ),
+    'slate': (
+      label: 'Titanium Slate',
+      darkColor: Color(0xFF94A3B8),
+      lightColor: Color(0xFF475569),
+    ),
+  };
+
+  OpenMoneyColors(
+    this.isDark, {
+    String? accentKey,
+    bool? isFlatClean,
+  })  : accentKey = accentKey ?? activeAccentKey,
+        isFlatClean = isFlatClean ?? activeIsFlatClean;
 
   Color get bgPrimary =>
       isDark ? const Color(0xFF0A0E17) : const Color(0xFFF3F6FC);
   Color get bgSecondary =>
       isDark ? const Color(0xFF111827) : const Color(0xFFFFFFFF);
-  Color get surfaceGlass => isDark
-      ? const Color(0xFF1E293B).withValues(alpha: 0.62)
-      : const Color(0xFFFFFFFF).withValues(alpha: 0.78);
-  Color get surfaceCard => isDark
-      ? const Color(0xFF162032).withValues(alpha: 0.85)
-      : const Color(0xFFFFFFFF).withValues(alpha: 0.92);
+  Color get surfaceGlass => isFlatClean
+      ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFFFF))
+      : (isDark
+          ? const Color(0xFF1E293B).withValues(alpha: 0.62)
+          : const Color(0xFFFFFFFF).withValues(alpha: 0.78));
+  Color get surfaceCard => isFlatClean
+      ? (isDark ? const Color(0xFF162032) : const Color(0xFFFFFFFF))
+      : (isDark
+          ? const Color(0xFF162032).withValues(alpha: 0.85)
+          : const Color(0xFFFFFFFF).withValues(alpha: 0.92));
   Color get borderGlass => isDark
       ? const Color(0xFFFFFFFF).withValues(alpha: 0.10)
       : const Color(0xFF0F172A).withValues(alpha: 0.09);
   Color get borderHighlight => isDark
-      ? const Color(0xFF38BDF8).withValues(alpha: 0.45)
-      : const Color(0xFF0284C7).withValues(alpha: 0.35);
+      ? accent.withValues(alpha: 0.45)
+      : accent.withValues(alpha: 0.35);
 
   Color get textPrimary =>
       isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
@@ -29,7 +78,10 @@ class OpenMoneyColors {
   Color get textMuted =>
       isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
 
-  Color get accent => const Color(0xFF0EA5E9);
+  Color get accent {
+    final pal = accentPalettes[accentKey] ?? accentPalettes['sky']!;
+    return isDark ? pal.darkColor : pal.lightColor;
+  }
   Color get accentBlue => accent;
   Color get accentIndigo => const Color(0xFF6366F1);
   Color get income =>
@@ -74,13 +126,18 @@ class GlassCard extends StatelessWidget {
 
     Widget cardBody = ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Padding(
-          padding: padding,
-          child: child,
-        ),
-      ),
+      child: colors.isFlatClean
+          ? Padding(
+              padding: padding,
+              child: child,
+            )
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Padding(
+                padding: padding,
+                child: child,
+              ),
+            ),
     );
 
     Widget content = Container(

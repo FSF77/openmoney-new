@@ -10,6 +10,7 @@ import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
 import '../widgets/csv_export.dart';
+import '../widgets/datagrid_transaction_table.dart';
 
 class AccountLedgerView extends StatefulWidget {
   final MoneyStore store;
@@ -238,6 +239,17 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
         dayGroups.last.closingPred = runningPred;
       }
     }
+
+    final displayGroups = widget.store.sortAscendingDate
+        ? dayGroups
+        : dayGroups.reversed
+            .map((g) => _DayGroup(
+                  date: g.date,
+                  items: g.items.reversed.toList(),
+                  closingReal: g.closingReal,
+                  closingPred: g.closingPred,
+                ))
+            .toList();
 
     final isMobile = MediaQuery.sizeOf(context).width < 720;
 
@@ -1396,6 +1408,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       ),
                       Wrap(
                         spacing: 16,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Real: ${brl(monthData.openingReal)}',
@@ -1419,45 +1432,113 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               ],
                             ),
                           ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: widget.store.sortAscendingDate
+                                    ? 'Ordem de Data: Mais antigos primeiro (Clique para Mais recentes primeiro)'
+                                    : 'Ordem de Data: Mais recentes primeiro (Clique para Mais antigos primeiro)',
+                                icon: Icon(
+                                  widget.store.sortAscendingDate
+                                      ? Icons.arrow_upward_rounded
+                                      : Icons.arrow_downward_rounded,
+                                  size: 16,
+                                  color: colors.accent,
+                                ),
+                                onPressed: widget.store.toggleSortAscendingDate,
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                height: 14,
+                                width: 1,
+                                color: colors.borderGlass,
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: 'Visualização em Lista Diária',
+                                icon: Icon(
+                                  Icons.view_agenda_outlined,
+                                  size: 16,
+                                  color: widget.store.ledgerViewMode == 'list'
+                                      ? colors.accent
+                                      : colors.textMuted,
+                                ),
+                                onPressed: () =>
+                                    widget.store.setLedgerViewMode('list'),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: 'Visualização em Tabela Datagrid',
+                                icon: Icon(
+                                  Icons.table_chart_outlined,
+                                  size: 16,
+                                  color: widget.store.ledgerViewMode == 'table'
+                                      ? colors.accent
+                                      : colors.textMuted,
+                                ),
+                                onPressed: () =>
+                                    widget.store.setLedgerViewMode('table'),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-              if (dayGroups.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 42,
-                          color: colors.textMuted,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _searchCtrl.text.trim().isNotEmpty
-                              ? 'Nenhum lançamento encontrado para "${_searchCtrl.text.trim()}".'
-                              : 'Nenhum lançamento em ${fmtMonth(widget.store.month)}.',
-                          style: TextStyle(color: colors.textSecondary),
-                        ),
-                        if (_searchCtrl.text.trim().isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            icon: const Icon(Icons.clear, size: 14),
-                            label: const Text('Limpar filtro'),
-                            onPressed: () {
-                              setState(() => _searchCtrl.clear());
-                            },
+              if (widget.store.ledgerViewMode == 'table')
+                DatagridTransactionTable(
+                  transactions: widget.store.sortAscendingDate
+                      ? filteredTxs
+                      : filteredTxs.reversed.toList(),
+                  store: widget.store,
+                  showAccountColumn: false,
+                )
+              else ...[
+                if (displayGroups.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 48),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.receipt_long_outlined,
+                            size: 42,
+                            color: colors.textMuted,
                           ),
+                          const SizedBox(height: 10),
+                          Text(
+                            _searchCtrl.text.trim().isNotEmpty
+                                ? 'Nenhum lançamento encontrado para "${_searchCtrl.text.trim()}".'
+                                : 'Nenhum lançamento em ${fmtMonth(widget.store.month)}.',
+                            style: TextStyle(color: colors.textSecondary),
+                          ),
+                          if (_searchCtrl.text.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              icon: const Icon(Icons.clear, size: 14),
+                              label: const Text('Limpar filtro'),
+                              onPressed: () {
+                                setState(() => _searchCtrl.clear());
+                              },
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ...dayGroups.map((group) {
+                ...displayGroups.map((group) {
                 return GlassCard(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: EdgeInsets.zero,
@@ -1828,6 +1909,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                   ),
                 );
               }),
+            ],
             ],
           ),
         ),
