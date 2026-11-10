@@ -60,23 +60,41 @@ irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
 
 O **OpenMoney** une o rigor contábil, a previsibilidade e a robustez do lendário **Microsoft Money 99** a uma experiência visual contemporânea construída em Flutter com o design system **Liquid Glass** (vidro translúcido, iluminação de bordas, cartões flutuantes e suporte impecável aos modos Claro e Escuro).
 
-### Princípios Fundamentais:
-1. **Soberania Absoluta dos Dados (100% Local)**:
-   - Sem cadastros obrigatórios, sem contas na nuvem proprietária, sem telemetria e sem dependência de internet para funcionar.
-   - Sua base reside em um único arquivo legível e aberto: `openmoney.json`.
-2. **Sincronização Livre e Transparente**:
-   - Salve o arquivo `openmoney.json` no **iCloud Drive**, **OneDrive**, **Google Drive**, **Dropbox**, pen drive ou no disco local.
+### Duas Abordagens, Uma Única Base de Dados
+
+O OpenMoney oferece dois modos de operação. **Você escolhe** como quer guardar seus dados, e pode alternar entre eles quando quiser, pois ambos usam o mesmo formato (`openmoney.json`, schema `v: 7`).
+
+| | 🗂️ Modo Local (Offline) | ☁️ Modo Online (OpenMoney Cloud) |
+|---|---|---|
+| **Cadastro / login** | Não exige | Conta com e-mail e senha (e-mail validado por código de 6 dígitos) |
+| **Onde ficam os dados** | Arquivo `openmoney.json` no seu disco, iCloud Drive, OneDrive, Google Drive, Dropbox ou pen drive | Nuvem OpenMoney (Cloudflare D1 / Durable Objects) |
+| **Internet** | Não necessária | Necessária para sincronizar |
+| **Sincronização** | Manual, via a pasta de sincronização que você escolher | Tempo real (Sync v2, WebSockets) entre todos os dispositivos |
+| **Telemetria** | Nenhuma | Nenhuma de uso/analytics; apenas os dados necessários para a conta e a sincronização |
+| **Backups** | ZIPs locais diários e manuais | ZIPs locais no Desktop (também no modo online) + logs de auditoria remotos |
+| **Plataformas** | Flutter (macOS, Windows, Web, Mobile) e Swift (macOS, iOS) | Flutter (macOS, Windows, Web, Mobile) |
+
+> [!NOTE]
+> As versões nativas em **Swift (macOS e iOS)** operam, por enquanto, **exclusivamente no modo local**. O modo online está disponível nas versões Flutter.
+
+### Princípios Fundamentais
+
+1. **Você no Controle dos Dados**:
+   - No **Modo Local**, a soberania é total: sem cadastro, sem conta na nuvem, sem telemetria e sem depender de internet. Sua base reside em um único arquivo legível e aberto: `openmoney.json`.
+   - No **Modo Online**, a conta é opcional e a sua base continua aberta: é possível exportar o `openmoney.json` completo e migrar de volta para o modo local a qualquer momento (sem *lock-in*).
+2. **Sincronização Livre e Transparente (Local)**:
+   - Salve o arquivo no **iCloud Drive**, **OneDrive**, **Google Drive**, **Dropbox**, pen drive ou disco local.
    - Integração com seletores nativos do sistema (`NSSavePanel` / `NSOpenPanel` no macOS; diálogos Win32 no Windows).
-3. **OpenMoney Cloud & Sincronização em Tempo Real (Sync v2)**:
-   - Suporte híbrido opcional: use bases locais em arquivo ou conecte sua conta online para sincronização instantânea em tempo real via Cloudflare D1/WebSockets.
-   - **Backups Locais de Segurança:** No Desktop, o app gera backups diários e manuais compactados (`.zip`) no disco do seu computador, mesmo ao utilizar o modo online.
-   - **Logs de Auditoria Centralizados:** Histórico completo de alterações com persistência remota e retenção de 30 dias.
-   - **Segurança de Conta:** Criação e alteração de e-mail validadas por código numérico de 6 dígitos (Resend), com envio preventivo do backup `.zip` em caso de exclusão de dados.
+3. **OpenMoney Cloud e Sincronização em Tempo Real (Online - Sync v2)**:
+   - Entre com e-mail e senha e use o mesmo orçamento em todos os seus dispositivos, com atualização instantânea via Cloudflare D1/WebSockets.
+   - **Backups Locais de Segurança:** no Desktop, o app gera backups diários e manuais compactados (`.zip`) no seu computador, mesmo no modo online.
+   - **Logs de Auditoria Centralizados:** histórico completo de alterações com persistência remota e retenção de 30 dias.
+   - **Segurança de Conta:** criação e alteração de e-mail validadas por código numérico de 6 dígitos (Resend), com envio preventivo do backup `.zip` em caso de exclusão de dados.
 4. **Precisão Financeira em Centavos Inteiros (`Int`)**:
-   - Todos os valores monetários são calculados e armazenados internamente como centavos inteiros (`amt: Int`), eliminando dízimas periódicas e erros de arredondamento de ponto flutuante (`Double` / `Float`).
+   - Todos os valores monetários são calculados e armazenados como centavos inteiros (`amt: Int`), eliminando dízimas periódicas e erros de ponto flutuante.
 5. **Resiliência e Gravação Atômica**:
-   - Proteção estrita contra corrupção em quedas de energia: a gravação ocorre em arquivo temporário com substituição atômica imediata.
-   - Rotina automatizada de **Backups em ZIP** com histórico e retenção segura.
+   - Proteção contra corrupção em quedas de energia: gravação em arquivo temporário com substituição atômica imediata.
+   - Rotina automatizada de **Backups em ZIP** com histórico e retenção segura, e proteção *anti-wipe* contra gravações que apagariam a base.
 
 ---
 
@@ -384,7 +402,7 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 
 ## 🔄 Sistema de Atualização Automática (Auto-Update)
 
-O OpenMoney inclui motor de auto-atualização integrado in-app ([`lib/services/update_service.dart`](file:///Users/fabiano/Developer/OpenMoneyFlutter/lib/services/update_service.dart)):
+O OpenMoney inclui motor de auto-atualização integrado in-app ([`lib/services/update_service.dart`](lib/services/update_service.dart)):
 - **Feed Oficial**: Conecta-se a [https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json](https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json) com cabeçalhos anti-cache.
 - **Verificação Automática e Manual**: Checagem silenciosa na inicialização e botão com ícone de nuvem na barra superior do aplicativo.
 - **Instalação em 1 Clique**: Download com monitoramento de progresso percentual, verificação de integridade e substituição atômica dos binários.
@@ -449,7 +467,7 @@ flutter run -d windows
 lib/
 ├── main.dart                             # Ponto de entrada, inicialização de janelas, tema e hotkeys
 ├── models/
-│   └── openmoney_models.dart             # Modelos de dados (Schema v6), Contas, Faturas, Regras e Txs
+│   └── openmoney_models.dart             # Modelos de dados (Schema v7), Contas, Faturas, Regras e Txs
 ├── store/
 │   └── money_store.dart                  # Estado reativo principal, I/O atômico, backups e sincronização
 ├── services/
@@ -495,6 +513,6 @@ O projeto conta com ativos gráficos oficiais de alta definição:
 
 ## 📄 Licença
 
-Distribuído sob a licença **MIT**. Consulte o arquivo [`LICENSE`](file:///Users/fabiano/Developer/OpenMoneyFlutter/LICENSE) para mais detalhes.
+Distribuído sob a licença **MIT**. Consulte o arquivo [`LICENSE`](LICENSE) para mais detalhes.
 
 *OpenMoney é um projeto independente de código aberto, concebido por entusiastas de finanças pessoais. - FSF Consultoria*
