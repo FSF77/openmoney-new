@@ -79,7 +79,7 @@ flutter build macos --release
 
 # 1b. Compilação da versão Web na MESMA versão e build
 echo "🌐 Compilando aplicativo Web (Cloudflare Pages) na versão v${VERSION}+${BUILD_NUM}..."
-flutter build web --release
+flutter build web --release --no-tree-shake-icons
 
 # Copia o build Web para web-dist/ para deploy automático via GitHub -> Cloudflare Pages (projeto openmoney-new)
 rm -rf "${ROOT_DIR}/web-dist"

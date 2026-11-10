@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
+import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'cloud_account_modal.dart';
@@ -105,12 +106,15 @@ class _WelcomeDatabaseSelectionScreenState
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 620),
-            child: GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: Image.asset(
@@ -412,9 +416,107 @@ class _WelcomeDatabaseSelectionScreenState
                 ],
               ),
             ),
-          ),
+            const SizedBox(height: 18),
+            _buildFooter(colors),
+          ],
         ),
       ),
+    ),
+  ),
+);
+  }
+
+  Widget _buildFooter(OpenMoneyColors colors) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        // Botão Apoiar o Projeto (Link na Bio)
+        Tooltip(
+          message: 'Apoie o desenvolvimento contínuo do OpenMoney',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => webOpenExternalUrl(
+              'https://linknabio.gg/fabianodesouzafernandes',
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: colors.bgSecondary.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                  width: 1.1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.coffee_rounded,
+                    size: 15,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Apoiar o Projeto',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // E-mail de Contato
+        Tooltip(
+          message: 'Enviar mensagem para contato@openmoney.app.br',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => webOpenExternalUrl('mailto:contato@openmoney.app.br'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: colors.bgSecondary.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.mail_outline_rounded,
+                    size: 14,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'contato@openmoney.app.br',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
