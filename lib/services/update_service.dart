@@ -241,7 +241,7 @@ class UpdateService {
               ],
             ),
             content: Text(
-              'Você já está utilizando a versão mais recente do OpenMoney (v${OpenMoneyVersion.version}).',
+              'Você já está utilizando a versão mais recente do OpenMoney (v${OpenMoneyVersion.version}, Build ${OpenMoneyVersion.build}).',
             ),
             actions: [
               FilledButton(
@@ -643,12 +643,40 @@ exit 0
                             color: colors.textPrimary,
                           ),
                         ),
-                        Text(
-                          'Versão ${widget.info.version} (Atual: v${OpenMoneyVersion.version})${widget.info.releaseDate != null ? " • ${widget.info.releaseDate}" : ""}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                          ),
+                        const SizedBox(height: 2),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          children: [
+                            Text(
+                              'Atual: v${OpenMoneyVersion.version} (Build ${OpenMoneyVersion.build})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward,
+                              size: 11,
+                              color: colors.textMuted,
+                            ),
+                            Text(
+                              'Nova: v${widget.info.version}${widget.info.build != null ? " (Build ${widget.info.build})" : ""}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: colors.accent,
+                              ),
+                            ),
+                            if (widget.info.releaseDate != null)
+                              Text(
+                                '• ${widget.info.releaseDate}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
