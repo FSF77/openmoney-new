@@ -916,6 +916,7 @@ class InvoiceSummary {
   final int chargesCents;
   final int paymentsCents;
   final int remainingCents;
+  final int clearedCents;
   final bool isFullyPaid;
 
   const InvoiceSummary({
@@ -927,6 +928,7 @@ class InvoiceSummary {
     required this.chargesCents,
     required this.paymentsCents,
     required this.remainingCents,
+    this.clearedCents = 0,
     required this.isFullyPaid,
   });
 }

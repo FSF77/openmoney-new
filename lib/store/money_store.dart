@@ -2554,19 +2554,24 @@ class MoneyStore extends ChangeNotifier {
 
     int charges = 0;
     int payments = 0;
+    int chargesRec = 0;
+    int paymentsRec = 0;
     for (final t in cardTxs) {
       if (t.auto == true && !t.rec) continue;
       final ik = t.ik ?? t.inv ?? invKeyFor(cardCfg, t.date);
       if (ik == key) {
         if (t.amt < 0) {
           charges += t.amt.abs();
+          if (t.rec) chargesRec += t.amt.abs();
         } else if (t.amt > 0) {
           payments += t.amt;
+          if (t.rec) paymentsRec += t.amt;
         }
       }
     }
 
     final remaining = (charges - payments) > 0 ? (charges - payments) : 0;
+    final cleared = (chargesRec - paymentsRec) > 0 ? (chargesRec - paymentsRec) : 0;
     final isFullyPaid = charges > 0 && remaining == 0;
 
     return InvoiceSummary(
@@ -2578,6 +2583,7 @@ class MoneyStore extends ChangeNotifier {
       chargesCents: charges,
       paymentsCents: payments,
       remainingCents: remaining,
+      clearedCents: cleared,
       isFullyPaid: isFullyPaid,
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
+import '../../services/cloud_sync_service.dart';
 import '../../store/money_store.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
@@ -51,7 +52,7 @@ class DashboardOverviewView extends StatelessWidget {
 
       switch (key) {
         case 'patrimony':
-          fullWidth = true;
+          fullWidth = false;
           cardWidget = _buildPatrimonyCard(
             context,
             colors,
@@ -120,7 +121,7 @@ class DashboardOverviewView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDashboardHeader(context, colors),
+              _buildDashboardHeader(context, colors, isCompact: isCompact),
               const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -153,7 +154,11 @@ class DashboardOverviewView extends StatelessWidget {
     );
   }
 
-  Widget _buildDashboardHeader(BuildContext context, OpenMoneyColors colors) {
+  Widget _buildDashboardHeader(
+    BuildContext context,
+    OpenMoneyColors colors, {
+    required bool isCompact,
+  }) {
     final now = DateTime.now();
     String greeting;
     if (now.hour < 12) {
@@ -163,6 +168,17 @@ class DashboardOverviewView extends StatelessWidget {
     } else {
       greeting = 'Boa noite';
     }
+
+    String greetingName = '';
+    if (CloudSyncService.instance.isAuthenticated &&
+        CloudSyncService.instance.userName.trim().isNotEmpty) {
+      final firstName =
+          CloudSyncService.instance.userName.trim().split(RegExp(r'\s+')).first;
+      if (firstName.isNotEmpty) {
+        greetingName = ', $firstName';
+      }
+    }
+    final greetingTitle = '$greeting$greetingName';
 
     const weekdays = [
       'Segunda-feira',
@@ -183,7 +199,7 @@ class DashboardOverviewView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$greeting, OpenMoney',
+              greetingTitle,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
@@ -200,21 +216,38 @@ class DashboardOverviewView extends StatelessWidget {
         ),
         Row(
           children: [
-            FilledButton.icon(
-              icon: const Icon(Icons.add_circle, size: 16),
-              label: const Text('Novo Lançamento'),
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
+            if (isCompact)
+              IconButton.filled(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Novo Lançamento',
+                icon: const Icon(Icons.add, size: 20),
+                style: IconButton.styleFrom(
+                  backgroundColor: colors.accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
                 ),
+                onPressed: () {
+                  showTransactionCreateModal(context, store);
+                },
+              )
+            else
+              FilledButton.icon(
+                icon: const Icon(Icons.add_circle, size: 16),
+                label: const Text('Novo Lançamento'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                ),
+                onPressed: () {
+                  showTransactionCreateModal(context, store);
+                },
               ),
-              onPressed: () {
-                showTransactionCreateModal(context, store);
-              },
-            ),
             const SizedBox(width: 8),
             IconButton(
               tooltip: 'Ajustes & Personalização',
@@ -347,11 +380,11 @@ class DashboardOverviewView extends StatelessWidget {
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 650;
+              final isNarrow = constraints.maxWidth < 380;
               final items = [
                 _buildKpiBox(
                   colors: colors,
-                  label: 'Saldo Real Disponível',
+                  label: 'Saldo Real',
                   valueCents: totalReal,
                   isHide: store.hidePatrimonyBalance,
                   highlightColor: totalReal >= 0 ? colors.income : colors.expense,
@@ -359,7 +392,7 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
                 _buildKpiBox(
                   colors: colors,
-                  label: 'Previsto no Mês (${_fmtMonthShort(store.month)})',
+                  label: 'Previsto Mês',
                   valueCents: totalPred,
                   isHide: store.hidePatrimonyBalance,
                   highlightColor: totalPred >= 0 ? colors.income : colors.expense,
@@ -367,7 +400,7 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
                 _buildKpiBox(
                   colors: colors,
-                  label: 'Previsto no Ano (${store.month.split('-').first})',
+                  label: 'Previsto Ano',
                   valueCents: totalPredYear,
                   isHide: store.hidePatrimonyBalance,
                   highlightColor:
@@ -391,7 +424,7 @@ class DashboardOverviewView extends StatelessWidget {
                 children: items
                     .map((w) => Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: w,
                           ),
                         ))
@@ -414,7 +447,7 @@ class DashboardOverviewView extends StatelessWidget {
   }) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: isCompact ? 10 : 12),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: isCompact ? 8 : 10),
       decoration: BoxDecoration(
         color: colors.surfaceGlass,
         borderRadius: BorderRadius.circular(10),
@@ -422,24 +455,30 @@ class DashboardOverviewView extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               color: colors.textSecondary,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
           Text(
-            isHide ? '••••••••' : brl(valueCents),
+            isHide ? '••••••' : brl(valueCents),
             style: TextStyle(
-              fontSize: isCompact ? 16 : 18,
+              fontSize: isCompact ? 14 : 15,
               fontWeight: FontWeight.w900,
               color: isHide ? colors.textPrimary : highlightColor,
+              letterSpacing: -0.2,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -489,7 +528,7 @@ class DashboardOverviewView extends StatelessWidget {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Contas & Saldos',
+                        'Contas',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -537,19 +576,14 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
               ),
               ...favAccounts.map((a) {
-                final idx = favAccounts.indexOf(a);
-                final bal = store.balance(a, predicted: false);
+                final real = store.balance(a, predicted: false);
+                final pred = store.balance(a, predicted: true);
                 return _buildAccountDashboardRow(
                   context,
                   colors,
                   account: a,
-                  balanceCents: bal,
-                  isFirst: idx == 0,
-                  isLast: idx == favAccounts.length - 1,
-                  onMoveUp: () =>
-                      store.moveAccountStepWithinGroup(favAccounts, a.id, -1),
-                  onMoveDown: () =>
-                      store.moveAccountStepWithinGroup(favAccounts, a.id, 1),
+                  realCents: real,
+                  predCents: pred,
                 );
               }),
               const SizedBox(height: 8),
@@ -569,19 +603,14 @@ class DashboardOverviewView extends StatelessWidget {
                   ),
                 ),
               ...regActive.map((a) {
-                final idx = regActive.indexOf(a);
-                final bal = store.balance(a, predicted: false);
+                final real = store.balance(a, predicted: false);
+                final pred = store.balance(a, predicted: true);
                 return _buildAccountDashboardRow(
                   context,
                   colors,
                   account: a,
-                  balanceCents: bal,
-                  isFirst: idx == 0,
-                  isLast: idx == regActive.length - 1,
-                  onMoveUp: () =>
-                      store.moveAccountStepWithinGroup(regActive, a.id, -1),
-                  onMoveDown: () =>
-                      store.moveAccountStepWithinGroup(regActive, a.id, 1),
+                  realCents: real,
+                  predCents: pred,
                 );
               }),
             ],
@@ -595,11 +624,8 @@ class DashboardOverviewView extends StatelessWidget {
     BuildContext context,
     OpenMoneyColors colors, {
     required Account account,
-    required int balanceCents,
-    required bool isFirst,
-    required bool isLast,
-    required VoidCallback onMoveUp,
-    required VoidCallback onMoveDown,
+    required int realCents,
+    required int predCents,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -612,7 +638,7 @@ class DashboardOverviewView extends StatelessWidget {
       child: Row(
         children: [
           AccountLogoWidget(account: account, size: 24, cornerRadius: 6),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: InkWell(
               onTap: () =>
@@ -638,39 +664,55 @@ class DashboardOverviewView extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            brl(balanceCents),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: balanceCents >= 0 ? colors.income : colors.expense,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
           const SizedBox(width: 8),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Mover para cima',
-                icon: Icon(Icons.arrow_drop_up,
-                    size: 20,
-                    color:
-                        isFirst ? colors.borderGlass : colors.textSecondary),
-                onPressed: isFirst ? null : onMoveUp,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Real ',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    brl(realCents),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: realCents >= 0 ? colors.income : colors.expense,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Mover para baixo',
-                icon: Icon(Icons.arrow_drop_down,
-                    size: 20,
-                    color: isLast ? colors.borderGlass : colors.textSecondary),
-                onPressed: isLast ? null : onMoveDown,
+              const SizedBox(height: 2),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Prev. mês ',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textMuted,
+                    ),
+                  ),
+                  Text(
+                    brl(predCents),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: predCents >= 0 ? colors.income : colors.expense,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -918,6 +960,7 @@ class DashboardOverviewView extends StatelessWidget {
             final currentIk = invKeyFor(card, todayISO());
             final summary = store.invoiceSummary(acc.id, currentIk);
             final remainingCents = summary?.remainingCents ?? 0;
+            final clearedCents = summary?.clearedCents ?? 0;
             final closeDate = summary?.closeDate ?? '';
             final dueDate = summary?.dueDate ?? '';
 
@@ -949,16 +992,58 @@ class DashboardOverviewView extends StatelessWidget {
                           ),
                         ],
                       ),
-                      Text(
-                        brl(remainingCents),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: remainingCents > 0
-                              ? colors.expense
-                              : colors.income,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Total ',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                brl(remainingCents),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: remainingCents > 0
+                                      ? colors.expense
+                                      : colors.income,
+                                  fontFeatures: const [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Atual ',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                              Text(
+                                brl(clearedCents),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.accentIndigo,
+                                  fontFeatures: const [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
