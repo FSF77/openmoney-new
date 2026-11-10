@@ -194,29 +194,49 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         ],
                       ),
                     ),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
+                    if (isMobile)
+                      IconButton.filled(
                         visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isMobile ? 10 : 14,
-                          vertical: isMobile ? 6 : 8,
+                        tooltip: 'Novo Lançamento',
+                        icon: const Icon(Icons.add, size: 20),
+                        style: IconButton.styleFrom(
+                          backgroundColor: colors.accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
                         ),
+                        onPressed: () {
+                          showTransactionCreateModal(
+                            context,
+                            widget.store,
+                            initialDateIso: _periodFilter == ConsolidatedPeriodFilter.day
+                                ? _selectedDayIso
+                                : null,
+                          );
+                        },
+                      )
+                    else
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        icon: const Icon(Icons.add_circle, size: 16),
+                        label: const Text(
+                          'Novo Lançamento',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () {
+                          showTransactionCreateModal(
+                            context,
+                            widget.store,
+                            initialDateIso: _periodFilter == ConsolidatedPeriodFilter.day
+                                ? _selectedDayIso
+                                : null,
+                          );
+                        },
                       ),
-                      icon: const Icon(Icons.add_circle, size: 16),
-                      label: Text(
-                        isMobile ? 'Novo' : 'Novo Lançamento',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      onPressed: () {
-                        showTransactionCreateModal(
-                          context,
-                          widget.store,
-                          initialDateIso: _periodFilter == ConsolidatedPeriodFilter.day
-                              ? _selectedDayIso
-                              : null,
-                        );
-                      },
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),

@@ -29,7 +29,7 @@ class DashboardOverviewView extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
     final width = MediaQuery.sizeOf(context).width;
-    final isCompact = store.uiDensityMode == 'compact';
+    final isCompact = width < 760 || store.uiDensityMode == 'compact';
 
     final totalReal = store.totalBalance(predicted: false);
     final totalPred = store.totalBalance(predicted: true);
@@ -195,26 +195,37 @@ class DashboardOverviewView extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              greetingTitle,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: colors.textPrimary,
-                letterSpacing: -0.3,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greetingTitle,
+                style: TextStyle(
+                  fontSize: isCompact ? 19 : 22,
+                  fontWeight: FontWeight.w900,
+                  color: colors.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              dateStr,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                dateStr,
+                style: TextStyle(
+                  fontSize: isCompact ? 12 : 13,
+                  color: colors.textSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 8),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (isCompact)
               IconButton.filled(
