@@ -102,7 +102,7 @@ class _SettingsViewState extends State<SettingsView> {
                       ButtonSegment(
                         value: 'dashboard',
                         label: Text('Dashboard Geral'),
-                        icon: Icon(Icons.dashboard_outlined, size: 16),
+                        icon: Icon(Icons.dashboard, size: 16),
                       ),
                       ButtonSegment(
                         value: 'lastAccount',

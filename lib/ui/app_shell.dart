@@ -309,12 +309,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: 'Dashboard Geral',
-                              icon: Icon(
-                                Icons.dashboard_rounded,
+                              icon: _DashboardVectorIcon(
                                 size: 21,
                                 color: widget.store.activeModule == NavModule.dashboard
                                     ? colors.accent
                                     : colors.textPrimary,
+                                filled: widget.store.activeModule == NavModule.dashboard,
                               ),
                               onPressed: () {
                                 widget.store.navigateTo(NavModule.dashboard);
@@ -542,10 +542,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  icon: Icon(
-                    Icons.dashboard_rounded,
+                  icon: _DashboardVectorIcon(
                     size: 18,
                     color: colors.accent,
+                    filled: widget.store.activeModule == NavModule.dashboard,
                   ),
                   tooltip: 'Dashboard Geral',
                   onPressed: () {
@@ -801,12 +801,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         Tooltip(
           message: 'Dashboard Geral',
           child: IconButton(
-            icon: Icon(
-              Icons.dashboard_outlined,
+            icon: _DashboardVectorIcon(
               size: 20,
               color: widget.store.activeModule == NavModule.dashboard
                   ? colors.accent
                   : colors.textSecondary,
+              filled: widget.store.activeModule == NavModule.dashboard,
             ),
             onPressed: () => selectModule(NavModule.dashboard),
           ),
@@ -1117,7 +1117,13 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             children: [
               // 1. Dashboard Geral (posicionado acima do Novo Lançamento)
               _SidebarNavTile(
-                icon: Icons.dashboard_outlined,
+                iconWidget: _DashboardVectorIcon(
+                  size: 18,
+                  color: widget.store.activeModule == NavModule.dashboard
+                      ? colors.accent
+                      : colors.textSecondary,
+                  filled: widget.store.activeModule == NavModule.dashboard,
+                ),
                 label: 'Dashboard Geral',
                 selected: widget.store.activeModule == NavModule.dashboard,
                 onTap: () => selectModule(NavModule.dashboard),
@@ -2028,7 +2034,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
 }
 
 class _SidebarNavTile extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final Widget? iconWidget;
   final String label;
   final bool selected;
   final String? badgeText;
@@ -2036,13 +2043,14 @@ class _SidebarNavTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SidebarNavTile({
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     required this.label,
     required this.selected,
     this.badgeText,
     this.badgeColor,
     required this.onTap,
-  });
+  }) : assert(icon != null || iconWidget != null);
 
   @override
   Widget build(BuildContext context) {
@@ -2063,11 +2071,14 @@ class _SidebarNavTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 18,
-              color: selected ? colors.accent : colors.textSecondary,
-            ),
+            if (iconWidget != null)
+              iconWidget!
+            else if (icon != null)
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? colors.accent : colors.textSecondary,
+              ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -2385,5 +2396,88 @@ class _SidebarAccountTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Ícone vetorial puro para o Dashboard Geral desenhado via CustomPaint.
+/// Garante renderização instantânea e perfeita em navegadores Chromium (Chrome, Edge),
+/// Safari, Firefox e Desktop sem depender de download ou cache de fontes web.
+class _DashboardVectorIcon extends StatelessWidget {
+  final double size;
+  final Color color;
+  final bool filled;
+
+  const _DashboardVectorIcon({
+    this.size = 18,
+    required this.color,
+    this.filled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: _DashboardVectorPainter(color: color, filled: filled),
+      ),
+    );
+  }
+}
+
+class _DashboardVectorPainter extends CustomPainter {
+  final Color color;
+  final bool filled;
+
+  const _DashboardVectorPainter({
+    required this.color,
+    required this.filled,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final strokeWidth = (w * 0.08).clamp(1.4, 1.8);
+    final paint = Paint()
+      ..color = color
+      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    final pad = w * 0.08;
+    final gap = w * 0.14;
+    final cellW = (w - (pad * 2) - gap) / 2;
+    final cellH = (h - (pad * 2) - gap) / 2;
+    final r = Radius.circular(cellW * 0.28);
+
+    // 4 blocos no grid 2x2: top-left, top-right, bottom-left, bottom-right
+    final tl = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad, pad, cellW, cellH),
+      r,
+    );
+    final tr = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad + cellW + gap, pad, cellW, cellH),
+      r,
+    );
+    final bl = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad, pad + cellH + gap, cellW, cellH),
+      r,
+    );
+    final br = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad + cellW + gap, pad + cellH + gap, cellW, cellH),
+      r,
+    );
+
+    canvas.drawRRect(tl, paint);
+    canvas.drawRRect(tr, paint);
+    canvas.drawRRect(bl, paint);
+    canvas.drawRRect(br, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashboardVectorPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.filled != filled;
   }
 }

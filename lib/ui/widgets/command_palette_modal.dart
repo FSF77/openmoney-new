@@ -106,7 +106,7 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
     list.add(_CommandItem(
       title: 'Dashboard Geral (Cockpit)',
       subtitle: 'Visão executiva com KPIs e widgets consolidados',
-      icon: Icons.dashboard_outlined,
+      icon: Icons.dashboard,
       category: 'MÓDULOS DO SISTEMA',
       onSelect: () {
         Navigator.of(context).pop();
