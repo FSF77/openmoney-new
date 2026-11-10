@@ -435,7 +435,7 @@ class DashboardOverviewView extends StatelessWidget {
                 children: items
                     .map((w) => Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 2.5),
                             child: w,
                           ),
                         ))
@@ -458,7 +458,10 @@ class DashboardOverviewView extends StatelessWidget {
   }) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 10, vertical: isCompact ? 8 : 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 6 : 8,
+        vertical: isCompact ? 6 : 8,
+      ),
       decoration: BoxDecoration(
         color: colors.surfaceGlass,
         borderRadius: BorderRadius.circular(10),
@@ -471,25 +474,28 @@ class DashboardOverviewView extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w600,
               color: colors.textSecondary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 4),
-          Text(
-            isHide ? '••••••' : brl(valueCents),
-            style: TextStyle(
-              fontSize: isCompact ? 14 : 15,
-              fontWeight: FontWeight.w900,
-              color: isHide ? colors.textPrimary : highlightColor,
-              letterSpacing: -0.2,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              isHide ? '••••••' : brl(valueCents),
+              style: TextStyle(
+                fontSize: isCompact ? 12 : 13,
+                fontWeight: FontWeight.w800,
+                color: isHide ? colors.textPrimary : highlightColor,
+                letterSpacing: -0.2,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -1253,9 +1259,10 @@ class DashboardOverviewView extends StatelessWidget {
             runSpacing: 10,
             children: [
               ActionChip(
-                avatar: Icon(Icons.add_circle, size: 16, color: colors.accent),
-                label: const Text('Novo Lançamento'),
-                onPressed: () => showTransactionCreateModal(context, store),
+                avatar: Icon(Icons.receipt_long_outlined,
+                    size: 16, color: colors.accent),
+                label: const Text('Lançamentos'),
+                onPressed: () => store.navigateTo(NavModule.transactions),
               ),
               ActionChip(
                 avatar: Icon(Icons.notifications_active_outlined,
@@ -1280,12 +1287,6 @@ class DashboardOverviewView extends StatelessWidget {
                     size: 16, color: colors.income),
                 label: const Text('Relatórios'),
                 onPressed: () => store.navigateTo(NavModule.reports),
-              ),
-              ActionChip(
-                avatar:
-                    Icon(Icons.manage_search, size: 16, color: colors.accent),
-                label: const Text('Pesquisa Global'),
-                onPressed: () => store.navigateTo(NavModule.search),
               ),
             ],
           ),
