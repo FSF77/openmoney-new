@@ -392,24 +392,27 @@ class _AuthViewState extends State<AuthView> {
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
-              child: Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: colors.bgSecondary.withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: colors.borderGlass, width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 32,
-                      offset: const Offset(0, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: colors.bgSecondary.withValues(alpha: 0.94),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: colors.borderGlass, width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 32,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                     // Cabeçalho com Logo Oficial e Título
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -951,11 +954,15 @@ class _AuthViewState extends State<AuthView> {
                   ],
                 ),
               ),
-            ),
+              const SizedBox(height: 18),
+              _buildFooter(colors),
+            ],
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildRegisterStep2Content(OpenMoneyColors colors) {
@@ -1411,6 +1418,100 @@ class _AuthViewState extends State<AuthView> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: colors.accentBlue, width: 1.4),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFooter(OpenMoneyColors colors) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        // Botão Apoiar o Projeto (Link na Bio)
+        Tooltip(
+          message: 'Apoie o desenvolvimento contínuo do OpenMoney',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => webOpenExternalUrl(
+              'https://linknabio.gg/fabianodesouzafernandes',
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: colors.bgSecondary.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                  width: 1.1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.coffee_rounded,
+                    size: 15,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Apoiar o Projeto',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // E-mail de Contato
+        Tooltip(
+          message: 'Enviar mensagem para contato@openmoney.app.br',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => webOpenExternalUrl('mailto:contato@openmoney.app.br'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: colors.bgSecondary.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.mail_outline_rounded,
+                    size: 14,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'contato@openmoney.app.br',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

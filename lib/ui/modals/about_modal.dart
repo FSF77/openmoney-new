@@ -130,10 +130,55 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
                       value: 'Open Source (GitHub)',
                       colors: colors,
                     ),
+                    const Divider(height: 14),
+                    _buildInfoRow(
+                      label: 'Contato',
+                      value: 'contato@openmoney.app.br',
+                      colors: colors,
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+
+              // Botão Apoiar o Projeto (Link na Bio)
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () =>
+                    _openUrl('https://linknabio.gg/fabianodesouzafernandes'),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.coffee_rounded,
+                        size: 18,
+                        color: Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Apoiar o Projeto',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
 
               Text(
                 '© 2026 OpenMoney • FSF Consultoria',
