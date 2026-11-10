@@ -162,6 +162,9 @@ class MoneyStore extends ChangeNotifier {
   bool sidebarShowPlanning = true;
   bool sidebarShowModules = false;
   bool hidePatrimonyBalance = false;
+  bool hideAccountsBalance = false;
+  bool hideInvestmentsBalance = false;
+  bool hideCardsBalance = false;
   bool showMissingDatabasePrompt = false;
   bool showWelcomeScreen = false;
   String missingDatabasePath = '';
@@ -351,6 +354,9 @@ class MoneyStore extends ChangeNotifier {
       'sidebarShowPlanning': sidebarShowPlanning,
       'sidebarShowModules': sidebarShowModules,
       'hidePatrimonyBalance': hidePatrimonyBalance,
+      'hideAccountsBalance': hideAccountsBalance,
+      'hideInvestmentsBalance': hideInvestmentsBalance,
+      'hideCardsBalance': hideCardsBalance,
       'lastUsedAccountId': _lastUsedAccountId,
     };
   }
@@ -466,6 +472,15 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['hidePatrimonyBalance'] is bool) {
       hidePatrimonyBalance = cfg['hidePatrimonyBalance'] as bool;
+    }
+    if (cfg['hideAccountsBalance'] is bool) {
+      hideAccountsBalance = cfg['hideAccountsBalance'] as bool;
+    }
+    if (cfg['hideInvestmentsBalance'] is bool) {
+      hideInvestmentsBalance = cfg['hideInvestmentsBalance'] as bool;
+    }
+    if (cfg['hideCardsBalance'] is bool) {
+      hideCardsBalance = cfg['hideCardsBalance'] as bool;
     }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
@@ -979,6 +994,33 @@ class MoneyStore extends ChangeNotifier {
     hidePatrimonyBalance = !hidePatrimonyBalance;
     final cfg = _readConfig();
     cfg['hidePatrimonyBalance'] = hidePatrimonyBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleHideAccountsBalance() {
+    hideAccountsBalance = !hideAccountsBalance;
+    final cfg = _readConfig();
+    cfg['hideAccountsBalance'] = hideAccountsBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleHideInvestmentsBalance() {
+    hideInvestmentsBalance = !hideInvestmentsBalance;
+    final cfg = _readConfig();
+    cfg['hideInvestmentsBalance'] = hideInvestmentsBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleHideCardsBalance() {
+    hideCardsBalance = !hideCardsBalance;
+    final cfg = _readConfig();
+    cfg['hideCardsBalance'] = hideCardsBalance;
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();

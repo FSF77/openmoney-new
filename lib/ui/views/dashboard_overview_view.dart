@@ -361,31 +361,22 @@ class DashboardOverviewView extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: store.toggleHidePatrimonyBalance,
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            store.hidePatrimonyBalance
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            size: 16,
-                            color: colors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            store.hidePatrimonyBalance ? 'Exibir' : 'Ocultar',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ],
+                  Tooltip(
+                    message: store.hidePatrimonyBalance
+                        ? 'Exibir valores'
+                        : 'Ocultar valores',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: store.toggleHidePatrimonyBalance,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          store.hidePatrimonyBalance
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 16,
+                          color: colors.textSecondary,
+                        ),
                       ),
                     ),
                   ),
@@ -565,6 +556,26 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
+              Tooltip(
+                message: store.hideAccountsBalance
+                    ? 'Exibir valores'
+                    : 'Ocultar valores',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: store.toggleHideAccountsBalance,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      store.hideAccountsBalance
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 16,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               _buildMoveButtons(widgetKey, colors),
             ],
           ),
@@ -693,7 +704,7 @@ class DashboardOverviewView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                brl(realCents),
+                store.hideAccountsBalance ? '••••••' : brl(realCents),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
@@ -715,7 +726,7 @@ class DashboardOverviewView extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      brl(predCents),
+                      store.hideAccountsBalance ? '••••••' : brl(predCents),
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w500,
@@ -789,6 +800,26 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
+              Tooltip(
+                message: store.hideInvestmentsBalance
+                    ? 'Exibir valores'
+                    : 'Ocultar valores',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: store.toggleHideInvestmentsBalance,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      store.hideInvestmentsBalance
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 16,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               _buildMoveButtons(widgetKey, colors),
             ],
           ),
@@ -857,7 +888,9 @@ class DashboardOverviewView extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            brl(realBalance),
+                            store.hideInvestmentsBalance
+                                ? '••••••'
+                                : brl(realBalance),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -881,7 +914,9 @@ class DashboardOverviewView extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  brl(predBalance),
+                                  store.hideInvestmentsBalance
+                                      ? '••••••'
+                                      : brl(predBalance),
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w500,
@@ -1134,6 +1169,26 @@ class DashboardOverviewView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
+              Tooltip(
+                message: store.hideCardsBalance
+                    ? 'Exibir valores'
+                    : 'Ocultar valores',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: store.toggleHideCardsBalance,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      store.hideCardsBalance
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 16,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               _buildMoveButtons(widgetKey, colors),
             ],
           ),
@@ -1206,7 +1261,11 @@ class DashboardOverviewView extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                brl(remainingCents > 0 ? -remainingCents : remainingCents),
+                                store.hideCardsBalance
+                                    ? '••••••'
+                                    : brl(remainingCents > 0
+                                        ? -remainingCents
+                                        : remainingCents),
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w800,
@@ -1230,7 +1289,11 @@ class DashboardOverviewView extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      brl(clearedCents > 0 ? -clearedCents : clearedCents),
+                                      store.hideCardsBalance
+                                          ? '••••••'
+                                          : brl(clearedCents > 0
+                                              ? -clearedCents
+                                              : clearedCents),
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w500,

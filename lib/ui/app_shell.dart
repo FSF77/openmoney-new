@@ -538,12 +538,33 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'OpenMoney',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textMuted,
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: Icon(
+                    Icons.dashboard_rounded,
+                    size: 18,
+                    color: colors.accent,
+                  ),
+                  tooltip: 'Dashboard Geral',
+                  onPressed: () {
+                    widget.store.navigateTo(NavModule.dashboard);
+                  },
+                ),
+                const SizedBox(width: 2),
+                InkWell(
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () {
+                    widget.store.navigateTo(NavModule.dashboard);
+                  },
+                  child: Text(
+                    'OpenMoney',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: colors.accent,
+                    ),
                   ),
                 ),
                 Padding(
@@ -1034,7 +1055,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize: 16,
-                                  color: colors.textPrimary,
+                                  color: colors.accent,
                                 ),
                               ),
                               Text(
