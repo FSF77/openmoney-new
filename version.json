@@ -1,29 +1,29 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.4.0",
-  "web": {
-    "version": "2.4.0",
-    "build": 107,
-    "releaseDate": "10/11/2026"
-  },
-  "build": 107,
-  "notes": "Personalização Visual e Temas, Novo Dashboard / Cockpit Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, pesquisa rápida (Cmd+K / Ctrl+K), tela de lançamentos consolidado, versão Flutter agora com sincronismo online, versão web em https://openmoney.app.br",
-  "releaseDate": "10/11/2026",
-  "windows": {
-    "build": 106,
-    "version": "2.4.0",
-    "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.0.zip",
-    "sha256": "6f99ba8eed0a37efc0f958c8c32142add1e8e6029934e82a7c97ec007575ebbe",
-    "releaseDate": "10/11/2026"
-  },
-  "macos": {
-    "version": "2.4.0",
-    "build": 107,
-    "releaseDate": "10/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.0.zip",
-    "sha256": "d7a9306a5cb3d5b5b6fdcdae7942087984b7783976185bb351250b8cd85a7bba",
-    "sizeMb": 12
-  },
-  "title": "OpenMoney Flutter v2.4.0"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "version":  "2.4.0",
+    "web":  {
+                "version":  "2.4.0",
+                "build":  107,
+                "releaseDate":  "10/11/2026"
+            },
+    "build":  107,
+    "notes":  "Personalização Visual e Temas, Novo Dashboard / Cockpit Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, pesquisa rápida (Cmd+K / Ctrl+K), tela de lançamentos consolidado, versão Flutter agora com sincronismo online, versão web em https://openmoney.app.br",
+    "releaseDate":  "10/11/2026",
+    "windows":  {
+                    "build":  107,
+                    "version":  "2.4.0",
+                    "sizeMb":  13,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.0.zip",
+                    "sha256":  "73ec5b9c45fd94891610d26817c6d24bfcba5fd27270fbde0b59f9a711f836c2",
+                    "releaseDate":  "10/11/2026"
+                },
+    "macos":  {
+                  "version":  "2.4.0",
+                  "build":  107,
+                  "releaseDate":  "10/11/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.0.zip",
+                  "sha256":  "d7a9306a5cb3d5b5b6fdcdae7942087984b7783976185bb351250b8cd85a7bba",
+                  "sizeMb":  12
+              },
+    "title":  "OpenMoney Flutter v2.4.0"
 }
