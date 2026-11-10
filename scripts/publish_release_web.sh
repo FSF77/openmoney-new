@@ -28,6 +28,18 @@ if [ -d "${ROOT_DIR}/coletor" ]; then
     cp -R "${ROOT_DIR}/coletor/"* "${ROOT_DIR}/web-dist/coletor/"
 fi
 
+if [ -f "${ROOT_DIR}/web/_headers" ]; then
+    cp "${ROOT_DIR}/web/_headers" "${ROOT_DIR}/web-dist/_headers"
+fi
+
+# Cache-busting da fonte MaterialIcons para contornar cache stale de CDN Cloudflare
+if [ -f "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular.otf" ]; then
+    cp "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular.otf" "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular-v${CURRENT_BUILD}.otf"
+    if [ -f "${ROOT_DIR}/web-dist/assets/FontManifest.json" ]; then
+        sed -i '' "s/MaterialIcons-Regular.otf/MaterialIcons-Regular-v${CURRENT_BUILD}.otf/g" "${ROOT_DIR}/web-dist/assets/FontManifest.json"
+    fi
+fi
+
 echo "✅ Build Web atualizado em: ${ROOT_DIR}/web-dist"
 
 if command -v npx >/dev/null 2>&1 && ! grep -q "SUBSTITUIR_PELO_ID_DO_SEU_D1_NA_CLOUDFLARE" "${ROOT_DIR}/wrangler.toml" 2>/dev/null; then

@@ -161,7 +161,7 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(
-                        Icons.coffee_rounded,
+                        Icons.local_cafe_rounded,
                         size: 18,
                         color: Color(0xFFF59E0B),
                       ),

@@ -1461,7 +1461,7 @@ class _AuthViewState extends State<AuthView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(
-                    Icons.coffee_rounded,
+                    Icons.local_cafe_rounded,
                     size: 15,
                     color: Color(0xFFF59E0B),
                   ),
@@ -1497,7 +1497,7 @@ class _AuthViewState extends State<AuthView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.mail_outline_rounded,
+                    Icons.mail_outline,
                     size: 14,
                     color: colors.textSecondary,
                   ),

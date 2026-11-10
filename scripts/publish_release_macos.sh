@@ -85,8 +85,19 @@ flutter build web --release --no-tree-shake-icons
 rm -rf "${ROOT_DIR}/web-dist"
 mkdir -p "${ROOT_DIR}/web-dist"
 cp -R "${ROOT_DIR}/build/web/"* "${ROOT_DIR}/web-dist/"
+if [ -f "${ROOT_DIR}/web/_headers" ]; then
+    cp "${ROOT_DIR}/web/_headers" "${ROOT_DIR}/web-dist/_headers"
+fi
 if [ -d "${ROOT_DIR}/coletor" ]; then
     cp -R "${ROOT_DIR}/coletor" "${ROOT_DIR}/web-dist/coletor"
+fi
+
+# Cache-busting da fonte MaterialIcons para contornar cache stale de CDN Cloudflare
+if [ -f "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular.otf" ]; then
+    cp "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular.otf" "${ROOT_DIR}/web-dist/assets/fonts/MaterialIcons-Regular-v${BUILD_NUM}.otf"
+    if [ -f "${ROOT_DIR}/web-dist/assets/FontManifest.json" ]; then
+        sed -i '' "s/MaterialIcons-Regular.otf/MaterialIcons-Regular-v${BUILD_NUM}.otf/g" "${ROOT_DIR}/web-dist/assets/FontManifest.json"
+    fi
 fi
 
 APP_PATH="${ROOT_DIR}/build/macos/Build/Products/Release/openmoney.app"
