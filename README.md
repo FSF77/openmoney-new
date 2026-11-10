@@ -389,6 +389,36 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 
 ---
 
+### 14. Dashboard Geral e Cockpit Executivo (`DashboardOverviewView`)
+- **Visão Central de Decisão**:
+  - Inicialização direta personalizável com saúde financeira consolidada.
+  - Grade adaptativa de 1 a 3 colunas e reordenação direta de cards (`←` e `→`).
+- **Cards Integrados**:
+  1. **Patrimônio Consolidado**: 3 blocos com métricas de Saldo Real, Previsto no Mês e Previsto no Ano, com privacidade isolada em 1 clique (olho).
+  2. **Contas**: Listagem de contas bancárias ativas e favoritas (sem cartões), com exibição clara de **Saldo Real** e **Previsto do Mês**, sem botões de reordenação manuais (seguindo rigorosamente a ordem da barra lateral) e com parâmetro para ocultar contas zeradas (R$ 0,00).
+  3. **Faturas de Cartão de Crédito**: Exibição individual dos cartões ativos com indicação de **Valor Total** da fatura e **Valor Atual** (consolidado/conciliado até o momento), além das datas de fechamento e vencimento.
+  4. **Radar de Vencimentos**: Lançamentos pendentes próximos com indicador de urgência e conciliação em 1 clique.
+  5. **Gastos por Categoria**: Ranking visual das 5 maiores categorias do mês (formato `nov/26`), sem contaminação por transferências e com valor total de pagamentos reais.
+  6. **Ações Rápidas**: Acesso direto aos módulos de relatórios, categorias, vencimentos e fluxo de caixa.
+
+---
+
+### 15. Central de Ajustes & Personalização (`SettingsView`)
+- **Painel Unificado de Preferências**:
+  - **Inicialização**: Abertura padrão no Dashboard Geral, na Última Conta ou em uma Conta Específica.
+  - **Dashboard**: Ativação individual de cada card, filtro de contas ativas, filtro de contas com saldo zero e dias de antecedência do radar.
+  - **Extratos e Lançamentos**: Direção padrão de ordenação por data (Crescente ou Decrescente).
+  - **Aparência e Layout**: Barra lateral expandida vs. Mini Rail compacto (64px), modo de extrato em lista vs. datagrid, zoom tipográfico de acessibilidade e tema.
+  - **IA Gemini**: Ativação e configuração da chave BYOK do Google AI Studio.
+
+---
+
+### 16. Visualização em Tabela Datagrid e Ordenação por Data
+- **Modo Datagrid Contínuo**: Visualização em tabela densa contínua com colunas padronizadas (`Status | Data | Conta com Logo | Favorecido | Categoria | Nota | Valor`) e ações rápidas no mouse (*hover*).
+- **Alternância de Ordenação por Data com 1 Clique**: Clique no cabeçalho **"DIA"** nos extratos ou no botão de ordenação da barra de ferramentas para alternar entre ordem Crescente (mais antigos primeiro) e Decrescente (mais recentes primeiro), preservando com exatidão a matemática dos saldos diários.
+
+---
+
 ## ⌨️ Atalhos de Teclado Globais
 
 | Atalho (macOS) | Atalho (Windows) | Ação Executada |
