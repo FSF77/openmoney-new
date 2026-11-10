@@ -70,6 +70,13 @@ class DashboardOverviewView extends StatelessWidget {
             widgetKey: key,
           );
           break;
+        case 'investments':
+          cardWidget = _buildInvestmentsOverviewCard(
+            context,
+            colors,
+            widgetKey: key,
+          );
+          break;
         case 'dueBills':
           cardWidget = _buildDueBillsRadarCard(
             context,
@@ -511,19 +518,18 @@ class DashboardOverviewView extends StatelessWidget {
     required String widgetKey,
   }) {
     final showZero = store.dashboardAccountsShowZeroBalance;
-    final favRaw = store.favoriteAccounts
-        .where((a) => a.type != kCardType && a.card == null);
-    final favAccounts = (showZero
-            ? favRaw
-            : favRaw.where((a) => store.balance(a, predicted: false) != 0))
-        .toList();
 
-    final regRaw = store.regularActiveAccounts
-        .where((a) => a.type != kCardType && a.card == null);
-    final regActive = (showZero
-            ? regRaw
-            : regRaw.where((a) => store.balance(a, predicted: false) != 0))
-        .toList();
+    bool isAccountVisible(Account a) {
+      if (a.type == kCardType || a.card != null) return false;
+      if (a.type == 'Poupança' || a.type == 'Investimento') return false;
+      if (!showZero && store.balance(a, predicted: false) == 0) {
+        return false;
+      }
+      return true;
+    }
+
+    final favAccounts = store.favoriteAccounts.where(isAccountVisible).toList();
+    final regActive = store.regularActiveAccounts.where(isAccountVisible).toList();
 
     final showActive = store.dashboardAccountsShowActive;
     final totalAccounts = favAccounts.length + (showActive ? regActive.length : 0);
@@ -686,53 +692,213 @@ class DashboardOverviewView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Real ',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  Text(
-                    brl(realCents),
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: realCents >= 0 ? colors.income : colors.expense,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
+              Text(
+                brl(realCents),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: realCents >= 0 ? colors.income : colors.expense,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
-              const SizedBox(height: 2),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Prev. mês ',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textMuted,
+              if (predCents != realCents) ...[
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Prev. mês ',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textMuted,
+                      ),
                     ),
-                  ),
-                  Text(
-                    brl(predCents),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: predCents >= 0 ? colors.income : colors.expense,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                    Text(
+                      brl(predCents),
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textMuted,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 2.1 INVESTIMENTOS & POUPANÇA
+  // =========================================================================
+  Widget _buildInvestmentsOverviewCard(
+    BuildContext context,
+    OpenMoneyColors colors, {
+    required String widgetKey,
+  }) {
+    final showZero = store.dashboardInvestmentsShowZeroBalance;
+
+    bool isInvestmentAccount(Account a) {
+      if (a.type != 'Poupança' && a.type != 'Investimento') return false;
+      if (a.isInactive) return false;
+      if (!showZero) {
+        final real = store.balance(a, predicted: false);
+        final pred = store.balance(a, predicted: true);
+        if (real == 0 && pred == 0) return false;
+      }
+      return true;
+    }
+
+    final favAccounts = store.favoriteAccounts.where(isInvestmentAccount).toList();
+    final regActive = store.regularActiveAccounts.where(isInvestmentAccount).toList();
+    final allInvestments = [...favAccounts, ...regActive];
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.trending_up_rounded,
+                        color: colors.income, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Investimentos',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              _buildMoveButtons(widgetKey, colors),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (allInvestments.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'Nenhuma conta de investimento a exibir.',
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                ),
+              ),
+            )
+          else
+            ...allInvestments.map((acc) {
+              final realBalance = store.balance(acc, predicted: false);
+              final predBalance = store.balance(acc, predicted: true);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: colors.surfaceGlass,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colors.borderGlass),
+                ),
+                child: InkWell(
+                  onTap: () {
+                    store.navigateTo(NavModule.account, accountId: acc.id);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    children: [
+                      AccountLogoWidget(
+                        account: acc,
+                        size: 24,
+                        cornerRadius: 6,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              acc.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: colors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              acc.type,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            brl(realBalance),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: realBalance < 0
+                                  ? colors.expense
+                                  : (realBalance > 0 ? colors.income : colors.textPrimary),
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          if (predBalance != realBalance) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Prev. mês ',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                                Text(
+                                  brl(predBalance),
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: colors.textMuted,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -972,60 +1138,75 @@ class DashboardOverviewView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          ...cardAccounts.map((acc) {
-            final card = acc.card!;
-            final currentIk = invKeyFor(card, todayISO());
-            final summary = store.invoiceSummary(acc.id, currentIk);
-            final remainingCents = summary?.remainingCents ?? 0;
-            final clearedCents = summary?.clearedCents ?? 0;
-            final closeDate = summary?.closeDate ?? '';
-            final dueDate = summary?.dueDate ?? '';
+          () {
+            final showZero = store.dashboardCardsShowZeroBalance;
+            final filtered = cardAccounts.where((acc) {
+              if (showZero) return true;
+              final card = acc.card;
+              if (card == null) return true;
+              final currentIk = invKeyFor(card, todayISO());
+              final summary = store.invoiceSummary(acc.id, currentIk);
+              final remainingCents = summary?.remainingCents ?? 0;
+              final clearedCents = summary?.clearedCents ?? 0;
+              return remainingCents != 0 || clearedCents != 0;
+            }).toList();
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colors.surfaceGlass,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: colors.borderGlass),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            if (filtered.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'Nenhum cartão com fatura ativa.',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              children: filtered.map((acc) {
+                final card = acc.card!;
+                final currentIk = invKeyFor(card, todayISO());
+                final summary = store.invoiceSummary(acc.id, currentIk);
+                final remainingCents = summary?.remainingCents ?? 0;
+                final clearedCents = summary?.clearedCents ?? 0;
+                final closeDate = summary?.closeDate ?? '';
+                final dueDate = summary?.dueDate ?? '';
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceGlass,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: colors.borderGlass),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        children: [
-                          AccountLogoWidget(account: acc, size: 22, cornerRadius: 4),
-                          const SizedBox(width: 8),
-                          Text(
-                            acc.name,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
+                            children: [
+                              AccountLogoWidget(account: acc, size: 22, cornerRadius: 4),
+                              const SizedBox(width: 8),
+                              Text(
+                                acc.name,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Total ',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                              Text(
-                                brl(remainingCents),
+                                brl(remainingCents > 0 ? -remainingCents : remainingCents),
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w800,
@@ -1035,64 +1216,66 @@ class DashboardOverviewView extends StatelessWidget {
                                   fontFeatures: const [FontFeature.tabularFigures()],
                                 ),
                               ),
+                              if (clearedCents != remainingCents) ...[
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Conciliado ',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.textMuted,
+                                      ),
+                                    ),
+                                    Text(
+                                      brl(clearedCents > 0 ? -clearedCents : clearedCents),
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.textMuted,
+                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Atual ',
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: colors.textMuted,
-                                ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            closeDate.isNotEmpty && dueDate.isNotEmpty
+                                ? 'Fecha: ${fmtDate(closeDate)} • Vence: ${fmtDate(dueDate)}'
+                                : 'Fatura do ciclo',
+                            style: TextStyle(fontSize: 11, color: colors.textSecondary),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              store.navigateTo(NavModule.account, accountId: acc.id);
+                            },
+                            child: Text(
+                              'Ver Fatura →',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: colors.accent,
                               ),
-                              Text(
-                                brl(clearedCents),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: colors.accentIndigo,
-                                  fontFeatures: const [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        closeDate.isNotEmpty && dueDate.isNotEmpty
-                            ? 'Fecha: ${fmtDate(closeDate)} • Vence: ${fmtDate(dueDate)}'
-                            : 'Fatura do ciclo',
-                        style: TextStyle(fontSize: 11, color: colors.textSecondary),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          store.navigateTo(NavModule.account, accountId: acc.id);
-                        },
-                        child: Text(
-                          'Ver Fatura →',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: colors.accent,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                );
+              }).toList(),
             );
-          }),
+          }(),
         ],
       ),
     );
@@ -1146,7 +1329,7 @@ class DashboardOverviewView extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Total: ${brl(totalExpenses)}',
+                    'Total: ${brl(totalExpenses > 0 ? -totalExpenses : totalExpenses)}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1191,7 +1374,7 @@ class DashboardOverviewView extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${brl(group.total)} (${(pct * 100).toStringAsFixed(1)}%)',
+                          '${brl(group.total > 0 ? -group.total : group.total)} (${(pct * 100).toStringAsFixed(1)}%)',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,

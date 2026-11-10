@@ -545,6 +545,30 @@ class _SettingsViewState extends State<SettingsView> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
+                  title: const Text('Investimentos & Poupança'),
+                  subtitle: const Text('Aplicações financeiras, investimentos e reservas de poupança.'),
+                  value: widget.store.dashboardWidgets['investments'] ?? true,
+                  onChanged: (v) => widget.store.setDashboardWidget('investments', v ?? true),
+                ),
+                if (widget.store.dashboardWidgets['investments'] ?? true) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 28, bottom: 8),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Exibir investimentos com saldo R\$ 0,00', style: TextStyle(fontSize: 13)),
+                      subtitle: const Text(
+                        'Quando desativado, oculta do card as contas de investimento e poupança com saldo zerado.',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      value: widget.store.dashboardInvestmentsShowZeroBalance,
+                      onChanged: (v) => widget.store.setDashboardInvestmentsShowZeroBalance(v),
+                    ),
+                  ),
+                ],
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
                   title: const Text('Radar de Vencimentos Próximos'),
                   subtitle: const Text('Contas e faturas a pagar com botão de quitação rápida.'),
                   value: widget.store.dashboardWidgets['dueBills'] ?? true,
@@ -558,6 +582,22 @@ class _SettingsViewState extends State<SettingsView> {
                   value: widget.store.dashboardWidgets['cards'] ?? true,
                   onChanged: (v) => widget.store.setDashboardWidget('cards', v ?? true),
                 ),
+                if (widget.store.dashboardWidgets['cards'] ?? true) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 28, bottom: 8),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Exibir faturas com valor zerado (R\$ 0,00)', style: TextStyle(fontSize: 13)),
+                      subtitle: const Text(
+                        'Quando desativado, oculta do card os cartões com fatura zerada no ciclo atual.',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      value: widget.store.dashboardCardsShowZeroBalance,
+                      onChanged: (v) => widget.store.setDashboardCardsShowZeroBalance(v),
+                    ),
+                  ),
+                ],
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,

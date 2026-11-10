@@ -134,9 +134,12 @@ class MoneyStore extends ChangeNotifier {
   bool sortAscendingDate = true;
   bool dashboardAccountsShowActive = true;
   bool dashboardAccountsShowZeroBalance = true;
+  bool dashboardInvestmentsShowZeroBalance = true;
+  bool dashboardCardsShowZeroBalance = true;
   List<String> dashboardWidgetsOrder = [
     'patrimony',
     'accounts',
+    'investments',
     'dueBills',
     'cards',
     'categories',
@@ -145,6 +148,7 @@ class MoneyStore extends ChangeNotifier {
   Map<String, bool> dashboardWidgets = {
     'patrimony': true,
     'accounts': true,
+    'investments': true,
     'dueBills': true,
     'cards': true,
     'categories': true,
@@ -337,6 +341,8 @@ class MoneyStore extends ChangeNotifier {
       'sortAscendingDate': sortAscendingDate,
       'dashboardAccountsShowActive': dashboardAccountsShowActive,
       'dashboardAccountsShowZeroBalance': dashboardAccountsShowZeroBalance,
+      'dashboardInvestmentsShowZeroBalance': dashboardInvestmentsShowZeroBalance,
+      'dashboardCardsShowZeroBalance': dashboardCardsShowZeroBalance,
       'dashboardWidgetsOrder': List<String>.from(dashboardWidgetsOrder),
       'dashboardWidgets': Map<String, bool>.from(dashboardWidgets),
       'sidebarShowFavorites': sidebarShowFavorites,
@@ -387,6 +393,14 @@ class MoneyStore extends ChangeNotifier {
       dashboardAccountsShowZeroBalance =
           cfg['dashboardAccountsShowZeroBalance'] as bool;
     }
+    if (cfg['dashboardInvestmentsShowZeroBalance'] is bool) {
+      dashboardInvestmentsShowZeroBalance =
+          cfg['dashboardInvestmentsShowZeroBalance'] as bool;
+    }
+    if (cfg['dashboardCardsShowZeroBalance'] is bool) {
+      dashboardCardsShowZeroBalance =
+          cfg['dashboardCardsShowZeroBalance'] as bool;
+    }
     if (cfg['dashboardWidgetsOrder'] is List) {
       final list = (cfg['dashboardWidgetsOrder'] as List)
           .map((e) => e.toString())
@@ -397,13 +411,19 @@ class MoneyStore extends ChangeNotifier {
         for (final k in [
           'patrimony',
           'accounts',
+          'investments',
           'dueBills',
           'cards',
           'categories',
           'quickActions'
         ]) {
           if (!dashboardWidgetsOrder.contains(k)) {
-            dashboardWidgetsOrder.add(k);
+            final accIdx = dashboardWidgetsOrder.indexOf('accounts');
+            if (k == 'investments' && accIdx != -1) {
+              dashboardWidgetsOrder.insert(accIdx + 1, k);
+            } else {
+              dashboardWidgetsOrder.add(k);
+            }
           }
         }
       }
@@ -780,6 +800,42 @@ class MoneyStore extends ChangeNotifier {
     dashboardAccountsShowZeroBalance = value;
     final cfg = _readConfig();
     cfg['dashboardAccountsShowZeroBalance'] = dashboardAccountsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleDashboardInvestmentsShowZeroBalance() {
+    dashboardInvestmentsShowZeroBalance = !dashboardInvestmentsShowZeroBalance;
+    final cfg = _readConfig();
+    cfg['dashboardInvestmentsShowZeroBalance'] = dashboardInvestmentsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setDashboardInvestmentsShowZeroBalance(bool value) {
+    dashboardInvestmentsShowZeroBalance = value;
+    final cfg = _readConfig();
+    cfg['dashboardInvestmentsShowZeroBalance'] = dashboardInvestmentsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleDashboardCardsShowZeroBalance() {
+    dashboardCardsShowZeroBalance = !dashboardCardsShowZeroBalance;
+    final cfg = _readConfig();
+    cfg['dashboardCardsShowZeroBalance'] = dashboardCardsShowZeroBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setDashboardCardsShowZeroBalance(bool value) {
+    dashboardCardsShowZeroBalance = value;
+    final cfg = _readConfig();
+    cfg['dashboardCardsShowZeroBalance'] = dashboardCardsShowZeroBalance;
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();
