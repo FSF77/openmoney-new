@@ -1257,36 +1257,23 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            widget.store.sidebarShowActiveAccounts
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 16,
-                            color: colors.textMuted,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'CONTAS ATIVAS (${regActive.length})',
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                              color: colors.textMuted,
-                            ),
-                          ),
-                        ],
+                      Icon(
+                        widget.store.sidebarShowActiveAccounts
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                        color: colors.textMuted,
                       ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Nova Conta',
-                        icon: Icon(Icons.add_circle_outline,
-                            size: 17, color: colors.accent),
-                        onPressed: () =>
-                            showAccountModal(context, widget.store),
+                      const SizedBox(width: 4),
+                      Text(
+                        'CONTAS ATIVAS (${regActive.length})',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: colors.textMuted,
+                        ),
                       ),
                     ],
                   ),
