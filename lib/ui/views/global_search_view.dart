@@ -32,7 +32,14 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
       accountId: _accFilter,
       signFilter: _signFilter,
     );
-    final totalSum = results.fold<int>(0, (s, t) => s + t.amt);
+    final summaryCur = _accFilter != 'all'
+        ? (widget.store.accById(_accFilter)?.effectiveCurrency ??
+            widget.store.baseCurrency)
+        : widget.store.baseCurrency;
+    final totalSum = results.fold<int>(
+      0,
+      (s, t) => s + widget.store.convertTxToCurrency(t, summaryCur),
+    );
 
     return Column(
       children: [
@@ -141,7 +148,7 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '${results.length} resultado(s) encontrado(s) • Soma líquida: ${brl(totalSum)}',
+                  '${results.length} resultado(s) encontrado(s) • Soma líquida: ${formatCurrency(totalSum, summaryCur)}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -158,7 +165,9 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
             itemCount: results.length,
             itemBuilder: (context, idx) {
               final tx = results[idx];
-              final accName = widget.store.accById(tx.acc)?.name ?? 'Conta';
+              final txAcc = widget.store.accById(tx.acc);
+              final accName = txAcc?.name ?? 'Conta';
+              final accCur = txAcc?.effectiveCurrency ?? widget.store.baseCurrency;
               return GlassCard(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding:
@@ -196,7 +205,7 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
                       ),
                     ),
                     Text(
-                      brl(tx.amt),
+                      formatCurrency(tx.amt, accCur),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,

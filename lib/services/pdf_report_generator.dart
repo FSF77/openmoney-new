@@ -61,7 +61,8 @@ class _SimpleA4PdfDocument {
         .replaceAll('↳', '›')
         .replaceAll('☑', '[x]')
         .replaceAll('☐', '[ ]')
-        .replaceAll('✓', 'OK');
+        .replaceAll('✓', 'OK')
+        .replaceAll('₲', 'Gs');
 
     final sb = StringBuffer('(');
     for (final rune in sanitized.runes) {
@@ -363,12 +364,14 @@ class PdfReportGenerator {
       );
     }
 
-    drawKpi(0, isAnnual ? 'Receitas do Ano' : 'Receitas do Mês', brl(data.totalIncome), 0.02, 0.59, 0.40);
-    drawKpi(1, isAnnual ? 'Despesas do Ano' : 'Despesas do Mês', brl(data.totalExpense), 0.88, 0.11, 0.28);
+    drawKpi(0, isAnnual ? 'Receitas do Ano' : 'Receitas do Mês',
+        formatCurrency(data.totalIncome, data.currency), 0.02, 0.59, 0.40);
+    drawKpi(1, isAnnual ? 'Despesas do Ano' : 'Despesas do Mês',
+        formatCurrency(data.totalExpense, data.currency), 0.88, 0.11, 0.28);
     drawKpi(
       2,
       'Resultado Líquido',
-      brl(data.netTotal),
+      formatCurrency(data.netTotal, data.currency),
       data.netTotal >= 0 ? 0.02 : 0.88,
       data.netTotal >= 0 ? 0.59 : 0.11,
       data.netTotal >= 0 ? 0.40 : 0.28,
@@ -409,7 +412,7 @@ class PdfReportGenerator {
       required double cb,
     }) {
       doc.drawText(
-        '$title (${brl(total)})',
+        '$title (${formatCurrency(total, data.currency)})',
         x,
         tableTop,
         fontSize: 9.5,
@@ -463,7 +466,7 @@ class PdfReportGenerator {
           maxChars: 28,
         );
         doc.drawTextRight(
-          '${brl(g.total)} (${g.percentage}%)',
+          '${formatCurrency(g.total, data.currency)} (${g.percentage}%)',
           x + colWidth - 4,
           y,
           fontSize: fontSize,
@@ -487,7 +490,7 @@ class PdfReportGenerator {
             maxChars: 30,
           );
           doc.drawTextRight(
-            '${brl(sub.amount)} (${sub.percentage}%)',
+            '${formatCurrency(sub.amount, data.currency)} (${sub.percentage}%)',
             x + colWidth - 4,
             y,
             fontSize: fontSize * 0.92,
@@ -562,6 +565,7 @@ class PdfReportGenerator {
   }) {
     final doc = _SimpleA4PdfDocument();
     final isCard = account.type == kCardType;
+    final accCur = account.effectiveCurrency;
     final title = isCard
         ? 'Fatura de Cartão de Crédito — ${account.name} (${fmtMonth(monthYM)})'
         : 'Extrato Mensal de Conta — ${account.name} (${fmtMonth(monthYM)})';
@@ -658,7 +662,7 @@ class PdfReportGenerator {
       );
       final statusTag = invoiceSummary.isFullyPaid ? ' [LIQUIDADA]' : '';
       doc.drawText(
-        'Total Fatura: ${brl(invoiceSummary.chargesCents)}   |   Pago: ${brl(invoiceSummary.paymentsCents)}   |   Em Aberto: ${brl(invoiceSummary.remainingCents)}$statusTag',
+        'Total Fatura: ${formatCurrency(invoiceSummary.chargesCents, accCur)}   |   Pago: ${formatCurrency(invoiceSummary.paymentsCents, accCur)}   |   Em Aberto: ${formatCurrency(invoiceSummary.remainingCents, accCur)}$statusTag',
         margin + 8,
         y + 29,
         fontSize: 8.5,
@@ -673,14 +677,14 @@ class PdfReportGenerator {
       doc.fillRect(margin, y, contentWidth, 38, r: 0.96, g: 0.97, b: 0.99);
       doc.strokeRect(margin, y, contentWidth, 38, r: 0.85, g: 0.88, b: 0.92);
       doc.drawText(
-        'Saldo Inicial do Período: Real ${brl(openingReal)}${openingPred != openingReal ? " (Previsto: ${brl(openingPred)})" : ""}   |   Entradas (+): ${brl(totalCredits)}   |   Saídas (-): ${brl(totalDebits)}',
+        'Saldo Inicial do Período: Real ${formatCurrency(openingReal, accCur)}${openingPred != openingReal ? " (Previsto: ${formatCurrency(openingPred, accCur)})" : ""}   |   Entradas (+): ${formatCurrency(totalCredits, accCur)}   |   Saídas (-): ${formatCurrency(totalDebits, accCur)}',
         margin + 8,
         y + 14,
         fontSize: 8.2,
         bold: true,
       );
       doc.drawText(
-        'Saldo Final Real: ${brl(finalReal)}   |   Saldo Final Previsto: ${brl(finalPred)}',
+        'Saldo Final Real: ${formatCurrency(finalReal, accCur)}   |   Saldo Final Previsto: ${formatCurrency(finalPred, accCur)}',
         margin + 8,
         y + 29,
         fontSize: 8.5,
@@ -711,7 +715,7 @@ class PdfReportGenerator {
         bold: true,
       );
       doc.drawTextRight(
-        'Valor (R\$)',
+        'Valor ($accCur)',
         margin + contentWidth - 4,
         topY + 11,
         fontSize: 8,
@@ -789,7 +793,7 @@ class PdfReportGenerator {
         maxChars: 30,
       );
       doc.drawTextRight(
-        brl(t.amt),
+        formatCurrency(t.amt, accCur),
         margin + contentWidth - 4,
         y,
         fontSize: 8.2,
@@ -828,7 +832,7 @@ class PdfReportGenerator {
         lineWidth: 1.2,
       );
       doc.drawTextRight(
-        'Total da Fatura (${transactions.length} lanç.): ${brl(totalPeriod)}',
+        'Total da Fatura (${transactions.length} lanç.): ${formatCurrency(totalPeriod, accCur)}',
         margin + contentWidth - 4,
         y + 4,
         fontSize: 10,
@@ -881,7 +885,7 @@ class PdfReportGenerator {
             b: 0.40,
           );
           doc.drawTextRight(
-            'Saldo Real: ${brl(runningReal)}   |   Previsto: ${brl(runningPred)}',
+            'Saldo Real: ${formatCurrency(runningReal, accCur)}   |   Previsto: ${formatCurrency(runningPred, accCur)}',
             margin + contentWidth - 6,
             y + 1,
             fontSize: 7.8,
@@ -905,7 +909,7 @@ class PdfReportGenerator {
       doc.fillRect(margin, y, contentWidth, 38, r: 0.95, g: 0.97, b: 0.99);
       doc.strokeRect(margin, y, contentWidth, 38, r: 0.78, g: 0.83, b: 0.90);
       doc.drawText(
-        'Saldo Inicial: Real ${brl(openingReal)} (Previsto: ${brl(openingPred)})   |   Entradas: +${brl(totalCredits)}   |   Saídas: -${brl(totalDebits)}',
+        'Saldo Inicial: Real ${formatCurrency(openingReal, accCur)} (Previsto: ${formatCurrency(openingPred, accCur)})   |   Entradas: +${formatCurrency(totalCredits, accCur)}   |   Saídas: -${formatCurrency(totalDebits, accCur)}',
         margin + 8,
         y + 14,
         fontSize: 8.0,
@@ -915,7 +919,7 @@ class PdfReportGenerator {
         b: 0.38,
       );
       doc.drawText(
-        'SALDO FINAL REAL: ${brl(finalReal)}     |     SALDO FINAL PREVISTO: ${brl(finalPred)}',
+        'SALDO FINAL REAL: ${formatCurrency(finalReal, accCur)}     |     SALDO FINAL PREVISTO: ${formatCurrency(finalPred, accCur)}',
         margin + 8,
         y + 29,
         fontSize: 9.2,
@@ -937,8 +941,10 @@ class PdfReportGenerator {
     required int incomeCents,
     required int expenseCents,
     required int netCents,
+    String? summaryCurrency,
   }) {
     final doc = _SimpleA4PdfDocument();
+    final sumCur = summaryCurrency ?? store.baseCurrency;
     final now = DateTime.now();
     final emission =
         '${now.day.toString().padLeft(2, "0")}/${now.month.toString().padLeft(2, "0")}/${now.year} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}';
@@ -948,6 +954,9 @@ class PdfReportGenerator {
     const footerY = _SimpleA4PdfDocument.pageHeight - 28.0;
 
     final accMap = {for (final a in store.db.accounts) a.id: a.name};
+    final accCurMap = {
+      for (final a in store.db.accounts) a.id: a.effectiveCurrency
+    };
 
     void drawPageHeader(int pageNum) {
       doc.drawText(
@@ -1019,7 +1028,7 @@ class PdfReportGenerator {
       b: 0.43,
     );
     doc.drawText(
-      'Receitas (+): ${brl(incomeCents)}   |   Despesas (−): ${brl(expenseCents)}   |   Resultado: ${brl(netCents)}',
+      'Receitas (+): ${formatCurrency(incomeCents, sumCur)}   |   Despesas (−): ${formatCurrency(expenseCents, sumCur)}   |   Resultado: ${formatCurrency(netCents, sumCur)}',
       margin + 8,
       y + 29,
       fontSize: 8.8,
@@ -1050,7 +1059,7 @@ class PdfReportGenerator {
         bold: true,
       );
       doc.drawTextRight(
-        'Valor (R\$)',
+        'Valor',
         margin + contentWidth - 4,
         topY + 11,
         fontSize: 8,
@@ -1139,7 +1148,7 @@ class PdfReportGenerator {
         maxChars: 24,
       );
       doc.drawTextRight(
-        brl(t.amt),
+        formatCurrency(t.amt, accCurMap[t.acc] ?? sumCur),
         margin + contentWidth - 4,
         y,
         fontSize: 8.2,

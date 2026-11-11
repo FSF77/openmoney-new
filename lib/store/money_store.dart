@@ -6,6 +6,7 @@ import '../services/audit_log_manager.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
 import '../services/cloud_sync_service.dart';
+import '../services/currency_rate_service.dart';
 import '../services/importers_exporters.dart';
 import '../services/native_file_picker.dart';
 import '../services/platform_io.dart';
@@ -119,6 +120,114 @@ class MoneyStore extends ChangeNotifier {
     cfg['lastUsedAccountId'] = accId;
     _writeConfig(cfg);
     notifyListeners();
+  }
+
+  String get baseCurrency => db.effectiveBaseCurrency;
+
+  void setBaseCurrency(String code) {
+    final normalized = code.trim().toUpperCase();
+    if (normalized.isEmpty || normalized == db.baseCurrency) return;
+    db.baseCurrency = normalized;
+    markIndexesDirty();
+    save();
+    checkAndRefreshRatesDaily();
+  }
+
+  double rateToBase(String fromCurrency) {
+    return exchangeRateBetween(
+      fromCurrency: fromCurrency,
+      toCurrency: baseCurrency,
+      rates: db.rates,
+    );
+  }
+
+  double rateToBrl(String fromCurrency) {
+    return exchangeRateBetween(
+      fromCurrency: fromCurrency,
+      toCurrency: 'BRL',
+      rates: db.rates,
+    );
+  }
+
+  int convertToBase(int cents, String fromCurrency, {double? txRateToBrl}) {
+    final from = fromCurrency.trim().toUpperCase();
+    final base = baseCurrency;
+    if (from == base) return cents;
+    if (txRateToBrl != null && txRateToBrl > 0) {
+      if (base == 'BRL') return (cents * txRateToBrl).round();
+      final baseRateToBrl = rateToBrl(base);
+      if (baseRateToBrl > 0) {
+        return (cents * (txRateToBrl / baseRateToBrl)).round();
+      }
+    }
+    return convertCents(
+      cents,
+      fromCurrency: from,
+      toCurrency: base,
+      rates: db.rates,
+    );
+  }
+
+  CurrencyRateInfo? rateInfoFor(String currencyCode) {
+    return db.rates[currencyCode.trim().toUpperCase()];
+  }
+
+  void updateCurrencyRate(String currencyCode, double rateToBrlValue,
+      {bool manual = true}) {
+    final code = currencyCode.trim().toUpperCase();
+    if (code == 'BRL' || rateToBrlValue <= 0) return;
+    db.rates[code] = CurrencyRateInfo(
+      rate: rateToBrlValue,
+      manual: manual,
+      updatedAt: DateTime.now().toIso8601String(),
+      source: manual ? 'Manual' : 'AwesomeAPI',
+    );
+    markIndexesDirty();
+    save();
+  }
+
+  void setCurrencyRateAuto(String currencyCode) {
+    final code = currencyCode.trim().toUpperCase();
+    final existing = db.rates[code];
+    if (existing != null) {
+      db.rates[code] = existing.copyWith(manual: false, source: 'AwesomeAPI');
+    }
+    refreshOnlineRates(force: true);
+  }
+
+  bool _isRefreshingRates = false;
+  bool get isRefreshingRates => _isRefreshingRates;
+
+  Future<void> checkAndRefreshRatesDaily() async {
+    if (!CurrencyRateService.shouldRefreshOnline(db)) return;
+    await refreshOnlineRates(force: false);
+  }
+
+  Future<bool> refreshOnlineRates({bool force = false}) async {
+    if (_isRefreshingRates) return false;
+    _isRefreshingRates = true;
+    notifyListeners();
+    try {
+      final fetched = await CurrencyRateService.fetchOnlineRates(force: force);
+      if (fetched == null || fetched.isEmpty) return false;
+      bool changed = false;
+      fetched.forEach((code, info) {
+        final existing = db.rates[code];
+        if (existing != null && existing.manual) {
+          return;
+        }
+        db.rates[code] = info;
+        changed = true;
+      });
+      if (changed) {
+        markIndexesDirty();
+        save();
+      }
+      return changed;
+    } finally {
+      _isRefreshingRates = false;
+      notifyListeners();
+    }
   }
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
@@ -585,6 +694,7 @@ class MoneyStore extends ChangeNotifier {
         this,
         hasValidLocalCache: loadedFromCache,
       );
+      unawaited(checkAndRefreshRatesDaily());
       return;
     }
 
@@ -693,6 +803,7 @@ class MoneyStore extends ChangeNotifier {
     registerRecentFile(targetPath);
     _setupFileWatcher(targetPath);
     notifyListeners();
+    unawaited(checkAndRefreshRatesDaily());
   }
 
   void _syncPreferencesOnWeb() {
@@ -1411,8 +1522,8 @@ class MoneyStore extends ChangeNotifier {
       final r = realByAcc[acc.id] ?? acc.opening;
       final p = predByAcc[acc.id] ?? acc.opening;
       _cachedBalances[acc.id] = (real: r, pred: p);
-      totalReal += r;
-      totalPred += p;
+      totalReal += convertToBase(r, acc.effectiveCurrency);
+      totalPred += convertToBase(p, acc.effectiveCurrency);
     }
 
     _cachedTotalReal = totalReal;
@@ -1455,7 +1566,7 @@ class MoneyStore extends ChangeNotifier {
       final p = predByAcc[acc.id] ?? acc.opening;
       final r = _cachedBalances[acc.id]?.real ?? acc.opening;
       _cachedBalances[acc.id] = (real: r, pred: p);
-      totalPred += p;
+      totalPred += convertToBase(p, acc.effectiveCurrency);
     }
     _cachedTotalPred = totalPred;
   }
@@ -2540,7 +2651,8 @@ class MoneyStore extends ChangeNotifier {
 
     int total = 0;
     for (final acc in db.accounts) {
-      total += predByAcc[acc.id] ?? acc.opening;
+      final p = predByAcc[acc.id] ?? acc.opening;
+      total += convertToBase(p, acc.effectiveCurrency);
     }
     return total;
   }
@@ -2841,9 +2953,16 @@ class MoneyStore extends ChangeNotifier {
     int? minBalance,
     String? logo,
     List<String>? walletAliases,
+    String? currency,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da conta.';
+
+    final cleanCurrency =
+        (currency != null && currency.trim().isNotEmpty)
+            ? currency.trim().toUpperCase()
+            : 'BRL';
+    final effectiveCurrencyField = cleanCurrency == 'BRL' ? null : cleanCurrency;
 
     final trimmedBiz = business?.trim();
     final cleanBiz =
@@ -2884,6 +3003,7 @@ class MoneyStore extends ChangeNotifier {
         db.accounts[idx].comments = comments?.trim().isEmpty == true ? null : comments?.trim();
         db.accounts[idx].minBalance = minBalance;
         db.accounts[idx].logo = cleanLogo;
+        db.accounts[idx].currency = effectiveCurrencyField;
         if (walletAliases != null) {
           db.accounts[idx].walletAliases = effectiveAliases;
         }
@@ -2917,6 +3037,7 @@ class MoneyStore extends ChangeNotifier {
         minBalance: minBalance,
         logo: cleanLogo,
         walletAliases: effectiveAliases,
+        currency: effectiveCurrencyField,
       );
       db.accounts.add(acc);
       selectedAccountId = newId;
@@ -2926,13 +3047,16 @@ class MoneyStore extends ChangeNotifier {
         action: AuditAction.create,
         entity: AuditEntity.account,
         id: newId,
-        summary: 'Nova conta cadastrada: "$trimmed" (tipo: $type, saldo inicial: ${brl(openingCents)})',
+        summary: 'Nova conta cadastrada: "$trimmed" (tipo: $type, moeda: $cleanCurrency, saldo inicial: ${formatCurrency(openingCents, cleanCurrency)})',
       );
     }
 
     syncCards();
     markIndexesDirty();
     save();
+    if (cleanCurrency != baseCurrency) {
+      checkAndRefreshRatesDaily();
+    }
     return null;
   }
 
@@ -3160,12 +3284,16 @@ class MoneyStore extends ChangeNotifier {
     int installments = 2,
     String? endDate,
     String? customIk,
+    int? peerSignedAmt,
+    double? txRate,
   }) {
     setLastUsedAccount(accId);
     final isXfer = catSelection.startsWith('xfer:');
     final peerId = isXfer ? catSelection.substring(5) : null;
     final peerAcc = accById(peerId);
     final curAcc = accById(accId);
+    final curCurrency = curAcc?.effectiveCurrency ?? 'BRL';
+    final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
     final catLabel =
         isXfer ? 'Transferência: ${peerAcc?.name ?? ""}' : catSelection;
     final count = mode == 'installment' ? installments.clamp(2, 120) : 1;
@@ -3183,6 +3311,13 @@ class MoneyStore extends ChangeNotifier {
     final targetMonth = (isCard && baseIk != null && baseIk.isNotEmpty)
         ? baseIk
         : (date.length >= 7 ? date.substring(0, 7) : _month);
+
+    double? resolvedCurRate;
+    if (txRate != null && txRate > 0) {
+      resolvedCurRate = txRate;
+    } else if (curCurrency != 'BRL') {
+      resolvedCurRate = rateToBrl(curCurrency);
+    }
 
     if (mode == 'recurring') {
       final rule = RecurrenceRule(
@@ -3221,6 +3356,7 @@ class MoneyStore extends ChangeNotifier {
             plan: pid,
             pn: i + 1,
             pt: count,
+            rate: (d.compareTo(today) <= 0) ? resolvedCurRate : null,
           ),
         );
       }
@@ -3228,6 +3364,42 @@ class MoneyStore extends ChangeNotifier {
     } else {
       final xid = isXfer ? uid() : null;
       final rec = date.compareTo(today) <= 0;
+
+      int? computedPeerAmt;
+      double? curTxRate = resolvedCurRate;
+      double? peerTxRate;
+
+      if (isXfer && peerId != null) {
+        if (curCurrency == peerCurrency) {
+          computedPeerAmt = -signedAmt;
+          peerTxRate = resolvedCurRate;
+        } else {
+          computedPeerAmt = peerSignedAmt ??
+              -convertCents(
+                signedAmt,
+                fromCurrency: curCurrency,
+                toCurrency: peerCurrency,
+                rates: db.rates,
+              );
+          if (curCurrency == 'BRL' &&
+              peerCurrency != 'BRL' &&
+              signedAmt != 0 &&
+              computedPeerAmt != 0) {
+            peerTxRate = signedAmt.abs() / computedPeerAmt.abs();
+            curTxRate = null;
+          } else if (curCurrency != 'BRL' &&
+              peerCurrency == 'BRL' &&
+              signedAmt != 0 &&
+              computedPeerAmt != 0) {
+            curTxRate = computedPeerAmt.abs() / signedAmt.abs();
+            peerTxRate = null;
+          } else {
+            curTxRate = curCurrency == 'BRL' ? null : (txRate ?? rateToBrl(curCurrency));
+            peerTxRate = peerCurrency == 'BRL' ? null : rateToBrl(peerCurrency);
+          }
+        }
+      }
+
       db.txs.add(
         Transaction(
           id: uid(),
@@ -3241,6 +3413,7 @@ class MoneyStore extends ChangeNotifier {
           rec: rec,
           xfer: xid,
           ik: baseIk,
+          rate: curTxRate,
         ),
       );
       if (isXfer && peerId != null) {
@@ -3260,10 +3433,11 @@ class MoneyStore extends ChangeNotifier {
             payee: payee,
             cat: 'Transferência: ${curAcc?.name ?? ""}',
             memo: memo,
-            amt: -signedAmt,
+            amt: computedPeerAmt ?? -signedAmt,
             rec: rec,
             xfer: xid,
             ik: peerIk,
+            rate: peerTxRate,
           ),
         );
       }
@@ -3276,9 +3450,10 @@ class MoneyStore extends ChangeNotifier {
 
     final accName = curAcc?.name ?? accId;
     final typeLabel = isXfer ? 'Transferência' : (signedAmt < 0 ? 'Despesa' : 'Receita');
+    final formattedAmt = formatCurrency(signedAmt, curCurrency);
     final desc = mode == 'installment'
-        ? '$typeLabel parcelado ($count x): "$payee" em $accName, total: ${brl(signedAmt)}'
-        : '$typeLabel: "$payee" em $accName, ${brl(signedAmt)} ($catLabel)';
+        ? '$typeLabel parcelado ($count x): "$payee" em $accName, total: $formattedAmt'
+        : '$typeLabel: "$payee" em $accName, $formattedAmt ($catLabel)';
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.create,
@@ -3306,6 +3481,29 @@ class MoneyStore extends ChangeNotifier {
     final xid = uid();
     final rec = paymentDate.compareTo(todayISO()) <= 0;
 
+    final cardCurrency = cardAcc.effectiveCurrency;
+    final sourceCurrency = sourceAcc?.effectiveCurrency ?? 'BRL';
+    final int sourceDebitCents;
+    double? cardRate;
+    double? sourceRate;
+
+    if (cardCurrency == sourceCurrency) {
+      sourceDebitCents = -amountCents.abs();
+      if (cardCurrency != 'BRL') {
+        cardRate = rateToBrl(cardCurrency);
+        sourceRate = cardRate;
+      }
+    } else {
+      sourceDebitCents = -convertCents(
+        amountCents.abs(),
+        fromCurrency: cardCurrency,
+        toCurrency: sourceCurrency,
+        rates: db.rates,
+      );
+      if (cardCurrency != 'BRL') cardRate = rateToBrl(cardCurrency);
+      if (sourceCurrency != 'BRL') sourceRate = rateToBrl(sourceCurrency);
+    }
+
     db.txs.add(
       Transaction(
         id: uid(),
@@ -3315,9 +3513,10 @@ class MoneyStore extends ChangeNotifier {
         payee: 'Pagamento de Fatura: $cardName',
         cat: 'Transferência: $cardName',
         memo: defaultMemo,
-        amt: -amountCents.abs(),
+        amt: sourceDebitCents,
         rec: rec,
         xfer: xid,
+        rate: sourceRate,
       ),
     );
 
@@ -3335,6 +3534,7 @@ class MoneyStore extends ChangeNotifier {
         rec: rec,
         xfer: xid,
         ik: invoiceKey,
+        rate: cardRate,
       ),
     );
 
@@ -3370,6 +3570,8 @@ class MoneyStore extends ChangeNotifier {
     required int newSignedAmt,
     ScopeChoice scope = ScopeChoice.only,
     String? newIk,
+    int? peerSignedAmt,
+    double? txRate,
   }) {
     final idx = db.txs.indexWhere((t) => t.id == txId);
     if (idx == -1) return;
@@ -3420,6 +3622,9 @@ class MoneyStore extends ChangeNotifier {
     db.txs[idx].date = newDate;
     db.txs[idx].memo = newMemo;
     db.txs[idx].amt = newSignedAmt;
+    if (txRate != null && txRate > 0) {
+      db.txs[idx].rate = txRate;
+    }
 
     final cAcc = accById(targetAccId);
     if (cAcc != null && cAcc.type == kCardType && cAcc.card != null) {
@@ -3435,18 +3640,30 @@ class MoneyStore extends ChangeNotifier {
     if (t.xfer != null) {
       final xfer = t.xfer!;
       db.txs[idx].payee = newPayee;
+      final curCurrency = cAcc?.effectiveCurrency ?? 'BRL';
+
       for (int i = 0; i < db.txs.length; i++) {
         if (db.txs[i].xfer == xfer && db.txs[i].id != t.id) {
           db.txs[i].date = newDate;
           db.txs[i].payee = newPayee;
           db.txs[i].memo = newMemo;
-          db.txs[i].amt = -newSignedAmt;
+
+          final peerAcc = accById(db.txs[i].acc);
+          final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
+
+          if (curCurrency == peerCurrency) {
+            db.txs[i].amt = -newSignedAmt;
+          } else {
+            if (peerSignedAmt != null) {
+              db.txs[i].amt = peerSignedAmt;
+            }
+          }
+
           if (accChanged) {
             db.txs[i].peer = targetAccId;
             db.txs[i].cat =
                 'Transferência: ${accById(targetAccId)?.name ?? ""}';
           }
-          final peerAcc = accById(db.txs[i].acc);
           if (peerAcc != null &&
               peerAcc.type == kCardType &&
               peerAcc.card != null) {
@@ -3569,13 +3786,15 @@ class MoneyStore extends ChangeNotifier {
     markIndexesDirty();
     save();
 
-    final accName = accById(newAccId ?? t.acc)?.name ?? t.acc;
+    final acc = accById(newAccId ?? t.acc);
+    final accName = acc?.name ?? t.acc;
+    final accCur = acc?.effectiveCurrency ?? baseCurrency;
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.update,
       entity: AuditEntity.transaction,
       id: txId,
-      summary: 'Lançamento alterado: "$newPayee" em $accName, ${brl(newSignedAmt)} ($newCatSelection)',
+      summary: 'Lançamento alterado: "$newPayee" em $accName, ${formatCurrency(newSignedAmt, accCur)} ($newCatSelection)',
     );
   }
 
@@ -3630,7 +3849,9 @@ class MoneyStore extends ChangeNotifier {
     markIndexesDirty();
     save();
 
-    final accName = accById(t.acc)?.name ?? t.acc;
+    final acc = accById(t.acc);
+    final accName = acc?.name ?? t.acc;
+    final accCur = acc?.effectiveCurrency ?? baseCurrency;
     final scopeLabel = scope == ScopeChoice.all
         ? ' (todos do plano/recorrência)'
         : (scope == ScopeChoice.forward ? ' (este e futuros)' : '');
@@ -3639,7 +3860,7 @@ class MoneyStore extends ChangeNotifier {
       action: AuditAction.delete,
       entity: AuditEntity.transaction,
       id: txId,
-      summary: 'Lançamento excluído: "${t.payee}" em $accName, ${brl(t.amt)}$scopeLabel',
+      summary: 'Lançamento excluído: "${t.payee}" em $accName, ${formatCurrency(t.amt, accCur)}$scopeLabel',
     );
   }
 
@@ -3901,9 +4122,10 @@ class MoneyStore extends ChangeNotifier {
           db.txs[idx].amt = newSigned;
           db.txs[idx].memo = newMemo;
 
+          final predCur = accById(pred.acc)?.effectiveCurrency ?? baseCurrency;
           if (wasChanged) {
             adjustedItems.add(
-              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Ajustada para ${brl(newRemaining)} (Base original: ${brl(base)} − Gastos da categoria: ${brl(netSpent)})',
+              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Ajustada para ${formatCurrency(newRemaining, predCur)} (Base original: ${formatCurrency(base, predCur)} − Gastos da categoria: ${formatCurrency(netSpent, predCur)})',
             );
             detailedItems.add(
               PredictionAdjustItem(
@@ -3919,7 +4141,7 @@ class MoneyStore extends ChangeNotifier {
             );
           } else {
             unchangedItems.add(
-              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Mantida em ${brl(newRemaining)} (Base: ${brl(base)} − Gastos: ${brl(netSpent)})',
+              '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Mantida em ${formatCurrency(newRemaining, predCur)} (Base: ${formatCurrency(base, predCur)} − Gastos: ${formatCurrency(netSpent, predCur)})',
             );
             detailedItems.add(
               PredictionAdjustItem(
@@ -3935,9 +4157,10 @@ class MoneyStore extends ChangeNotifier {
             );
           }
         } else {
+          final predCur = accById(pred.acc)?.effectiveCurrency ?? baseCurrency;
           idsToDelete.add(pred.id);
           exhaustedItems.add(
-            '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Excluída — Previsão esgotada! Não há mais previsão disponível (Base: ${brl(base)} atingida por ${brl(netSpent)} em gastos).',
+            '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Excluída — Previsão esgotada! Não há mais previsão disponível (Base: ${formatCurrency(base, predCur)} atingida por ${formatCurrency(netSpent, predCur)} em gastos).',
           );
           detailedItems.add(
             PredictionAdjustItem(
@@ -4276,6 +4499,34 @@ class MoneyStore extends ChangeNotifier {
     bool isAnnual = false,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
   }) {
+    String reportCurrency = baseCurrency;
+    if (accountFilterIds != null && accountFilterIds.isNotEmpty) {
+      final filteredCurrencies = db.accounts
+          .where((a) => accountFilterIds.contains(a.id))
+          .map((a) => a.effectiveCurrency)
+          .toSet();
+      if (filteredCurrencies.length == 1) {
+        reportCurrency = filteredCurrencies.first;
+      }
+    }
+
+    int convertToReport(Transaction t, int rawCents) {
+      final fromCur = accById(t.acc)?.effectiveCurrency ?? 'BRL';
+      if (fromCur == reportCurrency) return rawCents;
+      if (t.rate != null && t.rate! > 0) {
+        final toBrl = reportCurrency == 'BRL' ? 1.0 : rateToBrl(reportCurrency);
+        if (toBrl > 0) {
+          return (rawCents * (t.rate! / toBrl)).round();
+        }
+      }
+      return convertCents(
+        rawCents,
+        fromCurrency: fromCur,
+        toCurrency: reportCurrency,
+        rates: db.rates,
+      );
+    }
+
     final rawTxs = isAnnual
         ? db.txs.where((t) => t.date.startsWith('${monthYM.substring(0, 4)}-')).toList()
         : monthTransactions(monthYM);
@@ -4308,7 +4559,7 @@ class MoneyStore extends ChangeNotifier {
       int grand = 0;
 
       for (final t in filtered) {
-        final v = t.amt.abs();
+        final v = convertToReport(t, t.amt.abs());
         grand += v;
         final parts =
             t.cat.isEmpty ? ['Sem categoria'] : t.cat.split(kCategorySep);
@@ -4366,6 +4617,7 @@ class MoneyStore extends ChangeNotifier {
       totalExpense: exp.grandTotal,
       netTotal: net,
       savingsRate: rate,
+      currency: reportCurrency,
     );
   }
 
@@ -4384,6 +4636,8 @@ class MoneyStore extends ChangeNotifier {
       existingCats: db.cats,
       existingTxs: db.txs,
       allowDuplicates: allowDuplicates,
+      baseCurrency: baseCurrency,
+      rates: db.rates,
     );
 
     for (final acc in result.newAccounts) {
@@ -4526,11 +4780,14 @@ class MoneyStore extends ChangeNotifier {
 
     final reviewItems = <MobileInboxImportItem>[];
     for (final tx in result.newTxs) {
-      final accName = accById(tx.acc)?.name ?? 'Conta';
+      final accObj = accById(tx.acc);
+      final accName = accObj?.name ?? 'Conta';
+      final accCur = accObj?.effectiveCurrency ?? 'BRL';
       reviewItems.add(
         MobileInboxImportItem(
           txId: tx.id,
           accountName: accName,
+          currency: accCur,
           date: tx.date,
           payee: tx.payee,
           cat: tx.cat,
@@ -4575,6 +4832,9 @@ class MoneyStore extends ChangeNotifier {
     return CSVExporter.generateCSV(
       transactions: db.txs,
       accounts: db.accounts,
+      baseCurrency: baseCurrency,
+      rates: db.rates,
+      allTransactionsForPairs: db.txs,
       accountFilterId: accountFilterId,
       startDate: startDate,
       endDate: endDate,
@@ -4642,6 +4902,40 @@ class MoneyStore extends ChangeNotifier {
     return years.toList()..sort();
   }
 
+  String targetCurrencyForAccounts(Set<String>? accountIds) {
+    if (accountIds != null && accountIds.isNotEmpty) {
+      final currencies = db.accounts
+          .where((a) => accountIds.contains(a.id))
+          .map((a) => a.effectiveCurrency)
+          .toSet();
+      if (currencies.length == 1) return currencies.first;
+    }
+    return baseCurrency;
+  }
+
+  int convertTxToCurrency(Transaction tx, String targetCurrency,
+      {int? overrideAbsCents}) {
+    final raw = overrideAbsCents ?? tx.amt;
+    final fromCur = accById(tx.acc)?.effectiveCurrency ?? 'BRL';
+    if (fromCur == targetCurrency) return raw;
+    if (tx.rate != null && tx.rate! > 0) {
+      final toBrl = exchangeRateBetween(
+        fromCurrency: targetCurrency,
+        toCurrency: 'BRL',
+        rates: db.rates,
+      );
+      if (toBrl > 0) {
+        return (raw * (tx.rate! / toBrl)).round();
+      }
+    }
+    return convertCents(
+      raw,
+      fromCurrency: fromCur,
+      toCurrency: targetCurrency,
+      rates: db.rates,
+    );
+  }
+
   /// Retorna lançamentos consolidados para a visão multi-contas, filtrados por
   /// dia, mês ou ano, respeitando a modalidade de cartão (data do lançamento vs. fatura).
   ({
@@ -4649,6 +4943,7 @@ class MoneyStore extends ChangeNotifier {
     int incomeCents,
     int expenseCents,
     int netCents,
+    String currency,
   }) consolidatedTransactions({
     String? dayIso, // Ex: '2026-11-09'
     String? monthYM, // Ex: '2026-11'
@@ -4659,6 +4954,7 @@ class MoneyStore extends ChangeNotifier {
   }) {
     rebuildIndexesIfNeeded();
 
+    final targetCurrency = targetCurrencyForAccounts(accountFilterIds);
     final cardAccounts = {
       for (final a in db.accounts.where((a) => a.type == kCardType)) a.id: a
     };
@@ -4727,7 +5023,8 @@ class MoneyStore extends ChangeNotifier {
         final effDateStr = effectiveDate;
         final formattedDate = fmtDate(tx.date).toLowerCase();
         final formattedEffDate = fmtDate(effectiveDate).toLowerCase();
-        final amtBrl = brl(tx.amt).toLowerCase();
+        final accCur = accById(tx.acc)?.effectiveCurrency ?? baseCurrency;
+        final amtFormatted = formatCurrency(tx.amt, accCur).toLowerCase();
 
         bool matchAll = true;
         for (final token in tokens) {
@@ -4739,7 +5036,7 @@ class MoneyStore extends ChangeNotifier {
               effDateStr.contains(token) ||
               formattedDate.contains(token) ||
               formattedEffDate.contains(token) ||
-              amtBrl.contains(token))) {
+              amtFormatted.contains(token))) {
             matchAll = false;
             break;
           }
@@ -4755,10 +5052,11 @@ class MoneyStore extends ChangeNotifier {
 
       // Soma de Receitas e Despesas (ignora transferências entre contas e auto faturas)
       if (tx.xfer == null && tx.peer == null && tx.auto != true) {
-        if (tx.amt > 0) {
-          income += tx.amt;
-        } else if (tx.amt < 0) {
-          expense += tx.amt.abs();
+        final conv = convertTxToCurrency(tx, targetCurrency);
+        if (conv > 0) {
+          income += conv;
+        } else if (conv < 0) {
+          expense += conv.abs();
         }
       }
     }
@@ -4777,6 +5075,7 @@ class MoneyStore extends ChangeNotifier {
       incomeCents: income,
       expenseCents: expense,
       netCents: income - expense,
+      currency: targetCurrency,
     );
   }
 
@@ -4822,8 +5121,9 @@ class MoneyStore extends ChangeNotifier {
       final formattedDate = fmtDate(tx.date).toLowerCase();
 
       final absCents = tx.amt.abs();
-      final formattedBRL = brl(tx.amt).toLowerCase();
-      final formattedAbsBRL = brl(absCents).toLowerCase();
+      final accCur = accById(tx.acc)?.effectiveCurrency ?? baseCurrency;
+      final formattedCur = formatCurrency(tx.amt, accCur).toLowerCase();
+      final formattedAbsCur = formatCurrency(absCents, accCur).toLowerCase();
       final inputCents = formatInputCents(absCents).toLowerCase();
       final intPart = (absCents ~/ 100).toString();
       final centsStr = absCents.toString();
@@ -4835,8 +5135,8 @@ class MoneyStore extends ChangeNotifier {
             accName.contains(token) ||
             dateStr.contains(token) ||
             formattedDate.contains(token) ||
-            formattedBRL.contains(token) ||
-            formattedAbsBRL.contains(token) ||
+            formattedCur.contains(token) ||
+            formattedAbsCur.contains(token) ||
             inputCents.contains(token) ||
             intPart == token ||
             (token.length >= 3 && centsStr.contains(token));
@@ -4954,8 +5254,13 @@ class MoneyStore extends ChangeNotifier {
     int netTotal,
     int overdueCount,
     int dueTodayCount,
+    String currency,
   }) dueBillsSummary(
       {int? withinDays, String? accountId, Set<String>? accountIds}) {
+    final filterSet = accountIds != null && accountIds.isNotEmpty
+        ? accountIds
+        : (accountId != null && accountId.isNotEmpty ? {accountId} : null);
+    final targetCurrency = targetCurrencyForAccounts(filterSet);
     final items = dueBillItems(
         withinDays: withinDays, accountId: accountId, accountIds: accountIds);
     int payCount = 0;
@@ -4968,12 +5273,13 @@ class MoneyStore extends ChangeNotifier {
     for (final item in items) {
       if (item.isOverdue) overdueCount++;
       if (item.isDueToday) dueTodayCount++;
+      final convAbs = convertTxToCurrency(item.tx, targetCurrency).abs();
       if (item.isPayable) {
         payCount++;
-        payTotal += item.tx.amt.abs();
+        payTotal += convAbs;
       } else {
         recCount++;
-        recTotal += item.tx.amt;
+        recTotal += convAbs;
       }
     }
 
@@ -4986,6 +5292,7 @@ class MoneyStore extends ChangeNotifier {
       netTotal: recTotal - payTotal,
       overdueCount: overdueCount,
       dueTodayCount: dueTodayCount,
+      currency: targetCurrency,
     );
   }
 
@@ -5037,21 +5344,30 @@ class MoneyStore extends ChangeNotifier {
   String dueBillsCSVString(List<DueBillItem> items) {
     String q(String v) => '"${v.replaceAll('"', '""')}"';
     const header =
-        'Vencimento;Data da Compra;Conta;Negócio;Favorecido;Categoria;Parcela;Valor (R\$);Situação';
+        'Vencimento;Data da Compra;Conta;Moeda;Negócio;Favorecido;Categoria;Parcela;Valor;Situação;Moeda Padrão;Valor Moeda Padrão';
+    final baseCur = baseCurrency;
     final rows = items.map((i) {
       final t = i.tx;
+      final accObj = accById(t.acc);
+      final accCur = accObj?.effectiveCurrency ?? 'BRL';
       final valor = (t.amt / 100.0).toStringAsFixed(2).replaceAll('.', ',');
+      final baseCents = convertToBase(t.amt, accCur, txRateToBrl: t.rate);
+      final baseValor =
+          (baseCents / 100.0).toStringAsFixed(2).replaceAll('.', ',');
       final parcela = (t.pn != null && t.pt != null) ? '${t.pn}/${t.pt}' : '';
       return [
         fmtDate(i.effectiveDueDate),
         fmtDate(t.date),
         q(i.accountName),
-        q(accById(t.acc)?.business ?? ''),
+        accCur,
+        q(accObj?.business ?? ''),
         q(t.payee),
         q(t.cat),
         parcela,
         valor,
         i.statusDescription,
+        baseCur,
+        baseValor,
       ].join(';');
     }).join('\r\n');
     return '\uFEFF$header\r\n$rows';

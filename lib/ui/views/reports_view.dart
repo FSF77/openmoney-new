@@ -62,6 +62,12 @@ class _ReportsViewState extends State<ReportsView> {
       statusFilter: _statusFilter,
     );
 
+    final cur = data.currency;
+    final baseCur = widget.store.baseCurrency;
+    final isForeign = cur != baseCur;
+    final rateInfo = isForeign ? widget.store.rateInfoFor(cur) : null;
+    final curMeta = currencyMetaFor(cur);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
@@ -91,7 +97,7 @@ class _ReportsViewState extends State<ReportsView> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar',
+                          'Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar • Moeda: ${curMeta.flag} $cur${isForeign ? " (Base: $baseCur${rateInfo != null ? " • ${formatRateDate(rateInfo.updatedAt)}" : ""})" : ""}',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,
@@ -251,7 +257,10 @@ class _ReportsViewState extends State<ReportsView> {
                   width: cardWidth,
                   child: KpiMetricCard(
                     label: isAnnual ? 'Receitas do Ano' : 'Receitas do Mês',
-                    value: brl(data.totalIncome),
+                    value: formatCurrency(data.totalIncome, cur),
+                    subtitle: isForeign
+                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.totalIncome, cur), baseCur)}'
+                        : null,
                     valueColor: colors.income,
                     icon: Icons.trending_up,
                   ),
@@ -260,7 +269,10 @@ class _ReportsViewState extends State<ReportsView> {
                   width: cardWidth,
                   child: KpiMetricCard(
                     label: isAnnual ? 'Despesas do Ano' : 'Despesas do Mês',
-                    value: brl(data.totalExpense),
+                    value: formatCurrency(data.totalExpense, cur),
+                    subtitle: isForeign
+                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.totalExpense, cur), baseCur)}'
+                        : null,
                     valueColor: colors.expense,
                     icon: Icons.trending_down,
                   ),
@@ -269,7 +281,10 @@ class _ReportsViewState extends State<ReportsView> {
                   width: cardWidth,
                   child: KpiMetricCard(
                     label: isAnnual ? 'Saldo do Ano' : 'Resultado Líquido',
-                    value: brl(data.netTotal),
+                    value: formatCurrency(data.netTotal, cur),
+                    subtitle: isForeign
+                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.netTotal, cur), baseCur)}'
+                        : null,
                     valueColor:
                         data.netTotal >= 0 ? colors.income : colors.expense,
                     icon: Icons.account_balance_outlined,
@@ -306,6 +321,7 @@ class _ReportsViewState extends State<ReportsView> {
                     title: 'Receitas por Categoria',
                     groups: data.incomeGroups,
                     grandTotal: data.totalIncome,
+                    currency: cur,
                     barColor: colors.income,
                     colors: colors,
                     periodKey: periodKey,
@@ -319,6 +335,7 @@ class _ReportsViewState extends State<ReportsView> {
                     title: 'Despesas por Categoria',
                     groups: data.expenseGroups,
                     grandTotal: data.totalExpense,
+                    currency: cur,
                     barColor: colors.expense,
                     colors: colors,
                     periodKey: periodKey,
@@ -338,6 +355,7 @@ class _ReportsViewState extends State<ReportsView> {
     required String title,
     required List<CategoryGroupStat> groups,
     required int grandTotal,
+    required String currency,
     required Color barColor,
     required OpenMoneyColors colors,
     required String periodKey,
@@ -359,7 +377,7 @@ class _ReportsViewState extends State<ReportsView> {
                 ),
               ),
               Text(
-                brl(grandTotal),
+                formatCurrency(grandTotal, currency),
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -421,7 +439,7 @@ class _ReportsViewState extends State<ReportsView> {
                                   ),
                                 ),
                                 Text(
-                                  '${g.percentage}% • ${brl(g.total)}',
+                                  '${g.percentage}% • ${formatCurrency(g.total, currency)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,
@@ -487,7 +505,7 @@ class _ReportsViewState extends State<ReportsView> {
                                   ],
                                 ),
                                 Text(
-                                  '${sub.percentage}% • ${brl(sub.amount)}',
+                                  '${sub.percentage}% • ${formatCurrency(sub.amount, currency)}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

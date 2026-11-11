@@ -493,7 +493,7 @@ class DashboardOverviewView extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              isHide ? '••••••' : brl(valueCents),
+              isHide ? '••••••' : formatCurrency(valueCents, store.baseCurrency),
               style: TextStyle(
                 fontSize: isCompact ? 12 : 13,
                 fontWeight: FontWeight.w800,
@@ -700,7 +700,9 @@ class DashboardOverviewView extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    account.type,
+                    account.effectiveCurrency != store.baseCurrency
+                        ? '${account.type} • ${currencyMetaFor(account.effectiveCurrency).flag} ${account.effectiveCurrency}'
+                        : account.type,
                     style: TextStyle(fontSize: 11, color: colors.textSecondary),
                   ),
                 ],
@@ -713,7 +715,9 @@ class DashboardOverviewView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                store.hideAccountsBalance ? '••••••' : brl(realCents),
+                store.hideAccountsBalance
+                    ? '••••••'
+                    : formatCurrency(realCents, account.effectiveCurrency),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
@@ -721,6 +725,17 @@ class DashboardOverviewView extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
+              if (!store.hideAccountsBalance &&
+                  account.effectiveCurrency != store.baseCurrency)
+                Text(
+                  '≈ ${formatCurrency(store.convertToBase(realCents, account.effectiveCurrency), store.baseCurrency)}',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               if (predCents != realCents) ...[
                 const SizedBox(height: 2),
                 Row(
@@ -735,7 +750,9 @@ class DashboardOverviewView extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      store.hideAccountsBalance ? '••••••' : brl(predCents),
+                      store.hideAccountsBalance
+                          ? '••••••'
+                          : formatCurrency(predCents, account.effectiveCurrency),
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w500,
@@ -883,7 +900,9 @@ class DashboardOverviewView extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              acc.type,
+                              acc.effectiveCurrency != store.baseCurrency
+                                  ? '${acc.type} • ${currencyMetaFor(acc.effectiveCurrency).flag} ${acc.effectiveCurrency}'
+                                  : acc.type,
                               style: TextStyle(
                                 fontSize: 10.5,
                                 color: colors.textSecondary,
@@ -899,7 +918,8 @@ class DashboardOverviewView extends StatelessWidget {
                           Text(
                             store.hideInvestmentsBalance
                                 ? '••••••'
-                                : brl(realBalance),
+                                : formatCurrency(
+                                    realBalance, acc.effectiveCurrency),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -909,6 +929,17 @@ class DashboardOverviewView extends StatelessWidget {
                               fontFeatures: const [FontFeature.tabularFigures()],
                             ),
                           ),
+                          if (!store.hideInvestmentsBalance &&
+                              acc.effectiveCurrency != store.baseCurrency)
+                            Text(
+                              '≈ ${formatCurrency(store.convertToBase(realBalance, acc.effectiveCurrency), store.baseCurrency)}',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textSecondary,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
+                            ),
                           if (predBalance != realBalance) ...[
                             const SizedBox(height: 2),
                             Row(
@@ -925,7 +956,8 @@ class DashboardOverviewView extends StatelessWidget {
                                 Text(
                                   store.hideInvestmentsBalance
                                       ? '••••••'
-                                      : brl(predBalance),
+                                      : formatCurrency(
+                                          predBalance, acc.effectiveCurrency),
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w500,
@@ -1058,6 +1090,8 @@ class DashboardOverviewView extends StatelessWidget {
             ...items.take(4).map((item) {
               final isOverdue = item.isOverdue;
               final amt = item.tx.amt < 0 ? item.tx.amt : -item.tx.amt;
+              final accCur = store.accById(item.tx.acc)?.effectiveCurrency ??
+                  store.baseCurrency;
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1111,14 +1145,29 @@ class DashboardOverviewView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      brl(amt),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: colors.expense,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          formatCurrency(amt, accCur),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: colors.expense,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (accCur != store.baseCurrency)
+                          Text(
+                            '≈ ${formatCurrency(store.convertToBase(amt, accCur, txRateToBrl: item.tx.rate), store.baseCurrency)}',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: colors.textMuted,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 8),
                     IconButton(
@@ -1252,6 +1301,8 @@ class DashboardOverviewView extends StatelessWidget {
             ...items.take(4).map((item) {
               final isOverdue = item.isOverdue;
               final amt = item.tx.amt.abs();
+              final accCur = store.accById(item.tx.acc)?.effectiveCurrency ??
+                  store.baseCurrency;
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1305,14 +1356,29 @@ class DashboardOverviewView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      brl(amt),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: colors.income,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          formatCurrency(amt, accCur),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: colors.income,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (accCur != store.baseCurrency)
+                          Text(
+                            '≈ ${formatCurrency(store.convertToBase(amt, accCur, txRateToBrl: item.tx.rate), store.baseCurrency)}',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: colors.textMuted,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 8),
                     IconButton(
@@ -1470,9 +1536,12 @@ class DashboardOverviewView extends StatelessWidget {
                               Text(
                                 store.hideCardsBalance
                                     ? '••••••'
-                                    : brl(remainingCents > 0
-                                        ? -remainingCents
-                                        : remainingCents),
+                                    : formatCurrency(
+                                        remainingCents > 0
+                                            ? -remainingCents
+                                            : remainingCents,
+                                        acc.effectiveCurrency,
+                                      ),
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w800,
@@ -1482,6 +1551,17 @@ class DashboardOverviewView extends StatelessWidget {
                                   fontFeatures: const [FontFeature.tabularFigures()],
                                 ),
                               ),
+                              if (!store.hideCardsBalance &&
+                                  acc.effectiveCurrency != store.baseCurrency)
+                                Text(
+                                  '≈ ${formatCurrency(store.convertToBase(remainingCents > 0 ? -remainingCents : remainingCents, acc.effectiveCurrency), store.baseCurrency)}',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textSecondary,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
                               if (clearedCents != remainingCents) ...[
                                 const SizedBox(height: 2),
                                 Row(
@@ -1498,9 +1578,12 @@ class DashboardOverviewView extends StatelessWidget {
                                     Text(
                                       store.hideCardsBalance
                                           ? '••••••'
-                                          : brl(clearedCents > 0
-                                              ? -clearedCents
-                                              : clearedCents),
+                                          : formatCurrency(
+                                              clearedCents > 0
+                                                  ? -clearedCents
+                                                  : clearedCents,
+                                              acc.effectiveCurrency,
+                                            ),
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w500,
@@ -1599,7 +1682,7 @@ class DashboardOverviewView extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Total: ${brl(totalExpenses > 0 ? -totalExpenses : totalExpenses)}',
+                    'Total: ${formatCurrency(totalExpenses > 0 ? -totalExpenses : totalExpenses, reportData.currency)}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1644,7 +1727,7 @@ class DashboardOverviewView extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${brl(group.total > 0 ? -group.total : group.total)} (${(pct * 100).toStringAsFixed(1)}%)',
+                          '${formatCurrency(group.total > 0 ? -group.total : group.total, reportData.currency)} (${(pct * 100).toStringAsFixed(1)}%)',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,

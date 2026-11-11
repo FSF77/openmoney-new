@@ -63,6 +63,8 @@ Future<void> showDeleteTransactionDialog(
 ) async {
   if (tx.auto == true) return;
   final isSeries = tx.recId != null || tx.plan != null;
+  final txCur =
+      store.accById(tx.acc)?.effectiveCurrency ?? store.baseCurrency;
 
   if (!isSeries) {
     await showDialog(
@@ -70,7 +72,7 @@ Future<void> showDeleteTransactionDialog(
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir Lançamento'),
         content: Text(
-          'Confirma a exclusão de "${tx.payee}" (${brl(tx.amt)}) em ${fmtDate(tx.date)}?',
+          'Confirma a exclusão de "${tx.payee}" (${formatCurrency(tx.amt, txCur)}) em ${fmtDate(tx.date)}?',
         ),
         actions: [
           TextButton(
@@ -100,7 +102,7 @@ Future<void> showDeleteTransactionDialog(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '"${tx.payee}" (${brl(tx.amt)}) faz parte de uma série ${tx.recId != null ? "recorrente" : "parcelada"}.\n\nNota: Lançamentos já conciliados nunca são excluídos em lote.',
+            '"${tx.payee}" (${formatCurrency(tx.amt, txCur)}) faz parte de uma série ${tx.recId != null ? "recorrente" : "parcelada"}.\n\nNota: Lançamentos já conciliados nunca são excluídos em lote.',
           ),
         ],
       ),
@@ -155,10 +157,13 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   late final TextEditingController _payeeCtrl;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  late final TextEditingController _peerAmtCtrl;
+  late final TextEditingController _rateCtrl;
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
   ScopeChoice _scope = ScopeChoice.only;
+  bool _isUpdatingCross = false;
 
   @override
   void initState() {
@@ -176,6 +181,45 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       _catSelection = t.cat;
     }
     _customIk = t.ik;
+
+    // Inicializar campos cross-currency caso seja transferência entre moedas distintas
+    int peerAbs = 0;
+    if (t.xfer != null) {
+      for (final candidate in widget.store.db.txs) {
+        if (candidate.xfer == t.xfer && candidate.id != t.id) {
+          peerAbs = candidate.amt.abs();
+          break;
+        }
+      }
+    }
+    _peerAmtCtrl = TextEditingController(
+      text: peerAbs > 0 ? formatInputCents(peerAbs) : '',
+    );
+
+    final curAcc = widget.store.accById(_accId);
+    final curCur = curAcc?.effectiveCurrency ?? 'BRL';
+    String destCur = curCur;
+    if (_catSelection.startsWith('xfer:')) {
+      final peerId = _catSelection.substring(5);
+      destCur = widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL';
+    }
+    final double initRate;
+    if (curCur != destCur && t.amt.abs() > 0 && peerAbs > 0) {
+      initRate = peerAbs / t.amt.abs();
+    } else if (curCur != destCur) {
+      initRate = exchangeRateBetween(
+        fromCurrency: curCur,
+        toCurrency: destCur,
+        rates: widget.store.db.rates,
+      );
+    } else if (t.rate != null && t.rate! > 0) {
+      initRate = t.rate!;
+    } else {
+      initRate = widget.store.rateToBrl(curCur);
+    }
+    _rateCtrl = TextEditingController(
+      text: initRate.toStringAsFixed(4).replaceAll('.', ','),
+    );
   }
 
   @override
@@ -184,6 +228,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _peerAmtCtrl.dispose();
+    _rateCtrl.dispose();
     super.dispose();
   }
 
@@ -247,6 +293,29 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     final signedAmt = _isExpense ? -absCents : absCents;
 
+    int? peerSignedAmt;
+    double? txRate;
+    final curAcc = widget.store.accById(_accId);
+    final curCur = curAcc?.effectiveCurrency ?? 'BRL';
+    if (_catSelection.startsWith('xfer:')) {
+      final peerId = _catSelection.substring(5);
+      final peerAcc = widget.store.accById(peerId);
+      final peerCur = peerAcc?.effectiveCurrency ?? 'BRL';
+      if (curCur != peerCur) {
+        final peerAbs = (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+        if (peerAbs > 0) {
+          peerSignedAmt = signedAmt < 0 ? peerAbs : -peerAbs;
+          if (curCur == 'BRL' && absCents > 0) {
+            txRate = null;
+          } else if (peerCur == 'BRL' && absCents > 0) {
+            txRate = peerAbs / absCents;
+          }
+        }
+      }
+    } else if (curCur != 'BRL') {
+      txRate = widget.tx.rate ?? widget.store.rateToBrl(curCur);
+    }
+
     widget.store.updateTransaction(
       txId: widget.tx.id,
       newAccId: _accId,
@@ -257,6 +326,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       newSignedAmt: signedAmt,
       scope: _scope,
       newIk: _customIk,
+      peerSignedAmt: peerSignedAmt,
+      txRate: txRate,
     );
     if (mounted) {
       Navigator.of(context).pop();
@@ -398,45 +469,133 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                 currentSelection: effectiveCat,
                 excludeAccountId: _accId,
                 labelText: 'Categoria ou Transferência',
-                onChanged: (v) => setState(() => _catSelection = v),
+                onChanged: (v) {
+                  setState(() {
+                    _catSelection = v;
+                    if (v.startsWith('xfer:')) {
+                      final peerId = v.substring(5);
+                      final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                      final destCur =
+                          widget.store.accById(peerId)?.effectiveCurrency ??
+                              'BRL';
+                      if (srcCur != destCur) {
+                        final r = exchangeRateBetween(
+                          fromCurrency: srcCur,
+                          toCurrency: destCur,
+                          rates: widget.store.db.rates,
+                        );
+                        _rateCtrl.text =
+                            r.toStringAsFixed(4).replaceAll('.', ',');
+                        final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+                        if (srcCents > 0) {
+                          _peerAmtCtrl.text =
+                              formatInputCents((srcCents * r).round());
+                        }
+                      }
+                    }
+                  });
+                },
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _amtCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Valor (R\$)',
-                        labelStyle: TextStyle(fontSize: 13),
-                        prefixText: 'R\$ ',
-                        prefixStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
-                      ),
+              Builder(builder: (context) {
+                final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                final srcMeta = currencyMetaFor(srcCur);
+                final isXfer = _catSelection.startsWith('xfer:');
+                final peerId = isXfer ? _catSelection.substring(5) : null;
+                final destCur = peerId != null
+                    ? (widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL')
+                    : srcCur;
+                final isCross = isXfer && srcCur != destCur;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _amtCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onChanged: (_) {
+                              if (!isCross || _isUpdatingCross) return;
+                              _isUpdatingCross = true;
+                              final srcCents =
+                                  (parseCents(_amtCtrl.text) ?? 0).abs();
+                              final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+                              _peerAmtCtrl.text =
+                                  formatInputCents((srcCents * r).round());
+                              _isUpdatingCross = false;
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Valor (${srcMeta.symbol})',
+                              labelStyle: const TextStyle(fontSize: 13),
+                              prefixText: '${srcMeta.symbol} ',
+                              prefixStyle: const TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _memoCtrl,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: const InputDecoration(
+                              labelText: 'Nota / Observação',
+                              labelStyle: TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _memoCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Nota / Observação',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
+                    if (isCross)
+                      _CrossCurrencyTransferBox(
+                        store: widget.store,
+                        sourceCurrency: srcCur,
+                        destCurrency: destCur,
+                        rateCtrl: _rateCtrl,
+                        destAmtCtrl: _peerAmtCtrl,
+                        colors: colors,
+                        onRateChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final r = _parseRateInput(_rateCtrl.text);
+                          if (r != null && srcCents > 0) {
+                            _peerAmtCtrl.text =
+                                formatInputCents((srcCents * r).round());
+                          }
+                          _isUpdatingCross = false;
+                        },
+                        onDestAmtChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final destCents =
+                              (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+                          if (srcCents > 0 && destCents > 0) {
+                            final r = destCents / srcCents;
+                            _rateCtrl.text =
+                                r.toStringAsFixed(4).replaceAll('.', ',');
+                          }
+                          _isUpdatingCross = false;
+                        },
                       ),
-                    ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              }),
               if (isCard && targetAcc?.card != null) ...[
                 const SizedBox(height: 12),
                 Builder(
@@ -668,10 +827,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   late final TextEditingController _payeeCtrl;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  late final TextEditingController _peerAmtCtrl;
+  late final TextEditingController _rateCtrl;
   late final TextEditingController _endDateCtrl;
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
+  bool _isUpdatingCross = false;
 
   String _mode = 'single';
   String _freq = 'monthly';
@@ -732,6 +894,14 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     } else {
       _customIk = null;
     }
+
+    _peerAmtCtrl = TextEditingController();
+    _rateCtrl = TextEditingController(
+      text: widget.store
+          .rateToBrl(curAcc?.effectiveCurrency ?? 'BRL')
+          .toStringAsFixed(4)
+          .replaceAll('.', ','),
+    );
   }
 
   @override
@@ -740,6 +910,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _peerAmtCtrl.dispose();
+    _rateCtrl.dispose();
     _endDateCtrl.dispose();
     super.dispose();
   }
@@ -866,6 +1038,26 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       widget.store.addWalletAlias(widget.shortcutRawAccountName!.trim(), _accId);
     }
 
+    int? peerSignedAmt;
+    double? txRate;
+    final curCur = targetAcc?.effectiveCurrency ?? 'BRL';
+    if (isXfer) {
+      final peerId = _catSelection.substring(5);
+      final peerAcc = widget.store.accById(peerId);
+      final peerCur = peerAcc?.effectiveCurrency ?? 'BRL';
+      if (curCur != peerCur) {
+        final peerAbs = (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+        if (peerAbs > 0) {
+          peerSignedAmt = peerAbs;
+          if (curCur != 'BRL' && peerCur == 'BRL' && absCents > 0) {
+            txRate = peerAbs / absCents;
+          }
+        }
+      }
+    } else if (curCur != 'BRL') {
+      txRate = widget.store.rateToBrl(curCur);
+    }
+
     widget.store.addTransaction(
       accId: _accId,
       date: dateStr,
@@ -878,6 +1070,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       installments: _installments,
       endDate: endStr,
       customIk: ik,
+      peerSignedAmt: peerSignedAmt,
+      txRate: txRate,
     );
 
     Navigator.of(context).pop();
@@ -1159,47 +1353,134 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 currentSelection: effectiveCat,
                 excludeAccountId: _accId,
                 labelText: 'Categoria ou Transferência',
-                onChanged: (v) => setState(() => _catSelection = v),
+                onChanged: (v) {
+                  setState(() {
+                    _catSelection = v;
+                    if (v.startsWith('xfer:')) {
+                      final peerId = v.substring(5);
+                      final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                      final destCur =
+                          widget.store.accById(peerId)?.effectiveCurrency ??
+                              'BRL';
+                      if (srcCur != destCur) {
+                        final r = exchangeRateBetween(
+                          fromCurrency: srcCur,
+                          toCurrency: destCur,
+                          rates: widget.store.db.rates,
+                        );
+                        _rateCtrl.text =
+                            r.toStringAsFixed(4).replaceAll('.', ',');
+                        final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+                        if (srcCents > 0) {
+                          _peerAmtCtrl.text =
+                              formatInputCents((srcCents * r).round());
+                        }
+                      }
+                    }
+                  });
+                },
               ),
               const SizedBox(height: 12),
 
               // Valor & Observação
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _amtCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Valor (R\$)',
-                        labelStyle: TextStyle(fontSize: 13),
-                        prefixText: 'R\$ ',
-                        prefixStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
-                      ),
+              Builder(builder: (context) {
+                final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                final srcMeta = currencyMetaFor(srcCur);
+                final peerId = isXfer ? _catSelection.substring(5) : null;
+                final destCur = peerId != null
+                    ? (widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL')
+                    : srcCur;
+                final isCross = isXfer && srcCur != destCur;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _amtCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onChanged: (_) {
+                              if (!isCross || _isUpdatingCross) return;
+                              _isUpdatingCross = true;
+                              final srcCents =
+                                  (parseCents(_amtCtrl.text) ?? 0).abs();
+                              final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+                              _peerAmtCtrl.text =
+                                  formatInputCents((srcCents * r).round());
+                              _isUpdatingCross = false;
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Valor (${srcMeta.symbol})',
+                              labelStyle: const TextStyle(fontSize: 13),
+                              prefixText: '${srcMeta.symbol} ',
+                              prefixStyle: const TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _memoCtrl,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: const InputDecoration(
+                              labelText: 'Nota / Observação',
+                              labelStyle: TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _memoCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Nota / Observação',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
+                    if (isCross)
+                      _CrossCurrencyTransferBox(
+                        store: widget.store,
+                        sourceCurrency: srcCur,
+                        destCurrency: destCur,
+                        rateCtrl: _rateCtrl,
+                        destAmtCtrl: _peerAmtCtrl,
+                        colors: colors,
+                        onRateChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final r = _parseRateInput(_rateCtrl.text);
+                          if (r != null && srcCents > 0) {
+                            _peerAmtCtrl.text =
+                                formatInputCents((srcCents * r).round());
+                          }
+                          _isUpdatingCross = false;
+                        },
+                        onDestAmtChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final destCents =
+                              (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+                          if (srcCents > 0 && destCents > 0) {
+                            final r = destCents / srcCents;
+                            _rateCtrl.text =
+                                r.toStringAsFixed(4).replaceAll('.', ',');
+                          }
+                          _isUpdatingCross = false;
+                        },
                       ),
-                    ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              }),
               const SizedBox(height: 12),
 
               // Modo Flexível: Único, Recorrente, Parcelado
@@ -1452,10 +1733,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   late final TextEditingController _payeeCtrl;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  late final TextEditingController _peerAmtCtrl;
+  late final TextEditingController _rateCtrl;
   late final TextEditingController _endDateCtrl;
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
+  bool _isUpdatingCross = false;
 
   String _mode = 'single'; // 'single', 'installment', 'recurring'
   String _freq = 'monthly';
@@ -1507,6 +1791,25 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     } else {
       _customIk = null;
     }
+
+    _peerAmtCtrl = TextEditingController();
+    final curCur = curAcc?.effectiveCurrency ?? 'BRL';
+    final destCur = (t.peer != null && t.peer!.isNotEmpty)
+        ? (widget.store.accById(t.peer!)?.effectiveCurrency ?? curCur)
+        : curCur;
+    final r = curCur != destCur
+        ? exchangeRateBetween(
+            fromCurrency: curCur,
+            toCurrency: destCur,
+            rates: widget.store.db.rates,
+          )
+        : widget.store.rateToBrl(curCur);
+    _rateCtrl = TextEditingController(
+      text: r.toStringAsFixed(4).replaceAll('.', ','),
+    );
+    if (curCur != destCur && t.amt.abs() > 0) {
+      _peerAmtCtrl.text = formatInputCents((t.amt.abs() * r).round());
+    }
   }
 
   @override
@@ -1515,6 +1818,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _peerAmtCtrl.dispose();
+    _rateCtrl.dispose();
     _endDateCtrl.dispose();
     super.dispose();
   }
@@ -1587,6 +1892,26 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         ? _customIk
         : null;
 
+    int? peerSignedAmt;
+    double? txRate;
+    final curCur = targetAcc?.effectiveCurrency ?? 'BRL';
+    if (isXfer) {
+      final peerId = _catSelection.substring(5);
+      final peerAcc = widget.store.accById(peerId);
+      final peerCur = peerAcc?.effectiveCurrency ?? 'BRL';
+      if (curCur != peerCur) {
+        final peerAbs = (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+        if (peerAbs > 0) {
+          peerSignedAmt = peerAbs;
+          if (curCur != 'BRL' && peerCur == 'BRL' && absCents > 0) {
+            txRate = peerAbs / absCents;
+          }
+        }
+      }
+    } else if (curCur != 'BRL') {
+      txRate = widget.store.rateToBrl(curCur);
+    }
+
     widget.store.addTransaction(
       accId: _accId,
       date: dateStr,
@@ -1599,6 +1924,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
       installments: _installments,
       endDate: endStr,
       customIk: ik,
+      peerSignedAmt: peerSignedAmt,
+      txRate: txRate,
     );
 
     Navigator.of(context).pop();
@@ -1815,47 +2142,134 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                 currentSelection: effectiveCat,
                 excludeAccountId: _accId,
                 labelText: 'Categoria ou Transferência',
-                onChanged: (v) => setState(() => _catSelection = v),
+                onChanged: (v) {
+                  setState(() {
+                    _catSelection = v;
+                    if (v.startsWith('xfer:')) {
+                      final peerId = v.substring(5);
+                      final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                      final destCur =
+                          widget.store.accById(peerId)?.effectiveCurrency ??
+                              'BRL';
+                      if (srcCur != destCur) {
+                        final r = exchangeRateBetween(
+                          fromCurrency: srcCur,
+                          toCurrency: destCur,
+                          rates: widget.store.db.rates,
+                        );
+                        _rateCtrl.text =
+                            r.toStringAsFixed(4).replaceAll('.', ',');
+                        final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+                        if (srcCents > 0) {
+                          _peerAmtCtrl.text =
+                              formatInputCents((srcCents * r).round());
+                        }
+                      }
+                    }
+                  });
+                },
               ),
               const SizedBox(height: 12),
 
               // Valor & Observação
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _amtCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Valor (R\$)',
-                        labelStyle: TextStyle(fontSize: 13),
-                        prefixText: 'R\$ ',
-                        prefixStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
-                      ),
+              Builder(builder: (context) {
+                final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                final srcMeta = currencyMetaFor(srcCur);
+                final peerId = isXfer ? _catSelection.substring(5) : null;
+                final destCur = peerId != null
+                    ? (widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL')
+                    : srcCur;
+                final isCross = isXfer && srcCur != destCur;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _amtCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onChanged: (_) {
+                              if (!isCross || _isUpdatingCross) return;
+                              _isUpdatingCross = true;
+                              final srcCents =
+                                  (parseCents(_amtCtrl.text) ?? 0).abs();
+                              final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+                              _peerAmtCtrl.text =
+                                  formatInputCents((srcCents * r).round());
+                              _isUpdatingCross = false;
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Valor (${srcMeta.symbol})',
+                              labelStyle: const TextStyle(fontSize: 13),
+                              prefixText: '${srcMeta.symbol} ',
+                              prefixStyle: const TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _memoCtrl,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: const InputDecoration(
+                              labelText: 'Nota / Observação',
+                              labelStyle: TextStyle(fontSize: 13),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _memoCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        labelText: 'Nota / Observação',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(),
+                    if (isCross)
+                      _CrossCurrencyTransferBox(
+                        store: widget.store,
+                        sourceCurrency: srcCur,
+                        destCurrency: destCur,
+                        rateCtrl: _rateCtrl,
+                        destAmtCtrl: _peerAmtCtrl,
+                        colors: colors,
+                        onRateChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final r = _parseRateInput(_rateCtrl.text);
+                          if (r != null && srcCents > 0) {
+                            _peerAmtCtrl.text =
+                                formatInputCents((srcCents * r).round());
+                          }
+                          _isUpdatingCross = false;
+                        },
+                        onDestAmtChanged: () {
+                          if (_isUpdatingCross) return;
+                          _isUpdatingCross = true;
+                          final srcCents =
+                              (parseCents(_amtCtrl.text) ?? 0).abs();
+                          final destCents =
+                              (parseCents(_peerAmtCtrl.text) ?? 0).abs();
+                          if (srcCents > 0 && destCents > 0) {
+                            final r = destCents / srcCents;
+                            _rateCtrl.text =
+                                r.toStringAsFixed(4).replaceAll('.', ',');
+                          }
+                          _isUpdatingCross = false;
+                        },
                       ),
-                    ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              }),
               const SizedBox(height: 12),
 
               // Modo Flexível: Único, Recorrente, Parcelado
@@ -2103,7 +2517,7 @@ Future<void> showInvoicePaymentModal(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Fatura de ${fmtMonth(summary.key)} • Saldo Restante: ${brl(summary.remainingCents)}',
+                  'Fatura de ${fmtMonth(summary.key)} • Saldo Restante: ${formatCurrency(summary.remainingCents, cardAccount.effectiveCurrency)}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 14),
@@ -2133,10 +2547,12 @@ Future<void> showInvoicePaymentModal(
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Valor a Pagar (R\$)',
-                          prefixText: 'R\$ ',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText:
+                              'Valor a Pagar (${currencyMetaFor(cardAccount.effectiveCurrency).symbol})',
+                          prefixText:
+                              '${currencyMetaFor(cardAccount.effectiveCurrency).symbol} ',
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -2195,4 +2611,128 @@ Future<void> showInvoicePaymentModal(
       },
     ),
   );
+}
+
+double? _parseRateInput(String raw) {
+  final trimmed = raw.trim().replaceAll(' ', '');
+  if (trimmed.isEmpty) return null;
+  final normalized = trimmed.contains(',')
+      ? trimmed.replaceAll('.', '').replaceAll(',', '.')
+      : trimmed;
+  final v = double.tryParse(normalized);
+  if (v == null || v.isNaN || v <= 0) return null;
+  return v;
+}
+
+class _CrossCurrencyTransferBox extends StatelessWidget {
+  final MoneyStore store;
+  final String sourceCurrency;
+  final String destCurrency;
+  final TextEditingController rateCtrl;
+  final TextEditingController destAmtCtrl;
+  final OpenMoneyColors colors;
+  final VoidCallback onRateChanged;
+  final VoidCallback onDestAmtChanged;
+
+  const _CrossCurrencyTransferBox({
+    required this.store,
+    required this.sourceCurrency,
+    required this.destCurrency,
+    required this.rateCtrl,
+    required this.destAmtCtrl,
+    required this.colors,
+    required this.onRateChanged,
+    required this.onDestAmtChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final destMeta = currencyMetaFor(destCurrency);
+    final info = sourceCurrency != 'BRL'
+        ? store.rateInfoFor(sourceCurrency)
+        : store.rateInfoFor(destCurrency);
+    final dateLabel = info != null && info.updatedAt.isNotEmpty
+        ? ' · Atualizado ${formatRateDate(info.updatedAt)}'
+        : '';
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: colors.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.currency_exchange, size: 14, color: colors.accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Conversão Cambial ($sourceCurrency → $destCurrency)$dateLabel',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: colors.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: rateCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (_) => onRateChanged(),
+                  decoration: InputDecoration(
+                    labelText: 'Cotação (1 $sourceCurrency = ? $destCurrency)',
+                    labelStyle: const TextStyle(fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: destAmtCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (_) => onDestAmtChanged(),
+                  decoration: InputDecoration(
+                    labelText: 'Valor na Conta Destino (${destMeta.symbol})',
+                    labelStyle: const TextStyle(fontSize: 12),
+                    prefixText: '${destMeta.symbol} ',
+                    prefixStyle: const TextStyle(fontSize: 13),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Você pode ajustar a cotação ou diretamente o valor creditado no destino para incluir taxas/IOF.',
+            style: TextStyle(fontSize: 10.5, color: colors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
 }

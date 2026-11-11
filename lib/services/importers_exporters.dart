@@ -305,15 +305,65 @@ List<String> _parseCsvLine(String line, String delimiter) {
 
 String _escapeCSV(String value) => value.replaceAll('"', '""');
 
+String _formatCSVAmount(int cents) {
+  final isNeg = cents < 0;
+  final absCents = cents.abs();
+  return '${isNeg ? "-" : ""}${absCents ~/ 100},${(absCents % 100).toString().padLeft(2, "0")}';
+}
+
+String _formatCSVRate(double rate, {int? decimals}) {
+  final d = decimals ?? (rate < 0.1 ? 6 : 4);
+  return rate.toStringAsFixed(d).replaceAll('.', ',');
+}
+
+double? _parseDecimalRate(String raw) {
+  var s = raw.trim();
+  if (s.isEmpty) return null;
+  final hasComma = s.contains(',');
+  final hasDot = s.contains('.');
+  if (hasComma && hasDot) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replaceAll('.', '').replaceAll(',', '.');
+    } else {
+      s = s.replaceAll(',', '');
+    }
+  } else if (hasComma) {
+    s = s.replaceAll(',', '.');
+  }
+  s = s.replaceAll(RegExp(r'[^0-9.]'), '');
+  final v = double.tryParse(s);
+  if (v == null || v.isNaN || v <= 0) return null;
+  return v;
+}
+
+String? _normalizeSupportedCurrencyCode(String raw) {
+  final code = raw.trim().toUpperCase();
+  if (code.length != 3) return null;
+  if (kSupportedCurrencies.any((c) => c.code == code)) return code;
+  return null;
+}
+
 class CSVExporter {
   static String generateCSV({
     required List<Transaction> transactions,
     required List<Account> accounts,
+    String baseCurrency = 'BRL',
+    Map<String, CurrencyRateInfo>? rates,
+    List<Transaction>? allTransactionsForPairs,
     String? accountFilterId,
     String? startDate,
     String? endDate,
   }) {
     final accMap = {for (final a in accounts) a.id: a};
+    final effectiveBase = baseCurrency.isEmpty ? 'BRL' : baseCurrency;
+    final pairPool = allTransactionsForPairs ?? transactions;
+    final xferIndex = <String, List<Transaction>>{};
+    for (final t in pairPool) {
+      if (t.xfer != null && t.xfer!.isNotEmpty) {
+        (xferIndex[t.xfer!] ??= []).add(t);
+      }
+    }
+
     var filtered = (accountFilterId != null && accountFilterId.isNotEmpty)
         ? transactions.where((t) => t.acc == accountFilterId).toList()
         : List<Transaction>.from(transactions);
@@ -335,15 +385,16 @@ class CSVExporter {
     });
 
     final lines = <String>[
-      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa"',
+      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa";"Moeda";"Moeda Padrão";"Valor Moeda Padrão";"Taxa Câmbio";"Valor Contrapartida";"Moeda Contrapartida";"Taxa Transferência"',
     ];
 
     for (final tx in filtered) {
       final acc = accMap[tx.acc];
       final accName = _escapeCSV(acc?.name ?? 'Conta');
+      final accCur = acc?.effectiveCurrency ?? 'BRL';
       final dateStr = tx.date;
       final payeeStr = _escapeCSV(tx.payee);
-      
+
       // Ao exportar uma categoria que seja transferência entre contas,
       // não use "Transferência › nome da conta" e sim "Transferência: nome da conta"
       var exportedCat = tx.cat;
@@ -364,10 +415,7 @@ class CSVExporter {
       }
       final catStr = _escapeCSV(exportedCat);
       final memoStr = _escapeCSV(tx.memo);
-      final isNeg = tx.amt < 0;
-      final absCents = tx.amt.abs();
-      final amtStr =
-          '${isNeg ? "-" : ""}${absCents ~/ 100},${(absCents % 100).toString().padLeft(2, "0")}';
+      final amtStr = _formatCSVAmount(tx.amt);
       final recStr = tx.rec ? 'Sim' : 'Não';
 
       var invoiceStr = '';
@@ -383,8 +431,61 @@ class CSVExporter {
       final accFav = (acc?.isFavorite == true) ? 'Sim' : 'Não';
       final accAtiva = (acc?.isInactive == true) ? 'Não' : 'Sim';
 
+      double? effRate;
+      String fxRateStr = '';
+      if (accCur != effectiveBase) {
+        final accToBrl = (tx.rate != null && tx.rate! > 0 && accCur != 'BRL')
+            ? tx.rate!
+            : exchangeRateBetween(
+                fromCurrency: accCur,
+                toCurrency: 'BRL',
+                rates: rates,
+              );
+        final baseToBrl = exchangeRateBetween(
+          fromCurrency: effectiveBase,
+          toCurrency: 'BRL',
+          rates: rates,
+        );
+        effRate = baseToBrl > 0 ? (accToBrl / baseToBrl) : accToBrl;
+        fxRateStr = _formatCSVRate(effRate);
+      } else if (tx.rate != null && tx.rate! > 0 && accCur != 'BRL') {
+        fxRateStr = _formatCSVRate(tx.rate!);
+      }
+
+      final baseCents = convertCents(
+        tx.amt,
+        fromCurrency: accCur,
+        toCurrency: effectiveBase,
+        rates: rates,
+        customRate: effRate,
+      );
+      final baseAmtStr = _formatCSVAmount(baseCents);
+
+      String peerAmtStr = '';
+      String peerCurStr = '';
+      String xferRateStr = '';
+      if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+        final peers = xferIndex[tx.xfer!] ?? const [];
+        Transaction? peerTx;
+        for (final p in peers) {
+          if (p.id != tx.id) {
+            peerTx = p;
+            break;
+          }
+        }
+        final peerAcc = accMap[peerTx?.acc ?? tx.peer];
+        peerCurStr = peerAcc?.effectiveCurrency ?? '';
+        if (peerTx != null) {
+          peerAmtStr = _formatCSVAmount(peerTx.amt);
+          if (tx.amt != 0 && peerTx.amt != 0) {
+            final ratio = peerTx.amt.abs() / tx.amt.abs();
+            xferRateStr = _formatCSVRate(ratio, decimals: 6);
+          }
+        }
+      }
+
       lines.add(
-        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}";"$accFav";"$accAtiva"',
+        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}";"$accFav";"$accAtiva";"$accCur";"$effectiveBase";"$baseAmtStr";"$fxRateStr";"$peerAmtStr";"$peerCurStr";"$xferRateStr"',
       );
     }
 
@@ -403,6 +504,13 @@ class _ColumnMapping {
   int? amount;
   int? reconciled;
   int? invoice;
+  int? currency;
+  int? baseCurrency;
+  int? baseAmount;
+  int? txRate;
+  int? peerAmount;
+  int? peerCurrency;
+  int? transferRate;
 
   _ColumnMapping({
     this.date,
@@ -415,6 +523,13 @@ class _ColumnMapping {
     this.amount,
     this.reconciled,
     this.invoice,
+    this.currency,
+    this.baseCurrency,
+    this.baseAmount,
+    this.txRate,
+    this.peerAmount,
+    this.peerCurrency,
+    this.transferRate,
   });
 
   int get score {
@@ -427,6 +542,8 @@ class _ColumnMapping {
     if (memo != null) s += 1;
     if (reconciled != null) s += 1;
     if (invoice != null) s += 1;
+    if (currency != null) s += 1;
+    if (baseAmount != null) s += 1;
     return s;
   }
 }
@@ -463,6 +580,8 @@ class CSVImporter {
     required List<CategoryItem> existingCats,
     required List<Transaction> existingTxs,
     bool allowDuplicates = false,
+    String baseCurrency = 'BRL',
+    Map<String, CurrencyRateInfo>? rates,
   }) {
     final rawLines = content
         .replaceAll('\uFEFF', '')
@@ -505,7 +624,27 @@ class CSVImporter {
     } else {
       dataStartIndex = 0;
       final sampleRow = records[0];
-      if (sampleRow.length >= 10) {
+      if (sampleRow.length >= 17) {
+        colMap = _ColumnMapping(
+          date: 0,
+          account: 1,
+          payee: 2,
+          category: 3,
+          memo: 4,
+          amount: 5,
+          reconciled: 6,
+          invoice: 7,
+          accountFavorite: 8,
+          accountStatus: 9,
+          currency: 10,
+          baseCurrency: 11,
+          baseAmount: 12,
+          txRate: 13,
+          peerAmount: 14,
+          peerCurrency: 15,
+          transferRate: 16,
+        );
+      } else if (sampleRow.length >= 10) {
         colMap = _ColumnMapping(
           date: 0,
           account: 1,
@@ -636,6 +775,14 @@ class CSVImporter {
             }
           }
 
+          String? parsedAccCurrency;
+          if (colMap.currency != null && colMap.currency! < row.length) {
+            final curCode = _normalizeSupportedCurrencyCode(row[colMap.currency!]);
+            if (curCode != null && curCode != 'BRL') {
+              parsedAccCurrency = curCode;
+            }
+          }
+
           final newAcc = Account(
             id: uid(),
             name: accName,
@@ -643,6 +790,7 @@ class CSVImporter {
             opening: 0,
             inactive: isInactive,
             favorite: isFavorite,
+            currency: parsedAccCurrency,
           );
           newAccounts.add(newAcc);
           allAccounts.add(newAcc);
@@ -690,6 +838,8 @@ class CSVImporter {
             allAccounts.any((a) => a.id == targetAccountId))
         ? targetAccountId
         : (allAccounts.isNotEmpty ? allAccounts.first.id : uid());
+
+    final importedPeerAmounts = <int?>[];
 
     for (int rowIdx = dataStartIndex; rowIdx < records.length; rowIdx++) {
       final row = records[rowIdx];
@@ -845,6 +995,62 @@ class CSVImporter {
         }
       }
 
+      final accCur = accItem?.effectiveCurrency ?? 'BRL';
+      int? peerAmt;
+      if (colMap.peerAmount != null && colMap.peerAmount! < row.length) {
+        peerAmt = parseAmountCents(row[colMap.peerAmount!]);
+      }
+      String? peerCur;
+      if (colMap.peerCurrency != null && colMap.peerCurrency! < row.length) {
+        peerCur = _normalizeSupportedCurrencyCode(row[colMap.peerCurrency!]);
+      }
+
+      double? parsedTxRate;
+      if (accCur != 'BRL') {
+        if (colMap.txRate != null && colMap.txRate! < row.length) {
+          final rVal = _parseDecimalRate(row[colMap.txRate!]);
+          if (rVal != null) {
+            final rowBase = (colMap.baseCurrency != null &&
+                    colMap.baseCurrency! < row.length)
+                ? (_normalizeSupportedCurrencyCode(row[colMap.baseCurrency!]) ??
+                    baseCurrency)
+                : baseCurrency;
+            if (rowBase == 'BRL') {
+              parsedTxRate = rVal;
+            } else {
+              final bToBrl = exchangeRateBetween(
+                fromCurrency: rowBase,
+                toCurrency: 'BRL',
+                rates: rates,
+              );
+              parsedTxRate = rVal * bToBrl;
+            }
+          }
+        }
+        if (parsedTxRate == null &&
+            peerCur == 'BRL' &&
+            peerAmt != null &&
+            peerAmt != 0 &&
+            parsedAmt != 0) {
+          parsedTxRate = peerAmt.abs() / parsedAmt.abs();
+        }
+        if (parsedTxRate == null &&
+            colMap.baseAmount != null &&
+            colMap.baseAmount! < row.length &&
+            parsedAmt != 0) {
+          final baseAmt = parseAmountCents(row[colMap.baseAmount!]);
+          final rowBase = (colMap.baseCurrency != null &&
+                  colMap.baseCurrency! < row.length)
+              ? (_normalizeSupportedCurrencyCode(row[colMap.baseCurrency!]) ??
+                  baseCurrency)
+              : baseCurrency;
+          if (baseAmt != null && baseAmt != 0 && rowBase == 'BRL') {
+            parsedTxRate = baseAmt.abs() / parsedAmt.abs();
+          }
+        }
+      }
+
+      importedPeerAmounts.add(peerAmt);
       newTxs.add(
         Transaction(
           id: uid(),
@@ -856,8 +1062,49 @@ class CSVImporter {
           amt: parsedAmt,
           rec: rec,
           ik: parsedIk,
+          rate: parsedTxRate,
         ),
       );
+    }
+
+    // Pareia transferências recíprocas importadas no mesmo lote preservando valores originais
+    final accByIdMap = {for (final a in allAccounts) a.id: a};
+    for (int i = 0; i < newTxs.length; i++) {
+      final tA = newTxs[i];
+      if (tA.xfer != null || !tA.cat.startsWith('Transferência: ')) continue;
+      final accA = accByIdMap[tA.acc];
+      if (accA == null) continue;
+      final targetPeerName = tA.cat.substring('Transferência: '.length).trim();
+      final accB = allAccounts.where((a) => cmpPt(a.name, targetPeerName) == 0).firstOrNull;
+      if (accB == null || accB.id == accA.id) continue;
+
+      final expectedPeerAmt = importedPeerAmounts[i];
+      int? matchIdx;
+      for (int j = i + 1; j < newTxs.length; j++) {
+        final tB = newTxs[j];
+        if (tB.xfer != null || tB.acc != accB.id || tB.date != tA.date) continue;
+        if (!tB.cat.startsWith('Transferência: ')) continue;
+        final backName = tB.cat.substring('Transferência: '.length).trim();
+        if (cmpPt(backName, accA.name) != 0) continue;
+        final oppositeSigns = (tA.amt < 0 && tB.amt > 0) || (tA.amt > 0 && tB.amt < 0);
+        if (!oppositeSigns) continue;
+
+        if (expectedPeerAmt != null) {
+          if (tB.amt != expectedPeerAmt) continue;
+        } else if (accA.effectiveCurrency == accB.effectiveCurrency) {
+          if (tA.amt.abs() != tB.amt.abs()) continue;
+        }
+        matchIdx = j;
+        break;
+      }
+
+      if (matchIdx != null) {
+        final xid = uid();
+        tA.xfer = xid;
+        tA.peer = accB.id;
+        newTxs[matchIdx].xfer = xid;
+        newTxs[matchIdx].peer = accA.id;
+      }
     }
 
     return (
@@ -871,7 +1118,7 @@ class CSVImporter {
   static _ColumnMapping _detectColumnMapping(List<String> header) {
     final map = _ColumnMapping();
     for (int idx = 0; idx < header.length; idx++) {
-      final col = removeDiacritics(header[idx]).toLowerCase();
+      final col = removeDiacritics(header[idx]).toLowerCase().trim();
       if (map.date == null &&
           (col.contains('data') ||
               col.contains('date') ||
@@ -880,6 +1127,42 @@ class CSVImporter {
               col.contains('lancamento') ||
               col.contains('movimento'))) {
         map.date = idx;
+      } else if (map.currency == null &&
+          (col == 'moeda' || col == 'currency' || col == 'moeda da conta')) {
+        map.currency = idx;
+      } else if (map.baseCurrency == null &&
+          (col.contains('moeda padrao') ||
+              col.contains('moeda base') ||
+              col.contains('base currency'))) {
+        map.baseCurrency = idx;
+      } else if (map.peerCurrency == null &&
+          (col.contains('moeda contrapartida') ||
+              col.contains('moeda transferencia') ||
+              col.contains('peer currency'))) {
+        map.peerCurrency = idx;
+      } else if (map.baseAmount == null &&
+          (col.contains('valor moeda padrao') ||
+              col.contains('valor convertido') ||
+              col.contains('valor base') ||
+              col.contains('base amount'))) {
+        map.baseAmount = idx;
+      } else if (map.peerAmount == null &&
+          (col.contains('valor contrapartida') ||
+              col.contains('valor compra/venda') ||
+              col.contains('valor transferencia') ||
+              col.contains('peer amount'))) {
+        map.peerAmount = idx;
+      } else if (map.transferRate == null &&
+          (col.contains('taxa transferencia') || col.contains('taxa xfer') || col.contains('transfer rate'))) {
+        map.transferRate = idx;
+      } else if (map.txRate == null &&
+          (col.contains('taxa cambio') ||
+              col.contains('taxa de cambio') ||
+              col.contains('cotacao') ||
+              col == 'taxa' ||
+              col == 'rate' ||
+              col == 'fx rate')) {
+        map.txRate = idx;
       } else if (map.account == null &&
           (col.contains('conta') ||
               col.contains('account') ||
@@ -1572,6 +1855,7 @@ class QIFImporter {
 class MobileInboxImportItem {
   final String txId;
   final String accountName;
+  final String currency;
   final String date;
   final String payee;
   final String cat;
@@ -1582,6 +1866,7 @@ class MobileInboxImportItem {
   const MobileInboxImportItem({
     required this.txId,
     required this.accountName,
+    this.currency = 'BRL',
     required this.date,
     required this.payee,
     required this.cat,

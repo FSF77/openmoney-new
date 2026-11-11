@@ -174,32 +174,38 @@ class _BatchDeleteDialogState extends State<_BatchDeleteDialog> {
               ),
               const SizedBox(height: 12),
               GlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Pré-visualização ao Vivo do Impacto:',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('• Lançamentos selecionados: ${preview.count}'),
-                    Text(
-                        '• Contas afetadas: ${preview.affectedAccountsCount}'),
-                    Text(
-                      '• Total de Receitas: ${brl(preview.incomeCents)}',
-                      style: TextStyle(color: colors.income),
-                    ),
-                    Text(
-                      '• Total de Despesas: ${brl(preview.expenseCents)}',
-                      style: TextStyle(color: colors.expense),
-                    ),
-                    Text(
-                      '• Impacto Líquido: ${brl(preview.netCents)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+                child: Builder(builder: (context) {
+                  final batchCur = _selectedAccId == 'all'
+                      ? widget.store.baseCurrency
+                      : (widget.store.accById(_selectedAccId)?.effectiveCurrency ??
+                          widget.store.baseCurrency);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pré-visualização ao Vivo do Impacto:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('• Lançamentos selecionados: ${preview.count}'),
+                      Text(
+                          '• Contas afetadas: ${preview.affectedAccountsCount}'),
+                      Text(
+                        '• Total de Receitas: ${formatCurrency(preview.incomeCents, batchCur)}',
+                        style: TextStyle(color: colors.income),
+                      ),
+                      Text(
+                        '• Total de Despesas: ${formatCurrency(preview.expenseCents, batchCur)}',
+                        style: TextStyle(color: colors.expense),
+                      ),
+                      Text(
+                        '• Impacto Líquido: ${formatCurrency(preview.netCents, batchCur)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  );
+                }),
               ),
               const SizedBox(height: 8),
               Text(

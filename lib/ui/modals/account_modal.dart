@@ -42,6 +42,7 @@ class _AccountDialogState extends State<_AccountDialog> {
   late final TextEditingController _commentsCtrl;
   late final TextEditingController _walletAliasesCtrl;
   late String _type;
+  late String _currency;
   late int _closeDay;
   late int _dueDay;
   late String _payAccId;
@@ -71,6 +72,7 @@ class _AccountDialogState extends State<_AccountDialog> {
       text: (acc?.walletAliases ?? []).join(', '),
     );
     _type = acc?.type ?? 'Corrente';
+    _currency = acc?.effectiveCurrency ?? widget.store.baseCurrency;
     _closeDay = acc?.card?.closeDay ?? 1;
     _dueDay = acc?.card?.dueDay ?? 10;
 
@@ -138,6 +140,7 @@ class _AccountDialogState extends State<_AccountDialog> {
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList(),
+      currency: _currency,
     );
 
     if (err != null) {
@@ -559,19 +562,73 @@ class _AccountDialogState extends State<_AccountDialog> {
                 );
               }),
               const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue: _type,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo de Conta',
-                  border: OutlineInputBorder(),
-                ),
-                items: kAccountTypes
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _type = v);
-                },
+              Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _type,
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Conta',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: kAccountTypes
+                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _type = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 4,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: kSupportedCurrencies.any((c) => c.code == _currency)
+                          ? _currency
+                          : 'BRL',
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Moeda',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: kSupportedCurrencies
+                          .map((c) => DropdownMenuItem(
+                                value: c.code,
+                                child: Text(
+                                  '${c.flag} ${c.code} (${c.symbol})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _currency = v);
+                      },
+                    ),
+                  ),
+                ],
               ),
+              if (_currency != widget.store.baseCurrency) ...[
+                const SizedBox(height: 6),
+                Builder(builder: (context) {
+                  final rate = widget.store.rateToBase(_currency);
+                  final baseMeta = currencyMetaFor(widget.store.baseCurrency);
+                  final info = widget.store.rateInfoFor(_currency);
+                  final updatedLabel = info != null && info.updatedAt.isNotEmpty
+                      ? ' · Atualizado ${formatRateDate(info.updatedAt)}'
+                      : ' · Cotação estimada';
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Text(
+                      '1 $_currency ≈ ${baseMeta.symbol} ${rate.toStringAsFixed(4).replaceAll('.', ',')}$updatedLabel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  );
+                }),
+              ],
               const SizedBox(height: 14),
               if (!isCard)
                 TextField(
@@ -580,10 +637,11 @@ class _AccountDialogState extends State<_AccountDialog> {
                     decimal: true,
                     signed: true,
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'Saldo Inicial de Abertura (R\$)',
-                    prefixText: 'R\$ ',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText:
+                        'Saldo Inicial de Abertura (${currencyMetaFor(_currency).symbol})',
+                    prefixText: '${currencyMetaFor(_currency).symbol} ',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
               if (isCard) ...[
@@ -712,11 +770,12 @@ class _AccountDialogState extends State<_AccountDialog> {
                   decimal: true,
                   signed: true,
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'Saldo Mínimo / Limite da Conta (R\$)',
+                decoration: InputDecoration(
+                  labelText:
+                      'Saldo Mínimo / Limite (${currencyMetaFor(_currency).symbol})',
                   hintText: '0,00',
-                  prefixText: 'R\$ ',
-                  border: OutlineInputBorder(),
+                  prefixText: '${currencyMetaFor(_currency).symbol} ',
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),

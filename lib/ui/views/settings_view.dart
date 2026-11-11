@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -532,7 +533,10 @@ class _SettingsViewState extends State<SettingsView> {
                     child: SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      title: const Text('Exibir contas com saldo R\$ 0,00', style: TextStyle(fontSize: 13)),
+                      title: Text(
+                        'Exibir contas com saldo ${formatCurrency(0, widget.store.baseCurrency)}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       subtitle: const Text(
                         'Quando desativado, oculta do card as contas que estiverem com saldo exatamente zerado.',
                         style: TextStyle(fontSize: 11.5),
@@ -556,7 +560,10 @@ class _SettingsViewState extends State<SettingsView> {
                     child: SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      title: const Text('Exibir investimentos com saldo R\$ 0,00', style: TextStyle(fontSize: 13)),
+                      title: Text(
+                        'Exibir investimentos com saldo ${formatCurrency(0, widget.store.baseCurrency)}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       subtitle: const Text(
                         'Quando desativado, oculta do card as contas de investimento e poupança com saldo zerado.',
                         style: TextStyle(fontSize: 11.5),
@@ -596,7 +603,10 @@ class _SettingsViewState extends State<SettingsView> {
                     child: SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      title: const Text('Exibir faturas com valor zerado (R\$ 0,00)', style: TextStyle(fontSize: 13)),
+                      title: Text(
+                        'Exibir faturas com valor zerado (${formatCurrency(0, widget.store.baseCurrency)})',
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       subtitle: const Text(
                         'Quando desativado, oculta do card os cartões com fatura zerada no ciclo atual.',
                         style: TextStyle(fontSize: 11.5),
@@ -744,6 +754,202 @@ class _SettingsViewState extends State<SettingsView> {
                 _buildShortcutRow(colors, 'F1', 'Abrir Ajuda e Manual do Usuário'),
               ],
             ),
+            const SizedBox(height: 16),
+
+            // =================================================================
+            // 8. MOEDAS & COTAÇÕES
+            // =================================================================
+            _buildSectionCard(
+              colors: colors,
+              title: 'Moedas & Cotações',
+              icon: Icons.currency_exchange_outlined,
+              children: [
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Moeda Padrão / Base do Sistema',
+                  subtitle:
+                      'Moeda principal utilizada na consolidação do patrimônio, relatórios e dashboards.',
+                  trailing: SizedBox(
+                    width: 210,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: kSupportedCurrencies
+                              .any((c) => c.code == widget.store.baseCurrency)
+                          ? widget.store.baseCurrency
+                          : 'BRL',
+                      isDense: true,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      items: kSupportedCurrencies
+                          .map((c) => DropdownMenuItem(
+                                value: c.code,
+                                child: Text(
+                                  '${c.flag} ${c.code} - ${c.name}',
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          widget.store.setBaseCurrency(val);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Cotações Online (AwesomeAPI)',
+                  subtitle:
+                      'Consultadas automaticamente 1x ao dia quando há contas em moeda estrangeira. Taxas manuais são preservadas.',
+                  trailing: FilledButton.tonalIcon(
+                    icon: widget.store.isRefreshingRates
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync, size: 16),
+                    label: Text(
+                      widget.store.isRefreshingRates
+                          ? 'Atualizando...'
+                          : 'Atualizar Agora',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: widget.store.isRefreshingRates
+                        ? null
+                        : () async {
+                            final ok = await widget.store
+                                .refreshOnlineRates(force: true);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  ok
+                                      ? 'Cotações atualizadas com sucesso!'
+                                      : 'Nenhuma atualização pendente ou sem conexão.',
+                                ),
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: colors.surfaceGlass,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: colors.borderGlass),
+                  ),
+                  child: Column(
+                    children: [
+                      for (int i = 0;
+                          i <
+                              kSupportedCurrencies
+                                  .where((c) => c.code != 'BRL')
+                                  .length;
+                          i++) ...[
+                        Builder(builder: (context) {
+                          final foreignCurrencies = kSupportedCurrencies
+                              .where((c) => c.code != 'BRL')
+                              .toList();
+                          final cur = foreignCurrencies[i];
+                          final info = widget.store.rateInfoFor(cur.code);
+                          final rateVal = info?.rate ??
+                              kFallbackRatesBrl[cur.code] ??
+                              1.0;
+                          final isManual = info?.manual ?? false;
+                          final dateLabel =
+                              info != null && info.updatedAt.isNotEmpty
+                                  ? formatRateDate(info.updatedAt)
+                                  : 'Estimada';
+
+                          return Column(
+                            children: [
+                              if (i > 0)
+                                Divider(
+                                    height: 1,
+                                    color: colors.borderGlass
+                                        .withValues(alpha: 0.5)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Text(cur.flag,
+                                        style: const TextStyle(fontSize: 18)),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${cur.code} · ${cur.name}',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: colors.textPrimary,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${isManual ? "Manual" : (info?.source ?? "Padrão")} · $dateLabel',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: colors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      'R\$ ${rateVal.toStringAsFixed(cur.decimals == 0 ? 6 : 4).replaceAll('.', ',')}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: colors.textPrimary,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures()
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (isManual)
+                                      IconButton(
+                                        tooltip:
+                                            'Voltar para cotação automática',
+                                        icon: const Icon(Icons.autorenew,
+                                            size: 16),
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => widget.store
+                                            .setCurrencyRateAuto(cur.code),
+                                      ),
+                                    IconButton(
+                                      tooltip: 'Definir cotação manual',
+                                      icon: const Icon(Icons.edit_outlined,
+                                          size: 16),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () =>
+                                          _showManualRateDialog(cur, rateVal),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 32),
           ],
         ),
@@ -850,6 +1056,63 @@ class _SettingsViewState extends State<SettingsView> {
         );
       },
     );
+  }
+
+  Future<void> _showManualRateDialog(CurrencyMeta cur, double currentRate) async {
+    final ctrl = TextEditingController(
+      text: currentRate
+          .toStringAsFixed(cur.decimals == 0 ? 6 : 4)
+          .replaceAll('.', ','),
+    );
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Cotação Manual: ${cur.flag} ${cur.code}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Informe quanto vale 1 ${cur.code} em Reais (BRL).\nEsta taxa ficará fixa até você restaurar para o modo automático.',
+              style: const TextStyle(fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: '1 ${cur.code} em BRL (R\$)',
+                prefixText: 'R\$ ',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final raw = ctrl.text.trim().replaceAll(' ', '');
+              final norm = raw.contains(',')
+                  ? raw.replaceAll('.', '').replaceAll(',', '.')
+                  : raw;
+              final parsed = double.tryParse(norm);
+              if (parsed != null && parsed > 0) {
+                widget.store.updateCurrencyRate(cur.code, parsed, manual: true);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Salvar Taxa'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
   }
 
   Widget _buildShortcutRow(

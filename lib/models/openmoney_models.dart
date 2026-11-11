@@ -10,6 +10,123 @@ const List<String> kAccountTypes = [
   'Dinheiro',
 ];
 
+class CurrencyMeta {
+  final String code;
+  final String symbol;
+  final String name;
+  final String flag;
+  final int decimals;
+
+  const CurrencyMeta({
+    required this.code,
+    required this.symbol,
+    required this.name,
+    required this.flag,
+    this.decimals = 2,
+  });
+}
+
+const List<CurrencyMeta> kSupportedCurrencies = [
+  CurrencyMeta(code: 'BRL', symbol: 'R\$', name: 'Real Brasileiro', flag: '🇧🇷', decimals: 2),
+  CurrencyMeta(code: 'USD', symbol: 'US\$', name: 'Dólar Americano', flag: '🇺🇸', decimals: 2),
+  CurrencyMeta(code: 'EUR', symbol: '€', name: 'Euro', flag: '🇪🇺', decimals: 2),
+  CurrencyMeta(code: 'CAD', symbol: 'C\$', name: 'Dólar Canadense', flag: '🇨🇦', decimals: 2),
+  CurrencyMeta(code: 'AUD', symbol: 'A\$', name: 'Dólar Australiano', flag: '🇦🇺', decimals: 2),
+  CurrencyMeta(code: 'GBP', symbol: '£', name: 'Libra Esterlina', flag: '🇬🇧', decimals: 2),
+  CurrencyMeta(code: 'PYG', symbol: '₲', name: 'Guarani Paraguaio', flag: '🇵🇾', decimals: 0),
+  CurrencyMeta(code: 'ARS', symbol: 'ARS\$', name: 'Peso Argentino', flag: '🇦🇷', decimals: 2),
+  CurrencyMeta(code: 'UYU', symbol: '\$U', name: 'Peso Uruguaio', flag: '🇺🇾', decimals: 2),
+  CurrencyMeta(code: 'CHF', symbol: 'CHF', name: 'Franco Suíço', flag: '🇨🇭', decimals: 2),
+  CurrencyMeta(code: 'CLP', symbol: 'CLP\$', name: 'Peso Chileno', flag: '🇨🇱', decimals: 0),
+];
+
+CurrencyMeta currencyMetaFor(String? code) {
+  if (code == null || code.trim().isEmpty) {
+    return kSupportedCurrencies[0]; // BRL
+  }
+  final upper = code.trim().toUpperCase();
+  for (final c in kSupportedCurrencies) {
+    if (c.code == upper) return c;
+  }
+  return CurrencyMeta(
+    code: upper,
+    symbol: upper,
+    name: upper,
+    flag: '🌐',
+    decimals: 2,
+  );
+}
+
+const Map<String, double> kFallbackRatesBrl = {
+  'BRL': 1.0,
+  'USD': 5.7512,
+  'EUR': 6.2130,
+  'CAD': 4.1205,
+  'AUD': 3.7840,
+  'GBP': 7.4210,
+  'PYG': 0.000735,
+  'ARS': 0.005820,
+  'UYU': 0.134500,
+  'CHF': 6.5510,
+  'CLP': 0.005950,
+};
+
+class CurrencyRateInfo {
+  final double rate;
+  final bool manual;
+  final String updatedAt;
+  final String source;
+
+  const CurrencyRateInfo({
+    required this.rate,
+    this.manual = false,
+    required this.updatedAt,
+    this.source = 'AwesomeAPI',
+  });
+
+  factory CurrencyRateInfo.fromJson(Map<String, dynamic> json) {
+    return CurrencyRateInfo(
+      rate: (json['rate'] as num?)?.toDouble() ?? 1.0,
+      manual: json['manual'] as bool? ?? false,
+      updatedAt: json['updatedAt'] as String? ?? '',
+      source: json['source'] as String? ?? 'AwesomeAPI',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'rate': rate,
+        if (manual) 'manual': manual,
+        'updatedAt': updatedAt,
+        'source': source,
+      };
+
+  CurrencyRateInfo copyWith({
+    double? rate,
+    bool? manual,
+    String? updatedAt,
+    String? source,
+  }) {
+    return CurrencyRateInfo(
+      rate: rate ?? this.rate,
+      manual: manual ?? this.manual,
+      updatedAt: updatedAt ?? this.updatedAt,
+      source: source ?? this.source,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CurrencyRateInfo &&
+          rate == other.rate &&
+          manual == other.manual &&
+          updatedAt == other.updatedAt &&
+          source == other.source;
+
+  @override
+  int get hashCode => Object.hash(rate, manual, updatedAt, source);
+}
+
 class CardConfig {
   int closeDay;
   int dueDay;
@@ -128,6 +245,7 @@ class Account {
   int? minBalance;
   String? logo;
   List<String>? walletAliases;
+  String? currency;
 
   Account({
     required this.id,
@@ -146,11 +264,16 @@ class Account {
     this.minBalance,
     this.logo,
     this.walletAliases,
+    this.currency,
   });
 
   bool get isInactive => inactive == true;
   bool get isActive => !isInactive;
   bool get isFavorite => favorite == true;
+  String get effectiveCurrency =>
+      (currency != null && currency!.trim().isNotEmpty)
+          ? currency!.trim().toUpperCase()
+          : 'BRL';
 
   factory Account.fromJson(Map<String, dynamic> json) {
     Map<String, InvoiceInfo>? parsedInvoices;
@@ -186,6 +309,9 @@ class Account {
       if (list.isNotEmpty) parsedAliases = list;
     }
 
+    final rawCur = json['currency'] as String?;
+    final trimmedCur = rawCur?.trim().toUpperCase();
+
     return Account(
       id: json['id'] as String? ?? uid(),
       name: json['name'] as String? ?? 'Conta',
@@ -204,6 +330,7 @@ class Account {
       minBalance: (json['minBalance'] as num?)?.toInt(),
       logo: json['logo'] as String?,
       walletAliases: parsedAliases,
+      currency: (trimmedCur != null && trimmedCur.isNotEmpty) ? trimmedCur : null,
     );
   }
 
@@ -234,6 +361,8 @@ class Account {
               .map((e) => e.trim())
               .where((e) => e.isNotEmpty)
               .toList(),
+        if (currency != null && currency!.trim().isNotEmpty)
+          'currency': currency!.trim().toUpperCase(),
       };
 
   Account copyWith({
@@ -253,6 +382,7 @@ class Account {
     int? minBalance,
     String? logo,
     List<String>? walletAliases,
+    String? currency,
   }) {
     return Account(
       id: id ?? this.id,
@@ -273,6 +403,7 @@ class Account {
       logo: logo ?? this.logo,
       walletAliases: walletAliases ??
           (this.walletAliases != null ? List<String>.from(this.walletAliases!) : null),
+      currency: currency ?? this.currency,
     );
   }
 }
@@ -406,6 +537,7 @@ class Transaction {
   String? recFreq;
   int? recSeq;
   double? createdAt;
+  double? rate;
 
   Transaction({
     String? id,
@@ -429,6 +561,7 @@ class Transaction {
     this.recFreq,
     this.recSeq,
     double? createdAt,
+    this.rate,
   })  : id = id ?? uid(),
         createdAt =
             createdAt ?? (DateTime.now().millisecondsSinceEpoch / 1000.0);
@@ -461,6 +594,7 @@ class Transaction {
       recFreq: json['recFreq'] as String?,
       recSeq: (json['recSeq'] as num?)?.toInt(),
       createdAt: (json['createdAt'] as num?)?.toDouble(),
+      rate: (json['rate'] as num?)?.toDouble(),
     );
   }
 
@@ -486,6 +620,7 @@ class Transaction {
         if (recFreq != null) 'recFreq': recFreq,
         if (recSeq != null) 'recSeq': recSeq,
         if (createdAt != null) 'createdAt': createdAt,
+        if (rate != null) 'rate': rate,
       };
 
   Transaction copyWith({
@@ -510,6 +645,7 @@ class Transaction {
     String? recFreq,
     int? recSeq,
     double? createdAt,
+    double? rate,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -533,6 +669,7 @@ class Transaction {
       recFreq: recFreq ?? this.recFreq,
       recSeq: recSeq ?? this.recSeq,
       createdAt: createdAt ?? this.createdAt,
+      rate: rate ?? this.rate,
     );
   }
 }
@@ -635,6 +772,15 @@ class Database {
   /// Modo de abatimento de previsões: 'month' (padrão) ou 'invoice' (por fatura)
   String predMode;
 
+  /// Moeda base do sistema (padrão 'BRL')
+  String baseCurrency;
+
+  /// Mapa de cotações em relação ao BRL
+  Map<String, CurrencyRateInfo> rates;
+
+  String get effectiveBaseCurrency =>
+      baseCurrency.trim().isNotEmpty ? baseCurrency.trim().toUpperCase() : 'BRL';
+
   Database({
     List<Account>? accounts,
     List<CategoryItem>? cats,
@@ -644,7 +790,13 @@ class Database {
     Map<String, String>? comments,
     this.v = 7,
     this.predMode = 'month',
-  })  : accounts = accounts ??
+    String? baseCurrency,
+    Map<String, CurrencyRateInfo>? rates,
+  })  : baseCurrency = (baseCurrency != null && baseCurrency.trim().isNotEmpty)
+            ? baseCurrency.trim().toUpperCase()
+            : 'BRL',
+        rates = rates ?? {},
+        accounts = accounts ??
             [
               Account(
                 id: 'a1',
@@ -710,6 +862,18 @@ class Database {
       });
     }
 
+    Map<String, CurrencyRateInfo> parsedRates = {};
+    if (json['rates'] is Map) {
+      (json['rates'] as Map).forEach((k, v) {
+        if (v is Map) {
+          parsedRates[k.toString().toUpperCase()] =
+              CurrencyRateInfo.fromJson(Map<String, dynamic>.from(v));
+        }
+      });
+    }
+
+    final rawBase = json['baseCurrency'] as String?;
+
     return Database(
       accounts: (parsedAccounts != null && parsedAccounts.isNotEmpty)
           ? parsedAccounts
@@ -730,6 +894,8 @@ class Database {
       comments: parsedComments,
       v: (json['v'] as num?)?.toInt() ?? 7,
       predMode: json['predMode'] == 'invoice' ? 'invoice' : 'month',
+      baseCurrency: rawBase,
+      rates: parsedRates,
     );
   }
 
@@ -742,6 +908,9 @@ class Database {
         if (comments.isNotEmpty) 'comments': comments,
         'v': v,
         if (predMode != 'month') 'predMode': predMode,
+        if (baseCurrency != 'BRL') 'baseCurrency': baseCurrency,
+        if (rates.isNotEmpty)
+          'rates': rates.map((k, v) => MapEntry(k, v.toJson())),
       };
 }
 
@@ -1015,6 +1184,7 @@ class MonthlyReportData {
   final int totalExpense;
   final int netTotal;
   final int savingsRate;
+  final String currency;
 
   bool get isAnnual => monthYM.length == 4;
   String get periodTitle => isAnnual ? 'Ano $monthYM' : fmtMonth(monthYM);
@@ -1027,6 +1197,7 @@ class MonthlyReportData {
     required this.totalExpense,
     required this.netTotal,
     required this.savingsRate,
+    this.currency = 'BRL',
   });
 }
 
@@ -1123,11 +1294,16 @@ int daysBetween(String fromISO, String toISO) {
   return utc2.difference(utc1).inDays;
 }
 
-String brl(int cents, {bool showSymbol = true}) {
+String formatCurrency(
+  int cents,
+  String currencyCode, {
+  bool showSymbol = true,
+}) {
+  final meta = currencyMetaFor(currencyCode);
   final isNegative = cents < 0;
   final absCents = cents.abs();
   final intPart = absCents ~/ 100;
-  final decPart = (absCents % 100).toString().padLeft(2, '0');
+  final dec = absCents % 100;
 
   final intStr = intPart.toString();
   final buffer = StringBuffer();
@@ -1137,12 +1313,85 @@ String brl(int cents, {bool showSymbol = true}) {
     }
     buffer.write(intStr[i]);
   }
-  final numStr = '${buffer.toString()},$decPart';
+
+  final String numStr;
+  if (meta.decimals == 0 && dec == 0) {
+    numStr = buffer.toString();
+  } else {
+    final decPart = dec.toString().padLeft(2, '0');
+    numStr = '${buffer.toString()},$decPart';
+  }
+
   if (!showSymbol) {
     return isNegative ? '-$numStr' : numStr;
   }
-  final formatted = 'R\$ $numStr';
+  final formatted = '${meta.symbol} $numStr';
   return isNegative ? '-$formatted' : formatted;
+}
+
+String brl(int cents, {bool showSymbol = true}) {
+  return formatCurrency(cents, 'BRL', showSymbol: showSymbol);
+}
+
+double exchangeRateBetween({
+  required String fromCurrency,
+  required String toCurrency,
+  Map<String, CurrencyRateInfo>? rates,
+}) {
+  final from = fromCurrency.trim().toUpperCase();
+  final to = toCurrency.trim().toUpperCase();
+  if (from == to) return 1.0;
+
+  double rateToBrl(String code) {
+    if (code == 'BRL') return 1.0;
+    final r = rates?[code];
+    if (r != null && r.rate > 0) return r.rate;
+    final fb = kFallbackRatesBrl[code];
+    if (fb != null && fb > 0) return fb;
+    return 1.0;
+  }
+
+  final fromBrl = rateToBrl(from);
+  final toBrl = rateToBrl(to);
+  if (toBrl <= 0) return 1.0;
+  return fromBrl / toBrl;
+}
+
+int convertCents(
+  int cents, {
+  required String fromCurrency,
+  required String toCurrency,
+  Map<String, CurrencyRateInfo>? rates,
+  double? customRate,
+}) {
+  final from = fromCurrency.trim().toUpperCase();
+  final to = toCurrency.trim().toUpperCase();
+  if (from == to) return cents;
+
+  final rate = customRate ??
+      exchangeRateBetween(
+        fromCurrency: from,
+        toCurrency: to,
+        rates: rates,
+      );
+  return (cents * rate).round();
+}
+
+String formatRateDate(String? iso) {
+  if (iso == null || iso.trim().isEmpty) return '';
+  final trimmed = iso.trim();
+  try {
+    final dt = DateTime.parse(trimmed).toLocal();
+    final now = DateTime.now();
+    final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final timeStr = '${pad2(dt.hour)}:${pad2(dt.minute)}';
+    if (isToday) {
+      return 'hoje às $timeStr';
+    }
+    return '${pad2(dt.day)}/${pad2(dt.month)} às $timeStr';
+  } catch (_) {
+    return trimmed.length >= 10 ? fmtDate(trimmed.substring(0, 10)) : trimmed;
+  }
 }
 
 String formatInputCents(int cents) {

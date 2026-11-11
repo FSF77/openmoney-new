@@ -333,10 +333,14 @@ class _DatagridTransactionTableState extends State<DatagridTransactionTable> {
                             const SizedBox(width: 8),
 
                             // Valor
-                            SizedBox(
+                              SizedBox(
                               width: 120,
                               child: Text(
-                                brl(tx.amt),
+                                formatCurrency(
+                                  tx.amt,
+                                  widget.store.accById(tx.acc)?.effectiveCurrency ??
+                                      widget.store.baseCurrency,
+                                ),
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontSize: 12.5,

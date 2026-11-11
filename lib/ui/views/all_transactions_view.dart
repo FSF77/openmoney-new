@@ -248,6 +248,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       child: _SummaryKpiPill(
                         label: 'Total Receitas',
                         cents: res.incomeCents,
+                        currency: res.currency,
                         color: colors.income,
                         icon: Icons.trending_up,
                         colors: colors,
@@ -258,6 +259,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       child: _SummaryKpiPill(
                         label: 'Total Despesas',
                         cents: res.expenseCents,
+                        currency: res.currency,
                         color: colors.expense,
                         icon: Icons.trending_down,
                         colors: colors,
@@ -269,6 +271,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       child: _SummaryKpiPill(
                         label: 'Resultado Líquido',
                         cents: res.netCents,
+                        currency: res.currency,
                         color: res.netCents >= 0 ? colors.income : colors.expense,
                         icon: Icons.account_balance_wallet_outlined,
                         colors: colors,
@@ -485,6 +488,9 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                                 final csvContent = CSVExporter.generateCSV(
                                   transactions: txs,
                                   accounts: widget.store.db.accounts,
+                                  baseCurrency: widget.store.baseCurrency,
+                                  rates: widget.store.db.rates,
+                                  allTransactionsForPairs: widget.store.db.txs,
                                 );
                                 exportCsvWithFeedback(
                                   context,
@@ -518,6 +524,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                                   incomeCents: res.incomeCents,
                                   expenseCents: res.expenseCents,
                                   netCents: res.netCents,
+                                  summaryCurrency: res.currency,
                                 );
                                 final periodTag = _periodFilter == ConsolidatedPeriodFilter.day
                                     ? _selectedDayIso
@@ -693,6 +700,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       context,
                       txs: orderedTxs,
                       accMap: accMap,
+                      summaryCurrency: res.currency,
                       colors: colors,
                       isMobile: isMobile,
                     )),
@@ -705,6 +713,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
     BuildContext context, {
     required List<Transaction> txs,
     required Map<String, Account> accMap,
+    required String summaryCurrency,
     required OpenMoneyColors colors,
     required bool isMobile,
   }) {
@@ -731,8 +740,9 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
           int mExp = 0;
           for (final t in monthTxs) {
             if (t.xfer == null && t.peer == null && t.auto != true) {
-              if (t.amt > 0) mInc += t.amt;
-              if (t.amt < 0) mExp += t.amt.abs();
+              final conv = widget.store.convertTxToCurrency(t, summaryCurrency);
+              if (conv > 0) mInc += conv;
+              if (conv < 0) mExp += conv.abs();
             }
           }
           final mNet = mInc - mExp;
@@ -768,7 +778,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         spacing: 12,
                         children: [
                           Text(
-                            'Rec: +${brl(mInc)}',
+                            'Rec: +${formatCurrency(mInc, summaryCurrency)}',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
@@ -776,7 +786,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                             ),
                           ),
                           Text(
-                            'Desp: -${brl(mExp)}',
+                            'Desp: -${formatCurrency(mExp, summaryCurrency)}',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
@@ -784,7 +794,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                             ),
                           ),
                           Text(
-                            'Res: ${brl(mNet)}',
+                            'Res: ${formatCurrency(mNet, summaryCurrency)}',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w800,
@@ -802,6 +812,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                     context,
                     dg: dg,
                     accMap: accMap,
+                    summaryCurrency: summaryCurrency,
                     colors: colors,
                     isMobile: isMobile,
                   ),
@@ -825,6 +836,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
           context,
           dg: dg,
           accMap: accMap,
+          summaryCurrency: summaryCurrency,
           colors: colors,
           isMobile: isMobile,
         );
@@ -848,6 +860,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
     BuildContext context, {
     required _ConsolidatedDayGroup dg,
     required Map<String, Account> accMap,
+    required String summaryCurrency,
     required OpenMoneyColors colors,
     required bool isMobile,
   }) {
@@ -855,8 +868,9 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
     int dayExp = 0;
     for (final t in dg.items) {
       if (t.xfer == null && t.peer == null && t.auto != true) {
-        if (t.amt > 0) dayInc += t.amt;
-        if (t.amt < 0) dayExp += t.amt.abs();
+        final conv = widget.store.convertTxToCurrency(t, summaryCurrency);
+        if (conv > 0) dayInc += conv;
+        if (conv < 0) dayExp += conv.abs();
       }
     }
     final dayNet = dayInc - dayExp;
@@ -1066,7 +1080,8 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      brl(tx.amt),
+                      formatCurrency(
+                          tx.amt, acc?.effectiveCurrency ?? widget.store.baseCurrency),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: isMobile ? 12.5 : 13.5,
@@ -1149,7 +1164,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                   spacing: 12,
                   children: [
                     Text(
-                      'Receitas: +${brl(dayInc)}',
+                      'Receitas: +${formatCurrency(dayInc, summaryCurrency)}',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -1157,7 +1172,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       ),
                     ),
                     Text(
-                      'Despesas: -${brl(dayExp)}',
+                      'Despesas: -${formatCurrency(dayExp, summaryCurrency)}',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -1165,7 +1180,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       ),
                     ),
                     Text(
-                      'Resultado: ${brl(dayNet)}',
+                      'Resultado: ${formatCurrency(dayNet, summaryCurrency)}',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
@@ -1193,6 +1208,7 @@ class _ConsolidatedDayGroup {
 class _SummaryKpiPill extends StatelessWidget {
   final String label;
   final int cents;
+  final String currency;
   final Color color;
   final IconData icon;
   final OpenMoneyColors colors;
@@ -1201,6 +1217,7 @@ class _SummaryKpiPill extends StatelessWidget {
   const _SummaryKpiPill({
     required this.label,
     required this.cents,
+    this.currency = 'BRL',
     required this.color,
     required this.icon,
     required this.colors,
@@ -1209,7 +1226,9 @@ class _SummaryKpiPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayStr = isNegativeDisplay && cents > 0 ? '- ${brl(cents)}' : brl(cents);
+    final displayStr = isNegativeDisplay && cents > 0
+        ? '- ${formatCurrency(cents, currency)}'
+        : formatCurrency(cents, currency);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(

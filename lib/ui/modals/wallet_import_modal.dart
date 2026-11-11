@@ -487,8 +487,10 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
               itemBuilder: (ctx, idx) {
                 final d = _drafts[idx];
                 final isSelectedRow = idx == _selectedIndex;
-                final accName =
-                    widget.store.accById(d.accountId)?.name ?? 'Conta';
+                final accObj = widget.store.accById(d.accountId);
+                final accName = accObj?.name ?? 'Conta';
+                final accCur = accObj?.effectiveCurrency ??
+                    widget.store.baseCurrency;
 
                 return ListTile(
                   selected: isSelectedRow,
@@ -522,7 +524,7 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        brl(d.amountCents),
+                        formatCurrency(d.amountCents, accCur),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -771,10 +773,11 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _amountCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Valor (R\$)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.attach_money),
+                  decoration: InputDecoration(
+                    labelText:
+                        'Valor (${currencyMetaFor(widget.store.accById(current.accountId)?.effectiveCurrency ?? "BRL").symbol})',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.attach_money),
                   ),
                   keyboardType: TextInputType.number,
                   onChanged: (v) {

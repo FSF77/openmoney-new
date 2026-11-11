@@ -38,7 +38,7 @@ Future<void> showMobileInboxImportFlow(
     final result = store.importMobileInboxBytes(bytes);
 
     if (context.mounted) {
-      await showMobileInboxReviewModal(context, result);
+      await showMobileInboxReviewModal(context, result, store: store);
     }
   } catch (e) {
     if (context.mounted) {
@@ -55,17 +55,36 @@ Future<void> showMobileInboxImportFlow(
 /// Modal detalhado de conferência dos lançamentos importados do celular
 Future<void> showMobileInboxReviewModal(
   BuildContext context,
-  MobileInboxImportResult result,
-) async {
+  MobileInboxImportResult result, {
+  MoneyStore? store,
+}) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final colors = OpenMoneyColors(isDark);
 
+  final distinctCurrencies = result.items.map((i) => i.currency).toSet();
+  final summaryCurrency = distinctCurrencies.length == 1
+      ? distinctCurrencies.first
+      : (store?.baseCurrency ?? 'BRL');
+
+  int toSummaryCents(MobileInboxImportItem item) {
+    if (item.currency == summaryCurrency) return item.amt;
+    if (store != null) {
+      return convertCents(
+        item.amt,
+        fromCurrency: item.currency,
+        toCurrency: summaryCurrency,
+        rates: store.db.rates,
+      );
+    }
+    return item.amt;
+  }
+
   final totalExpenseCents = result.items
       .where((i) => i.amt < 0)
-      .fold<int>(0, (sum, i) => sum + i.amt);
+      .fold<int>(0, (sum, i) => sum + toSummaryCents(i));
   final totalIncomeCents = result.items
       .where((i) => i.amt > 0)
-      .fold<int>(0, (sum, i) => sum + i.amt);
+      .fold<int>(0, (sum, i) => sum + toSummaryCents(i));
 
   await showDialog(
     context: context,
@@ -153,7 +172,10 @@ Future<void> showMobileInboxReviewModal(
                       iconColor: colors.expense,
                       bgColor: colors.expense.withValues(alpha: 0.1),
                       label: 'Total Despesas',
-                      value: brl(totalExpenseCents),
+                      value: formatCurrency(
+                        totalExpenseCents,
+                        summaryCurrency,
+                      ),
                       valueColor: colors.expense,
                     ),
                   if (totalIncomeCents > 0)
@@ -162,7 +184,10 @@ Future<void> showMobileInboxReviewModal(
                       iconColor: colors.income,
                       bgColor: colors.income.withValues(alpha: 0.1),
                       label: 'Total Receitas',
-                      value: brl(totalIncomeCents),
+                      value: formatCurrency(
+                        totalIncomeCents,
+                        summaryCurrency,
+                      ),
                       valueColor: colors.income,
                     ),
                   if (result.skippedCount > 0)
@@ -299,7 +324,10 @@ Future<void> showMobileInboxReviewModal(
                               ],
                               const SizedBox(width: 12),
                               Text(
-                                brl(item.amt),
+                                formatCurrency(
+                                  item.amt,
+                                  item.currency,
+                                ),
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,

@@ -199,7 +199,8 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
       final bal = widget.store.balance(acc, predicted: false);
       list.add(_CommandItem(
         title: acc.name,
-        subtitle: '${acc.type} • Saldo Real: ${brl(bal)}',
+        subtitle:
+            '${acc.type} • Saldo Real: ${formatCurrency(bal, acc.effectiveCurrency)}',
         icon: acc.type == kCardType
             ? Icons.credit_card
             : Icons.account_balance_wallet_outlined,
@@ -220,9 +221,11 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
         if (tx.payee.toLowerCase().contains(query) ||
             tx.cat.toLowerCase().contains(query) ||
             tx.memo.toLowerCase().contains(query)) {
-          final accName = widget.store.accById(tx.acc)?.name ?? 'Conta';
+          final acc = widget.store.accById(tx.acc);
+          final accName = acc?.name ?? 'Conta';
+          final accCur = acc?.effectiveCurrency ?? widget.store.baseCurrency;
           list.add(_CommandItem(
-            title: '${tx.payee} (${brl(tx.amt)})',
+            title: '${tx.payee} (${formatCurrency(tx.amt, accCur)})',
             subtitle: '${fmtDate(tx.date)} • $accName • ${tx.cat}',
             icon: tx.amt >= 0 ? Icons.trending_up : Icons.trending_down,
             iconColor: tx.amt >= 0 ? colors.income : colors.expense,

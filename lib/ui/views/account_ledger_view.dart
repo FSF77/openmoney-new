@@ -206,7 +206,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
         ? monthData.transactions
         : monthData.transactions.where((t) {
             final amtStr = (t.amt / 100.0).toStringAsFixed(2);
-            final amtBrl = brl(t.amt).toLowerCase();
+            final amtBrl = formatCurrency(t.amt, acc.effectiveCurrency).toLowerCase();
             return t.payee.toLowerCase().contains(q) ||
                 t.memo.toLowerCase().contains(q) ||
                 t.cat.toLowerCase().contains(q) ||
@@ -403,7 +403,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     color: colors.textSecondary),
                               ),
                               Text(
-                                brl(widget.store.balance(acc, predicted: false)),
+                                formatCurrency(
+                                  widget.store.balance(acc, predicted: false),
+                                  acc.effectiveCurrency,
+                                ),
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
@@ -417,6 +420,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   ],
                                 ),
                               ),
+                              if (acc.effectiveCurrency !=
+                                  widget.store.baseCurrency)
+                                Text(
+                                  '≈ ${formatCurrency(widget.store.convertToBase(widget.store.balance(acc, predicted: false), acc.effectiveCurrency), widget.store.baseCurrency)}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: colors.textMuted,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -439,7 +454,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     color: colors.textSecondary),
                               ),
                               Text(
-                                brl(widget.store.balance(acc, predicted: true)),
+                                formatCurrency(
+                                  widget.store.balance(acc, predicted: true),
+                                  acc.effectiveCurrency,
+                                ),
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
@@ -453,6 +471,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   ],
                                 ),
                               ),
+                              if (acc.effectiveCurrency !=
+                                  widget.store.baseCurrency)
+                                Text(
+                                  '≈ ${formatCurrency(widget.store.convertToBase(widget.store.balance(acc, predicted: true), acc.effectiveCurrency), widget.store.baseCurrency)}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: colors.textMuted,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -562,6 +592,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               final csvContent = CSVExporter.generateCSV(
                                 transactions: exportTxs,
                                 accounts: widget.store.db.accounts,
+                                baseCurrency: widget.store.baseCurrency,
+                                rates: widget.store.db.rates,
+                                allTransactionsForPairs: widget.store.db.txs,
                               );
                               exportCsvWithFeedback(
                                 context,
@@ -623,7 +656,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       alignment: WrapAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Fatura ${fmtMonth(invSummary.key)} • Vence ${fmtDate(invSummary.dueDate)} • Aberto: ${brl(invSummary.remainingCents)}',
+                          'Fatura ${fmtMonth(invSummary.key)} • Vence ${fmtDate(invSummary.dueDate)} • Aberto: ${formatCurrency(invSummary.remainingCents, acc.effectiveCurrency)}',
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
@@ -710,6 +743,40 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   color: colors.textSecondary,
                                 ),
                               ),
+                              if (acc.effectiveCurrency !=
+                                  widget.store.baseCurrency)
+                                Builder(builder: (context) {
+                                  final cur = acc.effectiveCurrency;
+                                  final base = widget.store.baseCurrency;
+                                  final meta = currencyMetaFor(cur);
+                                  final baseMeta = currencyMetaFor(base);
+                                  final rate = widget.store.rateToBase(cur);
+                                  final info = widget.store.rateInfoFor(cur);
+                                  final dtStr = info != null && info.updatedAt.isNotEmpty
+                                      ? ' · ${formatRateDate(info.updatedAt)}'
+                                      : '';
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          colors.accent.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: colors.accent
+                                            .withValues(alpha: 0.35),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${meta.flag} $cur • 1 $cur ≈ ${baseMeta.symbol} ${rate.toStringAsFixed(4).replaceAll('.', ',')}$dtStr',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colors.accent,
+                                      ),
+                                    ),
+                                  );
+                                }),
                               IconButton(
                                 tooltip: 'Editar Conta',
                                 icon: const Icon(Icons.settings_outlined,
@@ -735,6 +802,15 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           label: 'Saldo atual',
                           cents: widget.store.balance(acc, predicted: false),
                           colors: colors,
+                          currency: acc.effectiveCurrency,
+                          baseCurrency: widget.store.baseCurrency,
+                          convertedBaseCents: acc.effectiveCurrency !=
+                                  widget.store.baseCurrency
+                              ? widget.store.convertToBase(
+                                  widget.store.balance(acc, predicted: false),
+                                  acc.effectiveCurrency,
+                                )
+                              : null,
                         ),
                         const SizedBox(width: 14),
                         _HeaderBalancePill(
@@ -743,6 +819,15 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               : 'Saldo previsto',
                           cents: widget.store.balance(acc, predicted: true),
                           colors: colors,
+                          currency: acc.effectiveCurrency,
+                          baseCurrency: widget.store.baseCurrency,
+                          convertedBaseCents: acc.effectiveCurrency !=
+                                  widget.store.baseCurrency
+                              ? widget.store.convertToBase(
+                                  widget.store.balance(acc, predicted: true),
+                                  acc.effectiveCurrency,
+                                )
+                              : null,
                         ),
                       ],
                     ),
@@ -816,6 +901,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           final csvContent = CSVExporter.generateCSV(
                             transactions: exportTxs,
                             accounts: widget.store.db.accounts,
+                            baseCurrency: widget.store.baseCurrency,
+                            rates: widget.store.db.rates,
+                            allTransactionsForPairs: widget.store.db.txs,
                           );
                           exportCsvWithFeedback(
                             context,
@@ -978,7 +1066,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Compras: ${brl(invSummary.chargesCents)}',
+                        'Compras: ${formatCurrency(invSummary.chargesCents, acc.effectiveCurrency)}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -987,7 +1075,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       ),
                       if (invSummary.paymentsCents > 0)
                         Text(
-                          'Pago: ${brl(invSummary.paymentsCents)}',
+                          'Pago: ${formatCurrency(invSummary.paymentsCents, acc.effectiveCurrency)}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -995,7 +1083,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                         ),
                       Text(
-                        'Em Aberto: ${brl(invSummary.remainingCents)}',
+                        'Em Aberto: ${formatCurrency(invSummary.remainingCents, acc.effectiveCurrency)}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1202,15 +1290,16 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'Valor (R\$)',
-                            labelStyle: TextStyle(fontSize: 13),
+                          decoration: InputDecoration(
+                            labelText:
+                                'Valor (${currencyMetaFor(acc.effectiveCurrency).symbol})',
+                            labelStyle: const TextStyle(fontSize: 13),
                             isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 10,
                             ),
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                           ),
                           onSubmitted: (_) => _submitQuickEntry(),
                         ),
@@ -1411,7 +1500,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
-                            'Real: ${brl(monthData.openingReal)}',
+                            'Real: ${formatCurrency(monthData.openingReal, acc.effectiveCurrency)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -1422,7 +1511,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                           ),
                           Text(
-                            'Previsto: ${brl(monthData.openingPred)}',
+                            'Previsto: ${formatCurrency(monthData.openingPred, acc.effectiveCurrency)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -1778,7 +1867,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  brl(tx.amt),
+                                  formatCurrency(tx.amt, acc.effectiveCurrency),
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: isMobile ? 13 : 14,
@@ -1878,7 +1967,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 spacing: 14,
                                 children: [
                                   Text(
-                                    'Saldo Real: ${brl(group.closingReal)}',
+                                    'Saldo Real: ${formatCurrency(group.closingReal, acc.effectiveCurrency)}',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
@@ -1889,7 +1978,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     ),
                                   ),
                                   Text(
-                                    'Previsto: ${brl(group.closingPred)}',
+                                    'Previsto: ${formatCurrency(group.closingPred, acc.effectiveCurrency)}',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -1936,11 +2025,17 @@ class _HeaderBalancePill extends StatelessWidget {
   final String label;
   final int cents;
   final OpenMoneyColors colors;
+  final String currency;
+  final String? baseCurrency;
+  final int? convertedBaseCents;
 
   const _HeaderBalancePill({
     required this.label,
     required this.cents,
     required this.colors,
+    this.currency = 'BRL',
+    this.baseCurrency,
+    this.convertedBaseCents,
   });
 
   @override
@@ -1954,7 +2049,7 @@ class _HeaderBalancePill extends StatelessWidget {
           style: TextStyle(fontSize: 11, color: colors.textSecondary),
         ),
         Text(
-          brl(cents),
+          formatCurrency(cents, currency),
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -1962,6 +2057,16 @@ class _HeaderBalancePill extends StatelessWidget {
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
+        if (convertedBaseCents != null && baseCurrency != null)
+          Text(
+            '≈ ${formatCurrency(convertedBaseCents!, baseCurrency!)}',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: colors.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
       ],
     );
   }

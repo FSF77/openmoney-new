@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cash_flow_engine.dart';
+import '../../services/importers_exporters.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
@@ -195,13 +196,13 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   }
 
   Future<void> _exportCsv(List<Transaction> txs) async {
-    const header = 'Data;Conta;Favorecido;Categoria;Nota;Valor (R\$);Conciliado';
-    final rows = txs.map((t) {
-      final acc = widget.store.accById(t.acc)?.name ?? 'Conta';
-      final valor = (t.amt / 100.0).toStringAsFixed(2).replaceAll('.', ',');
-      return '${fmtDate(t.date)};"$acc";"${t.payee}";"${t.cat}";"${t.memo}";$valor;${t.rec ? "Sim" : "Não"}';
-    }).join('\r\n');
-    final csv = '\uFEFF$header\r\n$rows';
+    final csv = CSVExporter.generateCSV(
+      transactions: txs,
+      accounts: widget.store.db.accounts,
+      baseCurrency: widget.store.baseCurrency,
+      rates: widget.store.db.rates,
+      allTransactionsForPairs: widget.store.db.txs,
+    );
 
     if (!kIsWeb) {
       final rawCat = widget.categoryPath ??
@@ -302,7 +303,12 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
         .toString();
     final monthYM = widget.targetMonth ?? widget.store.month;
     final txs = _buildFilteredTransactions();
-    final totalCents = txs.fold<int>(0, (s, t) => s + t.amt);
+    final targetCur = widget.store.targetCurrencyForAccounts(
+        widget.accountFilterIds);
+    final totalCents = txs.fold<int>(
+      0,
+      (s, t) => s + widget.store.convertTxToCurrency(t, targetCur),
+    );
     final hasCat = widget.categoryPath != null && widget.categoryPath!.isNotEmpty;
     final displayTitle = widget.titleOverride ??
         (hasCat
@@ -611,7 +617,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                     ),
                   ),
                   Text(
-                    'Total: ${brl(totalCents)}',
+                    'Total: ${formatCurrency(totalCents, targetCur)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: isMobile ? 12 : 13.5,
@@ -635,8 +641,10 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, i) {
                           final t = txs[i];
-                          final accName =
-                              widget.store.accById(t.acc)?.name ?? 'Conta';
+                          final txAcc = widget.store.accById(t.acc);
+                          final accName = txAcc?.name ?? 'Conta';
+                          final txCur = txAcc?.effectiveCurrency ??
+                              widget.store.baseCurrency;
                           return ListTile(
                             dense: true,
                             contentPadding:
@@ -661,7 +669,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                               style: const TextStyle(fontSize: 11.5),
                             ),
                             trailing: Text(
-                              brl(t.amt),
+                              formatCurrency(t.amt, txCur),
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 13,

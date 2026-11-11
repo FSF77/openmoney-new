@@ -12,6 +12,8 @@ class BudgetView extends StatelessWidget {
     String categoryPath,
     int currentBudgetCents,
   ) {
+    final baseCur = store.baseCurrency;
+    final meta = currencyMetaFor(baseCur);
     final ctrl = TextEditingController(
       text: currentBudgetCents > 0 ? formatInputCents(currentBudgetCents) : '',
     );
@@ -23,10 +25,10 @@ class BudgetView extends StatelessWidget {
           controller: ctrl,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Limite Mensal (R\$) — Deixe 0 para remover',
-            prefixText: 'R\$ ',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: 'Limite Mensal (${meta.symbol}) — Deixe 0 para remover',
+            prefixText: '${meta.symbol} ',
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
@@ -60,9 +62,11 @@ class BudgetView extends StatelessWidget {
           store.isCategoryIncludedInReports(t.cat);
     }).toList();
 
+    final baseCur = store.baseCurrency;
     final spentByPath = <String, int>{};
     for (final t in monthTxs) {
-      spentByPath[t.cat] = (spentByPath[t.cat] ?? 0) + t.amt.abs();
+      final convAbs = store.convertTxToCurrency(t, baseCur).abs();
+      spentByPath[t.cat] = (spentByPath[t.cat] ?? 0) + convAbs;
     }
 
     final topExpenseCats = store
@@ -184,7 +188,7 @@ class BudgetView extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          'Realizado: ${brl(effectiveTopSpent)} / Limite: ${brl(effectiveTopBudget)}',
+                          'Realizado: ${formatCurrency(effectiveTopSpent, baseCur)} / Limite: ${formatCurrency(effectiveTopBudget, baseCur)}',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 12.5,
@@ -257,7 +261,7 @@ class BudgetView extends StatelessWidget {
                                     ],
                                   ),
                                   Text(
-                                    '${brl(ss)} / ${sb > 0 ? brl(sb) : "Definir limite"}',
+                                    '${formatCurrency(ss, baseCur)} / ${sb > 0 ? formatCurrency(sb, baseCur) : "Definir limite"}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -312,7 +316,7 @@ class BudgetView extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                 ),
                 Text(
-                  'Realizado: ${brl(totalSpent)} • Limite: ${brl(totalPlanned)}',
+                  'Realizado: ${formatCurrency(totalSpent, baseCur)} • Limite: ${formatCurrency(totalPlanned, baseCur)}',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 13.5,

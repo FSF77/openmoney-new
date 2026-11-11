@@ -22,12 +22,20 @@ class _InstallmentsViewState extends State<InstallmentsView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
     final items = store.installmentItems(accountIds: _selectedAccountIds);
-    final total = items.fold<int>(0, (s, i) => s + i.tx.amt.abs());
+    final targetCur = store.targetCurrencyForAccounts(
+        _selectedAccountIds.isEmpty ? null : _selectedAccountIds);
+    final total = items.fold<int>(
+        0,
+        (s, i) =>
+            s + store.convertTxToCurrency(i.tx, targetCur).abs());
     final purchases = items
         .map((i) => '${i.tx.acc}|${i.tx.payee}|${i.tx.pt}')
         .toSet()
         .length;
     final next = items.isEmpty ? null : items.first;
+    final nextCur = next == null
+        ? targetCur
+        : (store.accById(next.tx.acc)?.effectiveCurrency ?? store.baseCurrency);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
@@ -103,7 +111,7 @@ class _InstallmentsViewState extends State<InstallmentsView> {
               width: w,
               child: KpiMetricCard(
                 label: 'Total em Aberto',
-                value: brl(total),
+                value: formatCurrency(total, targetCur),
                 valueColor: colors.expense,
                 icon: Icons.call_made,
               ),
@@ -132,7 +140,7 @@ class _InstallmentsViewState extends State<InstallmentsView> {
                 label: 'Próxima Parcela',
                 value: next == null
                     ? '—'
-                    : '${fmtDate(next.effectiveDueDate)} • ${brl(next.tx.amt.abs())}',
+                    : '${fmtDate(next.effectiveDueDate)} • ${formatCurrency(next.tx.amt.abs(), nextCur)}',
                 valueColor: colors.warning,
                 icon: Icons.event,
               ),
@@ -190,7 +198,11 @@ class _InstallmentsViewState extends State<InstallmentsView> {
                 ),
               ),
               Text(
-                brl(item.tx.amt),
+                formatCurrency(
+                  item.tx.amt,
+                  store.accById(item.tx.acc)?.effectiveCurrency ??
+                      store.baseCurrency,
+                ),
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,

@@ -543,7 +543,14 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                                                     ),
                                                   ),
                                                   Text(
-                                                    'R\$ ${(item.amountCents / 100.0).toStringAsFixed(2).replaceAll('.', ',')}',
+                                                    formatCurrency(
+                                                      item.amountCents,
+                                                      widget.store
+                                                              .accById(item
+                                                                  .accountId)
+                                                              ?.effectiveCurrency ??
+                                                          'BRL',
+                                                    ),
                                                     style: TextStyle(
                                                       fontWeight: FontWeight.bold,
                                                       fontSize: 13,
@@ -688,10 +695,11 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _amountCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Valor (R\$)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.attach_money),
+                  decoration: InputDecoration(
+                    labelText:
+                        'Valor (${currencyMetaFor(widget.store.accById(current.accountId)?.effectiveCurrency ?? "BRL").symbol})',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.attach_money),
                   ),
                   keyboardType: TextInputType.number,
                   onChanged: (v) {

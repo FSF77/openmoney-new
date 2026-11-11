@@ -172,7 +172,7 @@ class _DueBillsViewState extends State<DueBillsView> {
                   width: cardW,
                   child: KpiMetricCard(
                     label: 'Contas a Pagar (${summary.payCount})',
-                    value: brl(summary.payTotal),
+                    value: formatCurrency(summary.payTotal, summary.currency),
                     valueColor: colors.expense,
                     icon: Icons.call_made,
                   ),
@@ -181,7 +181,7 @@ class _DueBillsViewState extends State<DueBillsView> {
                   width: cardW,
                   child: KpiMetricCard(
                     label: 'Contas a Receber (${summary.receiveCount})',
-                    value: brl(summary.receiveTotal),
+                    value: formatCurrency(summary.receiveTotal, summary.currency),
                     valueColor: colors.income,
                     icon: Icons.call_received,
                   ),
@@ -190,7 +190,7 @@ class _DueBillsViewState extends State<DueBillsView> {
                   width: cardW,
                   child: KpiMetricCard(
                     label: 'Saldo Líquido Projetado',
-                    value: brl(summary.netTotal),
+                    value: formatCurrency(summary.netTotal, summary.currency),
                     valueColor:
                         summary.netTotal >= 0 ? colors.income : colors.expense,
                     icon: Icons.balance,
@@ -286,7 +286,11 @@ class _DueBillsViewState extends State<DueBillsView> {
                   ),
                 ),
                 Text(
-                  brl(item.tx.amt),
+                  formatCurrency(
+                    item.tx.amt,
+                    store.accById(item.tx.acc)?.effectiveCurrency ??
+                        store.baseCurrency,
+                  ),
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 14,

@@ -257,6 +257,8 @@ class _CashFlowViewState extends State<CashFlowView> {
       kindFilter: _kindFilter,
       dateMode: _dateMode,
       searchQuery: _searchQuery,
+      baseCurrency: widget.store.baseCurrency,
+      rates: widget.store.db.rates,
     );
 
     final isMobile = MediaQuery.sizeOf(context).width < 720;
@@ -300,7 +302,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                                 ),
                               ),
                               Text(
-                                matrix.periodSubtitle,
+                                '${matrix.periodSubtitle} • Moeda: ${currencyMetaFor(matrix.currency).flag} ${matrix.currency}',
                                 style: TextStyle(
                                   fontSize: isMobile ? 11 : 12,
                                   color: colors.textSecondary,
@@ -615,7 +617,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     runSpacing: 4,
                     children: [
                       Text(
-                        'Rec: ${brl(matrix.incomeSection.grandTotal)}',
+                        'Rec: ${formatCurrency(matrix.incomeSection.grandTotal, matrix.currency)}',
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
@@ -623,7 +625,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ),
                       Text(
-                        'Desp: ${brl(matrix.expenseSection.grandTotal)}',
+                        'Desp: ${formatCurrency(matrix.expenseSection.grandTotal, matrix.currency)}',
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
@@ -631,7 +633,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                         ),
                       ),
                       Text(
-                        'Líq: ${brl(matrix.netGrandTotal)}',
+                        'Líq: ${formatCurrency(matrix.netGrandTotal, matrix.currency)}',
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
@@ -893,6 +895,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         colWidth: colWidth,
         totalWidth: totalWidth,
         highlight: false,
+        matrixCurrency: matrix.currency,
       ),
     );
 
@@ -932,6 +935,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         colWidth: colWidth,
         totalWidth: totalWidth,
         highlight: true,
+        matrixCurrency: matrix.currency,
       ),
     );
 
@@ -944,6 +948,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         colWidth: colWidth,
         totalWidth: totalWidth,
         highlight: false,
+        matrixCurrency: matrix.currency,
       ),
     );
 
@@ -958,6 +963,7 @@ class _CashFlowViewState extends State<CashFlowView> {
         highlight: true,
         isEndingBalance: true,
         columns: matrix.columns,
+        matrixCurrency: matrix.currency,
       ),
     );
 
@@ -1091,7 +1097,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                       padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: _clickable(
                         Text(
-                          fmtCashFlowCents(group.periodTotals[i]),
+                          fmtCashFlowCents(group.periodTotals[i],
+                              currency: matrix.currency),
                           textAlign: TextAlign.right,
                           maxLines: 1,
                           softWrap: false,
@@ -1113,7 +1120,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: _clickable(
                       Text(
-                        fmtCashFlowCents(group.grandTotal, showZero: true),
+                        fmtCashFlowCents(group.grandTotal,
+                            showZero: true, currency: matrix.currency),
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         softWrap: false,
@@ -1167,7 +1175,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: _clickable(
                           Text(
-                            fmtCashFlowCents(sub.periodAmounts[i]),
+                            fmtCashFlowCents(sub.periodAmounts[i],
+                                currency: matrix.currency),
                             textAlign: TextAlign.right,
                             maxLines: 1,
                             softWrap: false,
@@ -1194,7 +1203,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                       padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: _clickable(
                         Text(
-                          fmtCashFlowCents(sub.total, showZero: true),
+                          fmtCashFlowCents(sub.total,
+                              showZero: true, currency: matrix.currency),
                           textAlign: TextAlign.right,
                           maxLines: 1,
                           softWrap: false,
@@ -1252,7 +1262,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: _clickable(
                       Text(
-                        fmtCashFlowCents(section.periodTotals[i], showZero: true),
+                        fmtCashFlowCents(section.periodTotals[i],
+                            showZero: true, currency: matrix.currency),
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         softWrap: false,
@@ -1274,7 +1285,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: _clickable(
                     Text(
-                      fmtCashFlowCents(section.grandTotal, showZero: true),
+                      fmtCashFlowCents(section.grandTotal,
+                          showZero: true, currency: matrix.currency),
                       textAlign: TextAlign.right,
                       maxLines: 1,
                       softWrap: false,
@@ -1309,6 +1321,7 @@ class _CashFlowViewState extends State<CashFlowView> {
     required bool highlight,
     bool isEndingBalance = false,
     List<CashFlowColumnDef>? columns,
+    String matrixCurrency = 'BRL',
   }) {
     final bgColor = highlight
         ? colors.accent.withValues(alpha: 0.12)
@@ -1356,7 +1369,8 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ],
                     Flexible(
                       child: Text(
-                        fmtCashFlowCents(amt, showZero: true),
+                        fmtCashFlowCents(amt,
+                            showZero: true, currency: matrixCurrency),
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         softWrap: false,
@@ -1385,6 +1399,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                       col.id,
                       col.title,
                       amt,
+                      matrixCurrency: matrixCurrency,
                     ),
                     borderRadius: BorderRadius.circular(4),
                     child: content,
@@ -1402,7 +1417,8 @@ class _CashFlowViewState extends State<CashFlowView> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Text(
-                  fmtCashFlowCents(grandTotal, showZero: true),
+                  fmtCashFlowCents(grandTotal,
+                      showZero: true, currency: matrixCurrency),
                   textAlign: TextAlign.right,
                   maxLines: 1,
                   softWrap: false,
@@ -1426,8 +1442,9 @@ class _CashFlowViewState extends State<CashFlowView> {
     BuildContext context,
     String periodId,
     String periodTitle,
-    int balanceCents,
-  ) async {
+    int balanceCents, {
+    String matrixCurrency = 'BRL',
+  }) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
     final initialText = widget.store.commentForPeriod(periodId) ?? '';
@@ -1471,7 +1488,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Período: $periodTitle • Saldo: ${fmtCashFlowCents(balanceCents, showZero: true)}',
+                      'Período: $periodTitle • Saldo: ${fmtCashFlowCents(balanceCents, showZero: true, currency: matrixCurrency)}',
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.textSecondary,
@@ -1573,10 +1590,16 @@ class _CashFlowViewState extends State<CashFlowView> {
     final net = matrix.netGrandTotal;
     final isPositive = net >= 0;
     final netColor = isPositive ? colors.income : colors.expense;
+    final cur = matrix.currency;
+    final baseCur = widget.store.baseCurrency;
+    final isForeign = cur != baseCur;
 
     final incomeCard = _buildKpiCard(
       title: 'TOTAL RECEITAS',
-      amount: brl(totalIncome),
+      amount: formatCurrency(totalIncome, cur),
+      subtitle: isForeign
+          ? '≈ ${formatCurrency(widget.store.convertToBase(totalIncome, cur), baseCur)}'
+          : null,
       color: colors.income,
       icon: Icons.north_east,
       colors: colors,
@@ -1584,7 +1607,10 @@ class _CashFlowViewState extends State<CashFlowView> {
 
     final expenseCard = _buildKpiCard(
       title: 'TOTAL DESPESAS',
-      amount: brl(totalExpense),
+      amount: formatCurrency(totalExpense, cur),
+      subtitle: isForeign
+          ? '≈ ${formatCurrency(widget.store.convertToBase(totalExpense, cur), baseCur)}'
+          : null,
       color: colors.expense,
       icon: Icons.south_east,
       colors: colors,
@@ -1592,7 +1618,10 @@ class _CashFlowViewState extends State<CashFlowView> {
 
     final netCard = _buildKpiCard(
       title: 'RESULTADO LÍQUIDO',
-      amount: brl(net),
+      amount: formatCurrency(net, cur),
+      subtitle: isForeign
+          ? '≈ ${formatCurrency(widget.store.convertToBase(net, cur), baseCur)}'
+          : null,
       color: netColor,
       icon: isPositive ? Icons.check_circle_rounded : Icons.error_rounded,
       colors: colors,
@@ -1642,6 +1671,7 @@ class _CashFlowViewState extends State<CashFlowView> {
   Widget _buildKpiCard({
     required String title,
     required String amount,
+    String? subtitle,
     required Color color,
     required IconData icon,
     required OpenMoneyColors colors,
@@ -1694,7 +1724,7 @@ class _CashFlowViewState extends State<CashFlowView> {
                         color: colors.textSecondary,
                       ),
                     ),
-                    if (trailingBadge != null) trailingBadge,
+                    ?trailingBadge,
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1709,6 +1739,18 @@ class _CashFlowViewState extends State<CashFlowView> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textSecondary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
               ],
             ),
           ),

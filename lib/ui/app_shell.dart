@@ -841,7 +841,16 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Tooltip(
-                    message: '${a.name}\n${a.type} • Saldo: ${brl(bal)}',
+                    message: () {
+                      final cur = a.effectiveCurrency;
+                      final baseCur = widget.store.baseCurrency;
+                      final mainStr = formatCurrency(bal, cur);
+                      if (cur != baseCur) {
+                        final conv = widget.store.convertToBase(bal, cur);
+                        return '${a.name}\n${a.type} ($cur) • Saldo: $mainStr (≈ ${formatCurrency(conv, baseCur)})';
+                      }
+                      return '${a.name}\n${a.type} • Saldo: $mainStr';
+                    }(),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: () =>
@@ -2344,14 +2353,19 @@ class _SidebarAccountTile extends StatelessWidget {
                     const SizedBox(height: 1.5),
                     Text(
                       () {
+                        final accCur = account.effectiveCurrency;
+                        final isForeign = accCur != store.baseCurrency;
+                        final curPrefix = isForeign
+                            ? '${currencyMetaFor(accCur).flag} $accCur • '
+                            : '';
                         final typeStr = account.isInactive
                             ? '${account.type} • Inativa'
                             : account.type;
                         if (account.business != null &&
                             account.business!.isNotEmpty) {
-                          return '$typeStr • ${account.business}';
+                          return '$curPrefix$typeStr • ${account.business}';
                         }
-                        return typeStr;
+                        return '$curPrefix$typeStr';
                       }(),
                       style: TextStyle(
                         fontSize: 9,
@@ -2369,7 +2383,12 @@ class _SidebarAccountTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    brl(balanceCents, showSymbol: false),
+                    formatCurrency(
+                      balanceCents,
+                      account.effectiveCurrency,
+                      showSymbol:
+                          account.effectiveCurrency != store.baseCurrency,
+                    ),
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
@@ -2377,10 +2396,22 @@ class _SidebarAccountTile extends StatelessWidget {
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                  if (account.effectiveCurrency != store.baseCurrency) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      '≈ ${formatCurrency(store.convertToBase(balanceCents, account.effectiveCurrency), store.baseCurrency)}',
+                      style: TextStyle(
+                        fontSize: 9.0,
+                        fontWeight: FontWeight.w500,
+                        color: colors.textMuted,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                   if (predCents != balanceCents && predCents != 0) ...[
                     const SizedBox(height: 1),
                     Text(
-                      'Prev: ${brl(predCents, showSymbol: false)}',
+                      'Prev: ${formatCurrency(predCents, account.effectiveCurrency, showSymbol: account.effectiveCurrency != store.baseCurrency)}',
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w500,

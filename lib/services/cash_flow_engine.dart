@@ -125,6 +125,7 @@ class CashFlowMatrix {
   final int priorBalanceGrandTotal;
   final List<int> endingBalancePeriodTotals;
   final int endingBalanceGrandTotal;
+  final String currency;
 
   const CashFlowMatrix({
     required this.periodKind,
@@ -142,15 +143,17 @@ class CashFlowMatrix {
     required this.priorBalanceGrandTotal,
     required this.endingBalancePeriodTotals,
     required this.endingBalanceGrandTotal,
+    this.currency = 'BRL',
   });
 }
 
-String fmtCashFlowCents(int cents, {bool showZero = false}) {
+String fmtCashFlowCents(int cents, {bool showZero = false, String currency = 'BRL'}) {
   if (cents == 0 && !showZero) return '';
   final isNeg = cents < 0;
   final absCents = cents.abs();
   final intPart = absCents ~/ 100;
-  final decPart = (absCents % 100).toString().padLeft(2, '0');
+  final remCents = absCents % 100;
+  final meta = currencyMetaFor(currency);
 
   final intStr = intPart.toString();
   final buffer = StringBuffer();
@@ -160,7 +163,13 @@ String fmtCashFlowCents(int cents, {bool showZero = false}) {
     }
     buffer.write(intStr[i]);
   }
-  final formatted = '${buffer.toString()},$decPart';
+  final String formatted;
+  if (meta.decimals == 0 && remCents == 0) {
+    formatted = buffer.toString();
+  } else {
+    final decPart = remCents.toString().padLeft(2, '0');
+    formatted = '${buffer.toString()},$decPart';
+  }
   return isNeg ? '-$formatted' : formatted;
 }
 
@@ -429,6 +438,8 @@ class CashFlowEngine {
     CashFlowKindFilter kindFilter = CashFlowKindFilter.all,
     CashFlowDateMode dateMode = CashFlowDateMode.transactionDate,
     String searchQuery = '',
+    String baseCurrency = 'BRL',
+    Map<String, CurrencyRateInfo> rates = const {},
   }) {
     final currentISO = todayISO();
     final currentYM = currentISO.substring(0, 7);
@@ -584,6 +595,43 @@ class CashFlowEngine {
     final isSpecificAccounts =
         activeAccountFilter != null && activeAccountFilter.isNotEmpty;
 
+    final accMap = {for (final a in accounts) a.id: a};
+    String targetCurrency = baseCurrency.trim().isNotEmpty
+        ? baseCurrency.trim().toUpperCase()
+        : 'BRL';
+    if (isSpecificAccounts) {
+      final filteredCurrencies = accounts
+          .where((a) => activeAccountFilter.contains(a.id))
+          .map((a) => a.effectiveCurrency)
+          .toSet();
+      if (filteredCurrencies.length == 1) {
+        targetCurrency = filteredCurrencies.first;
+      }
+    }
+
+    int convertTxAmount(Transaction tx, int rawCents) {
+      final fromCur = accMap[tx.acc]?.effectiveCurrency ?? 'BRL';
+      if (fromCur == targetCurrency) return rawCents;
+      if (tx.rate != null && tx.rate! > 0) {
+        final toBrl = targetCurrency == 'BRL'
+            ? 1.0
+            : exchangeRateBetween(
+                fromCurrency: targetCurrency,
+                toCurrency: 'BRL',
+                rates: rates,
+              );
+        if (toBrl > 0) {
+          return (rawCents * (tx.rate! / toBrl)).round();
+        }
+      }
+      return convertCents(
+        rawCents,
+        fromCurrency: fromCur,
+        toCurrency: targetCurrency,
+        rates: rates,
+      );
+    }
+
     final filteredTxs = filterTransactions(
       transactions,
       activeAccountFilter: activeAccountFilter,
@@ -610,7 +658,7 @@ class CashFlowEngine {
       if (colIdx < 0) continue;
 
       final isIncome = tx.amt > 0;
-      final absCents = tx.amt.abs();
+      final absCents = convertTxAmount(tx, tx.amt.abs());
       final parsed = parseCat(tx);
       final subKey = parsed.sub ?? '___DIRECT___';
 
@@ -758,12 +806,24 @@ class CashFlowEngine {
     if (isSpecificAccounts) {
       for (final a in accounts) {
         if (activeAccountFilter.contains(a.id)) {
-          initialOpening += (a.type == kCardType ? 0 : a.opening);
+          final op = a.type == kCardType ? 0 : a.opening;
+          initialOpening += convertCents(
+            op,
+            fromCurrency: a.effectiveCurrency,
+            toCurrency: targetCurrency,
+            rates: rates,
+          );
         }
       }
     } else {
       for (final a in accounts) {
-        initialOpening += (a.type == kCardType ? 0 : a.opening);
+        final op = a.type == kCardType ? 0 : a.opening;
+        initialOpening += convertCents(
+          op,
+          fromCurrency: a.effectiveCurrency,
+          toCurrency: targetCurrency,
+          rates: rates,
+        );
       }
     }
 
@@ -809,13 +869,14 @@ class CashFlowEngine {
       }
 
       final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
+      final convAmt = convertTxAmount(tx, tx.amt);
       if (effDate.compareTo(firstColStart) < 0) {
-        if (numCols > 0) priorDeltas[0] += tx.amt;
+        if (numCols > 0) priorDeltas[0] += convAmt;
       } else {
         for (int c = 1; c < numCols; c++) {
           if (effDate.compareTo(colStartDates[c]) < 0 &&
               effDate.compareTo(colStartDates[c - 1]) >= 0) {
-            priorDeltas[c] += tx.amt;
+            priorDeltas[c] += convAmt;
             break;
           }
         }
@@ -853,6 +914,7 @@ class CashFlowEngine {
       priorBalanceGrandTotal: priorGrandTotal,
       endingBalancePeriodTotals: endingBalances,
       endingBalanceGrandTotal: endingGrandTotal,
+      currency: targetCurrency,
     );
   }
 
@@ -862,7 +924,7 @@ class CashFlowEngine {
     lines.add('');
     lines.add(matrix.periodSubtitle);
     lines.add(
-      'Filtros: Status: ${matrix.statusFilter.label};Tipo: ${matrix.kindFilter.label};Regime: ${matrix.dateMode.label}',
+      'Filtros: Status: ${matrix.statusFilter.label};Tipo: ${matrix.kindFilter.label};Regime: ${matrix.dateMode.label};Moeda: ${matrix.currency}',
     );
     lines.add('');
     lines.add('');
@@ -870,7 +932,7 @@ class CashFlowEngine {
     final headerCells = <String>[
       'Subcategoria',
       ...matrix.columns.map((c) => c.title),
-      'Total',
+      'Total (${matrix.currency})',
     ];
     lines.add(headerCells.join(';'));
     lines.add('');
@@ -882,6 +944,9 @@ class CashFlowEngine {
       return str;
     }
 
+    String fmtAmt(int amt, {bool showZero = false}) =>
+        fmtCashFlowCents(amt, showZero: showZero, currency: matrix.currency);
+
     void writeSection(CashFlowSection sec) {
       lines.add(escape(sec.title));
       for (final group in sec.groups) {
@@ -890,22 +955,22 @@ class CashFlowEngine {
           for (final sub in group.subcategories) {
             final rowCells = <String>[
               escape(sub.name),
-              ...sub.periodAmounts.map((amt) => fmtCashFlowCents(amt)),
-              fmtCashFlowCents(sub.total, showZero: true),
+              ...sub.periodAmounts.map((amt) => fmtAmt(amt)),
+              fmtAmt(sub.total, showZero: true),
             ];
             lines.add(rowCells.join(';'));
           }
           final totalRowCells = <String>[
             escape('Total ${group.name}'),
-            ...group.periodTotals.map((amt) => fmtCashFlowCents(amt)),
-            fmtCashFlowCents(group.grandTotal, showZero: true),
+            ...group.periodTotals.map((amt) => fmtAmt(amt)),
+            fmtAmt(group.grandTotal, showZero: true),
           ];
           lines.add(totalRowCells.join(';'));
         } else {
           final rowCells = <String>[
             escape(group.name),
-            ...group.periodTotals.map((amt) => fmtCashFlowCents(amt)),
-            fmtCashFlowCents(group.grandTotal, showZero: true),
+            ...group.periodTotals.map((amt) => fmtAmt(amt)),
+            fmtAmt(group.grandTotal, showZero: true),
           ];
           lines.add(rowCells.join(';'));
         }
@@ -913,8 +978,8 @@ class CashFlowEngine {
 
       final secTotalCells = <String>[
         escape('Total ${sec.title}'),
-        ...sec.periodTotals.map((amt) => fmtCashFlowCents(amt)),
-        fmtCashFlowCents(sec.grandTotal, showZero: true),
+        ...sec.periodTotals.map((amt) => fmtAmt(amt)),
+        fmtAmt(sec.grandTotal, showZero: true),
       ];
       lines.add(secTotalCells.join(';'));
       lines.add('');
@@ -926,22 +991,22 @@ class CashFlowEngine {
     lines.add([
       escape('Rendimento menos Despesas'),
       ...matrix.netPeriodTotals
-          .map((amt) => fmtCashFlowCents(amt, showZero: true)),
-      fmtCashFlowCents(matrix.netGrandTotal, showZero: true),
+          .map((amt) => fmtAmt(amt, showZero: true)),
+      fmtAmt(matrix.netGrandTotal, showZero: true),
     ].join(';'));
 
     lines.add([
       escape('Saldo Anterior Acumulado'),
       ...matrix.priorBalancePeriodTotals
-          .map((amt) => fmtCashFlowCents(amt, showZero: true)),
-      fmtCashFlowCents(matrix.priorBalanceGrandTotal, showZero: true),
+          .map((amt) => fmtAmt(amt, showZero: true)),
+      fmtAmt(matrix.priorBalanceGrandTotal, showZero: true),
     ].join(';'));
 
     lines.add([
       escape('Saldo Final Acumulado'),
       ...matrix.endingBalancePeriodTotals
-          .map((amt) => fmtCashFlowCents(amt, showZero: true)),
-      fmtCashFlowCents(matrix.endingBalanceGrandTotal, showZero: true),
+          .map((amt) => fmtAmt(amt, showZero: true)),
+      fmtAmt(matrix.endingBalanceGrandTotal, showZero: true),
     ].join(';'));
 
     return '\uFEFF${lines.join('\r\n')}';
