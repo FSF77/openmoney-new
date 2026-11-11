@@ -126,6 +126,9 @@ class CashFlowMatrix {
   final List<int> endingBalancePeriodTotals;
   final int endingBalanceGrandTotal;
   final String currency;
+  final int? totalIncomeInBase;
+  final int? totalExpenseInBase;
+  final int? netGrandTotalInBase;
 
   const CashFlowMatrix({
     required this.periodKind,
@@ -144,6 +147,9 @@ class CashFlowMatrix {
     required this.endingBalancePeriodTotals,
     required this.endingBalanceGrandTotal,
     this.currency = 'BRL',
+    this.totalIncomeInBase,
+    this.totalExpenseInBase,
+    this.netGrandTotalInBase,
   });
 }
 
@@ -609,14 +615,15 @@ class CashFlowEngine {
       }
     }
 
-    int convertTxAmount(Transaction tx, int rawCents) {
+    int convertTxAmount(Transaction tx, int rawCents, {String? toCurrency}) {
+      final dest = toCurrency ?? targetCurrency;
       final fromCur = accMap[tx.acc]?.effectiveCurrency ?? 'BRL';
-      if (fromCur == targetCurrency) return rawCents;
+      if (fromCur == dest) return rawCents;
       if (tx.rate != null && tx.rate! > 0) {
-        final toBrl = targetCurrency == 'BRL'
+        final toBrl = dest == 'BRL'
             ? 1.0
             : exchangeRateBetween(
-                fromCurrency: targetCurrency,
+                fromCurrency: dest,
                 toCurrency: 'BRL',
                 rates: rates,
               );
@@ -627,7 +634,7 @@ class CashFlowEngine {
       return convertCents(
         rawCents,
         fromCurrency: fromCur,
-        toCurrency: targetCurrency,
+        toCurrency: dest,
         rates: rates,
       );
     }
@@ -644,6 +651,9 @@ class CashFlowEngine {
 
     final incMap = <String, Map<String, List<int>>>{};
     final expMap = <String, Map<String, List<int>>>{};
+    final baseIncMap = <String, Map<String, int>>{};
+    final baseExpMap = <String, Map<String, int>>{};
+    final needSeparateBase = targetCurrency != baseCurrency;
 
     for (final tx in filteredTxs) {
       if (tx.amt == 0) continue;
@@ -658,7 +668,8 @@ class CashFlowEngine {
       if (colIdx < 0) continue;
 
       final isIncome = tx.amt > 0;
-      final absCents = convertTxAmount(tx, tx.amt.abs());
+      final rawAbs = tx.amt.abs();
+      final absCents = convertTxAmount(tx, rawAbs);
       final parsed = parseCat(tx);
       final subKey = parsed.sub ?? '___DIRECT___';
 
@@ -667,6 +678,13 @@ class CashFlowEngine {
       final subEntry =
           topEntry.putIfAbsent(subKey, () => List<int>.filled(numCols, 0));
       subEntry[colIdx] += absCents;
+
+      if (needSeparateBase) {
+        final baseAbs = convertTxAmount(tx, rawAbs, toCurrency: baseCurrency);
+        final targetBaseMap = isIncome ? baseIncMap : baseExpMap;
+        final topBase = targetBaseMap.putIfAbsent(parsed.top, () => {});
+        topBase[subKey] = (topBase[subKey] ?? 0) + baseAbs;
+      }
     }
 
     CashFlowSection buildSection(
@@ -898,6 +916,35 @@ class CashFlowEngine {
     final priorGrandTotal = priorBalances.isNotEmpty ? priorBalances.first : 0;
     final endingGrandTotal = priorGrandTotal + netGrand;
 
+    int sumInBaseForSection(
+      Map<String, Map<String, int>> baseMap,
+      CashFlowSection built,
+    ) {
+      int total = 0;
+      for (final g in built.groups) {
+        final subMap = baseMap[g.name];
+        if (subMap == null) continue;
+        if (!g.hasSubcategories) {
+          total += subMap['___DIRECT___'] ?? 0;
+        } else {
+          for (final sr in g.subcategories) {
+            final key = sr.name == '${g.name} - Não-atribuído'
+                ? '___DIRECT___'
+                : sr.name;
+            total += subMap[key] ?? 0;
+          }
+        }
+      }
+      return total;
+    }
+
+    final incBaseGrand = needSeparateBase
+        ? sumInBaseForSection(baseIncMap, incomeSection)
+        : incomeSection.grandTotal;
+    final expBaseGrand = needSeparateBase
+        ? sumInBaseForSection(baseExpMap, expenseSection)
+        : expenseSection.grandTotal;
+
     return CashFlowMatrix(
       periodKind: periodKind,
       year: year,
@@ -915,6 +962,9 @@ class CashFlowEngine {
       endingBalancePeriodTotals: endingBalances,
       endingBalanceGrandTotal: endingGrandTotal,
       currency: targetCurrency,
+      totalIncomeInBase: incBaseGrand,
+      totalExpenseInBase: expBaseGrand,
+      netGrandTotalInBase: incBaseGrand - expBaseGrand,
     );
   }
 

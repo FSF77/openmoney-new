@@ -259,7 +259,7 @@ class _ReportsViewState extends State<ReportsView> {
                     label: isAnnual ? 'Receitas do Ano' : 'Receitas do Mês',
                     value: formatCurrency(data.totalIncome, cur),
                     subtitle: isForeign
-                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.totalIncome, cur), baseCur)}'
+                        ? '≈ ${formatCurrency(data.totalIncomeInBase ?? widget.store.convertToBase(data.totalIncome, cur), baseCur)}'
                         : null,
                     valueColor: colors.income,
                     icon: Icons.trending_up,
@@ -271,7 +271,7 @@ class _ReportsViewState extends State<ReportsView> {
                     label: isAnnual ? 'Despesas do Ano' : 'Despesas do Mês',
                     value: formatCurrency(data.totalExpense, cur),
                     subtitle: isForeign
-                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.totalExpense, cur), baseCur)}'
+                        ? '≈ ${formatCurrency(data.totalExpenseInBase ?? widget.store.convertToBase(data.totalExpense, cur), baseCur)}'
                         : null,
                     valueColor: colors.expense,
                     icon: Icons.trending_down,
@@ -283,7 +283,7 @@ class _ReportsViewState extends State<ReportsView> {
                     label: isAnnual ? 'Saldo do Ano' : 'Resultado Líquido',
                     value: formatCurrency(data.netTotal, cur),
                     subtitle: isForeign
-                        ? '≈ ${formatCurrency(widget.store.convertToBase(data.netTotal, cur), baseCur)}'
+                        ? '≈ ${formatCurrency(data.netTotalInBase ?? widget.store.convertToBase(data.netTotal, cur), baseCur)}'
                         : null,
                     valueColor:
                         data.netTotal >= 0 ? colors.income : colors.expense,

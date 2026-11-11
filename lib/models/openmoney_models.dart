@@ -1185,6 +1185,9 @@ class MonthlyReportData {
   final int netTotal;
   final int savingsRate;
   final String currency;
+  final int? totalIncomeInBase;
+  final int? totalExpenseInBase;
+  final int? netTotalInBase;
 
   bool get isAnnual => monthYM.length == 4;
   String get periodTitle => isAnnual ? 'Ano $monthYM' : fmtMonth(monthYM);
@@ -1198,6 +1201,9 @@ class MonthlyReportData {
     required this.netTotal,
     required this.savingsRate,
     this.currency = 'BRL',
+    this.totalIncomeInBase,
+    this.totalExpenseInBase,
+    this.netTotalInBase,
   });
 }
 

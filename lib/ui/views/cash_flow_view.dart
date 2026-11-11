@@ -1598,7 +1598,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       title: 'TOTAL RECEITAS',
       amount: formatCurrency(totalIncome, cur),
       subtitle: isForeign
-          ? '≈ ${formatCurrency(widget.store.convertToBase(totalIncome, cur), baseCur)}'
+          ? '≈ ${formatCurrency(matrix.totalIncomeInBase ?? widget.store.convertToBase(totalIncome, cur), baseCur)}'
           : null,
       color: colors.income,
       icon: Icons.north_east,
@@ -1609,7 +1609,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       title: 'TOTAL DESPESAS',
       amount: formatCurrency(totalExpense, cur),
       subtitle: isForeign
-          ? '≈ ${formatCurrency(widget.store.convertToBase(totalExpense, cur), baseCur)}'
+          ? '≈ ${formatCurrency(matrix.totalExpenseInBase ?? widget.store.convertToBase(totalExpense, cur), baseCur)}'
           : null,
       color: colors.expense,
       icon: Icons.south_east,
@@ -1620,7 +1620,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       title: 'RESULTADO LÍQUIDO',
       amount: formatCurrency(net, cur),
       subtitle: isForeign
-          ? '≈ ${formatCurrency(widget.store.convertToBase(net, cur), baseCur)}'
+          ? '≈ ${formatCurrency(matrix.netGrandTotalInBase ?? widget.store.convertToBase(net, cur), baseCur)}'
           : null,
       color: netColor,
       icon: isPositive ? Icons.check_circle_rounded : Icons.error_rounded,

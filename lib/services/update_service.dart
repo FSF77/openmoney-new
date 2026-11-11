@@ -7,8 +7,8 @@ import '../ui/theme/liquid_glass.dart';
 import 'platform_io.dart';
 
 class OpenMoneyVersion {
-  static const String fallbackVersion = '2.4.2';
-  static const int fallbackBuild = 113;
+  static const String fallbackVersion = '2.4.3';
+  static const int fallbackBuild = 114;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
       'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';

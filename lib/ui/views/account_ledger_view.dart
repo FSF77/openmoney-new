@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
+import '../../services/currency_rate_service.dart';
 import '../../services/importers_exporters.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
@@ -32,7 +33,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   final TextEditingController _payeeCtrl = TextEditingController();
   final TextEditingController _memoCtrl = TextEditingController();
   final TextEditingController _amtCtrl = TextEditingController();
+  final TextEditingController _quickRateCtrl = TextEditingController();
   final TextEditingController _searchCtrl = TextEditingController();
+  bool _quickRateEditedManually = false;
+  String _quickRateSourceLabel = '';
   bool _isExpense = true;
   String _catSelection = '';
   String _mode = 'single'; // 'single', 'installment', 'recurring'
@@ -49,6 +53,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     super.initState();
     _checkCreditCardOpenInvoice();
     _syncDefaultCategory();
+    _syncQuickRateForDate();
   }
 
   @override
@@ -56,8 +61,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.account.id != widget.account.id) {
       _customIk = null;
+      _quickRateEditedManually = false;
       _checkCreditCardOpenInvoice();
       _syncDefaultCategory();
+      _syncQuickRateForDate();
     }
   }
 
@@ -93,8 +100,73 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _quickRateCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  double? _parseQuickRate(String raw) {
+    final trimmed = raw.trim().replaceAll(' ', '');
+    if (trimmed.isEmpty) return null;
+    final normalized = trimmed.contains(',')
+        ? trimmed.replaceAll('.', '').replaceAll(',', '.')
+        : trimmed;
+    final v = double.tryParse(normalized);
+    if (v == null || v.isNaN || v <= 0) return null;
+    return v;
+  }
+
+  void _applyQuickRateDisplay(double rateToBrl, String sourceLabel) {
+    final baseCur = widget.store.baseCurrency;
+    final baseBrl = baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
+    final displayRate = baseBrl > 0 ? (rateToBrl / baseBrl) : rateToBrl;
+    _quickRateCtrl.text = displayRate.toStringAsFixed(4).replaceAll('.', ',');
+    _quickRateSourceLabel = sourceLabel;
+  }
+
+  void _syncQuickRateForDate() {
+    final accCur = widget.account.effectiveCurrency;
+    final baseCur = widget.store.baseCurrency;
+    if (accCur == 'BRL' || accCur == baseCur) {
+      _quickRateCtrl.clear();
+      _quickRateSourceLabel = '';
+      return;
+    }
+    final iso = _resolveIsoDate();
+    if (iso.compareTo(todayISO()) < 0) {
+      final xfer = widget.store.lastTransferRateForAccount(
+        widget.account.id,
+        onOrBeforeDate: iso,
+      );
+      if (xfer != null && xfer.rateToBrl > 0) {
+        _applyQuickRateDisplay(xfer.rateToBrl, 'Transf. ${fmtDate(xfer.date)}');
+        return;
+      }
+      final cached = CurrencyRateService.cachedHistoricalRate(accCur, iso);
+      if (cached != null && cached.rateToBrl > 0) {
+        _applyQuickRateDisplay(
+          cached.rateToBrl,
+          '${cached.source} ${fmtDate(cached.quoteDateIso)}',
+        );
+        return;
+      }
+      _applyQuickRateDisplay(widget.store.rateToBrl(accCur), 'Cotação atual');
+      CurrencyRateService.fetchHistoricalRateToBrl(accCur, iso).then((res) {
+        if (!mounted || res == null || res.rateToBrl <= 0) return;
+        if (_quickRateEditedManually) return;
+        if (_resolveIsoDate() != iso || widget.account.effectiveCurrency != accCur) {
+          return;
+        }
+        setState(() {
+          _applyQuickRateDisplay(
+            res.rateToBrl,
+            '${res.source} ${fmtDate(res.quoteDateIso)}',
+          );
+        });
+      });
+    } else {
+      _applyQuickRateDisplay(widget.store.rateToBrl(accCur), 'Cotação atual');
+    }
   }
 
   String _resolveIsoDate() {
@@ -119,6 +191,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     if (picked != null) {
       setState(() {
         _dateCtrl.text = fmtDate(isoFromDate(picked));
+        if (!_quickRateEditedManually) {
+          _syncQuickRateForDate();
+        }
       });
     }
   }
@@ -160,6 +235,17 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     final signedAmt = _isExpense ? -absCents : absCents;
     final isoDate = _resolveIsoDate();
 
+    double? txRate;
+    final accCur = widget.account.effectiveCurrency;
+    final baseCur = widget.store.baseCurrency;
+    if (accCur != 'BRL' && accCur != baseCur) {
+      final parsedRate = _parseQuickRate(_quickRateCtrl.text);
+      if (parsedRate != null && parsedRate > 0) {
+        final baseBrl = baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
+        txRate = baseCur == 'BRL' ? parsedRate : (parsedRate * baseBrl);
+      }
+    }
+
     widget.store.addTransaction(
       accId: widget.account.id,
       date: isoDate,
@@ -171,12 +257,15 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       freq: _freq,
       installments: _installments,
       customIk: _customIk,
+      txRate: txRate,
     );
 
     setState(() {
       _payeeCtrl.clear();
       _memoCtrl.clear();
       _amtCtrl.clear();
+      _quickRateEditedManually = false;
+      _syncQuickRateForDate();
       _mode = 'single';
       _suggestions = [];
       _mobileShowQuickEntry = false;
@@ -1214,6 +1303,15 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         child: TextField(
                           controller: _dateCtrl,
                           style: const TextStyle(fontSize: 13),
+                          onChanged: (val) {
+                            final trimmed = val.trim();
+                            if (RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(trimmed) ||
+                                RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) {
+                              if (!_quickRateEditedManually) {
+                                setState(() => _syncQuickRateForDate());
+                              }
+                            }
+                          },
                           decoration: InputDecoration(
                             labelText: 'Data',
                             labelStyle: const TextStyle(fontSize: 13),
@@ -1304,6 +1402,40 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           onSubmitted: (_) => _submitQuickEntry(),
                         ),
                       ),
+                      if (acc.effectiveCurrency != 'BRL' &&
+                          acc.effectiveCurrency != widget.store.baseCurrency)
+                        Tooltip(
+                          message: _quickRateSourceLabel.isEmpty
+                              ? 'Cotação para conversão na moeda padrão'
+                              : 'Origem da sugestão: $_quickRateSourceLabel',
+                          child: SizedBox(
+                            width: 106,
+                            child: TextField(
+                              controller: _quickRateCtrl,
+                              style: const TextStyle(fontSize: 13),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              onChanged: (_) {
+                                _quickRateEditedManually = true;
+                                _quickRateSourceLabel = 'Manual';
+                              },
+                              onSubmitted: (_) => _submitQuickEntry(),
+                              decoration: InputDecoration(
+                                labelText:
+                                    'Taxa (${currencyMetaFor(widget.store.baseCurrency).symbol})',
+                                labelStyle: const TextStyle(fontSize: 12),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 10,
+                                ),
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ),
                       SizedBox(
                         width: 118,
                         child: DropdownButtonFormField<String>(

@@ -28,6 +28,20 @@ enum NavModule {
   settings,
 }
 
+class TransferRateSuggestion {
+  final double rateToBrl;
+  final String date;
+  final String peerAccountName;
+  final bool isInbound;
+
+  const TransferRateSuggestion({
+    required this.rateToBrl,
+    required this.date,
+    required this.peerAccountName,
+    required this.isInbound,
+  });
+}
+
 enum ScopeChoice {
   only,
   forward,
@@ -170,6 +184,199 @@ class MoneyStore extends ChangeNotifier {
 
   CurrencyRateInfo? rateInfoFor(String currencyCode) {
     return db.rates[currencyCode.trim().toUpperCase()];
+  }
+
+  /// Retorna a taxa efetiva `accCurrency -> BRL` da transferência entre moedas mais
+  /// recente nessa conta (priorizando transferências até [onOrBeforeDate] e de entrada/compra).
+  TransferRateSuggestion? lastTransferRateForAccount(
+    String accId, {
+    String? onOrBeforeDate,
+  }) {
+    final acc = accById(accId);
+    if (acc == null) return null;
+    final accCur = acc.effectiveCurrency;
+    if (accCur == 'BRL') return null;
+
+    final cutoff = (onOrBeforeDate ?? '').trim();
+    final xferPeers = <String, List<Transaction>>{};
+    final candidates = <Transaction>[];
+
+    for (final t in db.txs) {
+      final x = t.xfer;
+      if (x != null && x.isNotEmpty) {
+        xferPeers.putIfAbsent(x, () => []).add(t);
+      }
+      if (t.acc == accId && x != null && x.isNotEmpty && t.peer != null) {
+        if (cutoff.isNotEmpty && t.date.compareTo(cutoff) > 0) continue;
+        final peerAcc = accById(t.peer!);
+        if (peerAcc != null && peerAcc.effectiveCurrency != accCur) {
+          candidates.add(t);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) {
+      final dc = b.date.compareTo(a.date);
+      if (dc != 0) return dc;
+      final aIn = a.amt > 0 ? 1 : 0;
+      final bIn = b.amt > 0 ? 1 : 0;
+      if (aIn != bIn) return bIn.compareTo(aIn);
+      return (b.createdAt ?? 0).compareTo(a.createdAt ?? 0);
+    });
+
+    for (final t in candidates) {
+      final peerAcc = accById(t.peer ?? '');
+      if (peerAcc == null) continue;
+      final peerCur = peerAcc.effectiveCurrency;
+      double? resolved;
+      if (t.rate != null && t.rate! > 0) {
+        resolved = t.rate!;
+      } else if (t.amt != 0) {
+        final peers = xferPeers[t.xfer!] ?? const [];
+        Transaction? peerTx;
+        for (final p in peers) {
+          if (p.id != t.id) {
+            peerTx = p;
+            break;
+          }
+        }
+        if (peerTx != null && peerTx.amt != 0) {
+          if (peerCur == 'BRL') {
+            resolved = peerTx.amt.abs() / t.amt.abs();
+          } else if (peerTx.rate != null && peerTx.rate! > 0) {
+            resolved = (peerTx.amt.abs() * peerTx.rate!) / t.amt.abs();
+          }
+        }
+      }
+      if (resolved != null && resolved > 0 && !resolved.isNaN) {
+        return TransferRateSuggestion(
+          rateToBrl: resolved,
+          date: t.date,
+          peerAccountName: peerAcc.name,
+          isInbound: t.amt > 0,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// Resolve a melhor taxa padrão `currency -> BRL` de forma síncrona:
+  /// para datas passadas prioriza a última transferência cambial até a data,
+  /// depois o cache histórico (BCB/AwesomeAPI), e por fim a cotação vigente.
+  double resolveDefaultRateToBrl(String accId, String dateIso) {
+    final cur = accById(accId)?.effectiveCurrency ?? 'BRL';
+    if (cur == 'BRL') return 1.0;
+    final trimmedDate = dateIso.trim();
+    if (trimmedDate.isNotEmpty && trimmedDate.compareTo(todayISO()) < 0) {
+      final xfer = lastTransferRateForAccount(accId, onOrBeforeDate: trimmedDate);
+      if (xfer != null && xfer.rateToBrl > 0) {
+        return xfer.rateToBrl;
+      }
+      final cached = CurrencyRateService.cachedHistoricalRate(cur, trimmedDate);
+      if (cached != null && cached.rateToBrl > 0) {
+        return cached.rateToBrl;
+      }
+    }
+    return rateToBrl(cur);
+  }
+
+  bool _isPastForeignNonTransfer(Transaction t, String today) {
+    if (t.xfer != null || t.peer != null) return false;
+    if (t.date.compareTo(today) >= 0) return false;
+    final cur = accById(t.acc)?.effectiveCurrency ?? 'BRL';
+    return cur != 'BRL' && cur != baseCurrency;
+  }
+
+  int countPastForeignTransactionsForRateSync() {
+    final today = todayISO();
+    int count = 0;
+    for (final t in db.txs) {
+      if (_isPastForeignNonTransfer(t, today)) count++;
+    }
+    return count;
+  }
+
+  /// Recalcula a taxa histórica (`rate`) dos lançamentos passados não-transferência
+  /// em contas de moeda estrangeira usando: 1) última transferência cambial <= data,
+  /// ou 2) consulta histórica BCB PTAX / AwesomeAPI pela data do lançamento.
+  Future<({int totalScanned, int updated, int fromTransfer, int fromApi})>
+      recalculatePastTransactionRates() async {
+    final today = todayISO();
+    final targets =
+        db.txs.where((t) => _isPastForeignNonTransfer(t, today)).toList();
+    if (targets.isEmpty) {
+      return (totalScanned: 0, updated: 0, fromTransfer: 0, fromApi: 0);
+    }
+
+    // Pré-busca em paralelo (dedupado por moeda + data) somente para os que não possuem transferência prévia
+    final apiKeysNeeded = <({String cur, String date})>{};
+    final transferRatesByTxId = <String, double>{};
+    for (final t in targets) {
+      final xfer = lastTransferRateForAccount(t.acc, onOrBeforeDate: t.date);
+      if (xfer != null && xfer.rateToBrl > 0) {
+        transferRatesByTxId[t.id] = xfer.rateToBrl;
+      } else {
+        final cur = accById(t.acc)?.effectiveCurrency ?? 'BRL';
+        apiKeysNeeded.add((cur: cur, date: t.date));
+      }
+    }
+
+    final apiRatesByKey = <String, double>{};
+    for (final item in apiKeysNeeded) {
+      final res = await CurrencyRateService.fetchHistoricalRateToBrl(
+        item.cur,
+        item.date,
+      );
+      if (res != null && res.rateToBrl > 0) {
+        apiRatesByKey['${item.cur}|${item.date}'] = res.rateToBrl;
+      }
+    }
+
+    int updated = 0;
+    int fromTransfer = 0;
+    int fromApi = 0;
+    for (final t in targets) {
+      final txTransferRate = transferRatesByTxId[t.id];
+      if (txTransferRate != null) {
+        if ((t.rate == null) || (t.rate! - txTransferRate).abs() > 0.00005) {
+          t.rate = txTransferRate;
+          updated++;
+        }
+        fromTransfer++;
+      } else {
+        final cur = accById(t.acc)?.effectiveCurrency ?? 'BRL';
+        final apiRate = apiRatesByKey['$cur|${t.date}'];
+        if (apiRate != null && apiRate > 0) {
+          if ((t.rate == null) || (t.rate! - apiRate).abs() > 0.00005) {
+            t.rate = apiRate;
+            updated++;
+          }
+          fromApi++;
+        }
+      }
+    }
+
+    if (updated > 0) {
+      markIndexesDirty();
+      save(immediate: true);
+      AuditLogManager.instance.logAsync(
+        dbPath: dbPath,
+        action: AuditAction.update,
+        entity: AuditEntity.transaction,
+        summary:
+            'Cotações históricas recalculadas em $updated lançamento(s) ($fromTransfer via transferência, $fromApi via BCB/API)',
+      );
+      notifyListeners();
+    }
+
+    return (
+      totalScanned: targets.length,
+      updated: updated,
+      fromTransfer: fromTransfer,
+      fromApi: fromApi,
+    );
   }
 
   void updateCurrencyRate(String currencyCode, double rateToBrlValue,
@@ -3316,7 +3523,7 @@ class MoneyStore extends ChangeNotifier {
     if (txRate != null && txRate > 0) {
       resolvedCurRate = txRate;
     } else if (curCurrency != 'BRL') {
-      resolvedCurRate = rateToBrl(curCurrency);
+      resolvedCurRate = resolveDefaultRateToBrl(accId, date);
     }
 
     if (mode == 'recurring') {
@@ -4609,6 +4816,23 @@ class MoneyStore extends ChangeNotifier {
         ? ((net / inc.grandTotal) * 100.0).round()
         : 0;
 
+    int incInBase = 0;
+    int expInBase = 0;
+    if (reportCurrency == baseCurrency) {
+      incInBase = inc.grandTotal;
+      expInBase = exp.grandTotal;
+    } else {
+      for (final t in txs) {
+        final fromCur = accById(t.acc)?.effectiveCurrency ?? 'BRL';
+        final conv = convertToBase(t.amt.abs(), fromCur, txRateToBrl: t.rate);
+        if (t.amt > 0) {
+          incInBase += conv;
+        } else if (t.amt < 0) {
+          expInBase += conv;
+        }
+      }
+    }
+
     return MonthlyReportData(
       monthYM: monthYM,
       incomeGroups: inc.groups,
@@ -4618,6 +4842,9 @@ class MoneyStore extends ChangeNotifier {
       netTotal: net,
       savingsRate: rate,
       currency: reportCurrency,
+      totalIncomeInBase: incInBase,
+      totalExpenseInBase: expInBase,
+      netTotalInBase: incInBase - expInBase,
     );
   }
 

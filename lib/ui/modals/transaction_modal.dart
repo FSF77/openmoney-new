@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/currency_rate_service.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
@@ -212,10 +213,14 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
         toCurrency: destCur,
         rates: widget.store.db.rates,
       );
-    } else if (t.rate != null && t.rate! > 0) {
-      initRate = t.rate!;
     } else {
-      initRate = widget.store.rateToBrl(curCur);
+      final baseCur = widget.store.baseCurrency;
+      final baseBrl =
+          baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
+      final rawBrlRate = (t.rate != null && t.rate! > 0)
+          ? t.rate!
+          : widget.store.rateToBrl(curCur);
+      initRate = baseBrl > 0 ? (rawBrlRate / baseBrl) : rawBrlRate;
     }
     _rateCtrl = TextEditingController(
       text: initRate.toStringAsFixed(4).replaceAll('.', ','),
@@ -313,7 +318,13 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
         }
       }
     } else if (curCur != 'BRL') {
-      txRate = widget.tx.rate ?? widget.store.rateToBrl(curCur);
+      txRate = _resolveNonXferRateToBrl(
+        widget.store,
+        _rateCtrl,
+        _accId,
+        curCur,
+        isoDate,
+      );
     }
 
     widget.store.updateTransaction(
@@ -421,7 +432,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                           onPressed: _pickDate,
                         ),
                       ),
-                      onChanged: (_) {
+                      onChanged: (v) {
                         if (isCard && targetAcc != null && targetAcc.card != null) {
                           setState(() {
                             _customIk = invKeyFor(
@@ -429,6 +440,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                               _resolveIsoDate(),
                             );
                           });
+                        } else if (_isCompleteDateInput(v)) {
+                          setState(() {});
                         }
                       },
                     ),
@@ -563,6 +576,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                         store: widget.store,
                         sourceCurrency: srcCur,
                         destCurrency: destCur,
+                        dateIso: _resolveIsoDate(),
                         rateCtrl: _rateCtrl,
                         destAmtCtrl: _peerAmtCtrl,
                         colors: colors,
@@ -592,6 +606,19 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                           }
                           _isUpdatingCross = false;
                         },
+                      )
+                    else if (!isXfer &&
+                        srcCur != 'BRL' &&
+                        srcCur != widget.store.baseCurrency)
+                      _ForeignTransactionRateBox(
+                        store: widget.store,
+                        accountId: _accId,
+                        sourceCurrency: srcCur,
+                        dateIso: _resolveIsoDate(),
+                        amtCtrl: _amtCtrl,
+                        rateCtrl: _rateCtrl,
+                        colors: colors,
+                        preserveInitialValue: true,
                       ),
                   ],
                 );
@@ -896,11 +923,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     }
 
     _peerAmtCtrl = TextEditingController();
+    final baseCur = widget.store.baseCurrency;
+    final baseBrl = baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
+    final initBrlRate =
+        widget.store.resolveDefaultRateToBrl(_accId, effectiveDateIso);
+    final initDisplayRate = baseBrl > 0 ? (initBrlRate / baseBrl) : initBrlRate;
     _rateCtrl = TextEditingController(
-      text: widget.store
-          .rateToBrl(curAcc?.effectiveCurrency ?? 'BRL')
-          .toStringAsFixed(4)
-          .replaceAll('.', ','),
+      text: initDisplayRate.toStringAsFixed(4).replaceAll('.', ','),
     );
   }
 
@@ -1055,7 +1084,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         }
       }
     } else if (curCur != 'BRL') {
-      txRate = widget.store.rateToBrl(curCur);
+      txRate = _resolveNonXferRateToBrl(
+        widget.store,
+        _rateCtrl,
+        _accId,
+        curCur,
+        dateStr,
+      );
     }
 
     widget.store.addTransaction(
@@ -1217,7 +1252,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           onPressed: () => _pickDate(_dateCtrl),
                         ),
                       ),
-                      onChanged: (_) {
+                      onChanged: (v) {
                         if (isCard &&
                             targetAcc != null &&
                             targetAcc.card != null) {
@@ -1227,6 +1262,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                               _resolveIsoDate(_dateCtrl.text),
                             );
                           });
+                        } else if (_isCompleteDateInput(v)) {
+                          setState(() {});
                         }
                       },
                     ),
@@ -1448,6 +1485,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                         store: widget.store,
                         sourceCurrency: srcCur,
                         destCurrency: destCur,
+                        dateIso: _resolveIsoDate(_dateCtrl.text),
                         rateCtrl: _rateCtrl,
                         destAmtCtrl: _peerAmtCtrl,
                         colors: colors,
@@ -1477,6 +1515,19 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           }
                           _isUpdatingCross = false;
                         },
+                      )
+                    else if (!isXfer &&
+                        srcCur != 'BRL' &&
+                        srcCur != widget.store.baseCurrency)
+                      _ForeignTransactionRateBox(
+                        store: widget.store,
+                        accountId: _accId,
+                        sourceCurrency: srcCur,
+                        dateIso: _resolveIsoDate(_dateCtrl.text),
+                        amtCtrl: _amtCtrl,
+                        rateCtrl: _rateCtrl,
+                        colors: colors,
+                        preserveInitialValue: false,
                       ),
                   ],
                 );
@@ -1803,7 +1854,14 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
             toCurrency: destCur,
             rates: widget.store.db.rates,
           )
-        : widget.store.rateToBrl(curCur);
+        : (() {
+            final baseCur = widget.store.baseCurrency;
+            final baseBrl =
+                baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
+            final rawBrl =
+                widget.store.resolveDefaultRateToBrl(_accId, todayStr);
+            return baseBrl > 0 ? (rawBrl / baseBrl) : rawBrl;
+          })();
     _rateCtrl = TextEditingController(
       text: r.toStringAsFixed(4).replaceAll('.', ','),
     );
@@ -1909,7 +1967,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         }
       }
     } else if (curCur != 'BRL') {
-      txRate = widget.store.rateToBrl(curCur);
+      txRate = _resolveNonXferRateToBrl(
+        widget.store,
+        _rateCtrl,
+        _accId,
+        curCur,
+        dateStr,
+      );
     }
 
     widget.store.addTransaction(
@@ -2034,7 +2098,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                           onPressed: () => _pickDate(_dateCtrl),
                         ),
                       ),
-                      onChanged: (_) {
+                      onChanged: (v) {
                         if (isCard && targetAcc != null && targetAcc.card != null) {
                           setState(() {
                             _customIk = invKeyFor(
@@ -2042,6 +2106,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                               _resolveIsoDate(_dateCtrl.text),
                             );
                           });
+                        } else if (_isCompleteDateInput(v)) {
+                          setState(() {});
                         }
                       },
                     ),
@@ -2237,6 +2303,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                         store: widget.store,
                         sourceCurrency: srcCur,
                         destCurrency: destCur,
+                        dateIso: _resolveIsoDate(_dateCtrl.text),
                         rateCtrl: _rateCtrl,
                         destAmtCtrl: _peerAmtCtrl,
                         colors: colors,
@@ -2266,6 +2333,19 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                           }
                           _isUpdatingCross = false;
                         },
+                      )
+                    else if (!isXfer &&
+                        srcCur != 'BRL' &&
+                        srcCur != widget.store.baseCurrency)
+                      _ForeignTransactionRateBox(
+                        store: widget.store,
+                        accountId: _accId,
+                        sourceCurrency: srcCur,
+                        dateIso: _resolveIsoDate(_dateCtrl.text),
+                        amtCtrl: _amtCtrl,
+                        rateCtrl: _rateCtrl,
+                        colors: colors,
+                        preserveInitialValue: false,
                       ),
                   ],
                 );
@@ -2613,6 +2693,31 @@ Future<void> showInvoicePaymentModal(
   );
 }
 
+bool _isCompleteDateInput(String raw) {
+  final t = raw.trim();
+  return RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(t) ||
+      RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(t);
+}
+
+double? _resolveNonXferRateToBrl(
+  MoneyStore store,
+  TextEditingController rateCtrl,
+  String accId,
+  String curCur,
+  String isoDate,
+) {
+  if (curCur == 'BRL') return null;
+  if (curCur != store.baseCurrency) {
+    final parsed = _parseRateInput(rateCtrl.text);
+    if (parsed != null && parsed > 0) {
+      final baseCur = store.baseCurrency;
+      final baseBrl = baseCur == 'BRL' ? 1.0 : store.rateToBrl(baseCur);
+      return baseCur == 'BRL' ? parsed : (parsed * baseBrl);
+    }
+  }
+  return store.resolveDefaultRateToBrl(accId, isoDate);
+}
+
 double? _parseRateInput(String raw) {
   final trimmed = raw.trim().replaceAll(' ', '');
   if (trimmed.isEmpty) return null;
@@ -2624,10 +2729,11 @@ double? _parseRateInput(String raw) {
   return v;
 }
 
-class _CrossCurrencyTransferBox extends StatelessWidget {
+class _CrossCurrencyTransferBox extends StatefulWidget {
   final MoneyStore store;
   final String sourceCurrency;
   final String destCurrency;
+  final String dateIso;
   final TextEditingController rateCtrl;
   final TextEditingController destAmtCtrl;
   final OpenMoneyColors colors;
@@ -2638,6 +2744,7 @@ class _CrossCurrencyTransferBox extends StatelessWidget {
     required this.store,
     required this.sourceCurrency,
     required this.destCurrency,
+    required this.dateIso,
     required this.rateCtrl,
     required this.destAmtCtrl,
     required this.colors,
@@ -2646,40 +2753,99 @@ class _CrossCurrencyTransferBox extends StatelessWidget {
   });
 
   @override
+  State<_CrossCurrencyTransferBox> createState() =>
+      _CrossCurrencyTransferBoxState();
+}
+
+class _CrossCurrencyTransferBoxState extends State<_CrossCurrencyTransferBox> {
+  bool _isLoadingHist = false;
+
+  Future<void> _applyHistoricalTransferRate() async {
+    if (_isLoadingHist) return;
+    setState(() => _isLoadingHist = true);
+    try {
+      final srcBrl = widget.sourceCurrency == 'BRL'
+          ? 1.0
+          : (await CurrencyRateService.fetchHistoricalRateToBrl(
+                widget.sourceCurrency,
+                widget.dateIso,
+              ))
+                  ?.rateToBrl;
+      final destBrl = widget.destCurrency == 'BRL'
+          ? 1.0
+          : (await CurrencyRateService.fetchHistoricalRateToBrl(
+                widget.destCurrency,
+                widget.dateIso,
+              ))
+                  ?.rateToBrl;
+      if (!mounted) return;
+      if (srcBrl != null && srcBrl > 0 && destBrl != null && destBrl > 0) {
+        final pairRate = srcBrl / destBrl;
+        widget.rateCtrl.text = pairRate.toStringAsFixed(4).replaceAll('.', ',');
+        widget.onRateChanged();
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingHist = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final destMeta = currencyMetaFor(destCurrency);
-    final info = sourceCurrency != 'BRL'
-        ? store.rateInfoFor(sourceCurrency)
-        : store.rateInfoFor(destCurrency);
+    final destMeta = currencyMetaFor(widget.destCurrency);
+    final info = widget.sourceCurrency != 'BRL'
+        ? widget.store.rateInfoFor(widget.sourceCurrency)
+        : widget.store.rateInfoFor(widget.destCurrency);
     final dateLabel = info != null && info.updatedAt.isNotEmpty
         ? ' · Atualizado ${formatRateDate(info.updatedAt)}'
         : '';
+    final isPast = widget.dateIso.compareTo(todayISO()) < 0;
 
     return Container(
       padding: const EdgeInsets.all(10),
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: colors.accent.withValues(alpha: 0.08),
+        color: widget.colors.accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colors.accent.withValues(alpha: 0.28)),
+        border: Border.all(color: widget.colors.accent.withValues(alpha: 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.currency_exchange, size: 14, color: colors.accent),
+              Icon(Icons.currency_exchange, size: 14, color: widget.colors.accent),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Conversão Cambial ($sourceCurrency → $destCurrency)$dateLabel',
+                  'Conversão Cambial (${widget.sourceCurrency} → ${widget.destCurrency})$dateLabel',
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: colors.accent,
+                    color: widget.colors.accent,
                   ),
                 ),
               ),
+              if (isPast)
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: _isLoadingHist
+                      ? const SizedBox(
+                          width: 11,
+                          height: 11,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        )
+                      : const Icon(Icons.history, size: 13),
+                  label: Text(
+                    'BCB ${fmtDate(widget.dateIso)}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: _isLoadingHist ? null : _applyHistoricalTransferRate,
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -2687,14 +2853,15 @@ class _CrossCurrencyTransferBox extends StatelessWidget {
             children: [
               Expanded(
                 child: TextField(
-                  controller: rateCtrl,
+                  controller: widget.rateCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
                   style: const TextStyle(fontSize: 13),
-                  onChanged: (_) => onRateChanged(),
+                  onChanged: (_) => widget.onRateChanged(),
                   decoration: InputDecoration(
-                    labelText: 'Cotação (1 $sourceCurrency = ? $destCurrency)',
+                    labelText:
+                        'Cotação (1 ${widget.sourceCurrency} = ? ${widget.destCurrency})',
                     labelStyle: const TextStyle(fontSize: 12),
                     isDense: true,
                     contentPadding:
@@ -2706,12 +2873,12 @@ class _CrossCurrencyTransferBox extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
-                  controller: destAmtCtrl,
+                  controller: widget.destAmtCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
                   style: const TextStyle(fontSize: 13),
-                  onChanged: (_) => onDestAmtChanged(),
+                  onChanged: (_) => widget.onDestAmtChanged(),
                   decoration: InputDecoration(
                     labelText: 'Valor na Conta Destino (${destMeta.symbol})',
                     labelStyle: const TextStyle(fontSize: 12),
@@ -2729,7 +2896,355 @@ class _CrossCurrencyTransferBox extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             'Você pode ajustar a cotação ou diretamente o valor creditado no destino para incluir taxas/IOF.',
-            style: TextStyle(fontSize: 10.5, color: colors.textSecondary),
+            style: TextStyle(fontSize: 10.5, color: widget.colors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ForeignTransactionRateBox extends StatefulWidget {
+  final MoneyStore store;
+  final String accountId;
+  final String sourceCurrency;
+  final String dateIso;
+  final TextEditingController amtCtrl;
+  final TextEditingController rateCtrl;
+  final OpenMoneyColors colors;
+  final bool preserveInitialValue;
+
+  const _ForeignTransactionRateBox({
+    required this.store,
+    required this.accountId,
+    required this.sourceCurrency,
+    required this.dateIso,
+    required this.amtCtrl,
+    required this.rateCtrl,
+    required this.colors,
+    required this.preserveInitialValue,
+  });
+
+  @override
+  State<_ForeignTransactionRateBox> createState() =>
+      _ForeignTransactionRateBoxState();
+}
+
+class _ForeignTransactionRateBoxState
+    extends State<_ForeignTransactionRateBox> {
+  bool _editedManually = false;
+  bool _isLoadingApi = false;
+  String _sourceLabel = '';
+  HistoricalRateResult? _apiResult;
+
+  @override
+  void initState() {
+    super.initState();
+    _initRateBox();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForeignTransactionRateBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.accountId != widget.accountId ||
+        oldWidget.sourceCurrency != widget.sourceCurrency ||
+        oldWidget.dateIso != widget.dateIso) {
+      if (oldWidget.accountId != widget.accountId ||
+          oldWidget.sourceCurrency != widget.sourceCurrency) {
+        _editedManually = false;
+      }
+      _apiResult = CurrencyRateService.cachedHistoricalRate(
+        widget.sourceCurrency,
+        widget.dateIso,
+      );
+      if (!widget.preserveInitialValue && !_editedManually) {
+        _applyAutoSuggestion();
+      } else {
+        _prefetchHistoricalChipIfNeeded();
+      }
+    }
+  }
+
+  double _toDisplayRate(double rateToBrl) {
+    final baseCur = widget.store.baseCurrency;
+    if (baseCur == 'BRL') return rateToBrl;
+    final baseBrl = widget.store.rateToBrl(baseCur);
+    return baseBrl > 0 ? (rateToBrl / baseBrl) : rateToBrl;
+  }
+
+  void _setRateToBrl(double rateToBrl, String label, {bool manual = false}) {
+    final disp = _toDisplayRate(rateToBrl);
+    widget.rateCtrl.text = disp.toStringAsFixed(4).replaceAll('.', ',');
+    setState(() {
+      _sourceLabel = label;
+      if (manual) _editedManually = true;
+    });
+  }
+
+  void _initRateBox() {
+    final isPast = widget.dateIso.compareTo(todayISO()) < 0;
+    _apiResult = isPast
+        ? CurrencyRateService.cachedHistoricalRate(
+            widget.sourceCurrency,
+            widget.dateIso,
+          )
+        : null;
+    if (widget.preserveInitialValue) {
+      _sourceLabel = 'Salva no lançamento';
+      _prefetchHistoricalChipIfNeeded();
+    } else {
+      _applyAutoSuggestion();
+    }
+  }
+
+  void _applyAutoSuggestion() {
+    final isPast = widget.dateIso.compareTo(todayISO()) < 0;
+    if (isPast) {
+      final xfer = widget.store.lastTransferRateForAccount(
+        widget.accountId,
+        onOrBeforeDate: widget.dateIso,
+      );
+      if (xfer != null && xfer.rateToBrl > 0) {
+        _setRateToBrl(xfer.rateToBrl, 'Transf. ${fmtDate(xfer.date)}');
+        _prefetchHistoricalChipIfNeeded();
+        return;
+      }
+      final cached = CurrencyRateService.cachedHistoricalRate(
+        widget.sourceCurrency,
+        widget.dateIso,
+      );
+      if (cached != null && cached.rateToBrl > 0) {
+        _apiResult = cached;
+        _setRateToBrl(
+          cached.rateToBrl,
+          '${cached.source} ${fmtDate(cached.quoteDateIso)}',
+        );
+        return;
+      }
+      _setRateToBrl(
+        widget.store.rateToBrl(widget.sourceCurrency),
+        'Cotação atual',
+      );
+      _fetchHistoricalRate(applyIfUnedited: true);
+    } else {
+      _setRateToBrl(
+        widget.store.rateToBrl(widget.sourceCurrency),
+        'Cotação atual',
+      );
+    }
+  }
+
+  void _prefetchHistoricalChipIfNeeded() {
+    if (widget.dateIso.compareTo(todayISO()) >= 0) return;
+    if (_apiResult == null) {
+      _fetchHistoricalRate(applyIfUnedited: false);
+    }
+  }
+
+  Future<void> _fetchHistoricalRate({required bool applyIfUnedited}) async {
+    if (widget.dateIso.compareTo(todayISO()) >= 0) return;
+    final reqCur = widget.sourceCurrency;
+    final reqDate = widget.dateIso;
+    if (mounted) setState(() => _isLoadingApi = true);
+    try {
+      final res =
+          await CurrencyRateService.fetchHistoricalRateToBrl(reqCur, reqDate);
+      if (!mounted) return;
+      if (reqCur != widget.sourceCurrency || reqDate != widget.dateIso) return;
+      setState(() {
+        _apiResult = res;
+        _isLoadingApi = false;
+      });
+      if (res != null &&
+          res.rateToBrl > 0 &&
+          applyIfUnedited &&
+          !_editedManually) {
+        _setRateToBrl(
+          res.rateToBrl,
+          '${res.source} ${fmtDate(res.quoteDateIso)}',
+        );
+      }
+    } finally {
+      if (mounted && _isLoadingApi) {
+        setState(() => _isLoadingApi = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseCur = widget.store.baseCurrency;
+    final isPast = widget.dateIso.compareTo(todayISO()) < 0;
+    final xfer = widget.store.lastTransferRateForAccount(
+      widget.accountId,
+      onOrBeforeDate: widget.dateIso,
+    );
+    final currentBrl = widget.store.rateToBrl(widget.sourceCurrency);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: widget.colors.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: widget.colors.accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.currency_exchange, size: 14, color: widget.colors.accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Taxa de Câmbio (${widget.sourceCurrency} → $baseCur)'
+                  '${_sourceLabel.isNotEmpty ? " · $_sourceLabel" : ""}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: widget.colors.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widget.rateCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (_) {
+                    if (!_editedManually || _sourceLabel != 'Manual') {
+                      setState(() {
+                        _editedManually = true;
+                        _sourceLabel = 'Manual';
+                      });
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: '1 ${widget.sourceCurrency} em $baseCur',
+                    labelStyle: const TextStyle(fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: widget.amtCtrl,
+                builder: (context, amtVal, _) {
+                  return ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: widget.rateCtrl,
+                    builder: (context, rateVal, _) {
+                      final absCents = (parseCents(amtVal.text) ?? 0).abs();
+                      final r = _parseRateInput(rateVal.text);
+                      final conv = (absCents > 0 && r != null)
+                          ? (absCents * r).round()
+                          : 0;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.colors.surfaceGlass,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: widget.colors.borderGlass),
+                        ),
+                        child: Text(
+                          '≈ ${formatCurrency(conv, baseCur)}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: widget.colors.textPrimary,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (xfer != null)
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(Icons.swap_horiz, size: 14),
+                  label: Text(
+                    'Última transf. (${fmtDate(xfer.date)}): '
+                    '${_toDisplayRate(xfer.rateToBrl).toStringAsFixed(4).replaceAll('.', ',')}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: () => _setRateToBrl(
+                    xfer.rateToBrl,
+                    'Transf. ${fmtDate(xfer.date)}',
+                    manual: true,
+                  ),
+                ),
+              if (isPast)
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: _isLoadingApi
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        )
+                      : const Icon(Icons.history, size: 14),
+                  label: Text(
+                    _apiResult != null
+                        ? '${_apiResult!.source} (${fmtDate(_apiResult!.quoteDateIso)}): '
+                            '${_toDisplayRate(_apiResult!.rateToBrl).toStringAsFixed(4).replaceAll('.', ',')}'
+                        : (_isLoadingApi
+                            ? 'Buscando ${fmtDate(widget.dateIso)}...'
+                            : 'Buscar BCB (${fmtDate(widget.dateIso)})'),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: _isLoadingApi
+                      ? null
+                      : () async {
+                          if (_apiResult != null) {
+                            _setRateToBrl(
+                              _apiResult!.rateToBrl,
+                              '${_apiResult!.source} ${fmtDate(_apiResult!.quoteDateIso)}',
+                              manual: true,
+                            );
+                          } else {
+                            await _fetchHistoricalRate(applyIfUnedited: false);
+                            if (mounted && _apiResult != null) {
+                              _setRateToBrl(
+                                _apiResult!.rateToBrl,
+                                '${_apiResult!.source} ${fmtDate(_apiResult!.quoteDateIso)}',
+                                manual: true,
+                              );
+                            }
+                          }
+                        },
+                ),
+              ActionChip(
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.today, size: 14),
+                label: Text(
+                  'Atual: ${_toDisplayRate(currentBrl).toStringAsFixed(4).replaceAll('.', ',')}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                onPressed: () =>
+                    _setRateToBrl(currentBrl, 'Cotação atual', manual: true),
+              ),
+            ],
           ),
         ],
       ),

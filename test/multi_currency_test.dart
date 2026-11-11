@@ -367,7 +367,7 @@ void main() {
       // Transferência com taxa customizada (spread/IOF: R$ 520,00 -> US$ 100,00; rate = 5.20)
       store.addTransaction(
         accId: brlId,
-        date: '2026-11-10',
+        date: '2020-11-10',
         payee: 'Remessa Câmbio',
         catSelection: 'xfer:$usdId',
         memo: 'Com IOF',
@@ -375,10 +375,10 @@ void main() {
         peerSignedAmt: 10000,
         txRate: 5.20,
       );
-      // Gasto normal em USD com taxa histórica 5.10
+      // Gasto normal em USD com taxa histórica 5.10 (data futura para permanecer Não conciliado)
       store.addTransaction(
         accId: usdId,
-        date: '2026-11-11',
+        date: '2099-11-11',
         payee: 'Cloud Hosting',
         catSelection: 'Serviços',
         memo: 'Servidor',
@@ -423,6 +423,124 @@ void main() {
       expect(legBrl.peer, impUsdAcc.id);
       expect(legUsd.peer, impBrlAcc.id);
       expect(expUsd.rate, closeTo(5.10, 0.0001));
+    });
+
+    test('Cotações históricas (BCB/AwesomeAPI, última transferência e cards base históricos)', () {
+      // 1) Parser BCB PTAX com múltiplos boletins (prefere Fechamento do último dia útil)
+      const bcbSample = '''
+      {
+        "value": [
+          {"cotacaoCompra": 2.0210, "cotacaoVenda": 2.0220, "dataHoraCotacao": "2012-07-12 13:05:00.000", "tipoBoletim": "Fechamento"},
+          {"cotacaoCompra": 2.0310, "cotacaoVenda": 2.0320, "dataHoraCotacao": "2012-07-13 10:05:00.000", "tipoBoletim": "Abertura"},
+          {"cotacaoCompra": 2.0380, "cotacaoVenda": 2.0390, "dataHoraCotacao": "2012-07-13 13:05:00.000", "tipoBoletim": "Fechamento"}
+        ]
+      }
+      ''';
+      final bcbParsed = CurrencyRateService.parseBcbHistoricalJson(bcbSample);
+      expect(bcbParsed, isNotNull);
+      expect(bcbParsed!.rateToBrl, closeTo(2.0390, 0.0001));
+      expect(bcbParsed.quoteDateIso, '2012-07-13');
+      expect(bcbParsed.source, 'BCB PTAX');
+
+      const awesomeSample = '[{"code":"PYG","codein":"BRL","bid":"0.00075","create_date":"2023-05-12 00:00:00"}]';
+      final awParsed = CurrencyRateService.parseAwesomeHistoricalJson(awesomeSample);
+      expect(awParsed, isNotNull);
+      expect(awParsed!.rateToBrl, closeTo(0.00075, 0.00001));
+      expect(awParsed.quoteDateIso, '2023-05-12');
+
+      // 2) Store: transferência antiga (2012) sugere taxa de 2012 em lançamento rápido/default, mesmo com cotação de hoje em 5.75
+      final store = MoneyStore(autoBoot: false);
+      store.db.accounts.clear();
+      store.db.txs.clear();
+      store.db.baseCurrency = 'BRL';
+      store.db.rates['USD'] = const CurrencyRateInfo(
+        rate: 5.75,
+        updatedAt: '2026-11-11T10:00:00Z',
+      );
+
+      store.saveAccount(
+        name: 'Banco BRL',
+        type: 'Corrente',
+        openingCents: 100000,
+        closeDay: 1,
+        dueDay: 1,
+        payAccId: '',
+        currency: 'BRL',
+      );
+      final brlId = store.selectedAccountId;
+
+      store.saveAccount(
+        name: 'Conta USD',
+        type: 'Corrente',
+        openingCents: 0,
+        closeDay: 1,
+        dueDay: 1,
+        payAccId: '',
+        currency: 'USD',
+      );
+      final usdId = store.selectedAccountId;
+
+      // Compra de US$ 100 em 2012-07-10 por R$ 205,00 (taxa = 2.05)
+      store.addTransaction(
+        accId: brlId,
+        date: '2012-07-10',
+        payee: 'Compra Dólar 2012',
+        catSelection: 'xfer:$usdId',
+        memo: '',
+        signedAmt: -20500,
+        peerSignedAmt: 10000,
+      );
+      // Compra posterior em 2020-01-10 (taxa = 4.10) NÃO deve afetar lançamento de 2012-07-15
+      store.addTransaction(
+        accId: brlId,
+        date: '2020-01-10',
+        payee: 'Compra Dólar 2020',
+        catSelection: 'xfer:$usdId',
+        memo: '',
+        signedAmt: -41000,
+        peerSignedAmt: 10000,
+      );
+
+      final sugg2012 = store.lastTransferRateForAccount(usdId, onOrBeforeDate: '2012-07-15');
+      expect(sugg2012, isNotNull);
+      expect(sugg2012!.rateToBrl, closeTo(2.05, 0.0001));
+      expect(sugg2012.date, '2012-07-10');
+      expect(store.resolveDefaultRateToBrl(usdId, '2012-07-15'), closeTo(2.05, 0.0001));
+
+      // Lançamento de despesa em 2012-07-15 sem passar txRate explícito deve resolver 2.05 (não 5.75!)
+      store.addTransaction(
+        accId: usdId,
+        date: '2012-07-15',
+        payee: 'Hotel Miami',
+        catSelection: 'Viagem',
+        memo: '',
+        signedAmt: -5000,
+      );
+      final hotelTx = store.db.txs.firstWhere((t) => t.payee == 'Hotel Miami');
+      expect(hotelTx.rate, closeTo(2.05, 0.0001));
+
+      // 3) Relatório Mensal & Fluxo de Caixa filtrados em Conta USD devem expor totalExpenseInBase = R$ 102,50 (não R$ 287,50!)
+      final rep = store.buildMonthlyReport('2012-07', accountFilterIds: {usdId});
+      expect(rep.currency, 'USD');
+      expect(rep.totalExpense, 5000);
+      expect(rep.totalExpenseInBase, 10250);
+      expect(rep.netTotalInBase, -10250);
+
+      final cf = CashFlowEngine.buildMatrix(
+        transactions: store.db.txs,
+        accounts: store.db.accounts,
+        periodKind: CashFlowPeriodKind.monthly,
+        year: 2012,
+        accountFilterIds: {usdId},
+        baseCurrency: store.baseCurrency,
+        rates: store.db.rates,
+      );
+      expect(cf.currency, 'USD');
+      expect(cf.incomeSection.grandTotal, 10000);
+      expect(cf.expenseSection.grandTotal, 5000);
+      expect(cf.totalIncomeInBase, 20500);
+      expect(cf.totalExpenseInBase, 10250);
+      expect(cf.netGrandTotalInBase, 10250);
     });
   });
 }

@@ -14,6 +14,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late TextEditingController _geminiKeyCtrl;
   bool _obscureGeminiKey = true;
+  bool _isRecalculatingHistory = false;
 
   @override
   void initState() {
@@ -840,6 +841,34 @@ class _SettingsViewState extends State<SettingsView> {
                           },
                   ),
                 ),
+                if (widget.store.countPastForeignTransactionsForRateSync() >
+                    0) ...[
+                  const Divider(height: 20),
+                  _buildSettingRow(
+                    colors: colors,
+                    title: 'Cotações Históricas (Lançamentos Passados)',
+                    subtitle:
+                        'Aplica a taxa da transferência cambial da época ou consulta o histórico BCB PTAX/AwesomeAPI para receitas e despesas passadas.',
+                    trailing: FilledButton.tonalIcon(
+                      icon: _isRecalculatingHistory
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.history, size: 16),
+                      label: Text(
+                        _isRecalculatingHistory
+                            ? 'Recalculando...'
+                            : 'Corrigir Passados (${widget.store.countPastForeignTransactionsForRateSync()})',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: _isRecalculatingHistory
+                          ? null
+                          : () => _confirmAndRecalculateHistory(context),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Container(
                   decoration: BoxDecoration(
@@ -987,6 +1016,56 @@ class _SettingsViewState extends State<SettingsView> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmAndRecalculateHistory(BuildContext context) async {
+    final total = widget.store.countPastForeignTransactionsForRateSync();
+    if (total == 0) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Recalcular Cotações Históricas'),
+        content: Text(
+          'Foram encontrados $total lançamento(s) passado(s) em contas de moeda estrangeira.\n\n'
+          'O OpenMoney irá aplicar automaticamente:\n'
+          '1) A taxa da última transferência cambial na conta até a data de cada lançamento (se existir);\n'
+          '2) A cotação oficial da data no Banco Central (PTAX) ou AwesomeAPI.\n\n'
+          'Transferências entre contas nunca são alteradas. Deseja continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Recalcular'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isRecalculatingHistory = true);
+    try {
+      final res = await widget.store.recalculatePastTransactionRates();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            res.updated > 0
+                ? '${res.updated} lançamento(s) atualizado(s) (${res.fromTransfer} via transferência, ${res.fromApi} via BCB/API).'
+                : 'Nenhuma alteração necessária (${res.totalScanned} analisado(s)).',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isRecalculatingHistory = false);
+      }
+    }
   }
 
   Widget _buildSettingRow({
