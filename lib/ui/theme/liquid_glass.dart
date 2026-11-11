@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class OpenMoneyColors {
@@ -124,9 +125,11 @@ class GlassCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
 
+    // No navegador (kIsWeb), o fundo atrás dos cards já é sólido, então omitir o
+    // BackdropFilter evita passes offscreen de blur em WebGL/CPU sem perda visual.
     Widget cardBody = ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: colors.isFlatClean
+      child: (colors.isFlatClean || kIsWeb)
           ? Padding(
               padding: padding,
               child: child,

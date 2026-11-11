@@ -387,35 +387,41 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 child: Row(
                   children: [
                     if (isDesktopOrTablet && widget.store.isSidebarVisible)
-                      Container(
-                        width: widget.store.sidebarMode == 'miniRail' ? 64 : 285,
-                        decoration: BoxDecoration(
-                          color: colors.bgSecondary,
-                          border: Border(
-                            right: BorderSide(color: colors.borderGlass),
+                      RepaintBoundary(
+                        child: Container(
+                          width: widget.store.sidebarMode == 'miniRail' ? 64 : 285,
+                          decoration: BoxDecoration(
+                            color: colors.bgSecondary,
+                            border: Border(
+                              right: BorderSide(color: colors.borderGlass),
+                            ),
                           ),
+                          child: widget.store.sidebarMode == 'miniRail'
+                              ? _buildMiniRailContent(context, colors)
+                              : _buildSidebarContent(
+                                  context,
+                                  colors,
+                                  closeDrawerOnSelect: false,
+                                ),
                         ),
-                        child: widget.store.sidebarMode == 'miniRail'
-                            ? _buildMiniRailContent(context, colors)
-                            : _buildSidebarContent(
-                                context,
-                                colors,
-                                closeDrawerOnSelect: false,
-                              ),
                       ),
                     Expanded(
                       child: Column(
                         children: [
                           if (isDesktopOrTablet)
-                            _buildDesktopTopBar(context, colors),
+                            RepaintBoundary(
+                              child: _buildDesktopTopBar(context, colors),
+                            ),
                           Expanded(
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: _buildActiveMainView(
-                                    context,
-                                    isDesktopOrTablet: isDesktopOrTablet,
-                                    colors: colors,
+                                  child: RepaintBoundary(
+                                    child: _buildActiveMainView(
+                                      context,
+                                      isDesktopOrTablet: isDesktopOrTablet,
+                                      colors: colors,
+                                    ),
                                   ),
                                 ),
                                 if (isDesktopOrTablet && !widget.store.isSidebarVisible)
