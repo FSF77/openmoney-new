@@ -1519,10 +1519,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   selected: widget.store.activeModule == NavModule.settings,
                   onTap: () => selectModule(NavModule.settings),
                 ),
-                // 3º Gestão de Contas Bancárias
+                // 3º Incluir Nova Conta
                 _SidebarNavTile(
                   icon: Icons.account_balance_outlined,
-                  label: 'Gestão de Contas Bancárias',
+                  label: 'Incluir Nova Conta',
                   selected: false,
                   onTap: () {
                     if (closeDrawerOnSelect) Navigator.of(context).pop();
