@@ -16,9 +16,9 @@ Este documento registra as diretrizes, repositórios, versionamento e fluxos de 
 
 1. **Equivalência Funcional Estrita:**
    - O aplicativo em **Swift** é a fonte da verdade para fluxos, modelos, cálculos, regras de negócio e comportamento da interface.
-   - Qualquer funcionalidade criada, ajustada ou corrigida no Swift deve ser replicada e rodar com o mesmo comportamento no Flutter/Dart.
+   - Qualquer funcionalidade criada, ajustada ou corrigida no Swift deve ser replicada e rodar com o mesmo comportamento no Flutter/Dart (e vice-versa).
    - **Toda mudança deve ser aplicada em todas as plataformas:** Flutter (macOS, Windows, Web, Mobile), Swift macOS e Swift iOS. Nunca entregar uma funcionalidade, ajuste ou correção em apenas uma delas; se alguma plataforma não puder ser feita, avisar explicitamente.
-   - **Exceção Temporária (Modo Online / Cloud Sync v2):** O ecossistema em **Flutter/Dart** suporta operação híbrida (Offline e Online com Cloud Sync v2 em tempo real via Cloudflare D1/Durable Objects). Excepcionalmente, a versão nativa em **Swift (macOS e iOS)** permanece **exclusivamente no modo offline local** (operando sobre arquivo `openmoney.json` local ou em pastas de sincronização como iCloud Drive/Dropbox) até nova diretriz. Todas as demais regras de negócio, cálculos, integridade e anti-wipe guard permanecem estritamente equivalentes.
+   - **Operação Híbrida Unificada (Modo Local ↔ Online com Cloud Sync v2):** Ambas as stacks (**Swift macOS/iOS** e **Flutter/Dart Desktop/Web/Mobile**) possuem paridade funcional integral e suportam nativamente operação híbrida completa: uso 100% offline local sobre arquivo `openmoney.json` e sincronização em tempo real (Sync v2) via Cloudflare D1/Durable Objects com resolução granular por registro, WebSocket, snapshot binário Gzip, autenticação em duas etapas, backups de segurança locais e Anti-Wipe Guard estritamente equivalentes. Não há exceções funcionais entre as versões.
 
 2. **Compatibilidade da Base de Dados (`openmoney.json`):**
    - Ambas as plataformas operam sobre a mesma base de dados.

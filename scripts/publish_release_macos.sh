@@ -272,7 +272,7 @@ chmod +x "${ROOT_DIR}/install.sh"
 # 4. Commit e Push no próprio repositório openmoney-new (dispara deploy automático no projeto openmoney-new da Cloudflare Pages)
 cp -f "${VERSION_JSON_FILE}" "${ROOT_DIR}/web-dist/version.json" 2>/dev/null || true
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add .gitignore scripts/ lib/ macos/ windows/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
+git add README.md AGENTS.md .gitignore scripts/ lib/ macos/ windows/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else
