@@ -365,6 +365,15 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
+  /// Desconecta e remove todas as contas salvas no dispositivo
+  void removeAllSavedAccounts() {
+    _savedAccounts.clear();
+    if (kIsWeb) {
+      webLocalStorageRemove(_kWebSavedAccountsKey);
+    }
+    logout();
+  }
+
   void enableWebOfflineGuestMode() {
     _webOfflineGuestMode = true;
     notifyListeners();

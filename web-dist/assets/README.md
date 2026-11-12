@@ -72,10 +72,10 @@ O OpenMoney oferece dois modos de operação. **Você escolhe** como quer guarda
 | **Sincronização** | Manual, via a pasta de sincronização que você escolher | Tempo real (Sync v2, WebSockets) entre todos os dispositivos |
 | **Telemetria** | Nenhuma | Nenhuma de uso/analytics; apenas os dados necessários para a conta e a sincronização |
 | **Backups** | ZIPs locais diários e manuais | ZIPs locais no Desktop (também no modo online) + logs de auditoria remotos |
-| **Plataformas** | Flutter (macOS, Windows, Web, Mobile) e Swift (macOS, iOS) | Flutter (macOS, Windows, Web, Mobile) |
+| **Plataformas** | Todas: Flutter (macOS, Windows, Web, Mobile) e Swift (macOS, iOS) | Todas: Flutter (macOS, Windows, Web, Mobile) e Swift (macOS, iOS) |
 
-> [!NOTE]
-> As versões nativas em **Swift (macOS e iOS)** operam, por enquanto, **exclusivamente no modo local**. O modo online está disponível nas versões Flutter.
+> [!TIP]
+> **Paridade Multi-Stack Completa:** Ambas as versões (**Flutter** e **Swift nativo para macOS/iOS**) suportam 100% das funcionalidades, permitindo alternar livremente entre o **Modo Local** e o **Modo Online com Sync v2** em tempo real.
 
 ### Princípios Fundamentais
 

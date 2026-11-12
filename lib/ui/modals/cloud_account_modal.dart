@@ -1212,7 +1212,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   color: colors.accentRed,
                 ),
                 label: Text(
-                  'Desconectar',
+                  'Desconectar Conta (Logout)',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
@@ -1266,6 +1266,31 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (savedAccounts.length > 1) ...[
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: colors.accentRed,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: _isBusy
+                              ? null
+                              : () async {
+                                  widget.store.removeAllSavedCloudAccounts();
+                                  if (mounted) setState(() {});
+                                },
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 14),
+                          label: const Text(
+                            'Desconectar Todas',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
@@ -1332,7 +1357,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: savedAccounts.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         Divider(color: colors.borderGlass, height: 1),
                     itemBuilder: (ctx, idx) {
                       final acc = savedAccounts[idx];
@@ -1407,20 +1432,37 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                                   ),
                                 ),
                               ),
-                            if (!isCurrent)
-                              IconButton(
-                                icon: Icon(
-                                  Icons.close,
-                                  size: 15,
-                                  color: colors.textSecondary,
+                            if (!isCurrent) ...[
+                              const SizedBox(width: 4),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: colors.accentRed,
+                                  side: BorderSide(
+                                    color: colors.accentRed.withValues(alpha: 0.35),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                tooltip: 'Remover atalho desta conta',
                                 onPressed: _isBusy
                                     ? null
-                                    : () => _cloud.removeSavedAccount(
+                                    : () {
+                                        widget.store.removeSavedCloudAccount(
                                           acc.userId,
-                                        ),
+                                        );
+                                        if (mounted) setState(() {});
+                                      },
+                                icon: const Icon(Icons.close, size: 12),
+                                label: const Text(
+                                  'Desconectar',
+                                  style: TextStyle(fontSize: 11),
+                                ),
                               ),
+                            ],
                           ],
                         ),
                       );
@@ -1929,6 +1971,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             ],
           ),
         ],
+        _buildLocalDatabaseSection(colors),
       ],
     );
   }
@@ -2122,13 +2165,41 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Contas Salvas neste Dispositivo (Acesso Rápido)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: colors.textPrimary,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Contas Salvas neste Dispositivo (Acesso Rápido)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    if (savedAccounts.length > 1)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: colors.accentRed,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _isBusy
+                            ? null
+                            : () async {
+                                widget.store.removeAllSavedCloudAccounts();
+                                if (mounted) setState(() {});
+                              },
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 14),
+                        label: const Text(
+                          'Desconectar Todas',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 ...savedAccounts.map(
@@ -2150,13 +2221,52 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         color: colors.textPrimary,
                       ),
                     ),
-                    trailing: OutlinedButton(
-                      onPressed:
-                          _isBusy ? null : () => _handleSwitchAccount(acc),
-                      child: const Text(
-                        'Conectar',
-                        style: TextStyle(fontSize: 11.5),
-                      ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed:
+                              _isBusy ? null : () => _handleSwitchAccount(acc),
+                          child: const Text(
+                            'Conectar',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.accentRed,
+                            side: BorderSide(
+                              color: colors.accentRed.withValues(alpha: 0.35),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: _isBusy
+                              ? null
+                              : () {
+                                  widget.store.removeSavedCloudAccount(acc.userId);
+                                  if (mounted) setState(() {});
+                                },
+                          icon: const Icon(Icons.close, size: 12),
+                          label: const Text(
+                            'Desconectar',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -2396,6 +2506,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             ),
           ),
         ],
+        _buildLocalDatabaseSection(colors),
       ],
     );
   }
@@ -2420,6 +2531,247 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: colors.borderGlass),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLocalDatabaseSection(OpenMoneyColors colors) {
+    if (kIsWeb) return const SizedBox.shrink();
+
+    final localPath = widget.store.dbPath.isEmpty
+        ? 'Base Padrão (openmoney.json)'
+        : widget.store.dbPath;
+    final isUsingLocal = widget.store.storageMode == 'local';
+    final recentFiles = widget.store.recentFiles;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.bgPrimary.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.borderGlass),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.storage_rounded,
+                size: 16,
+                color: isUsingLocal ? colors.accentBlue : colors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Base de Dados Local',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              if (isUsingLocal)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.accentBlue.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'EM USO',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: colors.accentBlue,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            localPath,
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: colors.textSecondary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (widget.store.hasConfiguredLocalDatabase)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.accentRed,
+                    side: BorderSide(
+                      color: colors.accentRed.withValues(alpha: 0.5),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    widget.store.disconnectLocalDatabase();
+                    Navigator.of(context).pop();
+                  },
+                  icon: const Icon(Icons.link_off, size: 14),
+                  label: const Text(
+                    'Desconectar Base Local',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              if (recentFiles.isNotEmpty)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.textSecondary,
+                    side: BorderSide(color: colors.borderGlass),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      widget.store.clearRecentFiles();
+                    });
+                  },
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 14),
+                  label: const Text(
+                    'Limpar Recentes',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                ),
+            ],
+          ),
+          if (recentFiles.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Divider(color: colors.borderGlass, height: 1),
+            const SizedBox(height: 8),
+            Text(
+              'Outras Bases Locais Conectadas (${recentFiles.length})',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: colors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 140),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: recentFiles.length,
+                separatorBuilder: (_, _) =>
+                    Divider(color: colors.borderGlass, height: 1),
+                itemBuilder: (ctx, idx) {
+                  final rf = recentFiles[idx];
+                  final isCur = rf.path == widget.store.dbPath;
+                  return ListTile(
+                    dense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 4),
+                    leading: Icon(
+                      isCur
+                          ? Icons.check_circle
+                          : Icons.description_outlined,
+                      size: 16,
+                      color:
+                          isCur ? colors.accentGreen : colors.textSecondary,
+                    ),
+                    title: Text(
+                      rf.displayName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            isCur ? FontWeight.w700 : FontWeight.w500,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      rf.path,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: colors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isCur)
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              widget.store.openDatabaseFromPath(rf.path);
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text(
+                              'Abrir',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        const SizedBox(width: 4),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.accentRed,
+                            side: BorderSide(
+                              color: colors.accentRed
+                                  .withValues(alpha: 0.35),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              widget.store.removeRecentFile(rf.path);
+                            });
+                          },
+                          icon: const Icon(Icons.close, size: 12),
+                          label: const Text(
+                            'Desconectar',
+                            style: TextStyle(fontSize: 10.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

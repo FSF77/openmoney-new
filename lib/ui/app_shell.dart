@@ -1522,17 +1522,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     showAccountModal(context, widget.store);
                   },
                 ),
-                if (kIsWeb)
-                  _SidebarNavTile(
-                    icon: Icons.cloud_sync_outlined,
-                    label: 'Conta Cloud & Sincronização',
-                    selected: false,
-                    badgeText: CloudSyncService.instance.isAuthenticated
-                        ? 'On'
-                        : null,
-                    badgeColor: colors.accentGreen,
-                    onTap: () => showCloudAccountModal(context, widget.store),
-                  ),
                 if (!kIsWeb)
                   _SidebarNavTile(
                     icon: Icons.archive_outlined,
@@ -1552,6 +1541,29 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   selected: false,
                   onTap: () => showCsvQifCenterModal(context, widget.store),
                 ),
+                _SidebarNavTile(
+                  icon: Icons.cloud_sync_outlined,
+                  label: 'Cloud & Sincronização',
+                  selected: false,
+                  badgeText: CloudSyncService.instance.isAuthenticated
+                      ? 'On'
+                      : null,
+                  badgeColor: colors.accentGreen,
+                  onTap: () {
+                    if (closeDrawerOnSelect) Navigator.of(context).pop();
+                    showCloudAccountModal(context, widget.store);
+                  },
+                ),
+                if (!kIsWeb && widget.store.hasConfiguredLocalDatabase)
+                  _SidebarNavTile(
+                    icon: Icons.link_off,
+                    label: 'Desconectar Base Local',
+                    selected: false,
+                    onTap: () {
+                      if (closeDrawerOnSelect) Navigator.of(context).pop();
+                      widget.store.disconnectLocalDatabase();
+                    },
+                  ),
                 _SidebarNavTile(
                   icon: Icons.cleaning_services_outlined,
                   label: 'Excluir Lançamentos',

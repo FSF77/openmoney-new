@@ -2009,6 +2009,47 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void disconnectLocalDatabases(List<String> paths) {
+    final set = paths.toSet();
+    if (set.contains(dbPath)) {
+      disconnectLocalDatabase();
+    }
+    recentFiles.removeWhere((r) => set.contains(r.path));
+    final cfg = _readConfig();
+    cfg['recentFiles'] = recentFiles.map((r) => r.toJson()).toList();
+    _writeConfig(cfg);
+    notifyListeners();
+  }
+
+  void removeSavedCloudAccount(String userId) {
+    final cloud = CloudSyncService.instance;
+    final isCurrent = cloud.userId == userId;
+    cloud.removeSavedAccount(userId);
+    saveCloudSessionToConfig();
+    if (isCurrent && storageMode == 'cloud') {
+      if (hasConfiguredLocalDatabase) {
+        switchToLocalMode();
+      } else {
+        disconnectLocalDatabase();
+      }
+    }
+    notifyListeners();
+  }
+
+  void removeAllSavedCloudAccounts() {
+    final cloud = CloudSyncService.instance;
+    cloud.removeAllSavedAccounts();
+    saveCloudSessionToConfig();
+    if (storageMode == 'cloud') {
+      if (hasConfiguredLocalDatabase) {
+        switchToLocalMode();
+      } else {
+        disconnectLocalDatabase();
+      }
+    }
+    notifyListeners();
+  }
+
   Future<void> switchToLocalMode({String? path}) async {
     cancelPendingSave();
     SyncEngine.instance.stop();
