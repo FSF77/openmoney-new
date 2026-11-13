@@ -243,10 +243,8 @@ void main() {
 
       final res3 = store.adjustPredictions('2026-10');
       expect(res3.hasExhausted, true);
-      expect(
-        store.db.txs.any((t) => isPredictionPayee(t.payee)),
-        false,
-      );
+      final predTx = store.db.txs.firstWhere((t) => isPredictionPayee(t.payee));
+      expect(predTx.amt, 0);
     });
 
     test('4. CashFlowEngine & QIF / CSV Importers', () {

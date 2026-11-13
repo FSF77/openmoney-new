@@ -24,6 +24,7 @@ import 'theme/liquid_glass.dart';
 import 'views/account_ledger_view.dart';
 import 'views/all_transactions_view.dart';
 import 'views/budget_view.dart';
+import 'views/predictions_management_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
 import 'views/dashboard_overview_view.dart';
@@ -509,6 +510,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         break;
       case NavModule.budget:
         moduleTitle = 'Limite de Gastos';
+        break;
+      case NavModule.predictions:
+        moduleTitle = 'Previsões';
         break;
       case NavModule.categories:
         moduleTitle = 'Categorias';
@@ -1006,6 +1010,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         return ReportsView(store: widget.store);
       case NavModule.budget:
         return BudgetView(store: widget.store);
+      case NavModule.predictions:
+        return PredictionsManagementView(store: widget.store);
       case NavModule.categories:
         return CategoriesView(store: widget.store);
       case NavModule.dueBills:
@@ -1450,6 +1456,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Relatório',
                   selected: widget.store.activeModule == NavModule.reports,
                   onTap: () => selectModule(NavModule.reports),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.auto_fix_high,
+                  label: 'Previsões',
+                  selected: widget.store.activeModule == NavModule.predictions,
+                  onTap: () => selectModule(NavModule.predictions),
                 ),
                 _SidebarNavTile(
                   icon: Icons.track_changes,

@@ -226,7 +226,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     });
   }
 
-  void _submitQuickEntry() {
+  Future<void> _submitQuickEntry() async {
     if (widget.account.isInactive) return;
     final payee = _payeeCtrl.text.trim();
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
@@ -246,6 +246,22 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       }
     }
 
+    final warning = widget.store.checkBudgetExceeded(
+      accId: widget.account.id,
+      date: isoDate,
+      catSelection: _catSelection,
+      signedAmt: signedAmt,
+      payee: payee,
+      mode: _mode,
+      installments: _installments,
+      txRate: txRate,
+    );
+
+    if (warning != null && mounted) {
+      final proceed = await showBudgetExceededDialog(context, warning);
+      if (!proceed) return;
+    }
+
     widget.store.addTransaction(
       accId: widget.account.id,
       date: isoDate,
@@ -260,6 +276,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       txRate: txRate,
     );
 
+    if (!mounted) return;
     setState(() {
       _payeeCtrl.clear();
       _memoCtrl.clear();

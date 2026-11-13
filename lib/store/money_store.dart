@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
+import '../models/prediction_models.dart';
 import '../services/audit_log_manager.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
@@ -25,6 +26,7 @@ enum NavModule {
   search,
   dueBills,
   installments,
+  predictions,
   settings,
 }
 
@@ -3518,6 +3520,106 @@ class MoneyStore extends ChangeNotifier {
     return null;
   }
 
+  // MARK: - Budget Verification
+
+  BudgetCheckResult? checkBudgetExceeded({
+    required String accId,
+    required String date,
+    required String catSelection,
+    required int signedAmt,
+    String? payee,
+    String mode = 'single',
+    int installments = 1,
+    double? txRate,
+  }) {
+    // Only evaluate expenses (signedAmt < 0). Ignore income, zero, transfers, and predictions.
+    if (signedAmt >= 0 ||
+        catSelection.startsWith('xfer:') ||
+        catSelection.contains('Transferência')) {
+      return null;
+    }
+
+    if (payee != null && isPredictionPayee(payee)) {
+      return null;
+    }
+
+    // Identify applicable budget category and target limit
+    int targetBudget = 0;
+    String budgetCategoryPath = '';
+    bool isTopLevelParent = false;
+
+    final directBudget = db.budgets[catSelection] ?? 0;
+    if (directBudget > 0) {
+      targetBudget = directBudget;
+      budgetCategoryPath = catSelection;
+      isTopLevelParent = !catSelection.contains(kCategorySep) && !catSelection.contains(' > ');
+    } else if (catSelection.contains(kCategorySep) || catSelection.contains(' > ')) {
+      final sep = catSelection.contains(kCategorySep) ? kCategorySep : ' > ';
+      final parent = catSelection.split(sep)[0];
+      final parentBudget = db.budgets[parent] ?? 0;
+      if (parentBudget > 0) {
+        targetBudget = parentBudget;
+        budgetCategoryPath = parent;
+        isTopLevelParent = true;
+      }
+    }
+
+    if (targetBudget <= 0) return null;
+
+    // Determine month
+    final targetMonth = date.length >= 7 ? date.substring(0, 7) : month;
+    final monthTxs = monthTransactions(targetMonth);
+    final baseCur = baseCurrency;
+
+    int currentSpentCents = 0;
+    for (final t in monthTxs) {
+      if (t.amt >= 0 ||
+          t.xfer != null ||
+          t.peer != null ||
+          t.auto == true ||
+          isPredictionPayee(t.payee) ||
+          !isCategoryIncludedInReports(t.cat)) {
+        continue;
+      }
+
+      final bool matches;
+      if (isTopLevelParent) {
+        matches = t.cat == budgetCategoryPath ||
+            t.cat.startsWith('$budgetCategoryPath$kCategorySep') ||
+            t.cat.startsWith('$budgetCategoryPath > ');
+      } else {
+        matches = t.cat == budgetCategoryPath;
+      }
+
+      if (matches) {
+        currentSpentCents += convertTxToCurrency(t, baseCur).abs();
+      }
+    }
+
+    // Calculate this transaction's expense impact for this month
+    final count = mode == 'installment' ? installments.clamp(2, 120) : 1;
+    final thisMonthSigned = count > 1 ? splitAmt(signedAmt, count)[0] : signedAmt;
+    final accCur = accById(accId)?.effectiveCurrency ?? 'BRL';
+    final effectiveRate = txRate != null && txRate > 0
+        ? txRate
+        : (accCur != 'BRL' ? resolveDefaultRateToBrl(accId, date) : null);
+    final newInBase = convertToBase(thisMonthSigned.abs(), accCur, txRateToBrl: effectiveRate).abs();
+
+    final projected = currentSpentCents + newInBase;
+    if (projected > targetBudget) {
+      return BudgetCheckResult(
+        categoryPath: budgetCategoryPath,
+        budgetCents: targetBudget,
+        currentSpentCents: currentSpentCents,
+        newAmountCents: newInBase,
+        currency: baseCur,
+        month: targetMonth,
+      );
+    }
+
+    return null;
+  }
+
   // MARK: - Transaction Actions
 
   void addTransaction({
@@ -4406,9 +4508,14 @@ class MoneyStore extends ChangeNotifier {
           }
         } else {
           final predCur = accById(pred.acc)?.effectiveCurrency ?? baseCurrency;
-          idsToDelete.add(pred.id);
+          final idx = db.txs.indexWhere((t) => t.id == pred.id);
+          if (idx != -1) {
+            final sign = pred.amt < 0 ? -1 : 1;
+            db.txs[idx].amt = sign * 0;
+            db.txs[idx].memo = memoWithBaseTag(pred.memo, base);
+          }
           exhaustedItems.add(
-            '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Excluída — Previsão esgotada! Não há mais previsão disponível (Base: ${formatCurrency(base, predCur)} atingida por ${formatCurrency(netSpent, predCur)} em gastos).',
+            '• ${pred.payee} (${fmtDate(pred.date)} • $accName • $catLabel):\n  Previsão esgotada (zerada)! Teto atingido (Base: ${formatCurrency(base, predCur)} atingida por ${formatCurrency(netSpent, predCur)} em gastos).',
           );
           detailedItems.add(
             PredictionAdjustItem(
@@ -4438,7 +4545,7 @@ class MoneyStore extends ChangeNotifier {
     final sections = <String>[];
     if (exhaustedItems.isNotEmpty) {
       sections.add(
-        '⚠️ PREVISÃO NÃO MAIS DISPONÍVEL (EXCLUÍDA):\n${exhaustedItems.join("\n\n")}',
+        '⚠️ PREVISÕES ESGOTADAS (ZERADAS):\n${exhaustedItems.join("\n\n")}',
       );
     }
     if (adjustedItems.isNotEmpty) {
@@ -5668,6 +5775,137 @@ class MoneyStore extends ChangeNotifier {
       }
     }
     markIndexesDirty();
+    save();
+  }
+
+  // MARK: - Predictions Management Helpers
+  PredictionsSummaryReport getPredictionsReport(String targetMonth) {
+    final invoiceMode = db.predMode == 'invoice';
+    final monthTxs = db.txs.where((t) => t.date.startsWith(targetMonth) && t.auto != true).toList();
+    final predTxs = monthTxs.where((t) => isPredictionPayee(t.payee)).toList();
+
+    final cardCfgs = <String, CardConfig>{};
+    for (final a in db.accounts) {
+      if (a.card != null) {
+        cardCfgs[a.id] = a.card!;
+      }
+    }
+
+    final predsByCategory = <String, List<Transaction>>{};
+    for (final pt in predTxs) {
+      predsByCategory.putIfAbsent(pt.cat, () => []).add(pt);
+    }
+
+    final groups = <PredictionCategoryGroup>[];
+    final allPredItems = <PredictionItemDetail>[];
+
+    var grandBase = 0;
+    var grandCurrent = 0;
+    var grandSpent = 0;
+    var grandDeducted = 0;
+
+    final sortedCategories = predsByCategory.keys.toList()..sort();
+
+    for (final cat in sortedCategories) {
+      final preds = predsByCategory[cat]!;
+      List<Transaction> spentTxs;
+      if (invoiceMode) {
+        spentTxs = db.txs.where((t) {
+          if (t.auto == true || t.cat != cat || isPredictionPayee(t.payee) || t.xfer != null) return false;
+          final cfg = cardCfgs[t.acc];
+          if (cfg != null) {
+            return (t.ik ?? invKeyFor(cfg, t.date)) == targetMonth;
+          } else {
+            return t.date.startsWith(targetMonth);
+          }
+        }).toList();
+      } else {
+        spentTxs = monthTxs.where((t) => t.cat == cat && !isPredictionPayee(t.payee) && t.xfer == null).toList();
+      }
+
+      var netSpentInBase = 0;
+      for (final ot in spentTxs) {
+        final convAmt = convertTxToCurrency(ot, baseCurrency);
+        if (convAmt < 0) {
+          netSpentInBase += convAmt.abs();
+        } else if (convAmt > 0) {
+          netSpentInBase -= convAmt;
+        }
+      }
+      if (netSpentInBase < 0) netSpentInBase = 0;
+
+      var catBase = 0;
+      var catCurrent = 0;
+      final itemDetails = <PredictionItemDetail>[];
+
+      for (final p in preds) {
+        final pAcc = accById(p.acc);
+        final pCur = pAcc?.effectiveCurrency ?? 'BRL';
+        final base = parseBaseFromMemo(p.memo) ?? p.amt.abs();
+        final current = p.amt.abs();
+        final deducted = (base - current) > 0 ? (base - current) : 0;
+        final isExhausted = current == 0;
+
+        catBase += base;
+        catCurrent += current;
+
+        final item = PredictionItemDetail(
+          tx: p,
+          accountName: pAcc?.name ?? 'Conta',
+          accountCurrency: pCur,
+          baseCents: base,
+          currentCents: current,
+          deductedCents: deducted,
+          isExhausted: isExhausted,
+        );
+        itemDetails.add(item);
+        allPredItems.add(item);
+      }
+
+      final catDeducted = catBase < netSpentInBase ? catBase : netSpentInBase;
+      final catRemaining = (catBase - netSpentInBase) > 0 ? (catBase - netSpentInBase) : 0;
+      final pct = catBase > 0 ? (netSpentInBase / catBase).clamp(0.0, 1.0) : 0.0;
+
+      grandBase += catBase;
+      grandCurrent += catCurrent;
+      grandSpent += netSpentInBase;
+      grandDeducted += catDeducted;
+
+      groups.add(PredictionCategoryGroup(
+        category: cat,
+        totalBaseCents: catBase,
+        totalCurrentCents: catCurrent,
+        totalSpentCents: netSpentInBase,
+        totalDeductedCents: catDeducted,
+        remainingCents: catRemaining,
+        percentSpent: pct,
+        predictions: itemDetails,
+        spentTransactions: spentTxs,
+      ));
+    }
+
+    final grandRemaining = (grandBase - grandSpent) > 0 ? (grandBase - grandSpent) : 0;
+
+    return PredictionsSummaryReport(
+      periodLabel: fmtMonth(targetMonth),
+      totalPlannedBaseCents: grandBase,
+      totalCurrentCents: grandCurrent,
+      totalSpentCents: grandSpent,
+      totalDeductedCents: grandDeducted,
+      totalRemainingCents: grandRemaining,
+      groups: groups,
+      allPredictions: allPredItems,
+    );
+  }
+
+  void restorePredictionBase(String txId) {
+    final idx = db.txs.indexWhere((t) => t.id == txId);
+    if (idx == -1) return;
+    final tx = db.txs[idx];
+    final base = parseBaseFromMemo(tx.memo);
+    if (base == null) return;
+    final sign = tx.amt < 0 ? -1 : 1;
+    tx.amt = sign * base;
     save();
   }
 

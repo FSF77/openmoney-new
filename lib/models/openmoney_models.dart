@@ -1713,3 +1713,29 @@ List<int> splitAmt(int total, int count) {
   final g = total >= 0 ? 1 : -1;
   return List<int>.generate(count, (i) => b + (i < r.abs() ? g : 0));
 }
+
+/// Resultado da verificação de teto de limite de gastos para um novo lançamento.
+class BudgetCheckResult {
+  final String categoryPath;
+  final int budgetCents;
+  final int currentSpentCents;
+  final int newAmountCents;
+  final String currency;
+  final String month;
+
+  BudgetCheckResult({
+    required this.categoryPath,
+    required this.budgetCents,
+    required this.currentSpentCents,
+    required this.newAmountCents,
+    required this.currency,
+    required this.month,
+  });
+
+  int get availableBeforeCents =>
+      (budgetCents - currentSpentCents) > 0 ? (budgetCents - currentSpentCents) : 0;
+  int get totalProjectedCents => currentSpentCents + newAmountCents;
+  int get excessCents =>
+      (totalProjectedCents - budgetCents) > 0 ? (totalProjectedCents - budgetCents) : 0;
+  String get monthLabel => fmtMonth(month);
+}

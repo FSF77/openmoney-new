@@ -139,6 +139,110 @@ Future<void> showDeleteTransactionDialog(
   );
 }
 
+/// Alerta de confirmação exibido quando um lançamento ultrapassa o limite de gastos definido para o mês da categoria.
+Future<bool> showBudgetExceededDialog(
+  BuildContext context,
+  BudgetCheckResult warning,
+) async {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final colors = OpenMoneyColors(isDark);
+
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+          SizedBox(width: 8),
+          Text(
+            'Limite de Gastos Excedido',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A categoria "${warning.categoryPath}" ultrapassará o limite de gastos definido para o mês de ${warning.monthLabel}.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Column(
+                children: [
+                  _budgetRow('Limite definido:', formatCurrency(warning.budgetCents, warning.currency)),
+                  const SizedBox(height: 4),
+                  _budgetRow('Gasto atual no mês:', formatCurrency(warning.currentSpentCents, warning.currency)),
+                  const SizedBox(height: 4),
+                  _budgetRow('Saldo disponível:', formatCurrency(warning.availableBeforeCents, warning.currency)),
+                  const SizedBox(height: 4),
+                  _budgetRow('Valor deste lançamento:', formatCurrency(warning.newAmountCents, warning.currency)),
+                  const Divider(height: 14),
+                  _budgetRow(
+                    'Valor excedente:',
+                    formatCurrency(warning.excessCents, warning.currency),
+                    valueColor: Colors.redAccent,
+                    isBold: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Deseja realmente continuar com este lançamento?',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Continuar'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
+Widget _budgetRow(String label, String value, {Color? valueColor, bool isBold = false}) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: isBold ? null : Colors.grey,
+          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+          color: valueColor,
+        ),
+      ),
+    ],
+  );
+}
+
 class _TransactionEditDialog extends StatefulWidget {
   final MoneyStore store;
   final Transaction tx;
@@ -1037,7 +1141,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     });
   }
 
-  void _commitCreate() {
+  Future<void> _commitCreate() async {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (absCents <= 0) return;
 
@@ -1093,6 +1197,22 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       );
     }
 
+    final warning = widget.store.checkBudgetExceeded(
+      accId: _accId,
+      date: dateStr,
+      catSelection: _catSelection,
+      signedAmt: signedAmt,
+      payee: finalPayee,
+      mode: isXfer && _mode == 'installment' ? 'single' : _mode,
+      installments: _installments,
+      txRate: txRate,
+    );
+
+    if (warning != null && mounted) {
+      final proceed = await showBudgetExceededDialog(context, warning);
+      if (!proceed) return;
+    }
+
     widget.store.addTransaction(
       accId: _accId,
       date: dateStr,
@@ -1109,7 +1229,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       txRate: txRate,
     );
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -1926,7 +2048,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     }
   }
 
-  void _commitCopy() {
+  Future<void> _commitCopy() async {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (absCents <= 0) return;
 
@@ -1976,6 +2098,22 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
       );
     }
 
+    final warning = widget.store.checkBudgetExceeded(
+      accId: _accId,
+      date: dateStr,
+      catSelection: _catSelection,
+      signedAmt: signedAmt,
+      payee: finalPayee,
+      mode: isXfer && _mode == 'installment' ? 'single' : _mode,
+      installments: _installments,
+      txRate: txRate,
+    );
+
+    if (warning != null && mounted) {
+      final proceed = await showBudgetExceededDialog(context, warning);
+      if (!proceed) return;
+    }
+
     widget.store.addTransaction(
       accId: _accId,
       date: dateStr,
@@ -1992,7 +2130,9 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
       txRate: txRate,
     );
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
