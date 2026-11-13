@@ -1,29 +1,29 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.4.6",
-  "web": {
-    "version": "2.4.6",
-    "build": 120,
-    "releaseDate": "13/11/2026"
-  },
-  "build": 120,
-  "notes": "Ajustes tela lançamentos, parâmetro para ocultar barra de inserção rápida, melhorias rotina de incluir novos lançamentos/transferências, Nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, pequenos ajustes tela de contas local e online, agora com contas em outras moedas e cotação online (beta), personalização Visual e Temas, Novo Dashboard Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, pesquisa rápida, tela de lançamentos consolidado, versão web em https://openmoney.app.br",
-  "releaseDate": "13/11/2026",
-  "windows": {
-    "build": 118,
-    "version": "2.4.6",
-    "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.6.zip",
-    "sha256": "e7cd5148aa920e7f27567d0184d757e6c113506f0bd7445f48afff07ed5364e4",
-    "releaseDate": "13/11/2026"
-  },
-  "macos": {
-    "version": "2.4.6",
-    "build": 120,
-    "releaseDate": "13/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.6.zip",
-    "sha256": "2a8d41b2c4e83a4ee25dfb04c1a985133c7bd0d39ec436f483b9dc88870c15ed",
-    "sizeMb": 12
-  },
-  "title": "OpenMoney Flutter v2.4.6"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "version":  "2.4.6",
+    "web":  {
+                "version":  "2.4.6",
+                "build":  120,
+                "releaseDate":  "13/11/2026"
+            },
+    "build":  120,
+    "notes":  "Ajustes tela lançamentos, parâmetro para ocultar barra de inserção rápida, melhorias rotina de incluir novos lançamentos/transferências, Nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, pequenos ajustes tela de contas local e online, agora com contas em outras moedas e cotação online (beta), personalização Visual e Temas, Novo Dashboard Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, pesquisa rápida, tela de lançamentos consolidado, versão web em https://openmoney.app.br",
+    "releaseDate":  "13/11/2026",
+    "windows":  {
+                    "build":  120,
+                    "version":  "2.4.6",
+                    "sizeMb":  13,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.6.zip",
+                    "sha256":  "16bcfc24b238ad2b9205611987dcb04b6edb0b19cb974a0e50efc727bb007bfc",
+                    "releaseDate":  "13/11/2026"
+                },
+    "macos":  {
+                  "version":  "2.4.6",
+                  "build":  120,
+                  "releaseDate":  "13/11/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.6.zip",
+                  "sha256":  "2a8d41b2c4e83a4ee25dfb04c1a985133c7bd0d39ec436f483b9dc88870c15ed",
+                  "sizeMb":  12
+              },
+    "title":  "OpenMoney Flutter v2.4.6"
 }
