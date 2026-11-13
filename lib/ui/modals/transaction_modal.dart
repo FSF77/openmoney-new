@@ -460,7 +460,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final catType = _isExpense ? 'Despesa' : 'Receita';
     final catOptions = widget.store.allCategoryOptions(catType);
     final otherAccounts =
-        widget.store.db.accounts.where((a) => a.id != _accId).toList();
+        widget.store.transferDestinationAccounts(excludeId: _accId);
 
     final dropdownItems = <DropdownMenuItem<String>>[
       if (_catSelection.isNotEmpty &&
@@ -956,11 +956,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   late String _accId;
   late final TextEditingController _dateCtrl;
   late final TextEditingController _payeeCtrl;
+  late final FocusNode _payeeFocus;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
   late final TextEditingController _peerAmtCtrl;
   late final TextEditingController _rateCtrl;
   late final TextEditingController _endDateCtrl;
+  late String _txType; // 'expense', 'income', 'transfer'
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
@@ -996,19 +998,27 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
 
     _dateCtrl = TextEditingController(text: fmtDate(effectiveDateIso));
     _payeeCtrl = TextEditingController(text: initialPayeeText);
+    _payeeFocus = FocusNode();
     _memoCtrl = TextEditingController(text: initialMemoText);
     _amtCtrl = TextEditingController(
       text: initialCents > 0 ? formatInputCents(initialCents) : '',
     );
-    _isExpense = widget.initialIsExpense ?? true;
 
-    final catPaths =
-        widget.store.allCategoryPaths(_isExpense ? 'Despesa' : 'Receita');
-    if (widget.initialCategory != null &&
-        widget.initialCategory!.trim().isNotEmpty) {
-      _catSelection = widget.initialCategory!.trim();
+    final initialCat = widget.initialCategory?.trim() ?? '';
+    if (initialCat.startsWith('xfer:')) {
+      _txType = 'transfer';
+      _isExpense = true;
+      _catSelection = initialCat;
     } else {
-      _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+      _isExpense = widget.initialIsExpense ?? true;
+      _txType = _isExpense ? 'expense' : 'income';
+      final catPaths =
+          widget.store.allCategoryPaths(_isExpense ? 'Despesa' : 'Receita');
+      if (initialCat.isNotEmpty) {
+        _catSelection = initialCat;
+      } else {
+        _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+      }
     }
 
     if (initialPayeeText.isNotEmpty) {
@@ -1041,6 +1051,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   void dispose() {
     _dateCtrl.dispose();
     _payeeCtrl.dispose();
+    _payeeFocus.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
     _peerAmtCtrl.dispose();
@@ -1057,6 +1068,27 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       list.addAll(widget.store.db.accounts);
     }
     return list;
+  }
+
+  void _updateTransferDestination(String peerId) {
+    _catSelection = 'xfer:$peerId';
+    final targetAcc = widget.store.accById(_accId);
+    final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+    final destCur =
+        widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL';
+    if (srcCur != destCur) {
+      final r = exchangeRateBetween(
+        fromCurrency: srcCur,
+        toCurrency: destCur,
+        rates: widget.store.db.rates,
+      );
+      _rateCtrl.text = r.toStringAsFixed(4).replaceAll('.', ',');
+      final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+      if (srcCents > 0) {
+        _peerAmtCtrl.text =
+            formatInputCents((srcCents * r).round());
+      }
+    }
   }
 
   String _resolveIsoDate(String raw, {String? fallback}) {
@@ -1098,9 +1130,16 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     setState(() {
       _suggestions = list;
       if (match != null) {
-        _isExpense = match.isExpense;
-        if (match.category.isNotEmpty) {
+        if (match.category.startsWith('xfer:')) {
+          _txType = 'transfer';
+          _isExpense = true;
           _catSelection = match.category;
+        } else {
+          _isExpense = match.isExpense;
+          _txType = match.isExpense ? 'expense' : 'income';
+          if (match.category.isNotEmpty) {
+            _catSelection = match.category;
+          }
         }
         if (match.accountId.isNotEmpty) {
           final matchedAcc = widget.store.accById(match.accountId);
@@ -1121,9 +1160,16 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   void _applySuggestion(PayeeSuggestion s) {
     setState(() {
       _payeeCtrl.text = s.name;
-      _isExpense = s.isExpense;
-      if (s.category.isNotEmpty) {
+      if (s.category.startsWith('xfer:')) {
+        _txType = 'transfer';
+        _isExpense = true;
         _catSelection = s.category;
+      } else {
+        _isExpense = s.isExpense;
+        _txType = s.isExpense ? 'expense' : 'income';
+        if (s.category.isNotEmpty) {
+          _catSelection = s.category;
+        }
       }
       if (s.accountId.isNotEmpty) {
         final matchedAcc = widget.store.accById(s.accountId);
@@ -1141,11 +1187,11 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     });
   }
 
-  Future<void> _commitCreate() async {
+  Future<void> _commitCreate({bool andCreateAnother = false}) async {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (absCents <= 0) return;
 
-    final isXfer = _catSelection.startsWith('xfer:');
+    final isXfer = _txType == 'transfer' || _catSelection.startsWith('xfer:');
     final signedAmt = isXfer ? -absCents : (_isExpense ? -absCents : absCents);
 
     final rawPayee = _payeeCtrl.text.trim();
@@ -1202,7 +1248,6 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       date: dateStr,
       catSelection: _catSelection,
       signedAmt: signedAmt,
-      payee: finalPayee,
       mode: isXfer && _mode == 'installment' ? 'single' : _mode,
       installments: _installments,
       txRate: txRate,
@@ -1229,7 +1274,24 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       txRate: txRate,
     );
 
-    if (mounted) {
+    if (!mounted) return;
+
+    if (andCreateAnother) {
+      setState(() {
+        _amtCtrl.clear();
+        _payeeCtrl.clear();
+        _memoCtrl.clear();
+        _peerAmtCtrl.clear();
+        _suggestions = [];
+      });
+      _payeeFocus.requestFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lançamento salvo! Pronto para o próximo.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
       Navigator.of(context).pop();
     }
   }
@@ -1241,12 +1303,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     final availableAccs = _availableAccounts();
     final targetAcc = widget.store.accById(_accId);
     final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
-    final isXfer = _catSelection.startsWith('xfer:');
+    final isXfer = _txType == 'transfer' || _catSelection.startsWith('xfer:');
 
     final catType = _isExpense ? 'Despesa' : 'Receita';
     final catOptions = widget.store.allCategoryOptions(catType);
     final otherAccounts =
-        widget.store.activeAccounts.where((a) => a.id != _accId).toList();
+        widget.store.transferDestinationAccounts(excludeId: _accId);
 
     final dropdownItems = <DropdownMenuItem<String>>[
       if (_catSelection.isNotEmpty &&
@@ -1308,55 +1370,126 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   ),
                 ),
               ],
-              // Conta do Lançamento
-              DropdownButtonFormField<String>(
-                initialValue: _accId,
-                isDense: true,
-                style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                decoration: const InputDecoration(
-                  labelText: 'Conta',
-                  labelStyle: TextStyle(fontSize: 13),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  border: OutlineInputBorder(),
-                ),
-                items: availableAccs
-                    .map((a) => DropdownMenuItem(
-                          value: a.id,
-                          child: Text(
-                            (a.isFavorite ? '★ ' : '') +
-                                a.name +
-                                (a.type == kCardType
-                                    ? ' (Cartão)'
-                                    : ' (${a.type})'),
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
+
+              // Tipo de Lançamento (Despesa / Receita / Transferência)
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<String>(
+                  style: const ButtonStyle(
+                    textStyle: WidgetStatePropertyAll(
+                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: 'expense',
+                      label: Text('− Despesa'),
+                      icon: Icon(Icons.arrow_downward_rounded, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: 'income',
+                      label: Text('+ Receita'),
+                      icon: Icon(Icons.arrow_upward_rounded, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: 'transfer',
+                      label: Text('⇄ Transferência'),
+                      icon: Icon(Icons.swap_horiz_rounded, size: 16),
+                    ),
+                  ],
+                  selected: {_txType},
+                  onSelectionChanged: (s) {
                     setState(() {
-                      _accId = v;
-                      final newAcc = widget.store.accById(v);
-                      if (newAcc?.type == kCardType && newAcc?.card != null) {
-                        _customIk = invKeyFor(
-                            newAcc!.card!, _resolveIsoDate(_dateCtrl.text));
+                      _txType = s.first;
+                      if (_txType == 'transfer') {
+                        final others = widget.store
+                            .transferDestinationAccounts(excludeId: _accId);
+                        final currentDest = _catSelection.startsWith('xfer:')
+                            ? _catSelection.substring(5)
+                            : '';
+                        if (!others.any((a) => a.id == currentDest)) {
+                          if (others.isNotEmpty) {
+                            _updateTransferDestination(others.first.id);
+                          }
+                        }
                       } else {
-                        _customIk = null;
-                      }
-                      if (_catSelection.startsWith('xfer:$v')) {
-                        _catSelection = '';
+                        _isExpense = _txType == 'expense';
+                        final paths = widget.store.allCategoryPaths(
+                          _isExpense ? 'Despesa' : 'Receita',
+                        );
+                        if (!paths.contains(_catSelection) ||
+                            _catSelection.startsWith('xfer:')) {
+                          _catSelection = paths.isNotEmpty ? paths.first : '';
+                        }
                       }
                     });
-                  }
-                },
+                  },
+                ),
               ),
               const SizedBox(height: 12),
 
-              // Tipo & Data
+              // Conta e Data lado a lado
               Row(
                 children: [
                   Expanded(
+                    flex: 3,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _accId,
+                      isDense: true,
+                      style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                      decoration: const InputDecoration(
+                        labelText: 'Conta',
+                        labelStyle: TextStyle(fontSize: 13),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: availableAccs
+                          .map((a) => DropdownMenuItem(
+                                value: a.id,
+                                child: Text(
+                                  (a.isFavorite ? '★ ' : '') +
+                                      a.name +
+                                      (a.type == kCardType
+                                          ? ' (Cartão)'
+                                          : ' (${a.type})'),
+                                  style: const TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _accId = v;
+                            final newAcc = widget.store.accById(v);
+                            if (newAcc?.type == kCardType && newAcc?.card != null) {
+                              _customIk = invKeyFor(
+                                  newAcc!.card!, _resolveIsoDate(_dateCtrl.text));
+                            } else {
+                              _customIk = null;
+                            }
+                            if (_catSelection.startsWith('xfer:')) {
+                              final others = widget.store
+                                  .transferDestinationAccounts(excludeId: v);
+                              final currentDest = _catSelection.substring(5);
+                              if (!others.any((a) => a.id == currentDest)) {
+                                if (others.isNotEmpty) {
+                                  _updateTransferDestination(others.first.id);
+                                } else {
+                                  _catSelection = '';
+                                }
+                              }
+                            }
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
                     child: TextField(
                       controller: _dateCtrl,
                       style: const TextStyle(fontSize: 13),
@@ -1390,33 +1523,6 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       },
                     ),
                   ),
-                  if (!isXfer) ...[
-                    const SizedBox(width: 12),
-                    SegmentedButton<bool>(
-                      style: const ButtonStyle(
-                        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('− Despesa')),
-                        ButtonSegment(value: false, label: Text('+ Receita')),
-                      ],
-                      selected: {_isExpense},
-                      onSelectionChanged: (s) {
-                        setState(() {
-                          _isExpense = s.first;
-                          final paths = widget.store.allCategoryPaths(
-                            _isExpense ? 'Despesa' : 'Receita',
-                          );
-                          if (!paths.contains(_catSelection) &&
-                              !_catSelection.startsWith('xfer:')) {
-                            _catSelection =
-                                paths.isNotEmpty ? paths.first : '';
-                          }
-                        });
-                      },
-                    ),
-                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -1469,6 +1575,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               // Favorecido / Descrição com Autocompletar inteligente
               TextField(
                 controller: _payeeCtrl,
+                focusNode: _payeeFocus,
                 style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(
                   labelText: 'Favorecido / Descrição',
@@ -1505,40 +1612,61 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               ],
               const SizedBox(height: 12),
 
-              // Categoria ou Transferência
-              CategorySelectFormField(
-                store: widget.store,
-                categoryType: catType,
-                currentSelection: effectiveCat,
-                excludeAccountId: _accId,
-                labelText: 'Categoria ou Transferência',
-                onChanged: (v) {
-                  setState(() {
-                    _catSelection = v;
-                    if (v.startsWith('xfer:')) {
-                      final peerId = v.substring(5);
-                      final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
-                      final destCur =
-                          widget.store.accById(peerId)?.effectiveCurrency ??
-                              'BRL';
-                      if (srcCur != destCur) {
-                        final r = exchangeRateBetween(
-                          fromCurrency: srcCur,
-                          toCurrency: destCur,
-                          rates: widget.store.db.rates,
-                        );
-                        _rateCtrl.text =
-                            r.toStringAsFixed(4).replaceAll('.', ',');
-                        final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
-                        if (srcCents > 0) {
-                          _peerAmtCtrl.text =
-                              formatInputCents((srcCents * r).round());
-                        }
-                      }
+              // Categoria ou Conta de Destino da Transferência
+              if (isXfer) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _catSelection.startsWith('xfer:')
+                      ? _catSelection.substring(5)
+                      : (otherAccounts.isNotEmpty ? otherAccounts.first.id : null),
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Conta de Destino',
+                    labelStyle: TextStyle(fontSize: 13),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.swap_horiz_rounded, size: 20),
+                  ),
+                  items: otherAccounts
+                      .map((a) => DropdownMenuItem(
+                            value: a.id,
+                            child: Text(
+                              (a.isFavorite ? '★ ' : '') +
+                                  a.name +
+                                  (a.type == kCardType
+                                      ? ' (Cartão)'
+                                      : ' (${a.type})'),
+                              style: const TextStyle(fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (destId) {
+                    if (destId != null) {
+                      setState(() => _updateTransferDestination(destId));
                     }
-                  });
-                },
-              ),
+                  },
+                ),
+              ] else ...[
+                CategorySelectFormField(
+                  store: widget.store,
+                  categoryType: catType,
+                  currentSelection: effectiveCat,
+                  excludeAccountId: _accId,
+                  labelText: 'Categoria',
+                  onChanged: (v) {
+                    setState(() {
+                      if (v.startsWith('xfer:')) {
+                        _txType = 'transfer';
+                        _updateTransferDestination(v.substring(5));
+                      } else {
+                        _catSelection = v;
+                      }
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
 
               // Valor & Observação
@@ -1813,6 +1941,15 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 children: [
                   ...formFields,
                   const SizedBox(height: 20),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Salvar e Criar Outro'),
+                    onPressed: () => _commitCreate(andCreateAnother: true),
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -1832,7 +1969,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           ),
                           icon: const Icon(Icons.check, size: 18),
                           label: const Text('Salvar'),
-                          onPressed: _commitCreate,
+                          onPressed: () => _commitCreate(andCreateAnother: false),
                         ),
                       ),
                     ],
@@ -1877,10 +2014,15 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Salvar e Criar Outro'),
+          onPressed: () => _commitCreate(andCreateAnother: true),
+        ),
         FilledButton.icon(
           icon: const Icon(Icons.check, size: 18),
           label: const Text('Salvar'),
-          onPressed: _commitCreate,
+          onPressed: () => _commitCreate(andCreateAnother: false),
         ),
       ],
     );
@@ -2147,7 +2289,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     final catType = _isExpense ? 'Despesa' : 'Receita';
     final catOptions = widget.store.allCategoryOptions(catType);
     final otherAccounts =
-        widget.store.activeAccounts.where((a) => a.id != _accId).toList();
+        widget.store.transferDestinationAccounts(excludeId: _accId);
 
     final dropdownItems = <DropdownMenuItem<String>>[
       if (_catSelection.isNotEmpty &&

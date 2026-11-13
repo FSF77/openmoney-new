@@ -485,6 +485,7 @@ class MoneyStore extends ChangeNotifier {
   bool hideAccountsBalance = false;
   bool hideInvestmentsBalance = false;
   bool hideCardsBalance = false;
+  bool showInlineTransactionEntry = true;
   bool showMissingDatabasePrompt = false;
   bool showWelcomeScreen = false;
   String missingDatabasePath = '';
@@ -677,6 +678,7 @@ class MoneyStore extends ChangeNotifier {
       'hideAccountsBalance': hideAccountsBalance,
       'hideInvestmentsBalance': hideInvestmentsBalance,
       'hideCardsBalance': hideCardsBalance,
+      'showInlineTransactionEntry': showInlineTransactionEntry,
       'lastUsedAccountId': _lastUsedAccountId,
     };
   }
@@ -805,6 +807,9 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['hideCardsBalance'] is bool) {
       hideCardsBalance = cfg['hideCardsBalance'] as bool;
+    }
+    if (cfg['showInlineTransactionEntry'] is bool) {
+      showInlineTransactionEntry = cfg['showInlineTransactionEntry'] as bool;
     }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
@@ -1347,6 +1352,15 @@ class MoneyStore extends ChangeNotifier {
     hideCardsBalance = !hideCardsBalance;
     final cfg = _readConfig();
     cfg['hideCardsBalance'] = hideCardsBalance;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setShowInlineTransactionEntry(bool value) {
+    showInlineTransactionEntry = value;
+    final cfg = _readConfig();
+    cfg['showInlineTransactionEntry'] = showInlineTransactionEntry;
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();
@@ -2917,6 +2931,45 @@ class MoneyStore extends ChangeNotifier {
       db.accounts.where((a) => a.isActive && !a.isFavorite).toList();
   List<Account> get regularInactiveAccounts =>
       db.accounts.where((a) => a.isInactive && !a.isFavorite).toList();
+
+  /// Contas ativas para destino de transferência:
+  /// Contas normais (não-cartão) vêm primeiro (Favoritas › Ativas),
+  /// e contas do tipo Cartão de Crédito ficam sempre no fim da lista (mesmo as favoritas).
+  List<Account> transferDestinationAccounts({String? excludeId}) {
+    final nonCardFavs = db.accounts.where((a) =>
+        a.isActive &&
+        a.type != kCardType &&
+        a.isFavorite &&
+        (excludeId == null || a.id != excludeId));
+    final nonCardOthers = db.accounts.where((a) =>
+        a.isActive &&
+        a.type != kCardType &&
+        !a.isFavorite &&
+        (excludeId == null || a.id != excludeId));
+
+    final cardFavs = db.accounts.where((a) =>
+        a.isActive &&
+        a.type == kCardType &&
+        a.isFavorite &&
+        (excludeId == null || a.id != excludeId));
+    final cardOthers = db.accounts.where((a) =>
+        a.isActive &&
+        a.type == kCardType &&
+        !a.isFavorite &&
+        (excludeId == null || a.id != excludeId));
+
+    final list = <Account>[
+      ...nonCardFavs,
+      ...nonCardOthers,
+      ...cardFavs,
+      ...cardOthers,
+    ];
+    if (list.isEmpty) {
+      list.addAll(db.accounts.where(
+          (a) => a.isActive && (excludeId == null || a.id != excludeId)));
+    }
+    return list;
+  }
 
   /// Lista ordenada de todos os negócios cadastrados nas contas (sem duplicatas).
   List<String> get allBusinesses {

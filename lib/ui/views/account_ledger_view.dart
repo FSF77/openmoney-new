@@ -480,8 +480,18 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          onPressed: () => setState(() =>
-                              _mobileShowQuickEntry = !_mobileShowQuickEntry),
+                          onPressed: () {
+                            if (!widget.store.showInlineTransactionEntry) {
+                              showTransactionCreateModal(
+                                context,
+                                widget.store,
+                                initialAccountId: acc.id,
+                              );
+                            } else {
+                              setState(() =>
+                                  _mobileShowQuickEntry = !_mobileShowQuickEntry);
+                            }
+                          },
                         ),
                       ],
                     ],
@@ -834,6 +844,26 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   color: colors.textPrimary,
                                 ),
                               ),
+                              if (!widget.store.showInlineTransactionEntry && !acc.isInactive)
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  tooltip: 'Novo Lançamento nesta conta',
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: colors.accent.withValues(alpha: 0.16),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(Icons.add, size: 16, color: colors.accent),
+                                  ),
+                                  onPressed: () => showTransactionCreateModal(
+                                    context,
+                                    widget.store,
+                                    initialAccountId: acc.id,
+                                  ),
+                                ),
                               if (acc.isFavorite)
                                 const Icon(Icons.star,
                                     size: 16, color: Colors.amber),
@@ -1266,7 +1296,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
         ),
 
         // 2. Quick Entry Bar (Barra de Inserção Rápida — recolhível no celular para liberar espaço para rolar os lançamentos)
-        if (!acc.isInactive && (!isMobile || _mobileShowQuickEntry))
+        if (!acc.isInactive && widget.store.showInlineTransactionEntry && (!isMobile || _mobileShowQuickEntry))
           Padding(
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 10 : 16,

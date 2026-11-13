@@ -1599,4 +1599,39 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(cFebCsv.contains('Supermercado'), true);
     expect(cFebCsv.contains('Restaurante'), false);
   });
+
+  test('34. transferDestinationAccounts orders non-cards (fav then regular) followed by credit cards at the end (fav then regular)', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db.accounts.clear();
+
+    final accNormalFav = Account(id: 'a_norm_fav', name: 'Banco Inter (Fav)', type: 'Corrente', opening: 0, favorite: true);
+    final accNormalRegular = Account(id: 'a_norm_reg', name: 'Banco Itaú', type: 'Corrente', opening: 0, favorite: false);
+    final cardFav = Account(id: 'c_card_fav', name: 'Nubank Ultravioleta (Fav)', type: kCardType, opening: 0, favorite: true);
+    final cardRegular = Account(id: 'c_card_reg', name: 'XP Visa Infinite', type: kCardType, opening: 0, favorite: false);
+    final inactiveAcc = Account(id: 'a_inact', name: 'Conta Inativa', type: 'Corrente', opening: 0, inactive: true, favorite: true);
+
+    store.db.accounts.addAll([
+      cardRegular,
+      accNormalRegular,
+      cardFav,
+      inactiveAcc,
+      accNormalFav,
+    ]);
+
+    final destAll = store.transferDestinationAccounts();
+    expect(destAll.map((a) => a.id).toList(), [
+      'a_norm_fav',
+      'a_norm_reg',
+      'c_card_fav',
+      'c_card_reg',
+    ]);
+
+    // Excluindo a conta de origem
+    final destExcl = store.transferDestinationAccounts(excludeId: 'a_norm_fav');
+    expect(destExcl.map((a) => a.id).toList(), [
+      'a_norm_reg',
+      'c_card_fav',
+      'c_card_reg',
+    ]);
+  });
 }

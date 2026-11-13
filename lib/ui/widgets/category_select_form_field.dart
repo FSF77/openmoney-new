@@ -60,10 +60,9 @@ class CategorySelectFormField extends StatelessWidget {
       }
     }
 
-    // Contas ativas para transferência
-    final transferAccounts = store.activeAccounts
-        .where((a) => excludeAccountId == null || a.id != excludeAccountId)
-        .toList();
+    // Contas ativas para transferência (ordenadas com Favoritas primeiro e depois Ativas)
+    final transferAccounts =
+        store.transferDestinationAccounts(excludeId: excludeAccountId);
 
     final displayText = _displayLabel(options);
 

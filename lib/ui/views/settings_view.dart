@@ -668,6 +668,18 @@ class _SettingsViewState extends State<SettingsView> {
                         widget.store.setLedgerViewMode(set.first),
                   ),
                 ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Inserção rápida no extrato das contas',
+                  subtitle:
+                      'Exibe o bloco de campos inline no topo do extrato. Desative para ocultar os campos, ganhar espaço e adicionar o botão "+" no cabeçalho.',
+                  trailing: Switch(
+                    value: widget.store.showInlineTransactionEntry,
+                    onChanged: (v) =>
+                        widget.store.setShowInlineTransactionEntry(v),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
