@@ -994,33 +994,37 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         ),
                       ),
                       if (isPred) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         StatusBadge(
                           text: 'PREVISÃO',
-                          color: colors.accentIndigo,
+                          color: colors.accentCyan,
+                          fontSize: 8.5,
                         ),
                       ],
                       if (tx.recId != null) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         StatusBadge(
                           text: recurrenceFrequencyLabel(tx.recFreq).toUpperCase(),
                           color: colors.accent,
                           icon: Icons.repeat,
+                          fontSize: 8.5,
                         ),
                       ],
                       if (tx.auto == true) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         StatusBadge(
                           text: 'FATURA AUTO',
                           color: colors.warning,
+                          fontSize: 8.5,
                         ),
                       ],
                       if (tx.ik != null && tx.ik!.isNotEmpty && tx.auto != true) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         StatusBadge(
                           text: 'FATURA ${formatInvoiceKeyForDisplay(tx.ik!)}',
                           color: colors.accentIndigo,
                           icon: Icons.receipt_outlined,
+                          fontSize: 8.5,
                         ),
                       ],
                     ],
@@ -1050,16 +1054,23 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                                       color: colors.textSecondary)),
                             if (isPred)
                               StatusBadge(
-                                  text: 'PREVISÃO', color: colors.accentIndigo),
+                                text: 'PREVISÃO',
+                                color: colors.accentCyan,
+                                fontSize: 8.5,
+                              ),
                             if (tx.auto == true)
                               StatusBadge(
-                                  text: 'FATURA AUTO', color: colors.warning),
+                                text: 'FATURA AUTO',
+                                color: colors.warning,
+                                fontSize: 8.5,
+                              ),
                             if (tx.ik != null &&
                                 tx.ik!.isNotEmpty &&
                                 tx.auto != true)
                               StatusBadge(
                                 text: 'FAT. ${formatInvoiceKeyForDisplay(tx.ik!)}',
                                 color: colors.accentIndigo,
+                                fontSize: 8.5,
                               ),
                           ],
                         ),

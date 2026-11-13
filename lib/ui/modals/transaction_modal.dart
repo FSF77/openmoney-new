@@ -552,8 +552,13 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   ),
                   const SizedBox(width: 12),
                   SegmentedButton<bool>(
-                    style: const ButtonStyle(
-                      textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    style: SegmentedButton.styleFrom(
+                      selectedBackgroundColor:
+                          colors.accent.withValues(alpha: 0.18),
+                      selectedForegroundColor: colors.accent,
+                      foregroundColor: colors.textSecondary,
+                      textStyle: const TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w700),
                       visualDensity: VisualDensity.compact,
                     ),
                     segments: const [
@@ -1375,10 +1380,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               SizedBox(
                 width: double.infinity,
                 child: SegmentedButton<String>(
-                  style: const ButtonStyle(
-                    textStyle: WidgetStatePropertyAll(
-                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-                    ),
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor:
+                        colors.accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: colors.accent,
+                    foregroundColor: colors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w700),
                     visualDensity: VisualDensity.compact,
                   ),
                   segments: const [
@@ -1792,8 +1800,13 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
-                  style: const ButtonStyle(
-                    textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor:
+                        colors.accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: colors.accent,
+                    foregroundColor: colors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w700),
                     visualDensity: VisualDensity.compact,
                   ),
                   segments: const [
@@ -1941,35 +1954,82 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 children: [
                   ...formFields,
                   const SizedBox(height: 20),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
-                    ),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Salvar e Criar Outro'),
-                    onPressed: () => _commitCreate(andCreateAnother: true),
-                  ),
-                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
+                        flex: 5,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 12),
+                            visualDensity: VisualDensity.compact,
                           ),
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancelar'),
+                          child: const Text(
+                            'Cancelar',
+                            style: TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 6),
                       Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                        flex: 7,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 12),
+                            visualDensity: VisualDensity.compact,
                           ),
-                          icon: const Icon(Icons.check, size: 18),
-                          label: const Text('Salvar'),
+                          onPressed: () => _commitCreate(andCreateAnother: true),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 15),
+                              SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  'Salvar e Outro',
+                                  style: TextStyle(fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 5,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 12),
+                            visualDensity: VisualDensity.compact,
+                          ),
                           onPressed: () => _commitCreate(andCreateAnother: false),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 15),
+                              SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  'Salvar',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -2397,8 +2457,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   if (!isXfer) ...[
                     const SizedBox(width: 12),
                     SegmentedButton<bool>(
-                      style: const ButtonStyle(
-                        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      style: SegmentedButton.styleFrom(
+                        selectedBackgroundColor:
+                            colors.accent.withValues(alpha: 0.18),
+                        selectedForegroundColor: colors.accent,
+                        foregroundColor: colors.textSecondary,
+                        textStyle: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700),
                         visualDensity: VisualDensity.compact,
                       ),
                       segments: const [
@@ -2642,8 +2707,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
-                  style: const ButtonStyle(
-                    textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor:
+                        colors.accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: colors.accent,
+                    foregroundColor: colors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w700),
                     visualDensity: VisualDensity.compact,
                   ),
                   segments: const [

@@ -85,6 +85,8 @@ class OpenMoneyColors {
   }
   Color get accentBlue => accent;
   Color get accentIndigo => const Color(0xFF6366F1);
+  Color get accentCyan =>
+      isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
   Color get income =>
       isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
   Color get accentGreen => income;
@@ -182,6 +184,7 @@ class StatusBadge extends StatelessWidget {
   final Color color;
   final IconData? icon;
   final double? fontSize;
+  final EdgeInsetsGeometry? padding;
 
   const StatusBadge({
     super.key,
@@ -189,15 +192,20 @@ class StatusBadge extends StatelessWidget {
     required this.color,
     this.icon,
     this.fontSize,
+    this.padding,
   });
 
   @override
   Widget build(BuildContext context) {
     final effectiveFontSize = fontSize ?? 10.0;
-    final effectiveIconSize = (effectiveFontSize + 1.0).clamp(9.0, 12.0);
+    final effectiveIconSize = (effectiveFontSize + 1.0).clamp(8.0, 12.0);
+    final effectivePadding = padding ??
+        (effectiveFontSize <= 9.0
+            ? const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5)
+            : const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5));
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      padding: effectivePadding,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
@@ -208,7 +216,7 @@ class StatusBadge extends StatelessWidget {
         children: [
           if (icon != null) ...[
             Icon(icon, size: effectiveIconSize, color: color),
-            const SizedBox(width: 3.5),
+            const SizedBox(width: 3.0),
           ],
           Text(
             text,

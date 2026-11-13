@@ -430,6 +430,41 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ],
                         ),
                       ),
+                      if (!acc.isInactive) ...[
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Novo Lançamento nesta conta',
+                          icon: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: colors.accent.withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              (widget.store.showInlineTransactionEntry && _mobileShowQuickEntry)
+                                  ? Icons.close
+                                  : Icons.add,
+                              size: 16,
+                              color: colors.accent,
+                            ),
+                          ),
+                          onPressed: () {
+                            if (!widget.store.showInlineTransactionEntry) {
+                              showTransactionCreateModal(
+                                context,
+                                widget.store,
+                                initialAccountId: acc.id,
+                              );
+                            } else {
+                              setState(() =>
+                                  _mobileShowQuickEntry = !_mobileShowQuickEntry);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.all(4),
@@ -461,39 +496,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         onPressed: () => setState(() =>
                             _mobileShowHeaderTools = !_mobileShowHeaderTools),
                       ),
-                      if (!acc.isInactive) ...[
-                        const SizedBox(width: 6),
-                        FilledButton.tonalIcon(
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                          ),
-                          icon: Icon(
-                            _mobileShowQuickEntry ? Icons.close : Icons.add,
-                            size: 16,
-                          ),
-                          label: Text(
-                            _mobileShowQuickEntry ? 'Fechar' : 'Lançar',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          onPressed: () {
-                            if (!widget.store.showInlineTransactionEntry) {
-                              showTransactionCreateModal(
-                                context,
-                                widget.store,
-                                initialAccountId: acc.id,
-                              );
-                            } else {
-                              setState(() =>
-                                  _mobileShowQuickEntry = !_mobileShowQuickEntry);
-                            }
-                          },
-                        ),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -784,25 +786,50 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           children: [
                             FilterChip(
                               visualDensity: VisualDensity.compact,
+                              selectedColor:
+                                  colors.accent.withValues(alpha: 0.16),
+                              backgroundColor:
+                                  colors.bgSecondary.withValues(alpha: 0.5),
+                              side: BorderSide(
+                                color: _filterCardByInvoice
+                                    ? colors.accent.withValues(alpha: 0.35)
+                                    : colors.borderGlass,
+                              ),
+                              labelStyle: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _filterCardByInvoice
+                                    ? colors.accent
+                                    : colors.textPrimary,
+                              ),
+                              checkmarkColor: colors.accent,
                               label: Text(
                                 _filterCardByInvoice ? 'Fatura' : 'Mês Civil',
-                                style: const TextStyle(fontSize: 11),
                               ),
                               selected: _filterCardByInvoice,
                               onSelected: (v) =>
                                   setState(() => _filterCardByInvoice = v),
                             ),
                             const SizedBox(width: 6),
-                            FilledButton.tonalIcon(
+                            FilledButton.icon(
                               style: FilledButton.styleFrom(
+                                backgroundColor:
+                                    colors.accent.withValues(alpha: 0.16),
+                                foregroundColor: colors.accent,
+                                elevation: 0,
+                                side: BorderSide(
+                                  color: colors.accent.withValues(alpha: 0.35),
+                                ),
                                 visualDensity: VisualDensity.compact,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
                               ),
                               icon:
                                   const Icon(Icons.payments_outlined, size: 14),
                               label: const Text('Pagar Fatura',
-                                  style: TextStyle(fontSize: 11)),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700)),
                               onPressed: () => showInvoicePaymentModal(
                                 context,
                                 widget.store,
@@ -844,26 +871,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   color: colors.textPrimary,
                                 ),
                               ),
-                              if (!widget.store.showInlineTransactionEntry && !acc.isInactive)
-                                IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                  tooltip: 'Novo Lançamento nesta conta',
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: colors.accent.withValues(alpha: 0.16),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(Icons.add, size: 16, color: colors.accent),
-                                  ),
-                                  onPressed: () => showTransactionCreateModal(
-                                    context,
-                                    widget.store,
-                                    initialAccountId: acc.id,
-                                  ),
-                                ),
                               if (acc.isFavorite)
                                 const Icon(Icons.star,
                                     size: 16, color: Colors.amber),
@@ -913,6 +920,26 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     ),
                                   );
                                 }),
+                              if (!widget.store.showInlineTransactionEntry && !acc.isInactive)
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  tooltip: 'Novo Lançamento nesta conta',
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: colors.accent.withValues(alpha: 0.16),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(Icons.add, size: 16, color: colors.accent),
+                                  ),
+                                  onPressed: () => showTransactionCreateModal(
+                                    context,
+                                    widget.store,
+                                    initialAccountId: acc.id,
+                                  ),
+                                ),
                               IconButton(
                                 tooltip: 'Editar Conta',
                                 icon: const Icon(Icons.settings_outlined,
@@ -1169,20 +1196,50 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           FilterChip(
+                            selectedColor:
+                                colors.accent.withValues(alpha: 0.16),
+                            backgroundColor:
+                                colors.bgSecondary.withValues(alpha: 0.5),
+                            side: BorderSide(
+                              color: _filterCardByInvoice
+                                  ? colors.accent.withValues(alpha: 0.35)
+                                  : colors.borderGlass,
+                            ),
+                            labelStyle: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: _filterCardByInvoice
+                                  ? colors.accent
+                                  : colors.textPrimary,
+                            ),
+                            checkmarkColor: colors.accent,
                             label: Text(
                               _filterCardByInvoice
                                   ? 'Exibindo Fatura (${invTxs.length} lanç.)'
                                   : 'Exibindo Mês Civil (${monthData.transactions.length} lanç.)',
-                              style: const TextStyle(fontSize: 11.5),
                             ),
                             selected: _filterCardByInvoice,
                             onSelected: (v) =>
                                 setState(() => _filterCardByInvoice = v),
                           ),
-                          FilledButton.tonalIcon(
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  colors.accent.withValues(alpha: 0.16),
+                              foregroundColor: colors.accent,
+                              elevation: 0,
+                              side: BorderSide(
+                                color: colors.accent.withValues(alpha: 0.35),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
+                            ),
                             icon: const Icon(Icons.payments_outlined, size: 16),
                             label: const Text('Pagar / Adiantar Fatura',
-                                style: TextStyle(fontSize: 11.5)),
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700)),
                             onPressed: () => showInvoicePaymentModal(
                               context,
                               widget.store,
@@ -1937,34 +1994,38 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   ),
                                 ),
                                 if (isPred) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 5),
                                   StatusBadge(
                                     text: 'PREVISÃO',
-                                    color: colors.accentIndigo,
+                                    color: colors.accentCyan,
+                                    fontSize: 8.5,
                                   ),
                                 ],
                                 if (tx.recId != null) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 5),
                                   StatusBadge(
                                     text: recurrenceFrequencyLabel(tx.recFreq)
                                         .toUpperCase(),
                                     color: colors.accent,
                                     icon: Icons.repeat,
+                                    fontSize: 8.5,
                                   ),
                                 ],
                                 if (tx.auto == true) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 5),
                                   StatusBadge(
                                     text: 'FATURA AUTO',
                                     color: colors.warning,
+                                    fontSize: 8.5,
                                   ),
                                 ],
                                 if (tx.ik != null && tx.ik!.isNotEmpty && tx.auto != true) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 5),
                                   StatusBadge(
                                     text: 'FATURA ${formatInvoiceKeyForDisplay(tx.ik!)}',
                                     color: colors.accentIndigo,
                                     icon: Icons.receipt_outlined,
+                                    fontSize: 8.5,
                                   ),
                                 ],
                               ],
@@ -2004,7 +2065,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                         if (isPred)
                                           StatusBadge(
                                             text: 'PREVISÃO',
-                                            color: colors.accentIndigo,
+                                            color: colors.accentCyan,
+                                            fontSize: 8.5,
                                           ),
                                         if (tx.recId != null)
                                           StatusBadge(
@@ -2013,11 +2075,13 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                                 .toUpperCase(),
                                             color: colors.accent,
                                             icon: Icons.repeat,
+                                            fontSize: 8.5,
                                           ),
                                         if (tx.auto == true)
                                           StatusBadge(
                                             text: 'FATURA AUTO',
                                             color: colors.warning,
+                                            fontSize: 8.5,
                                           ),
                                         if (tx.ik != null &&
                                             tx.ik!.isNotEmpty &&
@@ -2026,6 +2090,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                             text:
                                                 'FAT. ${formatInvoiceKeyForDisplay(tx.ik!)}',
                                             color: colors.accentIndigo,
+                                            fontSize: 8.5,
                                           ),
                                       ],
                                     ),
