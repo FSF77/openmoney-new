@@ -318,6 +318,9 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
 
                     // Controles específicos de acordo com o modo
                     if (_periodFilter == ConsolidatedPeriodFilter.day) ...[
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         padding: EdgeInsets.zero,
@@ -360,6 +363,8 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         icon: const Icon(Icons.chevron_right, size: 20),
                         tooltip: 'Próximo dia',
                         onPressed: () => _stepDay(1),
+                      ),
+                        ],
                       ),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
