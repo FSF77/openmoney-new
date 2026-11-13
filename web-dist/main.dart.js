@@ -32700,7 +32700,7 @@ s=7
 return A.r(A.apB(),$async$TD)
 case 7:n=b
 if(n.c.length!==0){m=A.bx(n.d,null)
-if(A.bqD(n.c,m,"2.4.6",123)||n.c==="2.4.6"){$.app=n.c
+if(A.bqD(n.c,m,"2.4.6",124)||n.c==="2.4.6"){$.app=n.c
 if(m!=null)$.apo=m}}p=2
 s=6
 break
@@ -133410,7 +133410,7 @@ $.b1U=A.o(t.N,t.CG)
 $.beT=null
 $.bfM=!1
 $.app="2.4.6"
-$.apo=123
+$.apo=124
 $.bbL=!1
 $.b5S="sky"
 $.b5T=!1
