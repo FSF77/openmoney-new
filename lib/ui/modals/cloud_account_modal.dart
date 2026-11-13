@@ -37,6 +37,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   bool _changeEmailStep2 = false;
   bool _addingAnotherAccount = false;
   bool _registerWithBlankBase = true;
+  bool _sortAccountsAscending = true;
   String? _statusMsg;
   bool _isError = false;
   List<CloudBackupInfo> _cloudBackups = const [];
@@ -513,12 +514,9 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     widget.store.saveCloudSessionToConfig();
     await _loadCloudBackups();
     if (!mounted) return;
-    setState(() {
-      _isBusy = false;
-      _addingAnotherAccount = false;
-      _isError = false;
-      _statusMsg = '✓ Conta alternada para ${acc.email} (r${_cloud.revision})!';
-    });
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _confirmCreateNewBlankDatabase(OpenMoneyColors colors) async {
@@ -1113,7 +1111,14 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   }
 
   Widget _buildConnectedBody(OpenMoneyColors colors) {
-    final savedAccounts = _cloud.savedAccounts;
+    final rawAccounts = _cloud.savedAccounts;
+    final savedAccounts = List<SavedCloudAccount>.from(rawAccounts)
+      ..sort((a, b) {
+        final nameA = a.name.isNotEmpty ? a.name.toLowerCase() : a.email.toLowerCase();
+        final nameB = b.name.isNotEmpty ? b.name.toLowerCase() : b.email.toLowerCase();
+        final cmp = nameA.compareTo(nameB);
+        return _sortAccountsAscending ? cmp : -cmp;
+      });
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1267,6 +1272,26 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (savedAccounts.length > 1) ...[
+                        IconButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                            _sortAccountsAscending
+                                ? Icons.sort_by_alpha_rounded
+                                : Icons.arrow_downward_rounded,
+                            size: 15,
+                            color: colors.accentBlue,
+                          ),
+                          tooltip: _sortAccountsAscending
+                              ? 'Ordenado de A a Z (clique para Z a A)'
+                              : 'Ordenado de Z a A (clique para A a Z)',
+                          onPressed: () {
+                            setState(() {
+                              _sortAccountsAscending = !_sortAccountsAscending;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 4),
                         TextButton.icon(
                           style: TextButton.styleFrom(
                             foregroundColor: colors.accentRed,
@@ -1484,15 +1509,15 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
         ),
         const SizedBox(height: 14),
 
-        // Status de Sincronismo Automático em Tempo Real (Sync v2) e Import/Export .json
+        // Status de Sincronismo Automático em Tempo Real (Sync v2) e Import/Export
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
             color: (_cloud.state == CloudSyncState.error
                     ? Colors.orange
                     : colors.accentGreen)
                 .withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: (_cloud.state == CloudSyncState.error
                       ? Colors.orange
@@ -1508,40 +1533,26 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                     : (_cloud.state == CloudSyncState.error
                         ? Icons.cloud_queue_rounded
                         : Icons.verified_rounded),
-                size: 20,
+                size: 18,
                 color: _cloud.state == CloudSyncState.error
                     ? Colors.orange
                     : colors.accentGreen,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _cloud.state == CloudSyncState.syncing
-                          ? 'Sincronizando alterações automaticamente...'
-                          : (_cloud.state == CloudSyncState.error
-                              ? (_cloud.pendingOutboxCount > 0
-                                  ? 'Modo Offline • ${_cloud.pendingOutboxCount} alteração(ões) na fila segura'
-                                  : 'Reconectando ao canal em tempo real...')
-                              : 'Sincronização Automática em Tempo Real Ativa (r${_cloud.revision})'),
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Cada lançamento, conta ou categoria é salvo e mesclado automaticamente por registro entre seus navegadores sem risco de sobrescrita.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.textSecondary,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  _cloud.state == CloudSyncState.syncing
+                      ? 'Sincronizando alterações automaticamente...'
+                      : (_cloud.state == CloudSyncState.error
+                          ? (_cloud.pendingOutboxCount > 0
+                              ? 'Modo Offline • ${_cloud.pendingOutboxCount} alteração(ões) na fila segura'
+                              : 'Reconectando ao canal em tempo real...')
+                          : 'Sincronização Automática em Tempo Real Ativa (r${_cloud.revision})'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -1573,7 +1584,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                       },
                 icon: const Icon(Icons.download_outlined, size: 17),
                 label: const Text(
-                  'Exportar\n.json',
+                  'Exportar',
                   textAlign: TextAlign.center,
                   style: TextStyle(height: 1.15),
                 ),
@@ -1617,7 +1628,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                       },
                 icon: const Icon(Icons.upload_file_outlined, size: 17),
                 label: const Text(
-                  'Importar\n.json',
+                  'Importar',
                   textAlign: TextAlign.center,
                   style: TextStyle(height: 1.15),
                 ),
@@ -1628,86 +1639,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
         const SizedBox(height: 14),
 
-        // Seção: Gerenciar Base (Criar Nova Base em Branco / Excluir Base Existente com Avisos de Cuidado)
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colors.accentRed.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colors.accentRed.withValues(alpha: 0.28),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    size: 16,
-                    color: Colors.orange.shade400,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Gerenciamento da Base Atual (Operações com Aviso de Segurança)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange.shade400,
-                        side: BorderSide(
-                          color: Colors.orange.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      onPressed: _isBusy
-                          ? null
-                          : () => _confirmCreateNewBlankDatabase(colors),
-                      icon: const Icon(Icons.note_add_outlined, size: 16),
-                      label: const Text(
-                        'Criar nova',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.accentRed,
-                        side: BorderSide(
-                          color: colors.accentRed.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      onPressed: _isBusy
-                          ? null
-                          : () => _confirmDeleteExistingDatabase(colors),
-                      icon: const Icon(Icons.delete_forever_outlined, size: 16),
-                      label: const Text(
-                        'Excluir',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
 
-        const SizedBox(height: 16),
 
         // Seção de Backups Diários na Nuvem
         Row(
@@ -1972,12 +1904,100 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           ),
         ],
         _buildLocalDatabaseSection(colors),
+        const SizedBox(height: 14),
+        // Seção: Gerenciar Base (Criar Nova Base em Branco / Excluir Base Existente com Avisos de Cuidado)
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.accentRed.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colors.accentRed.withValues(alpha: 0.28),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.orange.shade400,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Gerenciamento da Base Atual (Operações com Aviso de Segurança)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade400,
+                        side: BorderSide(
+                          color: Colors.orange.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmCreateNewBlankDatabase(colors),
+                      icon: const Icon(Icons.note_add_outlined, size: 16),
+                      label: const Text(
+                        'Criar nova',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.accentRed,
+                        side: BorderSide(
+                          color: colors.accentRed.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmDeleteExistingDatabase(colors),
+                      icon: const Icon(Icons.delete_forever_outlined, size: 16),
+                      label: const Text(
+                        'Excluir',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        
       ],
     );
   }
 
   Widget _buildDisconnectedBody(OpenMoneyColors colors) {
-    final savedAccounts = _cloud.savedAccounts;
+    final rawAccounts = _cloud.savedAccounts;
+    final savedAccounts = List<SavedCloudAccount>.from(rawAccounts)
+      ..sort((a, b) {
+        final nameA = a.name.isNotEmpty ? a.name.toLowerCase() : a.email.toLowerCase();
+        final nameB = b.name.isNotEmpty ? b.name.toLowerCase() : b.email.toLowerCase();
+        final cmp = nameA.compareTo(nameB);
+        return _sortAccountsAscending ? cmp : -cmp;
+      });
     if (_isForgotMode) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2176,7 +2196,27 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                         color: colors.textPrimary,
                       ),
                     ),
-                    if (savedAccounts.length > 1)
+                    if (savedAccounts.length > 1) ...[
+                      IconButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          _sortAccountsAscending
+                              ? Icons.sort_by_alpha_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 15,
+                          color: colors.accentBlue,
+                        ),
+                        tooltip: _sortAccountsAscending
+                            ? 'Ordenado de A a Z (clique para Z a A)'
+                            : 'Ordenado de Z a A (clique para A a Z)',
+                        onPressed: () {
+                          setState(() {
+                            _sortAccountsAscending = !_sortAccountsAscending;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 4),
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           foregroundColor: colors.accentRed,
@@ -2199,6 +2239,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                           style: TextStyle(fontSize: 11),
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -2507,6 +2548,87 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           ),
         ],
         _buildLocalDatabaseSection(colors),
+        const SizedBox(height: 14),
+        // Seção: Gerenciar Base (Criar Nova Base em Branco / Excluir Base Existente com Avisos de Cuidado)
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.accentRed.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colors.accentRed.withValues(alpha: 0.28),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.orange.shade400,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Gerenciamento da Base Atual (Operações com Aviso de Segurança)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade400,
+                        side: BorderSide(
+                          color: Colors.orange.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmCreateNewBlankDatabase(colors),
+                      icon: const Icon(Icons.note_add_outlined, size: 16),
+                      label: const Text(
+                        'Criar nova',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.accentRed,
+                        side: BorderSide(
+                          color: colors.accentRed.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _confirmDeleteExistingDatabase(colors),
+                      icon: const Icon(Icons.delete_forever_outlined, size: 16),
+                      label: const Text(
+                        'Excluir',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        
       ],
     );
   }
