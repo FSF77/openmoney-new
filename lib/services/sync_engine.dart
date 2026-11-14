@@ -147,6 +147,15 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       );
     });
 
+    for (final tag in db.tags) {
+      map['tags/$tag'] = (
+        coll: 'tags',
+        id: tag,
+        data: tag,
+        jsonStr: jsonEncode(tag),
+      );
+    }
+
     map['meta/predMode'] = (
       coll: 'meta',
       id: 'predMode',
@@ -312,6 +321,23 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
           db.comments[id] = val;
           baseline[key] = jsonEncode(val);
           modified = true;
+        }
+      } else if (coll == 'tags') {
+        if (isDel) {
+          final prevLen = db.tags.length;
+          db.tags.removeWhere((t) => t.toLowerCase() == id.toLowerCase());
+          if (db.tags.length != prevLen) modified = true;
+          baseline.remove(key);
+        } else {
+          final tagName = (ch.data?.toString() ?? id).trim();
+          if (tagName.isNotEmpty) {
+            if (!db.tags.any((t) => t.toLowerCase() == tagName.toLowerCase())) {
+              db.tags.add(tagName);
+              db.tags.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+              modified = true;
+            }
+            baseline[key] = jsonEncode(tagName);
+          }
         }
       } else if (coll == 'meta') {
         if (id == 'predMode' && !isDel) {

@@ -538,6 +538,7 @@ class Transaction {
   int? recSeq;
   double? createdAt;
   double? rate;
+  List<String>? tags;
 
   Transaction({
     String? id,
@@ -562,7 +563,8 @@ class Transaction {
     this.recSeq,
     double? createdAt,
     this.rate,
-  })  : id = id ?? uid(),
+    this.tags,
+  }) : id = id ?? uid(),
         createdAt =
             createdAt ?? (DateTime.now().millisecondsSinceEpoch / 1000.0);
 
@@ -571,6 +573,14 @@ class Transaction {
     final autoVal = json['auto'] as bool?;
     final recVal = json['rec'] as bool? ??
         (!(autoVal ?? false) && dateStr.compareTo(todayISO()) <= 0);
+    List<String>? parsedTags;
+    if (json['tags'] is List) {
+      final list = (json['tags'] as List)
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) parsedTags = list;
+    }
 
     return Transaction(
       id: json['id'] as String? ?? uid(),
@@ -595,6 +605,7 @@ class Transaction {
       recSeq: (json['recSeq'] as num?)?.toInt(),
       createdAt: (json['createdAt'] as num?)?.toDouble(),
       rate: (json['rate'] as num?)?.toDouble(),
+      tags: parsedTags,
     );
   }
 
@@ -621,6 +632,7 @@ class Transaction {
         if (recSeq != null) 'recSeq': recSeq,
         if (createdAt != null) 'createdAt': createdAt,
         if (rate != null) 'rate': rate,
+        if (tags != null && tags!.isNotEmpty) 'tags': tags,
       };
 
   Transaction copyWith({
@@ -646,6 +658,7 @@ class Transaction {
     int? recSeq,
     double? createdAt,
     double? rate,
+    List<String>? tags,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -670,6 +683,7 @@ class Transaction {
       recSeq: recSeq ?? this.recSeq,
       createdAt: createdAt ?? this.createdAt,
       rate: rate ?? this.rate,
+      tags: tags ?? this.tags,
     );
   }
 }
@@ -777,6 +791,7 @@ class Database {
 
   /// Mapa de cotações em relação ao BRL
   Map<String, CurrencyRateInfo> rates;
+  List<String> tags;
 
   String get effectiveBaseCurrency =>
       baseCurrency.trim().isNotEmpty ? baseCurrency.trim().toUpperCase() : 'BRL';
@@ -792,10 +807,12 @@ class Database {
     this.predMode = 'month',
     String? baseCurrency,
     Map<String, CurrencyRateInfo>? rates,
-  })  : baseCurrency = (baseCurrency != null && baseCurrency.trim().isNotEmpty)
+    List<String>? tags,
+  }) : baseCurrency = (baseCurrency != null && baseCurrency.trim().isNotEmpty)
             ? baseCurrency.trim().toUpperCase()
             : 'BRL',
         rates = rates ?? {},
+        tags = tags ?? [],
         accounts = accounts ??
             [
               Account(
@@ -874,6 +891,14 @@ class Database {
 
     final rawBase = json['baseCurrency'] as String?;
 
+    List<String> parsedTags = [];
+    if (json['tags'] is List) {
+      parsedTags = (json['tags'] as List)
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
     return Database(
       accounts: (parsedAccounts != null && parsedAccounts.isNotEmpty)
           ? parsedAccounts
@@ -896,6 +921,7 @@ class Database {
       predMode: json['predMode'] == 'invoice' ? 'invoice' : 'month',
       baseCurrency: rawBase,
       rates: parsedRates,
+      tags: parsedTags,
     );
   }
 
@@ -911,6 +937,7 @@ class Database {
         if (baseCurrency != 'BRL') 'baseCurrency': baseCurrency,
         if (rates.isNotEmpty)
           'rates': rates.map((k, v) => MapEntry(k, v.toJson())),
+        if (tags.isNotEmpty) 'tags': tags,
       };
 }
 

@@ -6,6 +6,7 @@ import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
 import '../modals/batch_delete_modal.dart';
+import '../modals/batch_edit_transactions_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/csv_export.dart';
@@ -35,6 +36,14 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
   bool _cardByInvoice = false;
   Set<String> _selectedAccountIds = {};
   final TextEditingController _searchCtrl = TextEditingController();
+
+  String _categoryFilter = 'all';
+  String _tagFilter = 'all';
+  String _typeFilter = 'all';
+  String _reconciledFilter = 'all';
+
+  bool _selectionMode = false;
+  final Set<String> _selectedTxIds = {};
 
   @override
   void initState() {
@@ -89,6 +98,134 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
     });
   }
 
+  bool get _hasActiveAdvancedFilters =>
+      _categoryFilter != 'all' ||
+      _tagFilter != 'all' ||
+      _typeFilter != 'all' ||
+      _reconciledFilter != 'all';
+
+  void _clearAdvancedFilters() {
+    setState(() {
+      _categoryFilter = 'all';
+      _tagFilter = 'all';
+      _typeFilter = 'all';
+      _reconciledFilter = 'all';
+    });
+  }
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) {
+        _selectedTxIds.clear();
+      }
+    });
+  }
+
+  void _toggleTxSelection(String txId) {
+    setState(() {
+      if (_selectedTxIds.contains(txId)) {
+        _selectedTxIds.remove(txId);
+      } else {
+        _selectedTxIds.add(txId);
+      }
+    });
+  }
+
+  void _selectAllVisible(List<Transaction> visibleTxs) {
+    setState(() {
+      for (final tx in visibleTxs) {
+        if (tx.auto == true) continue;
+        _selectedTxIds.add(tx.id);
+      }
+    });
+  }
+
+  void _batchQuickReconcile(bool reconciled) {
+    if (_selectedTxIds.isEmpty) return;
+    final count = widget.store.batchUpdateTransactions(
+      ids: _selectedTxIds,
+      payload: BatchTransactionEditPayload(
+        applyReconciled: true,
+        reconciled: reconciled,
+      ),
+    );
+    if (count > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            reconciled
+                ? '$count lançamento(s) marcado(s) como conciliado(s).'
+                : '$count lançamento(s) marcado(s) como pendente(s).',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openBatchEditModal() async {
+    if (_selectedTxIds.isEmpty) return;
+    final updated = await showDialog<int>(
+      context: context,
+      builder: (_) => BatchEditTransactionsModal(
+        store: widget.store,
+        selectedIds: Set<String>.from(_selectedTxIds),
+      ),
+    );
+    if (updated != null && updated > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$updated lançamento(s) atualizado(s) em lote.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmBatchDeleteSelection(OpenMoneyColors colors) async {
+    if (_selectedTxIds.isEmpty) return;
+    final count = _selectedTxIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surfaceCard,
+        title: const Text('Excluir Lançamentos Selecionados?'),
+        content: Text(
+          'Tem certeza que deseja excluir $count lançamento(s) selecionado(s)? Um backup de segurança será criado automaticamente antes da exclusão.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.expense,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final deleted =
+          widget.store.batchDeleteTransactionsByIds(_selectedTxIds);
+      if (mounted) {
+        setState(() {
+          _selectedTxIds.clear();
+          _selectionMode = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$deleted lançamento(s) excluído(s).'),
+          ),
+        );
+      }
+    }
+  }
+
   String _formatPeriodDescription() {
     switch (_periodFilter) {
       case ConsolidatedPeriodFilter.day:
@@ -114,6 +251,10 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
       cardByInvoice: _cardByInvoice,
       accountFilterIds: _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       searchQuery: query,
+      categoryFilter: _categoryFilter,
+      tagFilter: _tagFilter,
+      typeFilter: _typeFilter,
+      reconciledFilter: _reconciledFilter,
     );
 
     final txs = res.transactions;
@@ -321,49 +462,49 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        icon: const Icon(Icons.chevron_left, size: 20),
-                        tooltip: 'Dia anterior',
-                        onPressed: () => _stepDay(-1),
-                      ),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _pickDay,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: colors.borderGlass),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            icon: const Icon(Icons.chevron_left, size: 20),
+                            tooltip: 'Dia anterior',
+                            onPressed: () => _stepDay(-1),
+                          ),
+                          InkWell(
                             borderRadius: BorderRadius.circular(8),
-                            color: colors.surfaceGlass,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.calendar_today_outlined, size: 15),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${fmtDate(_selectedDayIso)} (${weekdayShort(_selectedDayIso)})',
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            onTap: _pickDay,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: colors.borderGlass),
+                                borderRadius: BorderRadius.circular(8),
+                                color: colors.surfaceGlass,
                               ),
-                            ],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.calendar_today_outlined, size: 15),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${fmtDate(_selectedDayIso)} (${weekdayShort(_selectedDayIso)})',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        icon: const Icon(Icons.chevron_right, size: 20),
-                        tooltip: 'Próximo dia',
-                        onPressed: () => _stepDay(1),
-                      ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            icon: const Icon(Icons.chevron_right, size: 20),
+                            tooltip: 'Próximo dia',
+                            onPressed: () => _stepDay(1),
+                          ),
                         ],
                       ),
                       OutlinedButton(
@@ -652,10 +793,19 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                _buildAdvancedFiltersBar(colors, isMobile),
               ],
             ),
           ),
         ),
+        if (_selectionMode)
+          _buildSelectionActionBar(
+            orderedTxs: orderedTxs,
+            currency: res.currency,
+            colors: colors,
+            isMobile: isMobile,
+          ),
 
         // 2. Listagem Cronológica dos Lançamentos Consolidados
         Expanded(
@@ -910,6 +1060,18 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                 leading: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (_selectionMode)
+                      Checkbox(
+                        value: tx.auto == true
+                            ? false
+                            : _selectedTxIds.contains(tx.id),
+                        onChanged: tx.auto == true
+                            ? null
+                            : (_) => _toggleTxSelection(tx.id),
+                        activeColor: colors.accent,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
                     IconButton(
                       visualDensity: isMobile ? VisualDensity.compact : null,
                       padding: isMobile ? const EdgeInsets.all(4) : null,
@@ -1032,6 +1194,10 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                           fontSize: 8.5,
                         ),
                       ],
+                      if (tx.tags != null && tx.tags!.isNotEmpty) ...[
+                        const SizedBox(width: 5),
+                        ..._buildTagChips(tx.tags!, colors),
+                      ],
                     ],
                   ],
                 ),
@@ -1077,6 +1243,8 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                                 color: colors.accentIndigo,
                                 fontSize: 8.5,
                               ),
+                            if (tx.tags != null && tx.tags!.isNotEmpty)
+                              ..._buildTagChips(tx.tags!, colors),
                           ],
                         ),
                       )
@@ -1209,6 +1377,293 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTagChips(List<String> tags, OpenMoneyColors colors) {
+    return tags.map((tag) {
+      return Container(
+        margin: const EdgeInsets.only(right: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: colors.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colors.accent.withValues(alpha: 0.3)),
+        ),
+        child: Text(
+          '#$tag',
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w600,
+            color: colors.accent,
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildAdvancedFiltersBar(OpenMoneyColors colors, bool isMobile) {
+    final categories = widget.store.allCatNames();
+    final tags = widget.store.allTags;
+
+    Widget buildDropdown<T>({
+      required String label,
+      required T value,
+      required List<DropdownMenuItem<T>> items,
+      required ValueChanged<T?> onChanged,
+      double width = 155,
+    }) {
+      return SizedBox(
+        width: isMobile ? null : width,
+        child: DropdownButtonFormField<T>(
+          initialValue: value,
+          isExpanded: true,
+          isDense: true,
+          dropdownColor: colors.surfaceCard,
+          style: TextStyle(fontSize: 12, color: colors.textPrimary),
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(fontSize: 11, color: colors.textMuted),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: colors.borderGlass),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: colors.borderGlass),
+            ),
+          ),
+          items: items,
+          onChanged: onChanged,
+        ),
+      );
+    }
+
+    final catValue = (_categoryFilter == 'all' ||
+            _categoryFilter == '__uncategorized__' ||
+            categories.contains(_categoryFilter))
+        ? _categoryFilter
+        : 'all';
+    final tagValue = (_tagFilter == 'all' ||
+            _tagFilter == '__untagged__' ||
+            tags.any((t) => t.toLowerCase() == _tagFilter.toLowerCase()))
+        ? _tagFilter
+        : 'all';
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        buildDropdown<String>(
+          label: 'Categoria',
+          value: catValue,
+          width: 175,
+          items: [
+            const DropdownMenuItem(value: 'all', child: Text('Todas')),
+            const DropdownMenuItem(
+              value: '__uncategorized__',
+              child: Text('Sem categoria'),
+            ),
+            ...categories.map(
+              (c) => DropdownMenuItem(
+                value: c,
+                child: Text(
+                  c.replaceAll(':', ' › '),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _categoryFilter = v);
+          },
+        ),
+        buildDropdown<String>(
+          label: 'Tag',
+          value: tagValue,
+          width: 145,
+          items: [
+            const DropdownMenuItem(value: 'all', child: Text('Todas')),
+            const DropdownMenuItem(value: '__untagged__', child: Text('Sem tag')),
+            ...tags.map(
+              (t) => DropdownMenuItem(
+                value: t,
+                child: Text('#$t', overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _tagFilter = v);
+          },
+        ),
+        buildDropdown<String>(
+          label: 'Tipo',
+          value: _typeFilter,
+          width: 130,
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('Todos')),
+            DropdownMenuItem(value: 'expense', child: Text('Despesas')),
+            DropdownMenuItem(value: 'income', child: Text('Receitas')),
+            DropdownMenuItem(value: 'transfer', child: Text('Transferências')),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _typeFilter = v);
+          },
+        ),
+        buildDropdown<String>(
+          label: 'Conciliação',
+          value: _reconciledFilter,
+          width: 130,
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('Todos')),
+            DropdownMenuItem(value: 'reconciled', child: Text('Conciliados')),
+            DropdownMenuItem(value: 'pending', child: Text('Pendentes')),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _reconciledFilter = v);
+          },
+        ),
+        if (_hasActiveAdvancedFilters)
+          TextButton.icon(
+            onPressed: _clearAdvancedFilters,
+            icon: const Icon(Icons.filter_alt_off, size: 15),
+            label: const Text('Limpar filtros', style: TextStyle(fontSize: 12)),
+          ),
+        OutlinedButton.icon(
+          onPressed: _toggleSelectionMode,
+          icon: Icon(
+            _selectionMode ? Icons.check_box : Icons.check_box_outline_blank,
+            size: 16,
+            color: _selectionMode ? colors.accent : colors.textSecondary,
+          ),
+          label: Text(
+            _selectionMode ? 'Sair da Seleção' : 'Selecionar',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _selectionMode ? colors.accent : colors.textPrimary,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(
+              color: _selectionMode ? colors.accent : colors.borderGlass,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionActionBar({
+    required List<Transaction> orderedTxs,
+    required String currency,
+    required OpenMoneyColors colors,
+    required bool isMobile,
+  }) {
+    final selectableTxs = orderedTxs.where((t) => t.auto != true).toList();
+    int selectedNet = 0;
+    for (final tx in selectableTxs) {
+      if (_selectedTxIds.contains(tx.id)) {
+        selectedNet += widget.store.convertTxToCurrency(tx, currency);
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 10 : 16,
+        0,
+        isMobile ? 10 : 16,
+        6,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: colors.accent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colors.accent.withValues(alpha: 0.35)),
+        ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              '${_selectedTxIds.length} selecionado(s)',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: colors.accent,
+              ),
+            ),
+            if (_selectedTxIds.isNotEmpty)
+              Text(
+                '(${formatCurrency(selectedNet, currency)})',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: selectedNet >= 0 ? colors.income : colors.expense,
+                ),
+              ),
+            TextButton(
+              onPressed: selectableTxs.isEmpty
+                  ? null
+                  : () => _selectAllVisible(selectableTxs),
+              child: const Text('Selecionar todos',
+                  style: TextStyle(fontSize: 12)),
+            ),
+            if (_selectedTxIds.isNotEmpty)
+              TextButton(
+                onPressed: () => setState(() => _selectedTxIds.clear()),
+                child: const Text('Limpar', style: TextStyle(fontSize: 12)),
+              ),
+            ElevatedButton.icon(
+              onPressed:
+                  _selectedTxIds.isEmpty ? null : _openBatchEditModal,
+              icon: const Icon(Icons.edit, size: 15),
+              label: const Text('Editar em Lote',
+                  style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _selectedTxIds.isEmpty
+                  ? null
+                  : () => _batchQuickReconcile(true),
+              icon: Icon(Icons.check_circle_outline,
+                  size: 15, color: colors.income),
+              label: const Text('Conciliar', style: TextStyle(fontSize: 12)),
+            ),
+            OutlinedButton.icon(
+              onPressed: _selectedTxIds.isEmpty
+                  ? null
+                  : () => _batchQuickReconcile(false),
+              icon: Icon(Icons.radio_button_unchecked,
+                  size: 15, color: colors.textMuted),
+              label: const Text('Pendente', style: TextStyle(fontSize: 12)),
+            ),
+            OutlinedButton.icon(
+              onPressed: _selectedTxIds.isEmpty
+                  ? null
+                  : () => _confirmBatchDeleteSelection(colors),
+              icon: Icon(Icons.delete_outline,
+                  size: 15, color: colors.expense),
+              label: Text(
+                'Excluir',
+                style: TextStyle(fontSize: 12, color: colors.expense),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

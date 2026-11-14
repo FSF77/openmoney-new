@@ -2028,6 +2028,34 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     fontSize: 8.5,
                                   ),
                                 ],
+                                if (tx.tags != null && tx.tags!.isNotEmpty) ...[
+                                  const SizedBox(width: 5),
+                                  ...tx.tags!.take(3).map(
+                                        (tag) => Container(
+                                          margin: const EdgeInsets.only(right: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: colors.accent
+                                                .withValues(alpha: 0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: colors.accent
+                                                  .withValues(alpha: 0.3),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '#$tag',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: colors.accent,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                ],
                               ],
                             ),
                             subtitle: isMobile
@@ -2091,6 +2119,36 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                                 'FAT. ${formatInvoiceKeyForDisplay(tx.ik!)}',
                                             color: colors.accentIndigo,
                                             fontSize: 8.5,
+                                          ),
+                                        if (tx.tags != null &&
+                                            tx.tags!.isNotEmpty)
+                                          ...tx.tags!.map(
+                                            (tag) => Container(
+                                              margin: const EdgeInsets.only(
+                                                  right: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: colors.accent
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                border: Border.all(
+                                                  color: colors.accent
+                                                      .withValues(alpha: 0.3),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '#$tag',
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colors.accent,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                       ],
                                     ),

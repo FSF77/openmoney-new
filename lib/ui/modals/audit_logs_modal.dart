@@ -82,6 +82,8 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
         return const Color(0xFF10B981); // Emerald Green
       case AuditAction.update:
         return const Color(0xFF3B82F6); // Blue
+      case AuditAction.batchEdit:
+        return const Color(0xFF6366F1); // Indigo
       case AuditAction.delete:
         return const Color(0xFFEF4444); // Red
       case AuditAction.batchDelete:
@@ -97,6 +99,8 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
         return Icons.add_circle_outline;
       case AuditAction.update:
         return Icons.edit_note_outlined;
+      case AuditAction.batchEdit:
+        return Icons.drive_file_rename_outline;
       case AuditAction.delete:
         return Icons.delete_outline;
       case AuditAction.batchDelete:

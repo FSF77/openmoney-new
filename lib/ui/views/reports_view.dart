@@ -19,6 +19,7 @@ class _ReportsViewState extends State<ReportsView> {
   Set<String> _selectedAccountIds = {};
   ReportPeriodKind _periodKind = ReportPeriodKind.monthly;
   CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
+  String _tagFilter = 'all';
   late int _selectedYear;
 
   @override
@@ -45,6 +46,7 @@ class _ReportsViewState extends State<ReportsView> {
       accountFilterIds:
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       statusFilter: _statusFilter,
+      tagFilter: _tagFilter == 'all' ? null : _tagFilter,
     );
   }
 
@@ -60,6 +62,7 @@ class _ReportsViewState extends State<ReportsView> {
           _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
       isAnnual: isAnnual,
       statusFilter: _statusFilter,
+      tagFilter: _tagFilter == 'all' ? null : _tagFilter,
     );
 
     final cur = data.currency;
@@ -165,6 +168,63 @@ class _ReportsViewState extends State<ReportsView> {
                     width: 200,
                     onSelectionChanged: (set) =>
                         setState(() => _selectedAccountIds = set),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final tags = widget.store.allTags;
+                      final effectiveTag = (_tagFilter == 'all' ||
+                              _tagFilter == '__untagged__' ||
+                              tags.any((t) =>
+                                  t.toLowerCase() == _tagFilter.toLowerCase()))
+                          ? _tagFilter
+                          : 'all';
+                      return SizedBox(
+                        width: 155,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: effectiveTag,
+                          isExpanded: true,
+                          isDense: true,
+                          dropdownColor: colors.surfaceCard,
+                          style: TextStyle(
+                              fontSize: 13, color: colors.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: 'Tag',
+                            labelStyle: TextStyle(
+                                fontSize: 11, color: colors.textMuted),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  BorderSide(color: colors.borderGlass),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  BorderSide(color: colors.borderGlass),
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                                value: 'all', child: Text('Todas')),
+                            const DropdownMenuItem(
+                                value: '__untagged__',
+                                child: Text('Sem tag')),
+                            ...tags.map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text('#$t',
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _tagFilter = v);
+                          },
+                        ),
+                      );
+                    },
                   ),
                   SizedBox(
                     width: 200,

@@ -25,6 +25,7 @@ Future<void> showCategoryDrillDownModal(
   Set<String>? accountFilterIds,
   CashFlowDateMode? dateMode,
   CashFlowStatusFilter? statusFilter,
+  String? tagFilter,
 }) async {
   await showDialog(
     context: context,
@@ -40,6 +41,7 @@ Future<void> showCategoryDrillDownModal(
       accountFilterIds: accountFilterIds,
       dateMode: dateMode,
       statusFilter: statusFilter,
+      tagFilter: tagFilter,
     ),
   );
 }
@@ -56,6 +58,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
   final Set<String>? accountFilterIds;
   final CashFlowDateMode? dateMode;
   final CashFlowStatusFilter? statusFilter;
+  final String? tagFilter;
 
   const _CategoryDrillDownDialog({
     required this.store,
@@ -69,6 +72,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
     this.accountFilterIds,
     this.dateMode,
     this.statusFilter,
+    this.tagFilter,
   });
 
   @override
@@ -113,6 +117,20 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
           widget.accountFilterIds!.isNotEmpty &&
           !widget.accountFilterIds!.contains(t.acc)) {
         return false;
+      }
+
+      if (widget.tagFilter != null &&
+          widget.tagFilter!.isNotEmpty &&
+          widget.tagFilter != 'all') {
+        final txTags = t.tags ?? const <String>[];
+        if (widget.tagFilter == '__untagged__') {
+          if (txTags.isNotEmpty) return false;
+        } else {
+          final normTag = widget.tagFilter!.trim().toLowerCase();
+          if (!txTags.any((tg) => tg.trim().toLowerCase() == normTag)) {
+            return false;
+          }
+        }
       }
 
       if (widget.statusFilter != null) {
@@ -310,12 +328,17 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
       (s, t) => s + widget.store.convertTxToCurrency(t, targetCur),
     );
     final hasCat = widget.categoryPath != null && widget.categoryPath!.isNotEmpty;
+    final hasTag = widget.tagFilter != null && widget.tagFilter!.isNotEmpty;
     final displayTitle = widget.titleOverride ??
-        (hasCat
-            ? 'Auditoria de Lançamentos: ${widget.categoryPath}'
-            : (widget.categoryTypeFilter != null
-                ? 'Auditoria: ${widget.categoryTypeFilter}'
-                : 'Auditoria de Lançamentos'));
+        (hasTag && !hasCat
+            ? (widget.tagFilter == '__untagged__'
+                ? 'Auditoria de Lançamentos: Sem tag'
+                : 'Auditoria de Lançamentos: #${widget.tagFilter}')
+            : (hasCat
+                ? 'Auditoria de Lançamentos: ${widget.categoryPath}'
+                : (widget.categoryTypeFilter != null
+                    ? 'Auditoria: ${widget.categoryTypeFilter}'
+                    : 'Auditoria de Lançamentos')));
 
     final screenSize = MediaQuery.sizeOf(context);
     final isMobile = screenSize.width < 720;

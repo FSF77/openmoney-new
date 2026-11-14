@@ -385,7 +385,7 @@ class CSVExporter {
     });
 
     final lines = <String>[
-      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa";"Moeda";"Moeda Padrão";"Valor Moeda Padrão";"Taxa Câmbio";"Valor Contrapartida";"Moeda Contrapartida";"Taxa Transferência"',
+      '"Data";"Conta";"Descrição";"Categoria";"Nota";"Valor";"Conciliado";"Fatura";"Conta Favorita";"Conta Ativa";"Moeda";"Moeda Padrão";"Valor Moeda Padrão";"Taxa Câmbio";"Valor Contrapartida";"Moeda Contrapartida";"Taxa Transferência";"Tags"',
     ];
 
     for (final tx in filtered) {
@@ -484,8 +484,9 @@ class CSVExporter {
         }
       }
 
+      final tagsStr = _escapeCSV((tx.tags ?? const []).join(', '));
       lines.add(
-        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}";"$accFav";"$accAtiva";"$accCur";"$effectiveBase";"$baseAmtStr";"$fxRateStr";"$peerAmtStr";"$peerCurStr";"$xferRateStr"',
+        '"$dateStr";"$accName";"$payeeStr";"$catStr";"$memoStr";"$amtStr";"$recStr";"${_escapeCSV(invoiceStr)}";"$accFav";"$accAtiva";"$accCur";"$effectiveBase";"$baseAmtStr";"$fxRateStr";"$peerAmtStr";"$peerCurStr";"$xferRateStr";"$tagsStr"',
       );
     }
 

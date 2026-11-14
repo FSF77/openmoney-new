@@ -8,6 +8,7 @@ enum AuditAction {
   create,
   update,
   delete,
+  batchEdit,
   batchDelete,
   importBatch,
 }
@@ -16,6 +17,7 @@ enum AuditEntity {
   transaction,
   account,
   category,
+  tag,
 }
 
 class AuditLogEntry {
@@ -84,6 +86,8 @@ class AuditLogEntry {
         return 'Inclusão';
       case AuditAction.update:
         return 'Alteração';
+      case AuditAction.batchEdit:
+        return 'Edição em Lote';
       case AuditAction.delete:
         return 'Exclusão';
       case AuditAction.batchDelete:
@@ -101,6 +105,8 @@ class AuditLogEntry {
         return 'Conta';
       case AuditEntity.category:
         return 'Categoria';
+      case AuditEntity.tag:
+        return 'Tag';
     }
   }
 

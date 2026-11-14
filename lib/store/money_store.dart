@@ -23,11 +23,83 @@ enum NavModule {
   reports,
   budget,
   categories,
+  tags,
   search,
   dueBills,
   installments,
   predictions,
   settings,
+}
+
+enum BatchTagMode {
+  add,
+  replace,
+  remove,
+}
+
+enum BatchAmountSignMode {
+  keepOriginal,
+  expense,
+  income,
+}
+
+class BatchTransactionEditPayload {
+  final bool applyPayee;
+  final String payee;
+
+  final bool applyCategory;
+  final String category;
+
+  final bool applyTags;
+  final BatchTagMode tagMode;
+  final List<String> tags;
+
+  final bool applyMemo;
+  final String memo;
+
+  final bool applyAmount;
+  final int absAmountCents;
+  final BatchAmountSignMode amountSignMode;
+
+  final bool applyDate;
+  final String date;
+
+  final bool applyAccount;
+  final String accountId;
+
+  final bool applyReconciled;
+  final bool reconciled;
+
+  const BatchTransactionEditPayload({
+    this.applyPayee = false,
+    this.payee = '',
+    this.applyCategory = false,
+    this.category = '',
+    this.applyTags = false,
+    this.tagMode = BatchTagMode.add,
+    this.tags = const [],
+    this.applyMemo = false,
+    this.memo = '',
+    this.applyAmount = false,
+    this.absAmountCents = 0,
+    this.amountSignMode = BatchAmountSignMode.keepOriginal,
+    this.applyDate = false,
+    this.date = '',
+    this.applyAccount = false,
+    this.accountId = '',
+    this.applyReconciled = false,
+    this.reconciled = false,
+  });
+
+  bool get hasAnyChange =>
+      applyPayee ||
+      applyCategory ||
+      applyTags ||
+      applyMemo ||
+      applyAmount ||
+      applyDate ||
+      applyAccount ||
+      applyReconciled;
 }
 
 class TransferRateSuggestion {
@@ -3689,8 +3761,14 @@ class MoneyStore extends ChangeNotifier {
     String? customIk,
     int? peerSignedAmt,
     double? txRate,
+    List<String>? tags,
   }) {
     setLastUsedAccount(accId);
+    final normalizedTags = normalizeTagList(tags ?? const []);
+    if (normalizedTags.isNotEmpty) {
+      _registerTagsInCatalog(normalizedTags);
+    }
+    final List<String>? txTags = normalizedTags.isEmpty ? null : normalizedTags;
     final isXfer = catSelection.startsWith('xfer:');
     final peerId = isXfer ? catSelection.substring(5) : null;
     final peerAcc = accById(peerId);
@@ -3760,6 +3838,7 @@ class MoneyStore extends ChangeNotifier {
             pn: i + 1,
             pt: count,
             rate: (d.compareTo(today) <= 0) ? resolvedCurRate : null,
+            tags: txTags == null ? null : List<String>.from(txTags),
           ),
         );
       }
@@ -3817,6 +3896,7 @@ class MoneyStore extends ChangeNotifier {
           xfer: xid,
           ik: baseIk,
           rate: curTxRate,
+          tags: txTags == null ? null : List<String>.from(txTags),
         ),
       );
       if (isXfer && peerId != null) {
@@ -3841,6 +3921,7 @@ class MoneyStore extends ChangeNotifier {
             xfer: xid,
             ik: peerIk,
             rate: peerTxRate,
+            tags: txTags == null ? null : List<String>.from(txTags),
           ),
         );
       }
@@ -3975,6 +4056,7 @@ class MoneyStore extends ChangeNotifier {
     String? newIk,
     int? peerSignedAmt,
     double? txRate,
+    List<String>? newTags,
   }) {
     final idx = db.txs.indexWhere((t) => t.id == txId);
     if (idx == -1) return;
@@ -4028,6 +4110,15 @@ class MoneyStore extends ChangeNotifier {
     if (txRate != null && txRate > 0) {
       db.txs[idx].rate = txRate;
     }
+    List<String>? resolvedTags;
+    if (newTags != null) {
+      final normalizedTags = normalizeTagList(newTags);
+      if (normalizedTags.isNotEmpty) {
+        _registerTagsInCatalog(normalizedTags);
+      }
+      resolvedTags = normalizedTags.isEmpty ? null : normalizedTags;
+      db.txs[idx].tags = resolvedTags;
+    }
 
     final cAcc = accById(targetAccId);
     if (cAcc != null && cAcc.type == kCardType && cAcc.card != null) {
@@ -4050,6 +4141,10 @@ class MoneyStore extends ChangeNotifier {
           db.txs[i].date = newDate;
           db.txs[i].payee = newPayee;
           db.txs[i].memo = newMemo;
+          if (newTags != null) {
+            db.txs[i].tags =
+                resolvedTags == null ? null : List<String>.from(resolvedTags);
+          }
 
           final peerAcc = accById(db.txs[i].acc);
           final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
@@ -4124,6 +4219,11 @@ class MoneyStore extends ChangeNotifier {
             db.txs[i].cat = newCat;
             db.txs[i].memo = newMemo;
             db.txs[i].amt = newSignedAmt;
+            if (newTags != null) {
+              db.txs[i].tags = resolvedTags == null
+                  ? null
+                  : List<String>.from(resolvedTags);
+            }
           }
           if (dateChanged && db.txs[i].recSeq != null) {
             final step = db.txs[i].recSeq! - baseSeq;
@@ -4161,6 +4261,10 @@ class MoneyStore extends ChangeNotifier {
           db.txs[i].cat = newCat;
           db.txs[i].memo = newMemo;
           db.txs[i].amt = newSignedAmt;
+          if (newTags != null) {
+            db.txs[i].tags =
+                resolvedTags == null ? null : List<String>.from(resolvedTags);
+          }
           if (dateChanged) {
             final step = opn - basePn;
             db.txs[i].date = addMonthsDate(newDate, step);
@@ -4906,6 +5010,7 @@ class MoneyStore extends ChangeNotifier {
     Set<String>? accountFilterIds,
     bool isAnnual = false,
     CashFlowStatusFilter statusFilter = CashFlowStatusFilter.all,
+    String? tagFilter,
   }) {
     String reportCurrency = baseCurrency;
     if (accountFilterIds != null && accountFilterIds.isNotEmpty) {
@@ -4955,6 +5060,17 @@ class MoneyStore extends ChangeNotifier {
         case CashFlowStatusFilter.pendingOnly:
           if (tx.rec) return false;
           break;
+      }
+      if (tagFilter != null && tagFilter.isNotEmpty && tagFilter != 'all') {
+        final txTags = tx.tags ?? const <String>[];
+        if (tagFilter == '__untagged__') {
+          if (txTags.isNotEmpty) return false;
+        } else {
+          final normTag = tagFilter.trim().toLowerCase();
+          if (!txTags.any((t) => t.trim().toLowerCase() == normTag)) {
+            return false;
+          }
+        }
       }
       return true;
     }).toList();
@@ -5379,6 +5495,10 @@ class MoneyStore extends ChangeNotifier {
     bool cardByInvoice = false,
     Set<String>? accountFilterIds,
     String searchQuery = '',
+    String? categoryFilter,
+    String? tagFilter,
+    String? typeFilter,
+    String? reconciledFilter,
   }) {
     rebuildIndexesIfNeeded();
 
@@ -5441,11 +5561,63 @@ class MoneyStore extends ChangeNotifier {
         }
       }
 
+      // Filtro de Categoria
+      if (categoryFilter != null &&
+          categoryFilter.isNotEmpty &&
+          categoryFilter != 'all') {
+        if (categoryFilter == '__uncategorized__') {
+          if (tx.cat.trim().isNotEmpty) continue;
+        } else {
+          final normFilter = removeDiacritics(categoryFilter).toLowerCase();
+          final normTxCat = removeDiacritics(tx.cat).toLowerCase();
+          if (normTxCat != normFilter &&
+              !normTxCat.startsWith('$normFilter:') &&
+              !normTxCat.startsWith('$normFilter ›')) {
+            continue;
+          }
+        }
+      }
+
+      // Filtro de Tag
+      if (tagFilter != null && tagFilter.isNotEmpty && tagFilter != 'all') {
+        final txTags = tx.tags ?? const <String>[];
+        if (tagFilter == '__untagged__') {
+          if (txTags.isNotEmpty) continue;
+        } else {
+          final normTag = tagFilter.trim().toLowerCase();
+          if (!txTags.any((t) => t.trim().toLowerCase() == normTag)) {
+            continue;
+          }
+        }
+      }
+
+      // Filtro de Tipo
+      if (typeFilter != null && typeFilter.isNotEmpty && typeFilter != 'all') {
+        final isXfer = tx.xfer != null || tx.peer != null;
+        if (typeFilter == 'transfer') {
+          if (!isXfer) continue;
+        } else if (typeFilter == 'income') {
+          if (isXfer || tx.amt <= 0) continue;
+        } else if (typeFilter == 'expense') {
+          if (isXfer || tx.amt >= 0) continue;
+        }
+      }
+
+      // Filtro de Conciliação
+      if (reconciledFilter != null &&
+          reconciledFilter.isNotEmpty &&
+          reconciledFilter != 'all') {
+        if (reconciledFilter == 'reconciled' && !tx.rec) continue;
+        if (reconciledFilter == 'pending' && tx.rec) continue;
+      }
+
       // Filtro de busca textual
       if (tokens.isNotEmpty) {
         final payee = removeDiacritics(tx.payee).toLowerCase();
         final cat = removeDiacritics(tx.cat).toLowerCase();
         final memo = removeDiacritics(tx.memo).toLowerCase();
+        final tagsText =
+            removeDiacritics((tx.tags ?? const []).join(' ')).toLowerCase();
         final accName = accNames[tx.acc] ?? '';
         final dateStr = tx.date;
         final effDateStr = effectiveDate;
@@ -5459,6 +5631,7 @@ class MoneyStore extends ChangeNotifier {
           if (!(payee.contains(token) ||
               cat.contains(token) ||
               memo.contains(token) ||
+              tagsText.contains(token) ||
               accName.contains(token) ||
               dateStr.contains(token) ||
               effDateStr.contains(token) ||
@@ -5505,6 +5678,354 @@ class MoneyStore extends ChangeNotifier {
       netCents: income - expense,
       currency: targetCurrency,
     );
+  }
+
+  // MARK: - Tags & Edição em Massa
+
+  static List<String> normalizeTagList(Iterable<String> raw) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final item in raw) {
+      final clean = item.trim();
+      if (clean.isEmpty) continue;
+      final key = clean.toLowerCase();
+      if (seen.add(key)) {
+        result.add(clean);
+      }
+    }
+    return result;
+  }
+
+  void _registerTagsInCatalog(Iterable<String> raw) {
+    final existingKeys = db.tags.map((e) => e.toLowerCase()).toSet();
+    bool changed = false;
+    for (final tag in raw) {
+      final clean = tag.trim();
+      if (clean.isEmpty) continue;
+      final key = clean.toLowerCase();
+      if (existingKeys.add(key)) {
+        db.tags.add(clean);
+        changed = true;
+      }
+    }
+    if (changed) {
+      db.tags.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    }
+  }
+
+  List<String> allCatNames() {
+    final list = db.cats.map((c) => c.path).toSet().toList();
+    list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  List<String> get allTags {
+    final map = <String, String>{};
+    for (final t in db.tags) {
+      final clean = t.trim();
+      if (clean.isEmpty) continue;
+      map.putIfAbsent(clean.toLowerCase(), () => clean);
+    }
+    for (final tx in db.txs) {
+      for (final t in tx.tags ?? const <String>[]) {
+        final clean = t.trim();
+        if (clean.isEmpty) continue;
+        map.putIfAbsent(clean.toLowerCase(), () => clean);
+      }
+    }
+    final list = map.values.toList();
+    list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  int transactionCountForTag(String tag) {
+    final key = tag.trim().toLowerCase();
+    if (key.isEmpty) return 0;
+    int count = 0;
+    for (final tx in db.txs) {
+      final tags = tx.tags;
+      if (tags != null && tags.any((t) => t.trim().toLowerCase() == key)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  bool addTag(String rawName) {
+    final clean = rawName.trim();
+    if (clean.isEmpty) return false;
+    final key = clean.toLowerCase();
+    if (db.tags.any((t) => t.trim().toLowerCase() == key)) {
+      return false;
+    }
+    db.tags.add(clean);
+    db.tags.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    save();
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.create,
+      entity: AuditEntity.tag,
+      id: clean,
+      summary: 'Tag criada: "#$clean"',
+    );
+    return true;
+  }
+
+  bool renameTag(String oldName, String newRawName) {
+    final oldKey = oldName.trim().toLowerCase();
+    final newClean = newRawName.trim();
+    if (oldKey.isEmpty || newClean.isEmpty) return false;
+    final newKey = newClean.toLowerCase();
+
+    if (oldKey != newKey &&
+        allTags.any((t) => t.trim().toLowerCase() == newKey)) {
+      return false;
+    }
+
+    db.tags.removeWhere((t) => t.trim().toLowerCase() == oldKey);
+    if (!db.tags.any((t) => t.trim().toLowerCase() == newKey)) {
+      db.tags.add(newClean);
+    }
+    db.tags.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    int affected = 0;
+    for (int i = 0; i < db.txs.length; i++) {
+      final current = db.txs[i].tags;
+      if (current == null || current.isEmpty) continue;
+      bool hadOld = false;
+      final updated = <String>[];
+      final seen = <String>{};
+      for (final item in current) {
+        final k = item.trim().toLowerCase();
+        if (k == oldKey) {
+          hadOld = true;
+          if (seen.add(newKey)) updated.add(newClean);
+        } else if (seen.add(k)) {
+          updated.add(item.trim());
+        }
+      }
+      if (hadOld) {
+        db.txs[i].tags = updated.isEmpty ? null : updated;
+        affected++;
+      }
+    }
+
+    markIndexesDirty();
+    save();
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.update,
+      entity: AuditEntity.tag,
+      id: newClean,
+      summary: 'Tag renomeada: "#$oldName" → "#$newClean" ($affected lançamento(s))',
+    );
+    return true;
+  }
+
+  void deleteTag(String tagName) {
+    final key = tagName.trim().toLowerCase();
+    if (key.isEmpty) return;
+
+    db.tags.removeWhere((t) => t.trim().toLowerCase() == key);
+    int affected = 0;
+    for (int i = 0; i < db.txs.length; i++) {
+      final current = db.txs[i].tags;
+      if (current == null || current.isEmpty) continue;
+      final filtered =
+          current.where((t) => t.trim().toLowerCase() != key).toList();
+      if (filtered.length != current.length) {
+        db.txs[i].tags = filtered.isEmpty ? null : filtered;
+        affected++;
+      }
+    }
+
+    markIndexesDirty();
+    save();
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.delete,
+      entity: AuditEntity.tag,
+      id: tagName,
+      summary: 'Tag excluída: "#$tagName" ($affected lançamento(s) atualizado(s))',
+    );
+  }
+
+  int batchUpdateTransactions({
+    required Set<String> ids,
+    required BatchTransactionEditPayload payload,
+  }) {
+    if (ids.isEmpty || !payload.hasAnyChange) return 0;
+
+    final normalizedPayloadTags =
+        payload.applyTags ? normalizeTagList(payload.tags) : const <String>[];
+    if (payload.applyTags &&
+        payload.tagMode != BatchTagMode.remove &&
+        normalizedPayloadTags.isNotEmpty) {
+      _registerTagsInCatalog(normalizedPayloadTags);
+    }
+
+    int updatedCount = 0;
+    final targetAcc = payload.applyAccount ? accById(payload.accountId) : null;
+
+    for (int i = 0; i < db.txs.length; i++) {
+      final tx = db.txs[i];
+      if (!ids.contains(tx.id) || tx.auto == true) continue;
+      final isXfer = (tx.xfer != null && tx.xfer!.isNotEmpty) ||
+          (tx.peer != null && tx.peer!.isNotEmpty);
+
+      if (payload.applyPayee) {
+        tx.payee = payload.payee.trim();
+      }
+      if (payload.applyCategory && !isXfer) {
+        tx.cat = payload.category;
+      }
+      if (payload.applyMemo) {
+        tx.memo = payload.memo;
+      }
+      if (payload.applyDate) {
+        tx.date = payload.date;
+      }
+      if (payload.applyAccount &&
+          !isXfer &&
+          targetAcc != null) {
+        tx.acc = targetAcc.id;
+      }
+      if (payload.applyReconciled) {
+        tx.rec = payload.reconciled;
+      }
+      if (payload.applyAmount && !isXfer) {
+        final absVal = payload.absAmountCents.abs();
+        switch (payload.amountSignMode) {
+          case BatchAmountSignMode.keepOriginal:
+            tx.amt = tx.amt < 0 ? -absVal : absVal;
+            break;
+          case BatchAmountSignMode.expense:
+            tx.amt = -absVal;
+            break;
+          case BatchAmountSignMode.income:
+            tx.amt = absVal;
+            break;
+        }
+      }
+      if (payload.applyTags) {
+        final current = tx.tags ?? const <String>[];
+        switch (payload.tagMode) {
+          case BatchTagMode.add:
+            final merged = normalizeTagList([...current, ...normalizedPayloadTags]);
+            tx.tags = merged.isEmpty ? null : merged;
+            break;
+          case BatchTagMode.replace:
+            tx.tags = normalizedPayloadTags.isEmpty
+                ? null
+                : List<String>.from(normalizedPayloadTags);
+            break;
+          case BatchTagMode.remove:
+            final removeKeys =
+                normalizedPayloadTags.map((e) => e.toLowerCase()).toSet();
+            final remaining = current
+                .where((t) => !removeKeys.contains(t.trim().toLowerCase()))
+                .toList();
+            tx.tags = remaining.isEmpty ? null : remaining;
+            break;
+        }
+      }
+
+      // Atualiza invoice key para cartão quando conta/data mudar
+      final effectiveAcc = accById(tx.acc);
+      if (effectiveAcc != null &&
+          effectiveAcc.type == kCardType &&
+          effectiveAcc.card != null) {
+        if (payload.applyAccount || payload.applyDate) {
+          tx.ik = invKeyFor(effectiveAcc.card!, tx.date);
+        }
+      } else {
+        tx.ik = null;
+      }
+
+      updatedCount++;
+    }
+
+    if (updatedCount > 0) {
+      syncCards();
+      markIndexesDirty();
+      rebuildIndexes();
+      save(immediate: true);
+
+      final fields = <String>[
+        if (payload.applyPayee) 'Favorecido',
+        if (payload.applyCategory) 'Categoria',
+        if (payload.applyTags) 'Tags',
+        if (payload.applyMemo) 'Nota',
+        if (payload.applyAmount) 'Valor',
+        if (payload.applyDate) 'Data',
+        if (payload.applyAccount) 'Conta',
+        if (payload.applyReconciled) 'Conciliação',
+      ];
+      AuditLogManager.instance.logAsync(
+        dbPath: dbPath,
+        action: AuditAction.batchEdit,
+        entity: AuditEntity.transaction,
+        summary:
+            'Edição em lote: $updatedCount lançamento(s) atualizado(s) (${fields.join(", ")})',
+      );
+    }
+
+    return updatedCount;
+  }
+
+  int batchDeleteTransactionsByIds(Set<String> ids) {
+    if (ids.isEmpty) return 0;
+
+    final toDelete = <String>{};
+    final transferKeys = <String>{};
+
+    for (final tx in db.txs) {
+      if (tx.auto == true) continue;
+      if (ids.contains(tx.id)) {
+        toDelete.add(tx.id);
+        if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+          transferKeys.add(tx.xfer!);
+        }
+      }
+    }
+
+    if (transferKeys.isNotEmpty) {
+      for (final tx in db.txs) {
+        if (tx.auto == true) continue;
+        if (tx.xfer != null && transferKeys.contains(tx.xfer!)) {
+          toDelete.add(tx.id);
+        }
+      }
+    }
+
+    if (toDelete.isEmpty) return 0;
+
+    if (!kIsWeb && dbPath.isNotEmpty) {
+      BackupManager.instance.createSafetyBackup(
+        appSupportDirPath: _appSupportDirPath,
+        reason: 'pre-batch-delete-selection',
+        databasePath: dbPath,
+      );
+    }
+
+    final before = db.txs.length;
+    db.txs.removeWhere((t) => toDelete.contains(t.id));
+    final deletedCount = before - db.txs.length;
+
+    syncCards();
+    markIndexesDirty();
+    rebuildIndexes();
+    save(immediate: true);
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.batchDelete,
+      entity: AuditEntity.transaction,
+      summary:
+          'Exclusão em lote: $deletedCount lançamento(s) excluído(s) via seleção múltipla',
+    );
+
+    return deletedCount;
   }
 
   List<Transaction> searchTransactions({

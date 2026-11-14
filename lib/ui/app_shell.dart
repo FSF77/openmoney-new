@@ -27,6 +27,7 @@ import 'views/budget_view.dart';
 import 'views/predictions_management_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
+import 'views/tags_view.dart';
 import 'views/dashboard_overview_view.dart';
 import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
@@ -516,6 +517,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         break;
       case NavModule.categories:
         moduleTitle = 'Categorias';
+        break;
+      case NavModule.tags:
+        moduleTitle = 'Tags';
         break;
       case NavModule.dueBills:
         moduleTitle = 'Contas a Pagar & Receber';
@@ -1014,6 +1018,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         return PredictionsManagementView(store: widget.store);
       case NavModule.categories:
         return CategoriesView(store: widget.store);
+      case NavModule.tags:
+        return TagsView(store: widget.store);
       case NavModule.dueBills:
         return DueBillsView(store: widget.store);
       case NavModule.installments:
@@ -1516,6 +1522,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Categorias e Subcategorias',
                   selected: widget.store.activeModule == NavModule.categories,
                   onTap: () => selectModule(NavModule.categories),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.label_outline,
+                  label: 'Tags',
+                  selected: widget.store.activeModule == NavModule.tags,
+                  onTap: () => selectModule(NavModule.tags),
                 ),
                 // 2º Ajustes & Personalização
                 _SidebarNavTile(

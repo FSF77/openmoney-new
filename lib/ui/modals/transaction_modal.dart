@@ -4,6 +4,7 @@ import '../../services/currency_rate_service.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
+import '../widgets/tag_input_field.dart';
 
 Future<void> showTransactionCreateModal(
   BuildContext context,
@@ -267,6 +268,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
+  List<String> _tags = [];
   ScopeChoice _scope = ScopeChoice.only;
   bool _isUpdatingCross = false;
 
@@ -286,6 +288,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       _catSelection = t.cat;
     }
     _customIk = t.ik;
+    _tags = List<String>.from(t.tags ?? const []);
 
     // Inicializar campos cross-currency caso seja transferência entre moedas distintas
     int peerAbs = 0;
@@ -443,6 +446,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       newIk: _customIk,
       peerSignedAmt: peerSignedAmt,
       txRate: txRate,
+      newTags: _tags,
     );
     if (mounted) {
       Navigator.of(context).pop();
@@ -679,6 +683,14 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    TagInputField(
+                      tags: _tags,
+                      onChanged: (list) => setState(() => _tags = list),
+                      availableTags: widget.store.allTags,
+                      colors: OpenMoneyColors(
+                          Theme.of(context).brightness == Brightness.dark),
                     ),
                     if (isCross)
                       _CrossCurrencyTransferBox(
@@ -971,6 +983,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
+  List<String> _tags = [];
   bool _isUpdatingCross = false;
 
   String _mode = 'single';
@@ -1277,6 +1290,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       customIk: ik,
       peerSignedAmt: peerSignedAmt,
       txRate: txRate,
+      tags: _tags,
     );
 
     if (!mounted) return;
@@ -1287,6 +1301,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         _payeeCtrl.clear();
         _memoCtrl.clear();
         _peerAmtCtrl.clear();
+        _tags = [];
         _suggestions = [];
       });
       _payeeFocus.requestFocus();
@@ -1738,6 +1753,14 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    TagInputField(
+                      tags: _tags,
+                      onChanged: (list) => setState(() => _tags = list),
+                      availableTags: widget.store.allTags,
+                      colors: OpenMoneyColors(
+                          Theme.of(context).brightness == Brightness.dark),
+                    ),
                     if (isCross)
                       _CrossCurrencyTransferBox(
                         store: widget.store,
@@ -2114,6 +2137,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
+  List<String> _tags = [];
   bool _isUpdatingCross = false;
 
   String _mode = 'single'; // 'single', 'installment', 'recurring'
@@ -2140,6 +2164,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     _memoCtrl = TextEditingController(text: t.memo);
     _amtCtrl = TextEditingController(text: formatInputCents(t.amt.abs()));
     _isExpense = t.amt < 0;
+    _tags = List<String>.from(t.tags ?? const []);
 
     if (t.peer != null && t.peer!.isNotEmpty) {
       _catSelection = 'xfer:${t.peer}';
@@ -2330,6 +2355,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
       customIk: ik,
       peerSignedAmt: peerSignedAmt,
       txRate: txRate,
+      tags: _tags,
     );
 
     if (mounted) {
@@ -2644,6 +2670,14 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    TagInputField(
+                      tags: _tags,
+                      onChanged: (list) => setState(() => _tags = list),
+                      availableTags: widget.store.allTags,
+                      colors: OpenMoneyColors(
+                          Theme.of(context).brightness == Brightness.dark),
                     ),
                     if (isCross)
                       _CrossCurrencyTransferBox(
