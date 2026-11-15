@@ -44,6 +44,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
 
   bool _selectionMode = false;
   final Set<String> _selectedTxIds = {};
+  bool _mobileShowHeaderTools = false;
 
   @override
   void initState() {
@@ -104,12 +105,30 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
       _typeFilter != 'all' ||
       _reconciledFilter != 'all';
 
+  bool get _hasActiveFilters =>
+      _hasActiveAdvancedFilters ||
+      _searchCtrl.text.isNotEmpty ||
+      _cardByInvoice ||
+      _selectedAccountIds.isNotEmpty;
+
   void _clearAdvancedFilters() {
     setState(() {
       _categoryFilter = 'all';
       _tagFilter = 'all';
       _typeFilter = 'all';
       _reconciledFilter = 'all';
+    });
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _categoryFilter = 'all';
+      _tagFilter = 'all';
+      _typeFilter = 'all';
+      _reconciledFilter = 'all';
+      _searchCtrl.clear();
+      _cardByInvoice = false;
+      _selectedAccountIds.clear();
     });
   }
 
@@ -335,7 +354,25 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         ],
                       ),
                     ),
-                    if (isMobile)
+                    if (isMobile) ...[
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Opções, Busca e Filtros',
+                        icon: Icon(
+                          _mobileShowHeaderTools
+                              ? Icons.expand_less
+                              : Icons.tune,
+                          size: 20,
+                          color: (_mobileShowHeaderTools || _hasActiveFilters)
+                              ? colors.accent
+                              : colors.textSecondary,
+                        ),
+                        onPressed: () => setState(() =>
+                            _mobileShowHeaderTools = !_mobileShowHeaderTools),
+                      ),
+                      const SizedBox(width: 4),
                       IconButton.filled(
                         visualDensity: VisualDensity.compact,
                         tooltip: 'Novo Lançamento',
@@ -356,8 +393,8 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                                 : null,
                           );
                         },
-                      )
-                    else
+                      ),
+                    ] else
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
                           visualDensity: VisualDensity.compact,
@@ -517,10 +554,13 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         child: const Text('Hoje', style: TextStyle(fontSize: 12)),
                       ),
                     ] else if (_periodFilter == ConsolidatedPeriodFilter.month) ...[
-                      MonthYearPickerBar(
-                        currentMonthYM: _selectedMonthYm,
-                        availableYears: widget.store.allYearsInDatabase(),
-                        onMonthChanged: (ym) => setState(() => _selectedMonthYm = ym),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: MonthYearPickerBar(
+                          currentMonthYM: _selectedMonthYm,
+                          availableYears: widget.store.allYearsInDatabase(),
+                          onMonthChanged: (ym) => setState(() => _selectedMonthYm = ym),
+                        ),
                       ),
                     ] else ...[
                       // Seletor de Ano
@@ -559,8 +599,57 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         ],
                       ),
                     ],
-
-                    // Filtro de Cartão: Data do Lançamento vs. Por Fatura
+                  ],
+                ),
+                if (isMobile && !_mobileShowHeaderTools && _hasActiveFilters) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: colors.accent.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.filter_alt, size: 13, color: colors.accent),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Filtros ativos aplicados',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: _clearAllFilters,
+                          child: Text(
+                            'Limpar',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.accent,
+                              fontWeight: FontWeight.w800,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (!isMobile || _mobileShowHeaderTools) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: colors.borderGlass),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Filtro de Cartão: Data do Lançamento vs. Por Fatura
                     FilterChip(
                       visualDensity: VisualDensity.compact,
                       label: Text(
@@ -795,6 +884,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                 ),
                 const SizedBox(height: 8),
                 _buildAdvancedFiltersBar(colors, isMobile),
+              ],
               ],
             ),
           ),

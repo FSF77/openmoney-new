@@ -291,6 +291,11 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Reconhecimento Multimodal via IA Google Gemini (BYOK)**: Extração precisa de Favorecido e Valor Líquido Total Pago com prompt contábil estrito que descarta maquininhas e tributos.
 - **Conferência em Split View**: Visualização lado a lado do comprovante original e dos campos auditáveis, com sugestão de categoria e movimentação física dos arquivos para a pasta `processados/`.
 
+### 19. Sistema de Tags, Filtros Avançados e Edição em Massa (ADR 022)
+- **Compatibilidade Schema `v: 7` & Sync v2**: `Transaction.tags` e `Database.tags` são omitidos do `openmoney.json` quando vazios/nulos, mantendo retrocompatibilidade total, e sincronizados granularmente na coleção `"tags"` do Sync v2.
+- **Proteção Contábil em Operações em Lote**: Lançamentos automáticos de pagamento de fatura (`auto == true`) não podem ser selecionados para edição/exclusão em lote; em transferências entre contas, edição em lote de categoria, conta e valor é bloqueada para preservar o pareamento.
+- **Backup Preventivo Obrigatório**: Toda exclusão em lote via seleção múltipla gera automaticamente um backup de segurança antes da remoção e registra auditoria (`AuditAction.batchEdit` / `AuditAction.batchDelete`).
+
 ---
 
 ## 🚀 Como Rodar e Compilar
@@ -729,6 +734,13 @@ open OpenMoney.xcodeproj
   - Matemática dos saldos diários e fechamentos rigorosamente preservada.
 - **Navegação Mobile / Telas Compactas**:
   - Abertura direta no Dashboard Geral em telas estreitas, eliminação da tela inicial legada, botão Dashboard na barra superior e botão circular compacto com `+` no cabeçalho.
+
+### 21. Sistema de Tags (`#tags`), Filtros Combináveis e Edição em Massa
+- **Tela Dedicada de Tags**: Acessível no menu lateral abaixo de Categorias (e em `Mais > Tags` no iOS), com botão `+` / `Nova Tag`, busca, contagem de lançamentos, renomeação em massa, exclusão e **drill-down ao clicar na linha** reutilizando a tela de detalhamento de lançamentos das Categorias.
+- **Criação Inline no Lançamento**: Campo de Tags nas telas de criação, edição e cópia de lançamentos que converte texto em chips `#tag` ao digitar vírgula (`,`) ou pressionar `Enter`, com sugestões clicáveis das tags existentes.
+- **Exibição e Relatórios**: Chips `#tag` exibidos nas linhas de **Lançamentos Gerais** e **Extrato de Conta/Cartão**, filtro de **Tags** na tela de **Relatórios** (mensal e anual) e coluna `Tags` na exportação CSV.
+- **Filtros Avançados e Edição em Lote (Lançamentos Gerais)**: Filtros combináveis de **Categoria**, **Tag**, **Tipo** e **Conciliação**, modo de seleção múltipla com barra contextual (contagem, soma líquida, selecionar todos, conciliar/pendente rápido, excluir em lote) e modal de **Edição em Lote** com seleção individual de campos.
+- **Otimização do Cabeçalho Mobile em Lançamentos Gerais**: Botão de alternância (`Icons.tune` / `Icons.expand_less`) ao lado do botão `+` no cabeçalho mobile (idêntico à tela de extrato), permitindo recolher todos os filtros e ferramentas secundárias e manter visíveis apenas o resumo de KPIs e o seletor temporal (Dia/Mês/Ano), liberando espaço total para a listagem dos lançamentos, com indicador compacto de filtros ativos e atalho "Limpar".
 
 ---
 
