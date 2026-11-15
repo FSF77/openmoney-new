@@ -556,18 +556,32 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   ),
                   const SizedBox(width: 12),
                   SegmentedButton<bool>(
+                    showSelectedIcon: false,
                     style: SegmentedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       selectedBackgroundColor:
                           colors.accent.withValues(alpha: 0.18),
                       selectedForegroundColor: colors.accent,
                       foregroundColor: colors.textSecondary,
                       textStyle: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w700),
+                          fontSize: 12, fontWeight: FontWeight.w700),
                       visualDensity: VisualDensity.compact,
                     ),
                     segments: const [
-                      ButtonSegment(value: true, label: Text('− Despesa')),
-                      ButtonSegment(value: false, label: Text('+ Receita')),
+                      ButtonSegment(
+                        value: true,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('− Despesa', maxLines: 1),
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: false,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('+ Receita', maxLines: 1),
+                        ),
+                      ),
                     ],
                     selected: {_isExpense},
                     onSelectionChanged: (s) {
@@ -1395,30 +1409,38 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               SizedBox(
                 width: double.infinity,
                 child: SegmentedButton<String>(
+                  showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     selectedBackgroundColor:
                         colors.accent.withValues(alpha: 0.18),
                     selectedForegroundColor: colors.accent,
                     foregroundColor: colors.textSecondary,
                     textStyle: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w700),
+                        fontSize: 12, fontWeight: FontWeight.w700),
                     visualDensity: VisualDensity.compact,
                   ),
                   segments: const [
                     ButtonSegment(
                       value: 'expense',
-                      label: Text('− Despesa'),
-                      icon: Icon(Icons.arrow_downward_rounded, size: 16),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('− Despesa', maxLines: 1),
+                      ),
                     ),
                     ButtonSegment(
                       value: 'income',
-                      label: Text('+ Receita'),
-                      icon: Icon(Icons.arrow_upward_rounded, size: 16),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('+ Receita', maxLines: 1),
+                      ),
                     ),
                     ButtonSegment(
                       value: 'transfer',
-                      label: Text('⇄ Transferência'),
-                      icon: Icon(Icons.swap_horiz_rounded, size: 16),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('⇄ Transferência', maxLines: 1),
+                      ),
                     ),
                   ],
                   selected: {_txType},
@@ -1823,21 +1845,39 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                 ),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
+                  showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     selectedBackgroundColor:
                         colors.accent.withValues(alpha: 0.18),
                     selectedForegroundColor: colors.accent,
                     foregroundColor: colors.textSecondary,
                     textStyle: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w700),
+                        fontSize: 12, fontWeight: FontWeight.w700),
                     visualDensity: VisualDensity.compact,
                   ),
                   segments: const [
-                    ButtonSegment(value: 'single', label: Text('Único')),
                     ButtonSegment(
-                        value: 'recurring', label: Text('Recorrente')),
+                      value: 'single',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Único', maxLines: 1),
+                      ),
+                    ),
                     ButtonSegment(
-                        value: 'installment', label: Text('Parcelado')),
+                      value: 'recurring',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Recorrente', maxLines: 1),
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: 'installment',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Parcelado', maxLines: 1),
+                      ),
+                    ),
                   ],
                   selected: {_mode},
                   onSelectionChanged: (s) => setState(() => _mode = s.first),
@@ -2483,18 +2523,32 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   if (!isXfer) ...[
                     const SizedBox(width: 12),
                     SegmentedButton<bool>(
+                      showSelectedIcon: false,
                       style: SegmentedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                         selectedBackgroundColor:
                             colors.accent.withValues(alpha: 0.18),
                         selectedForegroundColor: colors.accent,
                         foregroundColor: colors.textSecondary,
                         textStyle: const TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w700),
+                            fontSize: 12, fontWeight: FontWeight.w700),
                         visualDensity: VisualDensity.compact,
                       ),
                       segments: const [
-                        ButtonSegment(value: true, label: Text('− Despesa')),
-                        ButtonSegment(value: false, label: Text('+ Receita')),
+                        ButtonSegment(
+                          value: true,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('− Despesa', maxLines: 1),
+                          ),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('+ Receita', maxLines: 1),
+                          ),
+                        ),
                       ],
                       selected: {_isExpense},
                       onSelectionChanged: (s) {
