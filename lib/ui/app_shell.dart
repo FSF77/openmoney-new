@@ -895,9 +895,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               }),
               const Divider(height: 16),
 
-              // Atalhos de Módulos
+              // Atalhos de Módulos (Planejamento)
               Tooltip(
-                message: 'Lançamentos Consolidados',
+                message: 'Lançamentos',
                 child: IconButton(
                   icon: Icon(
                     Icons.receipt_long_outlined,
@@ -949,7 +949,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               Tooltip(
-                message: 'Relatórios',
+                message: 'Relatório',
                 child: IconButton(
                   icon: Icon(
                     Icons.pie_chart_outline,
@@ -959,6 +959,167 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         : colors.textSecondary,
                   ),
                   onPressed: () => selectModule(NavModule.reports),
+                ),
+              ),
+              Tooltip(
+                message: 'Previsões',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.auto_fix_high,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.predictions
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.predictions),
+                ),
+              ),
+              Tooltip(
+                message: 'Limite de Gastos',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.track_changes,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.budget
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.budget),
+                ),
+              ),
+              Tooltip(
+                message: 'Pesquisa Global',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.manage_search,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.search
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.search),
+                ),
+              ),
+
+              const Divider(height: 16),
+
+              // Atalhos de Módulos & Ferramentas
+              Tooltip(
+                message: 'Categorias e Subcategorias',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.category_outlined,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.categories
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.categories),
+                ),
+              ),
+              Tooltip(
+                message: 'Tags',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.label_outline,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.tags
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.tags),
+                ),
+              ),
+              Tooltip(
+                message: 'Ajustes & Personalização',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.tune,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.settings
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.settings),
+                ),
+              ),
+              Tooltip(
+                message: 'Incluir Nova Conta',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.account_balance_outlined,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showAccountModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Logs de Alterações',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.history_edu_outlined,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showAuditLogsModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Importação / Exportação',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.import_export,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showCsvQifCenterModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Cloud & Sincronização',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.cloud_sync_outlined,
+                    size: 20,
+                    color: CloudSyncService.instance.isAuthenticated
+                        ? colors.accentGreen
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => showCloudAccountModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Excluir Lançamentos',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.cleaning_services_outlined,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showBatchDeleteModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Ajuda e Manual',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.help_outline,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showHelpModal(context, widget.store),
+                ),
+              ),
+              Tooltip(
+                message: 'Sobre o OpenMoney',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                  onPressed: () => showAboutOpenMoneyModal(context, colors),
                 ),
               ),
             ],
