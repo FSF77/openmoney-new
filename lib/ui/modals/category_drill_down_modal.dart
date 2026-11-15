@@ -82,6 +82,7 @@ class _CategoryDrillDownDialog extends StatefulWidget {
 
 class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   late CategoryDrillDownScope _scope;
+  CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   String _searchQuery = '';
   String _sortField = 'date'; // 'date', 'payee', 'amount'
   bool _sortAsc = false;
@@ -89,6 +90,9 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.statusFilter != null) {
+      _statusFilter = widget.statusFilter!;
+    }
     if (widget.isAnnual) {
       _scope = CategoryDrillDownScope.year;
     } else if (widget.initialCurrentMonthOnly) {
@@ -133,17 +137,15 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
         }
       }
 
-      if (widget.statusFilter != null) {
-        switch (widget.statusFilter!) {
-          case CashFlowStatusFilter.all:
-            break;
-          case CashFlowStatusFilter.reconciledOnly:
-            if (!t.rec) return false;
-            break;
-          case CashFlowStatusFilter.pendingOnly:
-            if (t.rec) return false;
-            break;
-        }
+      switch (_statusFilter) {
+        case CashFlowStatusFilter.all:
+          break;
+        case CashFlowStatusFilter.reconciledOnly:
+          if (!t.rec) return false;
+          break;
+        case CashFlowStatusFilter.pendingOnly:
+          if (t.rec) return false;
+          break;
       }
 
       if (hasCat) {
@@ -332,13 +334,13 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
     final displayTitle = widget.titleOverride ??
         (hasTag && !hasCat
             ? (widget.tagFilter == '__untagged__'
-                ? 'Auditoria de Lançamentos: Sem tag'
-                : 'Auditoria de Lançamentos: #${widget.tagFilter}')
+                ? 'Sem tag'
+                : '#${widget.tagFilter}')
             : (hasCat
-                ? 'Auditoria de Lançamentos: ${widget.categoryPath}'
+                ? widget.categoryPath!
                 : (widget.categoryTypeFilter != null
-                    ? 'Auditoria: ${widget.categoryTypeFilter}'
-                    : 'Auditoria de Lançamentos')));
+                    ? widget.categoryTypeFilter!
+                    : 'Lançamentos')));
 
     final screenSize = MediaQuery.sizeOf(context);
     final isMobile = screenSize.width < 720;
@@ -475,10 +477,16 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Exportar CSV'),
-                      onPressed: () => _exportCsv(txs),
+                    Tooltip(
+                      message: 'Exportar CSV',
+                      child: FilledButton.tonal(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(36, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        onPressed: () => _exportCsv(txs),
+                        child: const Icon(Icons.download, size: 18),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     // Botões de escopo temporal
@@ -523,6 +531,46 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               if (isMobile) ...[
                 Row(
                   children: [
+                    Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceCard,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<CashFlowStatusFilter>(
+                          value: _statusFilter,
+                          icon: const Icon(Icons.arrow_drop_down, size: 18),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.all,
+                              child: Text('Todos'),
+                            ),
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.reconciledOnly,
+                              child: Text('Conciliados'),
+                            ),
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.pendingOnly,
+                              child: Text('Não Conciliados'),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _statusFilter = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: SizedBox(
                         height: 36,
@@ -578,6 +626,46 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               ] else ...[
                 Row(
                   children: [
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceCard,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<CashFlowStatusFilter>(
+                          value: _statusFilter,
+                          icon: const Icon(Icons.arrow_drop_down, size: 20),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.all,
+                              child: Text('Todos os status'),
+                            ),
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.reconciledOnly,
+                              child: Text('Apenas Conciliados'),
+                            ),
+                            DropdownMenuItem(
+                              value: CashFlowStatusFilter.pendingOnly,
+                              child: Text('Apenas Não Conciliados'),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _statusFilter = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         decoration: InputDecoration(
