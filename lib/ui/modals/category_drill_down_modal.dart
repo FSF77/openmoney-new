@@ -531,6 +531,29 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               if (isMobile) ...[
                 Row(
                   children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Pesquisar...',
+                            hintStyle: const TextStyle(fontSize: 12),
+                            prefixIcon: const Icon(Icons.search, size: 16),
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                          ),
+                          onChanged: (v) =>
+                              setState(() => _searchQuery = v.trim()),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       height: 36,
                       decoration: BoxDecoration(
@@ -571,29 +594,6 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: SizedBox(
-                        height: 36,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Pesquisar...',
-                            hintStyle: const TextStyle(fontSize: 12),
-                            prefixIcon: const Icon(Icons.search, size: 16),
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                          ),
-                          onChanged: (v) =>
-                              setState(() => _searchQuery = v.trim()),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                     DropdownButton<String>(
                       value: _sortField,
                       underline: const SizedBox(),
@@ -626,6 +626,26 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               ] else ...[
                 Row(
                   children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText:
+                              'Pesquisar nos resultados (favorecido, nota, conta)...',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                        ),
+                        onChanged: (v) =>
+                            setState(() => _searchQuery = v.trim()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       height: 40,
                       decoration: BoxDecoration(
@@ -663,26 +683,6 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                             }
                           },
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText:
-                              'Pesquisar nos resultados (favorecido, nota, conta)...',
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                        ),
-                        onChanged: (v) =>
-                            setState(() => _searchQuery = v.trim()),
                       ),
                     ),
                     const SizedBox(width: 12),
