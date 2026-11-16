@@ -178,12 +178,26 @@ class MoneyStore extends ChangeNotifier {
     return _storageMode;
   }
   bool get isCloudMode {
+    if (showWelcomeScreen) return false;
     final cloud = CloudSyncService.instance;
     if (!cloud.isAuthenticated) return false;
     if (kIsWeb) return !cloud.isWebOfflineGuestMode;
-    return _storageMode == 'cloud' ||
-        dbPath.startsWith('cloud://') ||
-        !hasConfiguredLocalDatabase;
+    return _storageMode == 'cloud' || dbPath.startsWith('cloud://');
+  }
+
+  bool _isValidCloudCachePayload(Database candidateDb, int cachedRev) {
+    final effectiveRev = cachedRev > CloudSyncService.instance.revision
+        ? cachedRev
+        : CloudSyncService.instance.revision;
+    final isBlankDefault = candidateDb.txs.isEmpty &&
+        candidateDb.accounts.length <= 1 &&
+        (candidateDb.accounts.isEmpty ||
+            (candidateDb.accounts.first.id == 'a1' &&
+                candidateDb.accounts.first.opening == 0));
+    if (isBlankDefault && effectiveRev > 1) {
+      return false;
+    }
+    return true;
   }
   String _lastLocalDbPath = '';
   String get lastLocalDbPath => _lastLocalDbPath;
@@ -649,14 +663,17 @@ class MoneyStore extends ChangeNotifier {
   late final String _configFilePath;
   late final String _defaultDbFilePath;
 
-  MoneyStore({bool autoBoot = true}) {
-    _initPaths();
+  MoneyStore({
+    bool autoBoot = true,
+    @visibleForTesting String? appSupportDirOverride,
+  }) {
+    _initPaths(appSupportDirOverride: appSupportDirOverride);
     if (autoBoot) {
       boot();
     }
   }
 
-  void _initPaths() {
+  void _initPaths({String? appSupportDirOverride}) {
     if (kIsWeb) {
       _appSupportDirPath = '';
       _configFilePath = '';
@@ -664,6 +681,12 @@ class MoneyStore extends ChangeNotifier {
       return;
     }
     final sep = Platform.pathSeparator;
+    if (appSupportDirOverride != null && appSupportDirOverride.isNotEmpty) {
+      _appSupportDirPath = appSupportDirOverride;
+      _configFilePath = '$_appSupportDirPath${sep}config.json';
+      _defaultDbFilePath = '$_appSupportDirPath${sep}openmoney.json';
+      return;
+    }
     String baseDir;
     if (Platform.isWindows) {
       baseDir = Platform.environment['APPDATA'] ??
@@ -963,12 +986,15 @@ class MoneyStore extends ChangeNotifier {
       _lastLocalDbPath = cfg['dbPath'] as String;
     }
 
+    final cfgDbPath = (cfg['dbPath'] as String?) ?? '';
     // 3. Inicialização no Modo Online (Cloud Sync v2 em Tempo Real)
-    if ((kIsWeb && CloudSyncService.instance.isAuthenticated && !CloudSyncService.instance.isWebOfflineGuestMode) ||
+    if ((kIsWeb &&
+            CloudSyncService.instance.isAuthenticated &&
+            !CloudSyncService.instance.isWebOfflineGuestMode) ||
         (CloudSyncService.instance.isAuthenticated &&
             (_storageMode == 'cloud' ||
-                !hasConfiguredLocalDatabase ||
-                dbPath.startsWith('cloud://')))) {
+                cfgDbPath.startsWith('cloud://') ||
+                (cfg['storageMode'] == null && !hasConfiguredLocalDatabase)))) {
       _storageMode = 'cloud';
       dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
       cfg['storageMode'] = 'cloud';
@@ -988,11 +1014,21 @@ class MoneyStore extends ChangeNotifier {
           final cached = jsonDecode(cachedRaw);
           if (cached is Map<String, dynamic> &&
               cached['payload'] is Map<String, dynamic>) {
-            db = Database.fromJson(cached['payload'] as Map<String, dynamic>);
-            if (cached['preferences'] is Map<String, dynamic>) {
-              applyPreferencesMap(cached['preferences'] as Map<String, dynamic>);
+            final candidateDb =
+                Database.fromJson(cached['payload'] as Map<String, dynamic>);
+            final cachedRev = (cached['revision'] as num?)?.toInt() ?? 0;
+            if (_isValidCloudCachePayload(candidateDb, cachedRev)) {
+              db = candidateDb;
+              if (cached['preferences'] is Map<String, dynamic>) {
+                applyPreferencesMap(
+                    cached['preferences'] as Map<String, dynamic>);
+              }
+              loadedFromCache = true;
+            } else {
+              webLocalStorageRemove(
+                'openmoney_web_cache_${CloudSyncService.instance.userId}',
+              );
             }
-            loadedFromCache = true;
           }
         } catch (_) {}
       }
@@ -1007,7 +1043,9 @@ class MoneyStore extends ChangeNotifier {
           activeModule = NavModule.dashboard;
         }
       }
-      ensureDailyLocalBackup();
+      if (loadedFromCache && db.txs.isNotEmpty) {
+        ensureDailyLocalBackup();
+      }
       notifyListeners();
       SyncEngine.instance.start(
         this,
@@ -1066,9 +1104,7 @@ class MoneyStore extends ChangeNotifier {
 
     // Se é o primeiro acesso (sem arquivo configurado e sem arquivo padrão existente),
     // abre a tela de Boas-Vindas mostrando opções de base Local e Online
-    if (!hasConfiguredPath &&
-        !File(_defaultDbFilePath).existsSync() &&
-        !CloudSyncService.instance.isAuthenticated) {
+    if (!hasConfiguredPath && !File(_defaultDbFilePath).existsSync()) {
       showWelcomeScreen = true;
       dbPath = '';
       db = Database();
@@ -2016,10 +2052,29 @@ class MoneyStore extends ChangeNotifier {
   /// Sincroniza a sessão atual a partir da nuvem via SyncEngine v2 em tempo real
   Future<bool> syncFromCloud() async {
     cancelPendingSave();
+    _fileWatcherSub?.cancel();
+    _fileWatcherSub = null;
     if (!CloudSyncService.instance.isAuthenticated) return false;
+
+    if (_storageMode == 'local' &&
+        dbPath.isNotEmpty &&
+        !dbPath.startsWith('cloud://')) {
+      _lastLocalDbPath = dbPath;
+      _performDiskWrite();
+    }
 
     _storageMode = 'cloud';
     dbPath = 'cloud://${CloudSyncService.instance.userEmail}';
+    showWelcomeScreen = false;
+    final cfg = _readConfig();
+    cfg['storageMode'] = 'cloud';
+    cfg['dbPath'] = dbPath;
+    if (_lastLocalDbPath.isNotEmpty) {
+      cfg['lastLocalDbPath'] = _lastLocalDbPath;
+    }
+    _writeConfig(cfg);
+    notifyListeners();
+
     SyncEngine.instance.start(
       this,
       triggerInitialSync: false,
@@ -2120,6 +2175,7 @@ class MoneyStore extends ChangeNotifier {
 
   void disconnectLocalDatabase() {
     cancelPendingSave();
+    SyncEngine.instance.stop();
     _fileWatcherSub?.cancel();
     _fileWatcherSub = null;
     db = Database();
@@ -2254,7 +2310,10 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> switchToCloudMode({String? accountUserId}) async {
+  Future<bool> switchToCloudMode({
+    String? accountUserId,
+    bool preserveMemoryIfNoCache = false,
+  }) async {
     cancelPendingSave();
     _fileWatcherSub?.cancel();
     _fileWatcherSub = null;
@@ -2302,13 +2361,25 @@ class MoneyStore extends ChangeNotifier {
         final cached = jsonDecode(cachedRaw);
         if (cached is Map<String, dynamic> &&
             cached['payload'] is Map<String, dynamic>) {
-          db = Database.fromJson(cached['payload'] as Map<String, dynamic>);
-          if (cached['preferences'] is Map<String, dynamic>) {
-            applyPreferencesMap(cached['preferences'] as Map<String, dynamic>);
+          final candidateDb =
+              Database.fromJson(cached['payload'] as Map<String, dynamic>);
+          final cachedRev = (cached['revision'] as num?)?.toInt() ?? 0;
+          if (_isValidCloudCachePayload(candidateDb, cachedRev)) {
+            db = candidateDb;
+            if (cached['preferences'] is Map<String, dynamic>) {
+              applyPreferencesMap(
+                  cached['preferences'] as Map<String, dynamic>);
+            }
+            loadedFromCache = true;
+          } else {
+            webLocalStorageRemove('openmoney_web_cache_${cloud.userId}');
           }
-          loadedFromCache = true;
         }
       } catch (_) {}
+    }
+
+    if (!loadedFromCache && !preserveMemoryIfNoCache) {
+      db = Database();
     }
 
     migrate();
@@ -2321,7 +2392,9 @@ class MoneyStore extends ChangeNotifier {
         activeModule = NavModule.dashboard;
       }
     }
-    ensureDailyLocalBackup();
+    if (loadedFromCache && db.txs.isNotEmpty) {
+      ensureDailyLocalBackup();
+    }
     notifyListeners();
 
     SyncEngine.instance.start(this, hasValidLocalCache: loadedFromCache);

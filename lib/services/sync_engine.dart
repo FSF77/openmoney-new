@@ -589,8 +589,42 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  bool _isSuspiciousEmptyDb(Database db) {
+    if (db.txs.isNotEmpty) return false;
+    if (_baseline.keys.any((k) => k.startsWith('txs/'))) return true;
+    final effectiveRev = _lastSeq > CloudSyncService.instance.revision
+        ? _lastSeq
+        : CloudSyncService.instance.revision;
+    if (effectiveRev > 1 && db.accounts.length <= 1) {
+      if (db.accounts.isEmpty) return true;
+      final acc = db.accounts.first;
+      if (acc.id == 'a1' && acc.name == 'Conta Corrente' && acc.opening == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  void configureStateForTesting({
+    MoneyStore? store,
+    int lastSeq = 0,
+    bool hasLoadedRemoteState = false,
+    Map<String, String>? baseline,
+  }) {
+    _store = store;
+    _lastSeq = lastSeq;
+    _hasLoadedRemoteState = hasLoadedRemoteState;
+    if (baseline != null) {
+      _baseline
+        ..clear()
+        ..addAll(baseline);
+    }
+  }
+
   void _persistLocalCache() {
     if (_store == null || !_hasLoadedRemoteState) return;
+    if (_isSuspiciousEmptyDb(_store!.db)) return;
     final userId = CloudSyncService.instance.userId;
     if (userId.isEmpty) return;
     try {
@@ -627,10 +661,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       }
       final cloud = CloudSyncService.instance;
       if (!cloud.isAuthenticated || !webIsOnline()) return;
-      // Proteção extra: nunca compacta se a memória estiver vazia mas o baseline era grande
-      if (_baseline.length > 20 &&
-          _store!.db.txs.isEmpty &&
-          _store!.db.accounts.length <= 1) {
+      // Proteção extra: nunca compacta se a memória estiver vazia mas o baseline/revisão indicar base populada
+      if (_isSuspiciousEmptyDb(_store!.db) ||
+          (_baseline.length > 20 &&
+              _store!.db.txs.isEmpty &&
+              _store!.db.accounts.length <= 1)) {
         return;
       }
       await cloud.pushDatabase(
@@ -652,7 +687,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
 
     // Trava de segurança: bloqueia geração acidental de tombstones em massa se a memória
     // foi reiniciada sem passar pelo fluxo explícito de resetToBlankDatabaseAndSync
-    if (_baseline.length > 20 && db.txs.isEmpty && db.accounts.length <= 1) {
+    if (_isSuspiciousEmptyDb(db) ||
+        (_baseline.length > 20 && db.txs.isEmpty && db.accounts.length <= 1)) {
       return;
     }
 
@@ -896,7 +932,19 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   /// e aplica em seguida quaisquer registros de delta gravados em user_sync_records.
   Future<bool> _pullFullSnapshotAndDeltas() async {
     final cloud = CloudSyncService.instance;
-    final snap = await cloud.fetchDatabase();
+    CloudDatabaseSnapshot? snap;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      snap = await cloud.fetchDatabase();
+      if (snap != null && snap.payload.isNotEmpty) {
+        break;
+      }
+      if (!_isRunning || !cloud.isAuthenticated) {
+        return false;
+      }
+      if (attempt < 2) {
+        await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
+      }
+    }
     if (snap == null || snap.payload.isEmpty) {
       return false;
     }
@@ -1113,6 +1161,10 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   void _applyIncomingDelta(List<SyncChange> changes, int newSeq) {
     final store = _store;
     if (store == null) return;
+    if (!_hasLoadedRemoteState) {
+      unawaited(syncNow(forceFullPull: true));
+      return;
+    }
 
     // Filtra chaves que ainda possuem edição local mais nova aguardando envio na outbox
     final filtered = changes

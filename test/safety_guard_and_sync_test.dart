@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/backup_manager.dart';
 import 'package:openmoney/services/cloud_sync_service.dart';
+import 'package:openmoney/services/platform_io.dart';
+import 'package:openmoney/services/sync_engine.dart';
 import 'package:openmoney/store/money_store.dart';
 
 void main() {
@@ -196,6 +197,175 @@ void main() {
       expect(resShort.error, contains('6 dígitos'));
 
       cloud.logout();
+    });
+  });
+
+  group('Cloud Cache Isolation & Empty Database Anti-Wipe Guardrails', () {
+    test('Migra cache legado grande do sync_kv_store.json para cloud_cache/ com escrita atômica', () {
+      final tempDir = Directory.systemTemp.createTempSync('om_cache_iso_');
+      try {
+        final legacyKv = File('${tempDir.path}/sync_kv_store.json');
+        legacyKv.writeAsStringSync(jsonEncode({
+          'openmoney_sync_seq_v2_u1': '42',
+          'openmoney_web_cache_u1': jsonEncode({
+            'revision': 42,
+            'payload': {'v': 7, 'accounts': [], 'txs': []},
+            'preferences': {},
+          }),
+        }));
+
+        overrideNativeStorageDirForTesting(tempDir.path);
+        expect(webLocalStorageGet('openmoney_sync_seq_v2_u1'), '42');
+        final migratedCache = webLocalStorageGet('openmoney_web_cache_u1');
+        expect(migratedCache, isNotNull);
+        expect(migratedCache, contains('"revision":42'));
+
+        final dedicatedFile = File('${tempDir.path}/cloud_cache/openmoney_web_cache_u1.json');
+        expect(dedicatedFile.existsSync(), isTrue);
+
+        // sync_kv_store.json não deve mais conter a base grande após migração
+        final kvContentAfter = jsonDecode(legacyKv.readAsStringSync()) as Map;
+        expect(kvContentAfter.containsKey('openmoney_web_cache_u1'), isFalse);
+        expect(kvContentAfter['openmoney_sync_seq_v2_u1'], '42');
+      } finally {
+        overrideNativeStorageDirForTesting(null);
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test('boot() rejeita cache vazio envenenado quando revision > 1 e força full pull', () {
+      final tempDir = Directory.systemTemp.createTempSync('om_poison_boot_');
+      try {
+        overrideNativeStorageDirForTesting(tempDir.path);
+
+        final configFile = File('${tempDir.path}/config.json');
+        configFile.writeAsStringSync(jsonEncode({
+          'storageMode': 'cloud',
+          'dbPath': 'cloud://user@example.com',
+          'cloudAuthToken': 'token_test',
+          'cloudUserId': 'u_poison',
+          'cloudUserEmail': 'user@example.com',
+          'cloudRevision': 500,
+        }));
+
+        // Simula cache corrompido/envenenado: 0 lançamentos + conta padrão a1 na revisão 500
+        webLocalStorageSet('openmoney_sync_seq_v2_u_poison', '500');
+        webLocalStorageSet(
+          'openmoney_web_cache_u_poison',
+          jsonEncode({
+            'revision': 500,
+            'payload': {
+              'v': 7,
+              'accounts': [{'id': 'a1', 'name': 'Conta Corrente', 'type': 'Corrente', 'opening': 0}],
+              'cats': [],
+              'txs': [],
+            },
+            'preferences': {},
+          }),
+        );
+
+        final store = MoneyStore(autoBoot: false, appSupportDirOverride: tempDir.path);
+        store.boot();
+
+        // Cache envenenado deve ser descartado e SyncEngine obrigado a fazer full pull
+        expect(SyncEngine.instance.hasLoadedRemoteState, isFalse);
+        expect(SyncEngine.instance.lastSeq, 0);
+        expect(webLocalStorageGet('openmoney_web_cache_u_poison'), isNull);
+        expect(store.isCloudMode, isTrue);
+      } finally {
+        SyncEngine.instance.stop();
+        CloudSyncService.instance.logout();
+        overrideNativeStorageDirForTesting(null);
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test('SyncEngine.onLocalSave e CloudSyncService.pushDatabase bloqueiam base vazia quando revision > 1', () async {
+      final tempDir = Directory.systemTemp.createTempSync('om_antiwipe_sync_');
+      try {
+        overrideNativeStorageDirForTesting(tempDir.path);
+        final cloud = CloudSyncService.instance;
+        cloud.loadSessionFromConfig({
+          'cloudAuthToken': 'token_test',
+          'cloudUserId': 'u_antiwipe',
+          'cloudUserEmail': 'antiwipe@example.com',
+          'cloudRevision': 250,
+        });
+
+        final store = MoneyStore(autoBoot: false, appSupportDirOverride: tempDir.path);
+        final emptyDb = Database(
+          accounts: [Account(id: 'a1', name: 'Conta Corrente', type: 'Corrente', opening: 0)],
+          cats: List<CategoryItem>.from(kDefaultCats),
+          txs: [],
+          recs: [],
+          budgets: {},
+          v: 7,
+        );
+
+        SyncEngine.instance.configureStateForTesting(
+          store: store,
+          lastSeq: 250,
+          hasLoadedRemoteState: true,
+          baseline: {'txs/tx1': '{"id":"tx1"}', 'accounts/a1': '{}'},
+        );
+
+        SyncEngine.instance.onLocalSave(emptyDb, {});
+        expect(SyncEngine.instance.pendingOutboxCount, 0);
+
+        final pushed = await cloud.pushDatabase(
+          payload: emptyDb.toJson(),
+          preferences: {},
+          force: false,
+          compactSeq: 250,
+        );
+        expect(pushed, isFalse);
+      } finally {
+        SyncEngine.instance.stop();
+        CloudSyncService.instance.logout();
+        overrideNativeStorageDirForTesting(null);
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test('disconnectLocalDatabase() interrompe SyncEngine e mantém isCloudMode falso mesmo autenticado', () {
+      final tempDir = Directory.systemTemp.createTempSync('om_disc_');
+      try {
+        overrideNativeStorageDirForTesting(tempDir.path);
+        final cloud = CloudSyncService.instance;
+        cloud.loadSessionFromConfig({
+          'cloudAuthToken': 'token_test',
+          'cloudUserId': 'u_disc',
+          'cloudUserEmail': 'disc@example.com',
+          'cloudRevision': 10,
+        });
+
+        final store = MoneyStore(autoBoot: false, appSupportDirOverride: tempDir.path);
+        SyncEngine.instance.configureStateForTesting(
+          store: store,
+          lastSeq: 10,
+          hasLoadedRemoteState: true,
+        );
+
+        store.disconnectLocalDatabase();
+
+        expect(store.showWelcomeScreen, isTrue);
+        expect(store.isCloudMode, isFalse);
+        expect(SyncEngine.instance.hasLoadedRemoteState, isFalse);
+        expect(SyncEngine.instance.lastSeq, 0);
+      } finally {
+        SyncEngine.instance.stop();
+        CloudSyncService.instance.logout();
+        overrideNativeStorageDirForTesting(null);
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
     });
   });
 }

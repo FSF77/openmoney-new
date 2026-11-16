@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cloud_sync_service.dart';
+import '../../services/sync_engine.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -285,15 +286,18 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
     if (!mounted) return;
     if (res.ok) {
+      final wasWelcomeScreen = widget.store.showWelcomeScreen;
       widget.store.saveCloudSessionToConfig();
-      await widget.store.switchToCloudMode();
+      await widget.store.switchToCloudMode(
+        preserveMemoryIfNoCache: !_registerWithBlankBase,
+      );
       if (_registerWithBlankBase) {
         await widget.store.resetToBlankDatabaseAndSync(pushToCloud: true);
       } else {
         await widget.store.pushLocalToCloud(force: true);
       }
       await _loadCloudBackups();
-      if (widget.store.showWelcomeScreen) {
+      if (wasWelcomeScreen || widget.store.showWelcomeScreen) {
         widget.store.showWelcomeScreen = false;
         if (mounted) {
           Navigator.of(context).pop();
@@ -431,11 +435,11 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     );
     if (!mounted) return;
     if (res.ok) {
+      final wasWelcomeScreen = widget.store.showWelcomeScreen;
       widget.store.saveCloudSessionToConfig();
-      await widget.store.switchToCloudMode();
-      await widget.store.syncFromCloud();
+      final synced = await widget.store.syncFromCloud();
       await _loadCloudBackups();
-      if (widget.store.showWelcomeScreen) {
+      if (wasWelcomeScreen || widget.store.showWelcomeScreen) {
         widget.store.showWelcomeScreen = false;
         if (mounted) {
           Navigator.of(context).pop();
@@ -445,8 +449,11 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
       if (mounted) {
         setState(() {
           _addingAnotherAccount = false;
-          _isError = false;
-          _statusMsg = '✓ Conectado em ${_cloud.userEmail} e sincronizado!';
+          _isError = !synced;
+          _statusMsg = synced
+              ? '✓ Conectado em ${_cloud.userEmail} e sincronizado!'
+              : (_cloud.lastError ??
+                  'Conectado, mas falhou ao baixar a base da nuvem.');
         });
       }
     } else {
@@ -466,7 +473,9 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   Future<void> _handleSwitchAccount(SavedCloudAccount acc) async {
     if (acc.userId == _cloud.userId &&
         _cloud.isAuthenticated &&
-        _cloud.state == CloudSyncState.synced) {
+        _cloud.state == CloudSyncState.synced &&
+        SyncEngine.instance.hasLoadedRemoteState &&
+        widget.store.db.txs.isNotEmpty) {
       return;
     }
 

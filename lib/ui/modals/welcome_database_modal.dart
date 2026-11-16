@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
+import '../../services/sync_engine.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'cloud_account_modal.dart';
@@ -89,8 +90,11 @@ class _WelcomeDatabaseSelectionScreenState
   Future<void> _handleOpenCloudModal() async {
     await showCloudAccountModal(context, widget.store);
     if (CloudSyncService.instance.isAuthenticated) {
-      await widget.store.switchToCloudMode();
       widget.store.showWelcomeScreen = false;
+      if (!widget.store.isCloudMode ||
+          !SyncEngine.instance.hasLoadedRemoteState) {
+        await widget.store.switchToCloudMode();
+      }
       if (mounted) setState(() {});
     }
   }

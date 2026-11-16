@@ -11,7 +11,25 @@ Future<String?> webPickFileAsVirtualPath({
   return null;
 }
 
+String? _testAppSupportDirOverride;
+
+void overrideNativeStorageDirForTesting(String? path) {
+  _testAppSupportDirOverride = path;
+  _nativeKvCache = null;
+  _nativeKvFile = null;
+}
+
 String _getAppSupportDir() {
+  if (_testAppSupportDirOverride != null &&
+      _testAppSupportDirOverride!.isNotEmpty) {
+    final dir = Directory(_testAppSupportDirOverride!);
+    if (!dir.existsSync()) {
+      try {
+        dir.createSync(recursive: true);
+      } catch (_) {}
+    }
+    return dir.path;
+  }
   final sep = Platform.pathSeparator;
   String baseDir;
   if (Platform.isWindows) {
@@ -39,6 +57,37 @@ String _getAppSupportDir() {
 Map<String, String>? _nativeKvCache;
 File? _nativeKvFile;
 
+bool _isLargeCacheKey(String key) {
+  return key.startsWith('openmoney_web_cache_') ||
+      key == 'openmoney_web_guest_db';
+}
+
+File _largeCacheFile(String key) {
+  final dir = _getAppSupportDir();
+  final sep = Platform.pathSeparator;
+  final cacheDir = Directory('$dir${sep}cloud_cache');
+  if (!cacheDir.existsSync()) {
+    try {
+      cacheDir.createSync(recursive: true);
+    } catch (_) {}
+  }
+  final safeKey = key.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+  return File('${cacheDir.path}$sep$safeKey.json');
+}
+
+void _atomicWriteStringSync(File target, String content) {
+  try {
+    target.parent.createSync(recursive: true);
+    final tmpFile = File('${target.path}.tmp.$pid');
+    tmpFile.writeAsStringSync(content, flush: true);
+    tmpFile.renameSync(target.path);
+  } catch (_) {
+    try {
+      target.writeAsStringSync(content, flush: true);
+    } catch (_) {}
+  }
+}
+
 void _ensureNativeKvLoaded() {
   if (_nativeKvCache != null) return;
   _nativeKvCache = <String, String>{};
@@ -49,9 +98,25 @@ void _ensureNativeKvLoaded() {
       final raw = _nativeKvFile!.readAsStringSync();
       final decoded = jsonDecode(raw);
       if (decoded is Map) {
+        final migratedKeys = <String>[];
         decoded.forEach((k, v) {
-          if (v != null) _nativeKvCache![k.toString()] = v.toString();
+          if (v != null) {
+            final keyStr = k.toString();
+            final valStr = v.toString();
+            if (_isLargeCacheKey(keyStr)) {
+              final dedicated = _largeCacheFile(keyStr);
+              if (!dedicated.existsSync() && valStr.isNotEmpty) {
+                _atomicWriteStringSync(dedicated, valStr);
+              }
+              migratedKeys.add(keyStr);
+            } else {
+              _nativeKvCache![keyStr] = valStr;
+            }
+          }
         });
+        if (migratedKeys.isNotEmpty) {
+          _flushNativeKv();
+        }
       }
     }
   } catch (_) {}
@@ -60,23 +125,54 @@ void _ensureNativeKvLoaded() {
 void _flushNativeKv() {
   try {
     if (_nativeKvFile != null && _nativeKvCache != null) {
-      _nativeKvFile!.writeAsStringSync(jsonEncode(_nativeKvCache), flush: true);
+      _atomicWriteStringSync(_nativeKvFile!, jsonEncode(_nativeKvCache));
     }
   } catch (_) {}
 }
 
 String? webLocalStorageGet(String key) {
+  if (_isLargeCacheKey(key)) {
+    _ensureNativeKvLoaded();
+    try {
+      final f = _largeCacheFile(key);
+      if (f.existsSync()) {
+        return f.readAsStringSync();
+      }
+    } catch (_) {}
+    return _nativeKvCache?[key];
+  }
   _ensureNativeKvLoaded();
   return _nativeKvCache?[key];
 }
 
 void webLocalStorageSet(String key, String value) {
+  if (_isLargeCacheKey(key)) {
+    _ensureNativeKvLoaded();
+    _atomicWriteStringSync(_largeCacheFile(key), value);
+    if (_nativeKvCache?.containsKey(key) == true) {
+      _nativeKvCache!.remove(key);
+      _flushNativeKv();
+    }
+    return;
+  }
   _ensureNativeKvLoaded();
   _nativeKvCache?[key] = value;
   _flushNativeKv();
 }
 
 void webLocalStorageRemove(String key) {
+  if (_isLargeCacheKey(key)) {
+    _ensureNativeKvLoaded();
+    try {
+      final f = _largeCacheFile(key);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+    if (_nativeKvCache?.containsKey(key) == true) {
+      _nativeKvCache!.remove(key);
+      _flushNativeKv();
+    }
+    return;
+  }
   _ensureNativeKvLoaded();
   _nativeKvCache?.remove(key);
   _flushNativeKv();

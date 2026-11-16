@@ -742,6 +742,15 @@ open OpenMoney.xcodeproj
 - **Filtros Avançados e Edição em Lote (Lançamentos Gerais)**: Filtros combináveis de **Categoria**, **Tag**, **Tipo** e **Conciliação**, modo de seleção múltipla com barra contextual (contagem, soma líquida, selecionar todos, conciliar/pendente rápido, excluir em lote) e modal de **Edição em Lote** com seleção individual de campos.
 - **Otimização do Cabeçalho Mobile em Lançamentos Gerais**: Botão de alternância (`Icons.tune` / `Icons.expand_less`) ao lado do botão `+` no cabeçalho mobile (idêntico à tela de extrato), permitindo recolher todos os filtros e ferramentas secundárias e manter visíveis apenas o resumo de KPIs e o seletor temporal (Dia/Mês/Ano), liberando espaço total para a listagem dos lançamentos, com indicador compacto de filtros ativos e atalho "Limpar".
 
+### 22. Blindagem de Cache Cloud, Inicialização Segura e Proteção Anti-Wipe (>10MB)
+- **Isolamento Atômico de Cache por Conta**: No Desktop e Mobile, os snapshots offline da nuvem são gravados em arquivos individuais por usuário (`cloud_cache/` no Flutter e `cloud_sync/` no Swift), separados do registro leve de metadados (`sync_kv_store.json`), utilizando gravação atômica por arquivo temporário (`.tmp` + `rename`) para impedir qualquer corrupção durante atualizações do aplicativo.
+- **Inicialização Síncrona & Tela de Carregamento Cloud**: O aplicativo inicializa sessão e cache sincronamente antes do primeiro frame e exibe obrigatoriamente a tela de sincronização Cloud enquanto o snapshot remoto não for carregado e validado (`!hasLoadedRemoteState`), eliminando exibições zeradas transitórias em bases extensas (`>10MB`).
+- **Descarte Automático de Cache Envenenado e Guarda Anti-Wipe em 3 Camadas**:
+  - Caches locais vazios (`txs.isEmpty` e conta padrão `'a1'` zerada) para contas com `revision > 1` são rejeitados e limpos no `boot()`, forçando download completo com até **3 retentativas**.
+  - Deltas recebidos antes do carregamento do snapshot base nunca marcam a base como carregada e disparam `forceFullPull: true`.
+  - O motor de sincronização (`SyncEngine`), o cliente REST (`CloudSyncService`) e o servidor Cloudflare (`PUT /api/db`) bloqueiam qualquer compactação ou envio vazio não forçado sobre bases populadas (incluindo barreira mínima de **50 KB** para bases `chunked:*` no D1).
+  - Ao desconectar a base local (`disconnectLocalDatabase`), o motor de sincronização é imediatamente encerrado (`stop()`).
+
 ---
 
 ## 📁 Estrutura do Projeto

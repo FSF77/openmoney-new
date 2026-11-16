@@ -153,7 +153,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         final width = MediaQuery.of(context).size.width;
         final isDesktopOrTablet = width >= 860;
 
-        if (kIsWeb &&
+        if (widget.store.isCloudMode &&
             CloudSyncService.instance.isAuthenticated &&
             !SyncEngine.instance.hasLoadedRemoteState) {
           return _buildCloudLoadingScreen(context, colors);
@@ -2141,7 +2141,32 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                             showCloudAccountModal(context, widget.store);
                           },
                         ),
+                        if (!kIsWeb)
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.folder_open_outlined, size: 18),
+                            label: const Text('Usar Base Local'),
+                            onPressed: () {
+                              if (widget.store.hasConfiguredLocalDatabase) {
+                                widget.store.switchToLocalMode();
+                              } else {
+                                showDatabaseFileManagerModal(
+                                    context, widget.store);
+                              }
+                            },
+                          ),
                       ],
+                    ),
+                  ] else if (!kIsWeb) ...[
+                    const SizedBox(height: 18),
+                    TextButton.icon(
+                      icon: const Icon(Icons.settings_outlined, size: 16),
+                      label: const Text(
+                        'Gerenciar Contas Cloud / Modo Local',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () {
+                        showCloudAccountModal(context, widget.store);
+                      },
                     ),
                   ],
                 ],

@@ -20,9 +20,12 @@ Este documento registra as diretrizes, repositórios, versionamento e fluxos de 
    - **Toda mudança deve ser aplicada em todas as plataformas:** Flutter (macOS, Windows, Web, Mobile), Swift macOS e Swift iOS. Nunca entregar uma funcionalidade, ajuste ou correção em apenas uma delas; se alguma plataforma não puder ser feita, avisar explicitamente.
    - **Operação Híbrida Unificada (Modo Local ↔ Online com Cloud Sync v2):** Ambas as stacks (**Swift macOS/iOS** e **Flutter/Dart Desktop/Web/Mobile**) possuem paridade funcional integral e suportam nativamente operação híbrida completa: uso 100% offline local sobre arquivo `openmoney.json` e sincronização em tempo real (Sync v2) via Cloudflare D1/Durable Objects com resolução granular por registro, WebSocket, snapshot binário Gzip, autenticação em duas etapas, backups de segurança locais e Anti-Wipe Guard estritamente equivalentes. Não há exceções funcionais entre as versões.
 
-2. **Compatibilidade da Base de Dados (`openmoney.json`):**
+2. **Compatibilidade da Base de Dados (`openmoney.json`) e Regras de Persistência / Anti-Wipe:**
    - Ambas as plataformas operam sobre a mesma base de dados.
    - **Schema unificado `v: 7`**: regras idênticas de leitura/escrita, campos em centavos inteiros (`amt`, `opening`), debounce de 350ms, migração de chaves de faturas para a competência de vencimento (`dueDay <= closeDay`) e backup atômico diário.
+   - **Cache Cloud Isolado e Escrita Atômica (`Sync v2`):** Snapshots em cache offline são gravados em arquivos individuais por conta (`cloud_cache/` no Flutter Desktop/Mobile e `cloud_sync/` no Swift), separados do arquivo leve de metadados (`sync_kv_store.json`), sempre via escrita atômica (`.tmp` + `rename`) para prevenir corrupção pós-atualizações.
+   - **Validação de Cache e Inicialização Segura:** O `boot()` executa sincronamente antes do primeiro frame; enquanto `!hasLoadedRemoteState` no modo Online, a interface exibe a tela de carregamento Cloud (nunca tela zerada). Caches locais vazios (`txs.isEmpty` e conta `'a1'` padrão zerada) para contas com `revision > 1` são descartados automaticamente, forçando `forceFullPull: true` com até 3 retentativas.
+   - **Bloqueio Anti-Wipe em 3 Camadas:** Deltas pré-carga (`_applyIncomingDelta`) e gravações/compactações vazias não forçadas (`_isSuspiciousEmptyDb` no `SyncEngine` e `CloudSyncService`) são bloqueados no cliente; `disconnectLocalDatabase()` interrompe obrigatoriamente o `SyncEngine`; e o backend Cloudflare (`PUT /api/db`) bloqueia com `HTTP 409` qualquer payload `< 50 KB` sobre bases `chunked:*` sem `force=true` explícito (incluindo requisições `compactSeq`).
 
 3. **Política de Versionamento:**
    - **Versão Semântica (`Version`):** Sempre equalizada entre Swift e Flutter (ex: `2.1.1`).

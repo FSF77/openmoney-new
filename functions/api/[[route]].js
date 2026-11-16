@@ -3036,16 +3036,17 @@ export async function onRequest(context) {
       url.searchParams.get("force") === "true";
 
     // Proteção absoluta contra perda de dados: se a base atual no D1 é grande (chunked)
-    // e o envio não tem force=true explícito, bloqueia qualquer payload vazio/minúsculo (<2KB)!
+    // e o envio não tem force=true explícito, bloqueia qualquer payload vazio/pequeno (<50KB)!
+    // Nota: uma base vazia com 66 categorias padrão em JSON possui ~4.2KB.
     const currentIsChunked =
       current &&
       typeof current.payload === "string" &&
       current.payload.startsWith("chunked:");
-    if (currentIsChunked && sizeBytes < 2000 && !isForce) {
+    if (currentIsChunked && sizeBytes < 50000 && !isForce) {
       return jsonResponse(
         {
           error:
-            "Proteção anti-perda ativada: tentativa de sobrescrever base grande com payload vazio bloqueada.",
+            "Proteção anti-perda ativada: tentativa de sobrescrever base grande com payload vazio/reduzido bloqueada.",
         },
         409,
         origin
@@ -3057,6 +3058,16 @@ export async function onRequest(context) {
       request.headers.get("X-OpenMoney-Compact-Seq") ||
       url.searchParams.get("compactSeq");
     if (compactSeqHeader !== null && compactSeqHeader !== undefined) {
+      if (currentIsChunked && sizeBytes < 50000) {
+        return jsonResponse(
+          {
+            error:
+              "Proteção anti-perda ativada: compactação em lote reduzido (<50KB) sobre base grande bloqueada.",
+          },
+          409,
+          origin
+        );
+      }
       const compactSeq = parseInt(compactSeqHeader, 10);
       if (isNaN(compactSeq) || compactSeq < meta.seq) {
         return jsonResponse(

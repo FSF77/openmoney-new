@@ -1079,7 +1079,13 @@ class CloudSyncService extends ChangeNotifier {
         _state = CloudSyncState.synced;
         _lastError = null;
 
-        if (_userId.isNotEmpty && payloadMap.isNotEmpty) {
+        final payloadIsSuspiciousEmpty =
+            (payloadMap['txs'] is! List ||
+                (payloadMap['txs'] as List).isEmpty) &&
+            _revision > 1;
+        if (_userId.isNotEmpty &&
+            payloadMap.isNotEmpty &&
+            !payloadIsSuspiciousEmpty) {
           if (kIsWeb) {
             if (rawJson.length < 2000000) {
               webLocalStorageSet(
@@ -1105,6 +1111,8 @@ class CloudSyncService extends ChangeNotifier {
             );
           }
           exportSessionToConfig({});
+        } else if (payloadIsSuspiciousEmpty && _userId.isNotEmpty) {
+          webLocalStorageRemove('openmoney_web_cache_$_userId');
         }
 
         notifyListeners();
@@ -1183,13 +1191,22 @@ class CloudSyncService extends ChangeNotifier {
       if (cachedRaw != null && cachedRaw.isNotEmpty) {
         final cached = _tryDecodeJson(cachedRaw);
         if (cached != null && cached['payload'] is Map<String, dynamic>) {
-          return CloudDatabaseSnapshot(
-            payload: cached['payload'] as Map<String, dynamic>,
-            preferences:
-                (cached['preferences'] as Map<String, dynamic>?) ?? const {},
-            revision: (cached['revision'] as num?)?.toInt() ?? _revision,
-            updatedAt: '',
-          );
+          final cachedPayload = cached['payload'] as Map<String, dynamic>;
+          final cachedRev = (cached['revision'] as num?)?.toInt() ?? _revision;
+          final effectiveRev = cachedRev > _revision ? cachedRev : _revision;
+          final isSuspiciousEmpty =
+              (cachedPayload['txs'] is! List ||
+                  (cachedPayload['txs'] as List).isEmpty) &&
+              effectiveRev > 1;
+          if (!isSuspiciousEmpty) {
+            return CloudDatabaseSnapshot(
+              payload: cachedPayload,
+              preferences:
+                  (cached['preferences'] as Map<String, dynamic>?) ?? const {},
+              revision: cachedRev,
+              updatedAt: '',
+            );
+          }
         }
       }
     }
@@ -1235,6 +1252,17 @@ class CloudSyncService extends ChangeNotifier {
   }) async {
     final reqUserId = _userId;
     final reqToken = _authToken;
+    final effectiveRev = compactSeq ?? _revision;
+    final txs = payload['txs'];
+    final isEmptyTxs = txs is! List || txs.isEmpty;
+
+    if (!force && isEmptyTxs && effectiveRev > 1 && reqUserId.isNotEmpty) {
+      debugPrint(
+        '[CloudSync] Anti-Wipe: bloqueado pushDatabase vazio não forçado (r$effectiveRev).',
+      );
+      return false;
+    }
+
     final rawJson = jsonEncode(payload);
 
     if (reqUserId.isNotEmpty) {

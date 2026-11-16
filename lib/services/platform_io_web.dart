@@ -68,6 +68,8 @@ void webClearUrlQueryParams() {
   } catch (_) {}
 }
 
+void overrideNativeStorageDirForTesting(String? path) {}
+
 String? webLocalStorageGet(String key) {
   try {
     final storage = _window.getProperty<JSObject?>('localStorage'.toJS);
