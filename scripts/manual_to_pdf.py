@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Converte MANUAL_BOAS_VINDAS.md em PDF usando Google Chrome headless (sem dependências)."""
+"""Converte o guia de boas-vindas em PDF usando Google Chrome headless (sem dependências)."""
 import html, re, subprocess, sys, pathlib
 
 root = pathlib.Path(__file__).resolve().parent.parent
-src = root / "MANUAL_BOAS_VINDAS.md"
+docs_root = root.parent / "OpenMoneyDocs"
+src = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else (docs_root / "manual" / "guia-boas-vindas.md")
 out_html = root / "tmp" / "manual.html"
-out_pdf = root / "MANUAL_BOAS_VINDAS.pdf"
+out_pdf = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else (root / "tmp" / "guia-boas-vindas.pdf")
 out_html.parent.mkdir(exist_ok=True)
+out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
 
 def inline(t):

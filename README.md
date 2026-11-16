@@ -291,7 +291,7 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Reconhecimento Multimodal via IA Google Gemini (BYOK)**: Extração precisa de Favorecido e Valor Líquido Total Pago com prompt contábil estrito que descarta maquininhas e tributos.
 - **Conferência em Split View**: Visualização lado a lado do comprovante original e dos campos auditáveis, com sugestão de categoria e movimentação física dos arquivos para a pasta `processados/`.
 
-### 19. Sistema de Tags, Filtros Avançados e Edição em Massa (ADR 022)
+### 19. Sistema de Tags, Filtros Avançados e Edição em Massa (ADR 023)
 - **Compatibilidade Schema `v: 7` & Sync v2**: `Transaction.tags` e `Database.tags` são omitidos do `openmoney.json` quando vazios/nulos, mantendo retrocompatibilidade total, e sincronizados granularmente na coleção `"tags"` do Sync v2.
 - **Proteção Contábil em Operações em Lote**: Lançamentos automáticos de pagamento de fatura (`auto == true`) não podem ser selecionados para edição/exclusão em lote; em transferências entre contas, edição em lote de categoria, conta e valor é bloqueada para preservar o pareamento.
 - **Backup Preventivo Obrigatório**: Toda exclusão em lote via seleção múltipla gera automaticamente um backup de segurança antes da remoção e registra auditoria (`AuditAction.batchEdit` / `AuditAction.batchDelete`).
@@ -434,8 +434,8 @@ open OpenMoney.xcodeproj
   - **Identificação Automática**: Localiza instantaneamente todos os lançamentos do mês cuja descrição comece com `Previsão` (ex: `Previsão Posto`, `Previsão Mercado`), sem distinção de maiúsculas/minúsculas e acentos.
   - **Apuração Global de Gastos da Categoria**: Varre todas as contas ativas no mês e calcula o total dos gastos efetivamente realizados na mesma categoria (desconsiderando transferências e outras previsões).
   - **Abatimento Proporcional Inteligente**: Reduz o valor da previsão com base nos gastos reais da categoria. A base original é gravada de forma transparente na nota (`[Previsão base: R$ X,XX]`), garantindo que execuções sucessivas não causem deduções repetidas.
-  - **Exclusão de Previsão Esgotada**: Caso as despesas da categoria alcancem ou superem o valor previsto (saldo restante $\le 0$), o lançamento temporário de previsão é **excluído automaticamente**, emitindo aviso em destaque: *"Não há mais previsão disponível"*.
-  - **Relatório de Ajuste Instantâneo**: Exibe modal/alerta com o resumo categorizado das previsões ajustadas, previsões esgotadas/excluídas e previsões que permaneceram em dia.
+  - **Retenção de Previsão Esgotada (Valor Zerado sem Exclusão)**: Caso as despesas da categoria alcancem ou superem o valor previsto (saldo restante $\le 0$), a previsão **não é excluída**: seu valor passa a **R$ 0,00**, recebendo a tag **ESGOTADA** para preservar o histórico contábil e permitir restauração de teto a qualquer momento.
+  - **Relatório de Ajuste Instantâneo**: Exibe modal com o resumo categorizado das previsões ajustadas, previsões esgotadas (`R$ 0,00`) e previsões que permaneceram em dia.
 
 ### 4. Pesquisa em Toda a Base de Dados (Busca Global)
 - **Consulta Global Unificada em Todas as Contas e Períodos**:
