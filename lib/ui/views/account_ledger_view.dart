@@ -1540,51 +1540,58 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                           ),
                         ),
-                      SizedBox(
-                        width: 118,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _mode,
-                          isExpanded: true,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colors.textPrimary,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Modalidade',
-                            labelStyle: TextStyle(fontSize: 13),
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
+                      Builder(
+                        builder: (context) {
+                          final isQuickXfer = _catSelection.startsWith('xfer:');
+                          final effectiveMode = (isQuickXfer && _mode == 'installment') ? 'single' : _mode;
+                          return SizedBox(
+                            width: 118,
+                            child: DropdownButtonFormField<String>(
+                              value: effectiveMode,
+                              isExpanded: true,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colors.textPrimary,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'Modalidade',
+                                labelStyle: TextStyle(fontSize: 13),
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: 'single',
+                                  child: Text('Único',
+                                      style: TextStyle(fontSize: 13),
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                                if (!isQuickXfer)
+                                  const DropdownMenuItem(
+                                    value: 'installment',
+                                    child: Text('Parcelado',
+                                        style: TextStyle(fontSize: 13),
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                                const DropdownMenuItem(
+                                  value: 'recurring',
+                                  child: Text('Recorrente',
+                                      style: TextStyle(fontSize: 13),
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) setState(() => _mode = v);
+                              },
                             ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'single',
-                              child: Text('Único',
-                                  style: TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            DropdownMenuItem(
-                              value: 'installment',
-                              child: Text('Parcelado',
-                                  style: TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            DropdownMenuItem(
-                              value: 'recurring',
-                              child: Text('Recorrente',
-                                  style: TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _mode = v);
-                          },
-                        ),
+                          );
+                        },
                       ),
-                      if (_mode == 'installment')
+                      if (_mode == 'installment' && !_catSelection.startsWith('xfer:'))
                         SizedBox(
                           width: 88,
                           child: DropdownButtonFormField<int>(

@@ -1644,4 +1644,60 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
       'c_card_reg',
     ]);
   });
+
+  test('35. Recurring transfers create paired transactions with xrec and peer, and handle deletion with scope', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db.accounts.clear();
+    store.db.txs.clear();
+    store.db.recs.clear();
+
+    final acc1 = Account(id: 'acc1', name: 'Conta Corrente', type: 'Corrente', opening: 100000);
+    final acc2 = Account(id: 'acc2', name: 'Poupança', type: 'Poupança', opening: 0);
+    store.db.accounts.addAll([acc1, acc2]);
+
+    // Insere transferência recorrente mensal de R$ 250,00 da acc1 para acc2
+    store.addTransaction(
+      accId: 'acc1',
+      date: '2026-11-01',
+      payee: 'Aplicação Mensal',
+      catSelection: 'xfer:acc2',
+      memo: 'Reserva',
+      signedAmt: -25000,
+      mode: 'recurring',
+      freq: 'monthly',
+    );
+
+    // Verifica que a regra foi criada com peer == acc2
+    expect(store.db.recs.length, 1);
+    final rule = store.db.recs.first;
+    expect(rule.acc, 'acc1');
+    expect(rule.peer, 'acc2');
+    expect(rule.amt, -25000);
+
+    // Verifica que syncRecs() gerou os lançamentos para ambas as contas
+    final txsAcc1 = store.db.txs.where((t) => t.acc == 'acc1').toList();
+    final txsAcc2 = store.db.txs.where((t) => t.acc == 'acc2').toList();
+    expect(txsAcc1.isNotEmpty, true);
+    expect(txsAcc2.isNotEmpty, true);
+    expect(txsAcc1.length, equals(txsAcc2.length));
+
+    // Primeiro lançamento da acc1
+    final firstAcc1 = txsAcc1.firstWhere((t) => t.date == '2026-11-01');
+    expect(firstAcc1.amt, -25000);
+    expect(firstAcc1.peer, 'acc2');
+    expect(firstAcc1.cat, 'Transferência: Poupança');
+    expect(firstAcc1.xfer, startsWith('xrec:${rule.id}:'));
+
+    // Lançamento contrapartida na acc2
+    final firstAcc2 = txsAcc2.firstWhere((t) => t.date == '2026-11-01');
+    expect(firstAcc2.amt, 25000);
+    expect(firstAcc2.peer, 'acc1');
+    expect(firstAcc2.cat, 'Transferência: Conta Corrente');
+    expect(firstAcc2.xfer, equals(firstAcc1.xfer));
+
+    // Exclusão com escopo .all deve remover a regra e todos os lançamentos
+    store.deleteTransaction(firstAcc1.id, ScopeChoice.all);
+    expect(store.db.recs.isEmpty, true);
+    expect(store.db.txs.where((t) => t.recId == rule.id).isEmpty, true);
+  });
 }

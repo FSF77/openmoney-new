@@ -1448,6 +1448,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     setState(() {
                       _txType = s.first;
                       if (_txType == 'transfer') {
+                        if (_mode == 'installment') _mode = 'single';
                         final others = widget.store
                             .transferDestinationAccounts(excludeId: _accId);
                         final currentDest = _catSelection.startsWith('xfer:')
@@ -1837,138 +1838,137 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
               }),
               const SizedBox(height: 12),
 
-              // Modo Flexível: Único, Recorrente, Parcelado
-              if (!isXfer) ...[
-                const Text(
-                  'Modo do Lançamento:',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              // Modo Flexível: Único, Recorrente, Parcelado (se não for transferência)
+              const Text(
+                'Modo do Lançamento:',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                style: SegmentedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  selectedBackgroundColor:
+                      colors.accent.withValues(alpha: 0.18),
+                  selectedForegroundColor: colors.accent,
+                  foregroundColor: colors.textSecondary,
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
+                  visualDensity: VisualDensity.compact,
                 ),
-                const SizedBox(height: 6),
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  style: SegmentedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    selectedBackgroundColor:
-                        colors.accent.withValues(alpha: 0.18),
-                    selectedForegroundColor: colors.accent,
-                    foregroundColor: colors.textSecondary,
-                    textStyle: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700),
-                    visualDensity: VisualDensity.compact,
+                segments: [
+                  const ButtonSegment(
+                    value: 'single',
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Único', maxLines: 1),
+                    ),
                   ),
-                  segments: const [
-                    ButtonSegment(
-                      value: 'single',
-                      label: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Único', maxLines: 1),
-                      ),
+                  const ButtonSegment(
+                    value: 'recurring',
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Recorrente', maxLines: 1),
                     ),
-                    ButtonSegment(
-                      value: 'recurring',
-                      label: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Recorrente', maxLines: 1),
-                      ),
-                    ),
-                    ButtonSegment(
+                  ),
+                  if (!isXfer)
+                    const ButtonSegment(
                       value: 'installment',
                       label: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text('Parcelado', maxLines: 1),
                       ),
                     ),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: (s) => setState(() => _mode = s.first),
-                ),
-                const SizedBox(height: 12),
+                ],
+                selected: {_mode == 'installment' && isXfer ? 'single' : _mode},
+                onSelectionChanged: (s) => setState(() => _mode = s.first),
+              ),
+              const SizedBox(height: 12),
 
-                if (_mode == 'recurring') ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _freq,
-                          isDense: true,
-                          style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                          decoration: const InputDecoration(
-                            labelText: 'Frequência',
-                            labelStyle: TextStyle(fontSize: 13),
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: kRecurrenceFrequencyOptions
-                              .map((o) => DropdownMenuItem(
-                                    value: o.id,
-                                    child: Text(o.label, style: const TextStyle(fontSize: 13)),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setState(() => _freq = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
-                    value: _hasEndDate,
-                    onChanged: (v) => setState(() => _hasEndDate = v ?? false),
-                  ),
-                  if (_hasEndDate) ...[
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _endDateCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'Data de Término (DD/MM/AAAA)',
-                        labelStyle: const TextStyle(fontSize: 13),
+              if (_mode == 'recurring') ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _freq,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: const OutlineInputBorder(),
-                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
-                        suffixIcon: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.calendar_month, size: 18),
-                          tooltip: 'Escolher data de término',
-                          onPressed: () {
-                            final baseD = dateFromISO(
-                                _resolveIsoDate(_dateCtrl.text));
-                            _pickDate(_endDateCtrl, firstDate: baseD);
-                          },
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        decoration: const InputDecoration(
+                          labelText: 'Frequência',
+                          labelStyle: TextStyle(fontSize: 13),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(),
                         ),
+                        items: kRecurrenceFrequencyOptions
+                            .map((o) => DropdownMenuItem(
+                                  value: o.id,
+                                  child: Text(o.label, style: const TextStyle(fontSize: 13)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _freq = v);
+                        },
                       ),
                     ),
                   ],
-                ] else if (_mode == 'installment') ...[
-                  DropdownButtonFormField<int>(
-                    initialValue: _installments,
-                    isDense: true,
-                    style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Número de Parcelas',
-                      labelStyle: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
+                  value: _hasEndDate,
+                  onChanged: (v) => setState(() => _hasEndDate = v ?? false),
+                ),
+                if (_hasEndDate) ...[
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _endDateCtrl,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Data de Término (DD/MM/AAAA)',
+                      labelStyle: const TextStyle(fontSize: 13),
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: List.generate(
-                      119,
-                      (i) => DropdownMenuItem(
-                        value: i + 2,
-                        child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: const OutlineInputBorder(),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
+                      suffixIcon: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.calendar_month, size: 18),
+                        tooltip: 'Escolher data de término',
+                        onPressed: () {
+                          final baseD = dateFromISO(
+                              _resolveIsoDate(_dateCtrl.text));
+                          _pickDate(_endDateCtrl, firstDate: baseD);
+                        },
                       ),
                     ),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _installments = v);
-                    },
                   ),
                 ],
+              ] else if (_mode == 'installment' && !isXfer) ...[
+                DropdownButtonFormField<int>(
+                  initialValue: _installments,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Número de Parcelas',
+                    labelStyle: TextStyle(fontSize: 13),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: List.generate(
+                    119,
+                    (i) => DropdownMenuItem(
+                      value: i + 2,
+                      child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _installments = v);
+                  },
+                ),
               ],
             ];
 
@@ -2787,117 +2787,136 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
               }),
               const SizedBox(height: 12),
 
-              // Modo Flexível: Único, Recorrente, Parcelado
-              if (!isXfer) ...[
-                const Text(
-                  'Modo do Lançamento:',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              // Modo Flexível: Único, Recorrente, Parcelado (se não for transferência)
+              const Text(
+                'Modo do Lançamento:',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                style: SegmentedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  selectedBackgroundColor:
+                      colors.accent.withValues(alpha: 0.18),
+                  selectedForegroundColor: colors.accent,
+                  foregroundColor: colors.textSecondary,
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
+                  visualDensity: VisualDensity.compact,
                 ),
-                const SizedBox(height: 6),
-                SegmentedButton<String>(
-                  style: SegmentedButton.styleFrom(
-                    selectedBackgroundColor:
-                        colors.accent.withValues(alpha: 0.18),
-                    selectedForegroundColor: colors.accent,
-                    foregroundColor: colors.textSecondary,
-                    textStyle: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w700),
-                    visualDensity: VisualDensity.compact,
+                segments: [
+                  const ButtonSegment(
+                    value: 'single',
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Único', maxLines: 1),
+                    ),
                   ),
-                  segments: const [
-                    ButtonSegment(value: 'single', label: Text('Único')),
-                    ButtonSegment(value: 'recurring', label: Text('Recorrente')),
-                    ButtonSegment(value: 'installment', label: Text('Parcelado')),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: (s) => setState(() => _mode = s.first),
-                ),
-                const SizedBox(height: 12),
+                  const ButtonSegment(
+                    value: 'recurring',
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Recorrente', maxLines: 1),
+                    ),
+                  ),
+                  if (!isXfer)
+                    const ButtonSegment(
+                      value: 'installment',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Parcelado', maxLines: 1),
+                      ),
+                    ),
+                ],
+                selected: {_mode == 'installment' && isXfer ? 'single' : _mode},
+                onSelectionChanged: (s) => setState(() => _mode = s.first),
+              ),
+              const SizedBox(height: 12),
 
-                if (_mode == 'recurring') ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _freq,
-                          isDense: true,
-                          style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                          decoration: const InputDecoration(
-                            labelText: 'Frequência',
-                            labelStyle: TextStyle(fontSize: 13),
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: kRecurrenceFrequencyOptions
-                              .map((o) => DropdownMenuItem(
-                                    value: o.id,
-                                    child: Text(o.label, style: const TextStyle(fontSize: 13)),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setState(() => _freq = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
-                    value: _hasEndDate,
-                    onChanged: (v) => setState(() => _hasEndDate = v ?? false),
-                  ),
-                  if (_hasEndDate) ...[
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _endDateCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'Data de Término (DD/MM/AAAA)',
-                        labelStyle: const TextStyle(fontSize: 13),
+              if (_mode == 'recurring') ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _freq,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: const OutlineInputBorder(),
-                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
-                        suffixIcon: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.calendar_month, size: 18),
-                          tooltip: 'Escolher data de término',
-                          onPressed: () {
-                            final baseD = dateFromISO(_resolveIsoDate(_dateCtrl.text));
-                            _pickDate(_endDateCtrl, firstDate: baseD);
-                          },
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        decoration: const InputDecoration(
+                          labelText: 'Frequência',
+                          labelStyle: TextStyle(fontSize: 13),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(),
                         ),
+                        items: kRecurrenceFrequencyOptions
+                            .map((o) => DropdownMenuItem(
+                                  value: o.id,
+                                  child: Text(o.label, style: const TextStyle(fontSize: 13)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _freq = v);
+                        },
                       ),
                     ),
                   ],
-                ] else if (_mode == 'installment') ...[
-                  DropdownButtonFormField<int>(
-                    initialValue: _installments,
-                    isDense: true,
-                    style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Número de Parcelas',
-                      labelStyle: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Definir Data de Término', style: TextStyle(fontSize: 13)),
+                  value: _hasEndDate,
+                  onChanged: (v) => setState(() => _hasEndDate = v ?? false),
+                ),
+                if (_hasEndDate) ...[
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _endDateCtrl,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Data de Término (DD/MM/AAAA)',
+                      labelStyle: const TextStyle(fontSize: 13),
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: List.generate(
-                      119,
-                      (i) => DropdownMenuItem(
-                        value: i + 2,
-                        child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: const OutlineInputBorder(),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
+                      suffixIcon: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.calendar_month, size: 18),
+                        tooltip: 'Escolher data de término',
+                        onPressed: () {
+                          final baseD = dateFromISO(_resolveIsoDate(_dateCtrl.text));
+                          _pickDate(_endDateCtrl, firstDate: baseD);
+                        },
                       ),
                     ),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _installments = v);
-                    },
                   ),
                 ],
+              ] else if (_mode == 'installment' && !isXfer) ...[
+                DropdownButtonFormField<int>(
+                  initialValue: _installments,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Número de Parcelas',
+                    labelStyle: TextStyle(fontSize: 13),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: List.generate(
+                    119,
+                    (i) => DropdownMenuItem(
+                      value: i + 2,
+                      child: Text('${i + 2}x', style: const TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _installments = v);
+                  },
+                ),
               ],
             ];
 

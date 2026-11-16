@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="Sources/OpenMoney/Resources/icon-1024.png" alt="OpenMoney Icon" width="128" height="128" />
+  <img src="logo/openmoney_app_icon.png" alt="OpenMoney Icon" width="128" height="128" />
 </p>
 
 ---
@@ -291,7 +291,7 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Reconhecimento Multimodal via IA Google Gemini (BYOK)**: Extração precisa de Favorecido e Valor Líquido Total Pago com prompt contábil estrito que descarta maquininhas e tributos.
 - **Conferência em Split View**: Visualização lado a lado do comprovante original e dos campos auditáveis, com sugestão de categoria e movimentação física dos arquivos para a pasta `processados/`.
 
-### 19. Sistema de Tags, Filtros Avançados e Edição em Massa (ADR 022)
+### 19. Sistema de Tags, Filtros Avançados e Edição em Massa (ADR 023)
 - **Compatibilidade Schema `v: 7` & Sync v2**: `Transaction.tags` e `Database.tags` são omitidos do `openmoney.json` quando vazios/nulos, mantendo retrocompatibilidade total, e sincronizados granularmente na coleção `"tags"` do Sync v2.
 - **Proteção Contábil em Operações em Lote**: Lançamentos automáticos de pagamento de fatura (`auto == true`) não podem ser selecionados para edição/exclusão em lote; em transferências entre contas, edição em lote de categoria, conta e valor é bloqueada para preservar o pareamento.
 - **Backup Preventivo Obrigatório**: Toda exclusão em lote via seleção múltipla gera automaticamente um backup de segurança antes da remoção e registra auditoria (`AuditAction.batchEdit` / `AuditAction.batchDelete`).
@@ -434,8 +434,8 @@ open OpenMoney.xcodeproj
   - **Identificação Automática**: Localiza instantaneamente todos os lançamentos do mês cuja descrição comece com `Previsão` (ex: `Previsão Posto`, `Previsão Mercado`), sem distinção de maiúsculas/minúsculas e acentos.
   - **Apuração Global de Gastos da Categoria**: Varre todas as contas ativas no mês e calcula o total dos gastos efetivamente realizados na mesma categoria (desconsiderando transferências e outras previsões).
   - **Abatimento Proporcional Inteligente**: Reduz o valor da previsão com base nos gastos reais da categoria. A base original é gravada de forma transparente na nota (`[Previsão base: R$ X,XX]`), garantindo que execuções sucessivas não causem deduções repetidas.
-  - **Exclusão de Previsão Esgotada**: Caso as despesas da categoria alcancem ou superem o valor previsto (saldo restante $\le 0$), o lançamento temporário de previsão é **excluído automaticamente**, emitindo aviso em destaque: *"Não há mais previsão disponível"*.
-  - **Relatório de Ajuste Instantâneo**: Exibe modal/alerta com o resumo categorizado das previsões ajustadas, previsões esgotadas/excluídas e previsões que permaneceram em dia.
+  - **Retenção de Previsão Esgotada (Valor Zerado sem Exclusão)**: Caso as despesas da categoria alcancem ou superem o valor previsto (saldo restante $\le 0$), a previsão **não é excluída**: seu valor passa a **R$ 0,00**, recebendo a tag **ESGOTADA** para preservar o histórico contábil e permitir restauração de teto a qualquer momento.
+  - **Relatório de Ajuste Instantâneo**: Exibe modal com o resumo categorizado das previsões ajustadas, previsões esgotadas (`R$ 0,00`) e previsões que permaneceram em dia.
 
 ### 4. Pesquisa em Toda a Base de Dados (Busca Global)
 - **Consulta Global Unificada em Todas as Contas e Períodos**:
@@ -739,7 +739,7 @@ open OpenMoney.xcodeproj
 - **Tela Dedicada de Tags**: Acessível no menu lateral abaixo de Categorias (e em `Mais > Tags` no iOS), com botão `+` / `Nova Tag`, busca, contagem de lançamentos, renomeação em massa, exclusão e **drill-down ao clicar na linha** reutilizando a tela de detalhamento de lançamentos das Categorias.
 - **Criação Inline no Lançamento**: Campo de Tags nas telas de criação, edição e cópia de lançamentos que converte texto em chips `#tag` ao digitar vírgula (`,`) ou pressionar `Enter`, com sugestões clicáveis das tags existentes.
 - **Exibição e Relatórios**: Chips `#tag` exibidos nas linhas de **Lançamentos Gerais** e **Extrato de Conta/Cartão**, filtro de **Tags** na tela de **Relatórios** (mensal e anual) e coluna `Tags` na exportação CSV.
-- **Filtros Avançados e Edição em Lote (Lançamentos Gerais)**: Filtros combináveis de **Categoria**, **Tag**, **Tipo** e **Conciliação**, modo de seleção múltipla com barra contextual (contagem, soma líquida, selecionar todos, conciliar/pendente rápido, excluir em lote) e modal de **Edição em Lote** com seleção individual de campos.
+- **Filtros Avançados e Edição em Lote (Lançamentos Gerais)**: Filtros combináveis de **Categoria**, **Tag**, **Tipo** e **Conciliação**, modo de seleção múltipla com barra contextual (contagem, soma líquida, selecionar todos, conciliar/pendente rápido, excluir em lote) e modal de **Edição em Lote** com seleção individual de campos. Veja os guias: [Guia de Tags](docs/manual/guia-tags.md) e [Guia de Edição em Massa](docs/manual/guia-edicao-em-massa.md).
 - **Otimização do Cabeçalho Mobile em Lançamentos Gerais**: Botão de alternância (`Icons.tune` / `Icons.expand_less`) ao lado do botão `+` no cabeçalho mobile (idêntico à tela de extrato), permitindo recolher todos os filtros e ferramentas secundárias e manter visíveis apenas o resumo de KPIs e o seletor temporal (Dia/Mês/Ano), liberando espaço total para a listagem dos lançamentos, com indicador compacto de filtros ativos e atalho "Limpar".
 
 ### 22. Blindagem de Cache Cloud, Inicialização Segura e Proteção Anti-Wipe (>10MB)
@@ -796,6 +796,52 @@ ProjOpenMoney/
 - **Interface**: SwiftUI 5+ (materiais translúcidos nativos, escala responsiva, animações contínuas)
 - **Frameworks Apple**: `SwiftUI`, `AppKit` (macOS), `UIKit` (iOS), `UniformTypeIdentifiers`
 - **Armazenamento e Performance**: JSON Schema estruturado e atômico com indexação em memória $O(1)$, salvamento assíncrono em background (debounced, sem travamento de UI em bases com mais de 30.000 lançamentos) e importadores em lote otimizados via Sets hash.
+
+---
+
+## 📚 Documentação Oficial do Ecossistema (`docs/`)
+
+### Arquitetura e Dados (`docs/architecture/`)
+- [Compilado de Engenharia, Regras de Negócio e Funcionalidades](docs/architecture/compilado-do-sistema.md)
+- [Dicionário de Dados Completo (Schema v: 7)](docs/architecture/dicionario-de-dados.md)
+- [Relatório de Comparação Técnica e Paridade Multi-Stack](docs/architecture/relatorio-comparacao-paridade.md)
+
+### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Boas-Vindas e Primeiros Passos](docs/manual/guia-boas-vindas.md)
+- [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](docs/manual/guia-dashboard-e-personalizacao.md)
+- [Guia do Usuário: Filtros Avançados e Edição em Massa (Lote)](docs/manual/guia-edicao-em-massa.md)
+- [Guia do Usuário: Gestão e Acompanhamento de Previsões Orçamentárias](docs/manual/guia-gestao-de-previsoes.md)
+- [Guia do Usuário: Limite de Gastos e Alerta Preventivo de Orçamento](docs/manual/guia-limite-de-gastos-e-alertas.md)
+- [Guia do Usuário: Contas Multi-Moeda, Câmbio e Cotações Históricas](docs/manual/guia-multi-moeda-e-cambio.md)
+- [Guia do Usuário: Sincronização em Tempo Real (OpenMoney Cloud — Sync v2)](docs/manual/guia-sincronizacao-cloud.md)
+- [Guia do Usuário: Sistema de Tags (`#tags`)](docs/manual/guia-tags.md)
+
+### Decisões de Arquitetura (`docs/adr/`)
+- [ADR 001: Adoção do Schema v: 7 como Padrão Unificado Multi-Stack](docs/adr/001-schema-v7-adoption.md)
+- [ADR 002: Histórico de Versões do Schema e Alinhamento de Versão Padrão](docs/adr/002-schema-default-version.md)
+- [ADR 003: Estratégia e Implementação da Vigência de Fatura (`isVigenteInvoice`)](docs/adr/003-is-vigente-invoice-strategy.md)
+- [ADR 004: Conciliação e Quitação Automática de Faturas de Cartão (`syncCards`)](docs/adr/004-card-invoice-settlement.md)
+- [ADR 005: Cálculo de Contas a Pagar e Faturas Vencidas (`dueBillItems`)](docs/adr/005-due-bill-overdue-calculation.md)
+- [ADR 006: Síntese de Auditoria Técnica e Resolução de Divergências Multi-Stack](docs/adr/006-divergence-summary.md)
+- [ADR 007: Arquitetura de Importação de Comprovantes via OCR Nativo e IA Multimodal (BYOK)](docs/adr/007-receipts-ocr-ai-import.md)
+- [ADR 008: Arquitetura do Coletor Mobile PWA, Automação via Atalhos do iOS e Resolução de Contas em 4 Níveis](docs/adr/008-coletor-smart-account-ios-automation.md)
+- [ADR 009: Padronização de Design System, Visibilidade de Patrimônio e Fluxo de Novo Lançamento](docs/adr/009-design-system-patrimony-and-transaction-flow.md)
+- [ADR 010: Rotina de Abatimento de Previsões Orçamentárias (`adjustPredictions`) — Modos por Mês e por Fatura de Cartão](docs/adr/010-smart-predictions-offset-modes.md)
+- [ADR 011: Arquitetura Web Multiusuário Cloudflare e Manutenção do Modo Tradicional Local no Desktop](docs/adr/011-web-multiuser-cloudflare-architecture.md)
+- [ADR 012: Design Responsivo Mobile Web e Otimização para Telas Estreitas](docs/adr/012-mobile-responsive-web-design.md)
+- [ADR 013: Motor de Sincronização Granular por Registro em Tempo Real (Sync v2)](docs/adr/013-realtime-record-sync.md)
+- [ADR 014: Arquitetura Híbrida Desktop (Local ↔ Nuvem), Backups de Segurança Locais e Logs de Auditoria Online](docs/adr/014-desktop-hybrid-sync-audit-and-safety-backups.md)
+- [ADR 015: Hardening de Segurança Web, Proteção Anti-Força-Bruta D1, Isolamento de Segredos e Mitigação de Ataques](docs/adr/015-web-and-d1-security-hardening.md)
+- [ADR 016: Tela Consolidada de Lançamentos de Todas as Contas, Filtro Temporal e Resolução por Fatura](docs/adr/016-consolidated-transactions-view.md)
+- [ADR 017: Modernização de UI/UX Desktop & Web, Central de Ajustes, Dashboard Customizável, Mini Rail, Datagrid e Paridade Multi-Stack](docs/adr/017-desktop-web-ui-dashboard-and-customization.md)
+- [ADR 018: Arquitetura Multi-Moeda, Câmbio em Transferências e Cotações Históricas](docs/adr/018-multi-currency-and-historical-rates.md)
+- [ADR 019: Paridade Integral do Modo Online e Sync v2 no OpenMoney Swift (macOS e iOS)](docs/adr/019-swift-cloud-sync-v2-parity.md)
+- [ADR 020: Tela Dedicada de Gestão de Previsões e Retenção de Previsões Esgotadas com Saldo Zerado](docs/adr/020-predictions-management-view-and-zero-balance-retention.md)
+- [ADR 021: Verificação Ativa de Limite de Gastos (Budget Excess Warning) na Inserção de Lançamentos](docs/adr/021-budget-limit-verification-on-transaction-entry.md)
+- [ADR 022: Padronização Visual Integral da Cor de Destaque, Eliminação de Resíduos Lilases do M3 e Otimização do Fluxo de Lançamentos e Extratos](docs/adr/022-complete-accent-color-standardization-and-entry-flow-optimizations.md)
+- [ADR 023: Sistema de Tags nos Lançamentos, Filtros Avançados e Edição em Massa](docs/adr/023-tags-and-batch-transaction-editing.md)
+- [ADR 024: Aperfeiçoamento do Modal de Detalhe de Lançamentos (Drill-Down), Filtro de Conciliação e Limpeza Visual](docs/adr/024-drill-down-reconciliation-filter-and-ui-cleanup.md)
+- [ADR 025: Persistência Local do Key-Value Store de Sincronização (sync_kv_store.json) e Paridade Multiplataforma](docs/adr/025-sync-kv-store-local-persistence.md)
 
 ---
 

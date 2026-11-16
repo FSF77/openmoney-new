@@ -2741,6 +2741,8 @@ class MoneyStore extends ChangeNotifier {
 
         if (!existingIds.contains(id)) {
           final curAcc = accById(r.acc);
+          final accCur = curAcc?.effectiveCurrency ?? 'BRL';
+          final txRateToBrl = accCur == 'BRL' ? null : rateToBrl(accCur);
           final curIsCard = curAcc?.type == kCardType && curAcc?.card != null;
           final curIk = curIsCard ? invKeyFor(curAcc!.card!, d) : null;
 
@@ -2760,6 +2762,7 @@ class MoneyStore extends ChangeNotifier {
               recId: r.id,
               recFreq: r.freq,
               recSeq: seq,
+              rate: txRateToBrl,
             ),
           );
           existingIds.add(id);
@@ -2771,6 +2774,18 @@ class MoneyStore extends ChangeNotifier {
           if (!existingIds.contains(peerTxId)) {
             final peerAcc = accById(peerId);
             final curAcc = accById(r.acc);
+            final accCur = curAcc?.effectiveCurrency ?? 'BRL';
+            final peerCur = peerAcc?.effectiveCurrency ?? 'BRL';
+            final peerAmt = accCur == peerCur
+                ? -r.amt
+                : convertCents(
+                    -r.amt,
+                    fromCurrency: accCur,
+                    toCurrency: peerCur,
+                    rates: db.rates,
+                  );
+            final peerRateToBrl =
+                peerCur == 'BRL' ? null : rateToBrl(peerCur);
             final peerIsCard =
                 peerAcc?.type == kCardType && peerAcc?.card != null;
             final peerIk = peerIsCard ? invKeyFor(peerAcc!.card!, d) : null;
@@ -2784,13 +2799,14 @@ class MoneyStore extends ChangeNotifier {
                 payee: r.payee,
                 cat: 'Transferência: ${curAcc?.name ?? ""}',
                 memo: r.memo,
-                amt: -r.amt,
+                amt: peerAmt,
                 rec: d.compareTo(today) <= 0 && seq == 1,
                 xfer: xid,
                 ik: peerIk,
                 recId: r.id,
                 recFreq: r.freq,
                 recSeq: seq,
+                rate: peerRateToBrl,
               ),
             );
             existingIds.add(peerTxId);
