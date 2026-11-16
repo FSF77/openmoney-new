@@ -270,9 +270,19 @@ EOF
 chmod +x "${ROOT_DIR}/install.sh"
 
 # 4. Commit e Push no próprio repositório openmoney-new (dispara deploy automático no projeto openmoney-new da Cloudflare Pages)
+if [ -d "${ROOT_DIR}/../OpenMoneyDocs" ]; then
+    echo "📚 Sincronizando documentação de OpenMoneyDocs para docs/..."
+    mkdir -p "${ROOT_DIR}/docs"
+    rm -rf "${ROOT_DIR}/docs/adr" "${ROOT_DIR}/docs/architecture" "${ROOT_DIR}/docs/manual"
+    cp -f "${ROOT_DIR}/../OpenMoneyDocs/README.md" "${ROOT_DIR}/docs/README.md"
+    sed -i '' 's|\.\./OpenMoneySwift/Sources/OpenMoney/Resources/icon-1024\.png|../logo/openmoney_app_icon.png|g' "${ROOT_DIR}/docs/README.md"
+    cp -R "${ROOT_DIR}/../OpenMoneyDocs/adr" "${ROOT_DIR}/docs/"
+    cp -R "${ROOT_DIR}/../OpenMoneyDocs/architecture" "${ROOT_DIR}/docs/"
+    cp -R "${ROOT_DIR}/../OpenMoneyDocs/manual" "${ROOT_DIR}/docs/"
+fi
 cp -f "${VERSION_JSON_FILE}" "${ROOT_DIR}/web-dist/version.json" 2>/dev/null || true
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
-git add README.md AGENTS.md .gitignore scripts/ lib/ macos/ windows/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
+git add README.md AGENTS.md .gitignore docs/ scripts/ lib/ macos/ windows/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"
 if git diff --staged --quiet; then
     echo "ℹ️ Nenhuma alteração a commitar."
 else

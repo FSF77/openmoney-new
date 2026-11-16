@@ -4,7 +4,10 @@ import html, re, subprocess, sys, pathlib
 
 root = pathlib.Path(__file__).resolve().parent.parent
 docs_root = root.parent / "OpenMoneyDocs"
-src = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else (docs_root / "manual" / "guia-boas-vindas.md")
+default_src = docs_root / "manual" / "guia-boas-vindas.md"
+if not default_src.exists():
+    default_src = root / "docs" / "manual" / "guia-boas-vindas.md"
+src = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else default_src
 out_html = root / "tmp" / "manual.html"
 out_pdf = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else (root / "tmp" / "guia-boas-vindas.pdf")
 out_html.parent.mkdir(exist_ok=True)
