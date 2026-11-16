@@ -1024,6 +1024,16 @@ CX
 
     store.resetZoom();
     expect(store.fontScale, 1.0);
+
+    // Test separation of mobile vs desktop fontScale
+    store.fontScaleDesktop = 1.0;
+    store.fontScaleMobile = 1.15;
+    expect(store.fontScaleDesktop, 1.0);
+    expect(store.fontScaleMobile, 1.15);
+
+    // exportPreferencesMap must NOT contain fontScale (cloud sync isolation)
+    final prefs = store.exportPreferencesMap();
+    expect(prefs.containsKey('fontScale'), isFalse);
   });
 
   test('20. Category import hierarchical creation and slash/separator handling', () {

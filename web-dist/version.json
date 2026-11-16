@@ -1,29 +1,29 @@
 {
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.4.7",
+  "version": "2.4.8",
   "web": {
-    "version": "2.4.7",
-    "build": 131,
-    "releaseDate": "15/11/2026"
+    "version": "2.4.8",
+    "build": 132,
+    "releaseDate": "16/11/2026"
   },
-  "build": 131,
+  "build": 132,
   "notes": "Novo recurso para classificar os lançamentos por tags, tela de lançamentos gerais agora permite mais filtros e edição em lotes, ajustes tela lançamentos, parâmetro para ocultar barra de inserção rápida, melhorias rotina de incluir novos lançamentos/transferências, Nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, possibilidade de usar conta e sincronismo online, contas em outras moedas e cotação online (beta), personalização Visual e Temas, Novo Dashboard Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, tela de lançamentos consolidado, versão web em https://openmoney.app.br",
-  "releaseDate": "15/11/2026",
+  "releaseDate": "16/11/2026",
   "windows": {
-    "build": 128,
+    "build": 131,
     "version": "2.4.7",
     "sizeMb": 13,
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.7.zip",
-    "sha256": "e42e70eca41eb6283d74495abfe098bad606c564f5cd9e5baf51c705fff8070c",
+    "sha256": "91d01e43d615efc03b16767bd0c5ddd5b59c0a02998a6691e58a84d2653547d5",
     "releaseDate": "15/11/2026"
   },
   "macos": {
-    "version": "2.4.7",
-    "build": 131,
-    "releaseDate": "15/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.7.zip",
-    "sha256": "858d48a3cbd8585db479b3fff63729c45c4732ac53c3e5d390a617aae99b0c31",
+    "version": "2.4.8",
+    "build": 132,
+    "releaseDate": "16/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.4.8.zip",
+    "sha256": "4ee408536613fbe52dc3c4b3254fcda6fe9217202da66dcbf426ca0dd9bf2bd9",
     "sizeMb": 12
   },
-  "title": "OpenMoney Flutter v2.4.7"
+  "title": "OpenMoney Flutter v2.4.8"
 }

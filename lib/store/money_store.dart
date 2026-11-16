@@ -513,7 +513,25 @@ class MoneyStore extends ChangeNotifier {
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
-  double fontScale = 1.0;
+  double fontScaleDesktop = 1.0;
+  double fontScaleMobile = 1.0;
+
+  bool get isMobilePlatform {
+    if (kIsWeb) {
+      return defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android;
+    }
+    return Platform.isIOS || Platform.isAndroid;
+  }
+
+  double get fontScale => isMobilePlatform ? fontScaleMobile : fontScaleDesktop;
+  set fontScale(double val) {
+    if (isMobilePlatform) {
+      fontScaleMobile = val;
+    } else {
+      fontScaleDesktop = val;
+    }
+  }
   bool isSidebarVisible = true;
   String accentColorKey = 'sky';
   bool isFlatClean = false;
@@ -726,7 +744,6 @@ class MoneyStore extends ChangeNotifier {
     return <String, dynamic>{
       'reminderDaysAhead': reminderDaysAhead,
       'isDarkMode': isDarkMode,
-      'fontScale': fontScale,
       'isSidebarVisible': isSidebarVisible,
       'accentColorKey': accentColorKey,
       'isFlatClean': isFlatClean,
@@ -838,10 +855,26 @@ class MoneyStore extends ChangeNotifier {
         if (v is bool) dashboardWidgets[k] = v;
       });
     }
-    if (cfg['fontScale'] is num) {
+    if (cfg['fontScaleDesktop'] is num) {
+      final s = (cfg['fontScaleDesktop'] as num).toDouble();
+      if (s >= 0.80 && s <= 1.80) {
+        fontScaleDesktop = s;
+      }
+    } else if (cfg['fontScale'] is num && !isMobilePlatform) {
       final s = (cfg['fontScale'] as num).toDouble();
       if (s >= 0.80 && s <= 1.80) {
-        fontScale = s;
+        fontScaleDesktop = s;
+      }
+    }
+    if (cfg['fontScaleMobile'] is num) {
+      final s = (cfg['fontScaleMobile'] as num).toDouble();
+      if (s >= 0.80 && s <= 1.80) {
+        fontScaleMobile = s;
+      }
+    } else if (cfg['fontScale'] is num && isMobilePlatform) {
+      final s = (cfg['fontScale'] as num).toDouble();
+      if (s >= 0.80 && s <= 1.80) {
+        fontScaleMobile = s;
       }
     }
     if (cfg['isGeminiAiEnabled'] is bool) {
@@ -1290,11 +1323,17 @@ class MoneyStore extends ChangeNotifier {
 
   void setFontScale(double scale) {
     final clamped = (scale * 100).round() / 100.0;
-    fontScale = clamped.clamp(0.85, 1.60);
+    final val = clamped.clamp(0.85, 1.60);
     final cfg = _readConfig();
-    cfg['fontScale'] = fontScale;
+    if (isMobilePlatform) {
+      fontScaleMobile = val;
+      cfg['fontScaleMobile'] = val;
+    } else {
+      fontScaleDesktop = val;
+      cfg['fontScaleDesktop'] = val;
+    }
+    cfg['fontScale'] = val;
     _writeConfig(cfg);
-    _syncPreferencesOnWeb();
     notifyListeners();
   }
 
