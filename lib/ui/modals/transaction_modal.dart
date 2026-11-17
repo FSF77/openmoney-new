@@ -265,6 +265,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   late final TextEditingController _amtCtrl;
   late final TextEditingController _peerAmtCtrl;
   late final TextEditingController _rateCtrl;
+  late String _txType; // 'expense', 'income', 'transfer'
   late bool _isExpense;
   late String _catSelection;
   late String? _customIk;
@@ -286,6 +287,22 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       _catSelection = 'xfer:${t.peer}';
     } else {
       _catSelection = t.cat;
+    }
+    final isTransfer = t.xfer != null ||
+        t.peer != null ||
+        _catSelection.startsWith('xfer:') ||
+        t.cat.startsWith('Transferência:');
+    if (isTransfer) {
+      _txType = 'transfer';
+      _isExpense = true;
+      if (!_catSelection.startsWith('xfer:')) {
+        final others = widget.store.transferDestinationAccounts(excludeId: _accId);
+        if (others.isNotEmpty) {
+          _catSelection = 'xfer:${others.first.id}';
+        }
+      }
+    } else {
+      _txType = _isExpense ? 'expense' : 'income';
     }
     _customIk = t.ik;
     _tags = List<String>.from(t.tags ?? const []);
@@ -403,7 +420,12 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
 
     final isoDate = _resolveIsoDate();
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
-    final signedAmt = _isExpense ? -absCents : absCents;
+    final signedAmt =
+        (_txType == 'transfer' || _isExpense) ? -absCents : absCents;
+    final rawPayee = _payeeCtrl.text.trim();
+    final finalPayee = rawPayee.isEmpty
+        ? (_txType == 'transfer' ? 'Transferência' : 'Sem descrição')
+        : rawPayee;
 
     int? peerSignedAmt;
     double? txRate;
@@ -438,7 +460,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       txId: widget.tx.id,
       newAccId: _accId,
       newDate: isoDate,
-      newPayee: _payeeCtrl.text.trim(),
+      newPayee: finalPayee,
       newCatSelection: _catSelection,
       newMemo: _memoCtrl.text.trim(),
       newSignedAmt: signedAmt,
@@ -457,7 +479,19 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final isSeries = widget.tx.recId != null || widget.tx.plan != null;
+    final isInstallment = widget.tx.plan != null &&
+        (widget.tx.pn != null || widget.tx.pt != null);
+    final isRecurring = widget.tx.recId != null;
+    final isSeries = isInstallment || isRecurring;
+    final isXfer = _txType == 'transfer' || _catSelection.startsWith('xfer:');
+
+    final matchingRule = isRecurring
+        ? widget.store.db.recs.cast<RecurrenceRule?>().firstWhere(
+              (r) => r?.id == widget.tx.recId,
+              orElse: () => null,
+            )
+        : null;
+
     final targetAcc = widget.store.accById(_accId);
     final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
 
@@ -489,153 +523,289 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final isSmallScreen = MediaQuery.of(context).size.width < 640;
 
     final formFields = <Widget>[
-              DropdownButtonFormField<String>(
-                initialValue: _accId,
-                isDense: true,
-                style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                decoration: const InputDecoration(
-                  labelText: 'Conta do Lançamento (Mover entre Contas)',
-                  labelStyle: TextStyle(fontSize: 13),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  border: OutlineInputBorder(),
+      // Banner Informativo de Série (Parcelamento ou Recorrência)
+      if (isSeries) ...[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.accent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: colors.accent.withValues(alpha: 0.25),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isInstallment
+                    ? Icons.credit_card_outlined
+                    : Icons.repeat_rounded,
+                color: colors.accent,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isInstallment
+                          ? 'Lançamento Parcelado • Parcela ${widget.tx.pn ?? 1} de ${widget.tx.pt ?? 1}'
+                          : '${isXfer ? "Transferência Recorrente" : "Lançamento Recorrente"} • ${kRecurrenceFrequencyOptions.firstWhere((o) => o.id == (widget.tx.recFreq ?? "monthly"), orElse: () => kRecurrenceFrequencyOptions[3]).label} (Ocorrência #${widget.tx.recSeq ?? 1})',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: colors.accent,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isInstallment
+                          ? 'Este lançamento faz parte de um plano em ${widget.tx.pt ?? 1} parcelas.'
+                          : (matchingRule?.end != null
+                              ? 'Regra programada com término em ${fmtDate(matchingRule!.end!)}.'
+                              : 'Regra programada por tempo indeterminado.'),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                items: widget.store.db.accounts
-                    .map((a) =>
-                        DropdownMenuItem(value: a.id, child: Text(a.name, style: const TextStyle(fontSize: 13))))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      _accId = v;
-                      final newAcc = widget.store.accById(v);
-                      if (newAcc?.type == kCardType && newAcc?.card != null) {
-                        _customIk =
-                            invKeyFor(newAcc!.card!, _resolveIsoDate());
-                      } else {
-                        _customIk = null;
-                      }
-                    });
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+
+      // Tipo de Lançamento (Despesa / Receita / Transferência)
+      SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            selectedBackgroundColor: colors.accent.withValues(alpha: 0.18),
+            selectedForegroundColor: colors.accent,
+            foregroundColor: colors.textSecondary,
+            textStyle:
+                const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            visualDensity: VisualDensity.compact,
+          ),
+          segments: const [
+            ButtonSegment(
+              value: 'expense',
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('− Despesa', maxLines: 1),
+              ),
+            ),
+            ButtonSegment(
+              value: 'income',
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('+ Receita', maxLines: 1),
+              ),
+            ),
+            ButtonSegment(
+              value: 'transfer',
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('⇄ Transferência', maxLines: 1),
+              ),
+            ),
+          ],
+          selected: {_txType},
+          onSelectionChanged: (s) {
+            setState(() {
+              _txType = s.first;
+              if (_txType == 'transfer') {
+                _isExpense = true;
+                final others =
+                    widget.store.transferDestinationAccounts(excludeId: _accId);
+                final currentDest = _catSelection.startsWith('xfer:')
+                    ? _catSelection.substring(5)
+                    : '';
+                if (!others.any((a) => a.id == currentDest)) {
+                  if (others.isNotEmpty) {
+                    _catSelection = 'xfer:${others.first.id}';
                   }
-                },
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _dateCtrl,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'Data (DD/MM/AAAA)',
-                        labelStyle: const TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: const OutlineInputBorder(),
-                        suffixIconConstraints: const BoxConstraints(minWidth: 28, maxHeight: 24),
-                        suffixIcon: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.calendar_month, size: 18),
-                          tooltip: 'Escolher data no calendário',
-                          onPressed: _pickDate,
-                        ),
-                      ),
-                      onChanged: (v) {
-                        if (isCard && targetAcc != null && targetAcc.card != null) {
-                          setState(() {
-                            _customIk = invKeyFor(
-                              targetAcc.card!,
-                              _resolveIsoDate(),
-                            );
-                          });
-                        } else if (_isCompleteDateInput(v)) {
-                          setState(() {});
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      selectedBackgroundColor:
-                          colors.accent.withValues(alpha: 0.18),
-                      selectedForegroundColor: colors.accent,
-                      foregroundColor: colors.textSecondary,
-                      textStyle: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    segments: const [
-                      ButtonSegment(
-                        value: true,
-                        label: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('− Despesa', maxLines: 1),
-                        ),
-                      ),
-                      ButtonSegment(
-                        value: false,
-                        label: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('+ Receita', maxLines: 1),
-                        ),
-                      ),
-                    ],
-                    selected: {_isExpense},
-                    onSelectionChanged: (s) {
-                      setState(() => _isExpense = s.first);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _payeeCtrl,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                  labelText: 'Favorecido / Descrição',
-                  labelStyle: TextStyle(fontSize: 13),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              CategorySelectFormField(
-                store: widget.store,
-                categoryType: catType,
-                currentSelection: effectiveCat,
-                excludeAccountId: _accId,
-                labelText: 'Categoria ou Transferência',
-                onChanged: (v) {
-                  setState(() {
-                    _catSelection = v;
-                    if (v.startsWith('xfer:')) {
-                      final peerId = v.substring(5);
-                      final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
-                      final destCur =
-                          widget.store.accById(peerId)?.effectiveCurrency ??
-                              'BRL';
-                      if (srcCur != destCur) {
-                        final r = exchangeRateBetween(
-                          fromCurrency: srcCur,
-                          toCurrency: destCur,
-                          rates: widget.store.db.rates,
-                        );
-                        _rateCtrl.text =
-                            r.toStringAsFixed(4).replaceAll('.', ',');
-                        final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
-                        if (srcCents > 0) {
-                          _peerAmtCtrl.text =
-                              formatInputCents((srcCents * r).round());
-                        }
-                      }
-                    }
-                  });
-                },
-              ),
+                }
+              } else {
+                _isExpense = _txType == 'expense';
+                final paths = widget.store
+                    .allCategoryPaths(_isExpense ? 'Despesa' : 'Receita');
+                if (!paths.contains(_catSelection) ||
+                    _catSelection.startsWith('xfer:')) {
+                  _catSelection = paths.isNotEmpty ? paths.first : '';
+                }
+              }
+            });
+          },
+        ),
+      ),
+      const SizedBox(height: 12),
+
+      // Conta do Lançamento
+      DropdownButtonFormField<String>(
+        value: _accId,
+        isDense: true,
+        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+        decoration: const InputDecoration(
+          labelText: 'Conta do Lançamento (Mover entre Contas)',
+          labelStyle: TextStyle(fontSize: 13),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          border: OutlineInputBorder(),
+        ),
+        items: widget.store.db.accounts
+            .map((a) => DropdownMenuItem(
+                value: a.id,
+                child: Text(a.name, style: const TextStyle(fontSize: 13))))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) {
+            setState(() {
+              _accId = v;
+              final newAcc = widget.store.accById(v);
+              if (newAcc?.type == kCardType && newAcc?.card != null) {
+                _customIk = invKeyFor(newAcc!.card!, _resolveIsoDate());
+              } else {
+                _customIk = null;
+              }
+              if (_txType == 'transfer' &&
+                  _catSelection.startsWith('xfer:$_accId')) {
+                final others =
+                    widget.store.transferDestinationAccounts(excludeId: _accId);
+                if (others.isNotEmpty) {
+                  _catSelection = 'xfer:${others.first.id}';
+                }
+              }
+            });
+          }
+        },
+      ),
+      const SizedBox(height: 12),
+
+      // Data
+      TextField(
+        controller: _dateCtrl,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          labelText: 'Data (DD/MM/AAAA)',
+          labelStyle: const TextStyle(fontSize: 13),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: const OutlineInputBorder(),
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 28, maxHeight: 24),
+          suffixIcon: IconButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.calendar_month, size: 18),
+            tooltip: 'Escolher data no calendário',
+            onPressed: _pickDate,
+          ),
+        ),
+        onChanged: (v) {
+          if (isCard && targetAcc != null && targetAcc.card != null) {
+            setState(() {
+              _customIk = invKeyFor(
+                targetAcc.card!,
+                _resolveIsoDate(),
+              );
+            });
+          } else if (_isCompleteDateInput(v)) {
+            setState(() {});
+          }
+        },
+      ),
+      const SizedBox(height: 12),
+
+      // Favorecido / Descrição
+      TextField(
+        controller: _payeeCtrl,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          labelText: _txType == 'transfer'
+              ? 'Favorecido / Descrição (Opcional)'
+              : 'Favorecido / Descrição',
+          labelStyle: const TextStyle(fontSize: 13),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: const OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 12),
+
+      // Categoria OU Conta de Destino
+      if (_txType == 'transfer') ...[
+        DropdownButtonFormField<String>(
+          value: () {
+            final curDest = _catSelection.startsWith('xfer:')
+                ? _catSelection.substring(5)
+                : '';
+            final others =
+                widget.store.transferDestinationAccounts(excludeId: _accId);
+            return others.any((a) => a.id == curDest)
+                ? curDest
+                : (others.isNotEmpty ? others.first.id : null);
+          }(),
+          isDense: true,
+          style: TextStyle(fontSize: 13, color: colors.textPrimary),
+          decoration: const InputDecoration(
+            labelText: 'Conta de Destino da Transferência',
+            labelStyle: TextStyle(fontSize: 13),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(),
+          ),
+          items: widget.store
+              .transferDestinationAccounts(excludeId: _accId)
+              .map((a) => DropdownMenuItem(
+                    value: a.id,
+                    child: Text('⇄ Transferência: ${a.name}',
+                        style: const TextStyle(fontSize: 13)),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() {
+                _catSelection = 'xfer:$v';
+                final destAcc = widget.store.accById(v);
+                final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
+                final destCur = destAcc?.effectiveCurrency ?? 'BRL';
+                if (srcCur != destCur) {
+                  final r = exchangeRateBetween(
+                    fromCurrency: srcCur,
+                    toCurrency: destCur,
+                    rates: widget.store.db.rates,
+                  );
+                  _rateCtrl.text = r.toStringAsFixed(4).replaceAll('.', ',');
+                  final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+                  if (srcCents > 0) {
+                    _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
+                  }
+                }
+              });
+            }
+          },
+        ),
+      ] else ...[
+        CategorySelectFormField(
+          store: widget.store,
+          categoryType: catType,
+          currentSelection: effectiveCat,
+          excludeAccountId: _accId,
+          labelText: 'Categoria',
+          onChanged: (v) {
+            setState(() => _catSelection = v);
+          },
+        ),
+      ],
               const SizedBox(height: 12),
               Builder(builder: (context) {
                 final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';

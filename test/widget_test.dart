@@ -17,6 +17,7 @@ import 'package:openmoney/ui/views/due_bills_view.dart';
 import 'package:openmoney/ui/views/installments_view.dart';
 import 'package:openmoney/ui/views/reports_view.dart';
 import 'package:openmoney/ui/modals/account_multi_select_filter.dart';
+import 'package:openmoney/ui/modals/transaction_modal.dart';
 
 void main() {
   group('OpenMoney JSON v6 Schema & Business Rules Parity Tests', () {
@@ -1699,5 +1700,89 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     store.deleteTransaction(firstAcc1.id, ScopeChoice.all);
     expect(store.db.recs.isEmpty, true);
     expect(store.db.txs.where((t) => t.recId == rule.id).isEmpty, true);
+  });
+
+  testWidgets('36. Transaction edit modal displays transfer button for transfers and series information for installments and recurrences', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+    store.db.accounts.clear();
+    store.db.txs.clear();
+    store.db.recs.clear();
+
+    final acc1 = Account(id: 'acc1', name: 'Banco Alpha', type: 'Corrente', opening: 100000);
+    final acc2 = Account(id: 'acc2', name: 'Banco Beta', type: 'Poupança', opening: 50000);
+    store.db.accounts.addAll([acc1, acc2]);
+
+    // 1. Lançamento Parcelado
+    final installmentTx = Transaction(
+      id: 'tx_inst_1',
+      acc: 'acc1',
+      date: '2026-11-10',
+      payee: 'Notebook (2/10)',
+      cat: 'Eletrônicos',
+      memo: 'Compra de trabalho',
+      amt: -35000,
+      plan: 'plan_xyz',
+      pn: 2,
+      pt: 10,
+    );
+    store.db.txs.add(installmentTx);
+
+    // 2. Transferência Recorrente
+    final recTransferTx = Transaction(
+      id: 'tx_rec_xfer_1',
+      acc: 'acc1',
+      peer: 'acc2',
+      date: '2026-11-12',
+      payee: 'Transferência Mensal',
+      cat: 'Transferência: Banco Beta',
+      memo: 'Aporte',
+      amt: -20000,
+      xfer: 'xrec:rule_1:3',
+      recId: 'rule_1',
+      recFreq: 'monthly',
+      recSeq: 3,
+    );
+    store.db.txs.add(recTransferTx);
+
+    // Abrir modal de edição para o lançamento parcelado
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => showTransactionEditModal(ctx, store, installmentTx),
+            child: const Text('Editar Parcelado'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Editar Parcelado'));
+    await tester.pumpAndSettle();
+
+    // Verifica que exibe o banner informativo de parcelamento
+    expect(find.textContaining('Lançamento Parcelado • Parcela 2 de 10'), findsOneWidget);
+    expect(find.textContaining('Este lançamento faz parte de um plano em 10 parcelas.'), findsOneWidget);
+
+    // Fecha o modal
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    // Abrir modal de edição para a transferência recorrente
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => showTransactionEditModal(ctx, store, recTransferTx),
+            child: const Text('Editar Transferência'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Editar Transferência'));
+    await tester.pumpAndSettle();
+
+    // Verifica que exibe o botão Transferência e o banner informativo de transferência recorrente
+    expect(find.text('⇄ Transferência'), findsWidgets);
+    expect(find.textContaining('Transferência Recorrente • Mensal (Ocorrência #3)'), findsOneWidget);
+    expect(find.text('Conta de Destino da Transferência'), findsOneWidget);
   });
 }

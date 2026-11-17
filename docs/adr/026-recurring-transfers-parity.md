@@ -43,12 +43,18 @@ Ao processar regras recorrentes que possuam `peer != null`:
    - `rate`: taxa de conversão para BRL da conta de destino.
    - `ik`: chave de fatura calculada caso a conta de destino seja cartão de crédito.
 
-### 2.3. Paridade de Interface (UI)
-Nas telas de criação e edição:
+### 2.3. Paridade de Interface (UI) e Tela de Edição
+Nas telas de criação, cópia e edição de lançamentos:
 - **Despesas e Receitas**: O seletor de modo oferece `[ Único | Recorrente | Parcelado ]`.
 - **Transferências**: O seletor de modo oferece dinamicamente `[ Único | Recorrente ]` (omite "Parcelado").
 - **Proteção contra Estado Inválido**: Ao alternar para o tipo Transferência, caso o modo estivesse selecionado como "Parcelado", o sistema força a seleção automaticamente para "Único".
 - **Configuração de Recorrência**: Quando selecionado "Recorrente", exibe-se a escolha de periodicidade (`freq`: Diário, Semanal, Quinzenal, Mensal, Bimestral, Trimestral, Semestral, Anual) e data de término opcional.
+- **Tela de Edição de Lançamentos (`_TransactionEditDialog` / `TransactionEditSheet`)**:
+  - Habilitado o seletor completo de 3 estados `[ − Despesa | + Receita | ⇄ Transferência ]`.
+  - Ao editar ou selecionar uma transferência, a interface exibe dinamicamente a escolha da conta de destino através do campo dedicado de contas de contrapartida.
+  - Implementado **Banner Informativo de Séries** no topo do formulário de edição:
+    - Para **Parcelados**: Exibe `Lançamento Parcelado • Parcela X de Y` e informações do plano de parcelamento.
+    - Para **Recorrentes**: Exibe `Lançamento Recorrente` (ou `Transferência Recorrente`), a frequência cadastrada (ex: *Mensal*), o número de sequência da ocorrência (ex: *Ocorrência #3*) e a data de término programada se houver.
 
 ### 2.4. Escopo de Edição e Exclusão em Séries Pareadas
 - **Escopo "Apenas Este" (`only`)**: Exclui ou atualiza simultaneamente a perna selecionada e sua contrapartida pareada através da chave `xfer` (`xrec:...`).
@@ -62,8 +68,8 @@ Nas telas de criação e edição:
 | Plataforma | Componentes Modificados | Status |
 | :--- | :--- | :--- |
 | **Flutter (macOS, Windows, Web, Mobile)** | `money_store.dart`, `transaction_modal.dart`, `account_ledger_view.dart` | ✅ Implementado e testado |
-| **Swift macOS** | `Views.swift` (`TransactionCreateSheet`, `TransactionCopySheet`, `AccountDetailView`) | ✅ Implementado e compilado |
-| **Swift iOS** | `iOSViews.swift` (`iOSNewTransactionSheet`) | ✅ Implementado e compilado |
+| **Swift macOS** | `Views.swift` (`TransactionCreateSheet`, `TransactionCopySheet`, `TransactionEditSheet`, `AccountDetailView`) | ✅ Implementado e compilado |
+| **Swift iOS** | `Views.swift` (`TransactionEditSheet`), `iOSViews.swift` (`iOSNewTransactionSheet`) | ✅ Implementado e compilado |
 
 ---
 
@@ -71,9 +77,7 @@ Nas telas de criação e edição:
 
 1. **Testes Unitários de Regra e Geração (`widget_test.dart`)**:
    - `test 35`: Inserção de transferência recorrente mensal entre conta corrente e poupança.
-   - Validação da persistência de `rule.peer` no banco.
-   - Validação da geração idêntica de lançamentos espelho interligados por `xrec:...`.
-   - Validação da exclusão em lote de toda a série e remoção de ambas as contas.
+   - `test 36`: Validação visual e de comportamento do modal de edição (`_TransactionEditDialog`) confirmando a presença do botão "⇄ Transferência" selecionado para transferências e a renderização do banner informativo de séries para lançamentos parcelados e recorrentes.
 2. **Testes de Regressão da Suite**:
-   - 91 testes automatizados executados e aprovados com 100% de sucesso.
+   - 92 testes automatizados executados e aprovados com 100% de sucesso.
    - Compilação nativa `swift build` aprovada sem warnings ou erros de tipos.
