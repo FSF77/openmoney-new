@@ -176,9 +176,9 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force",
+      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset",
     "Access-Control-Expose-Headers":
-      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
+      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Vary": "Origin",
@@ -865,6 +865,310 @@ async function cleanupOrphanedChunksForUser(db, userId) {
   }
 }
 
+const MAX_DAILY_AUTO_BACKUPS = 4;
+const MIN_BACKUP_INTERVAL_MINUTES = 180;
+const MIN_PERIOD_CHANGE_INTERVAL_MINUTES = 30;
+const CLOUD_BACKUP_RETENTION_DAYS = 15;
+const CLOUD_BACKUP_MIN_KEEP = 28;
+
+function extractTzOffsetMinutes(request, url) {
+  const raw =
+    (url && url.searchParams ? url.searchParams.get("tzOffset") : null) ??
+    (request && request.headers ? request.headers.get("X-OpenMoney-Tz-Offset") : null);
+  if (raw !== null && raw !== undefined && raw !== "") {
+    const parsed = parseInt(String(raw), 10);
+    if (!Number.isNaN(parsed) && parsed >= -720 && parsed <= 840) {
+      return parsed;
+    }
+  }
+  return -180; // Padrão América/São Paulo (UTC-3)
+}
+
+function formatClientLocalTime(nowIso, tzOffsetMinutes = -180) {
+  const offsetMin = Number.isFinite(Number(tzOffsetMinutes))
+    ? Math.max(-720, Math.min(840, Number(tzOffsetMinutes)))
+    : -180;
+  const parsedMs = nowIso ? Date.parse(nowIso) : Date.now();
+  const utcMs = Number.isFinite(parsedMs) ? parsedMs : Date.now();
+  const localDate = new Date(utcMs + offsetMin * 60000);
+
+  const year = String(localDate.getUTCFullYear()).padStart(4, "0");
+  const month = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(localDate.getUTCDate()).padStart(2, "0");
+  const hourNum = localDate.getUTCHours();
+  const hour = String(hourNum).padStart(2, "0");
+  const minute = String(localDate.getUTCMinutes()).padStart(2, "0");
+  const secStr = String(localDate.getUTCSeconds()).padStart(2, "0");
+
+  const dateStr = `${year}-${month}-${day}`;
+  const timeStr = `${hour}:${minute}`;
+  return {
+    utcMs,
+    dateStr,
+    timeStr,
+    secStr,
+    label: `${dateStr} ${timeStr}`,
+    hour: hourNum,
+    period: Math.floor(hourNum / 6),
+  };
+}
+
+function parseBackupLocalPeriod(backupRow, tzOffsetMinutes = -180) {
+  if (backupRow && backupRow.created_at) {
+    const parsed = Date.parse(backupRow.created_at);
+    if (Number.isFinite(parsed)) {
+      return formatClientLocalTime(backupRow.created_at, tzOffsetMinutes).period;
+    }
+  }
+  const bDate = String((backupRow && backupRow.backup_date) || "");
+  const m = bDate.match(/^\d{4}-\d{2}-\d{2}\s+(\d{2}):(\d{2})/);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    if (!Number.isNaN(h)) return Math.floor(h / 6);
+  }
+  return 0;
+}
+
+async function pruneOldCloudBackups(db, userId) {
+  try {
+    const cutoffIso = new Date(
+      Date.now() - CLOUD_BACKUP_RETENTION_DAYS * 86400 * 1000
+    ).toISOString();
+    await db
+      .prepare(
+        `DELETE FROM user_database_backups
+         WHERE user_id = ?1
+           AND created_at < ?2
+           AND id NOT IN (
+             SELECT id FROM user_database_backups
+             WHERE user_id = ?1
+             ORDER BY created_at DESC, backup_date DESC
+             LIMIT ?3
+           )`
+      )
+      .bind(userId, cutoffIso, CLOUD_BACKUP_MIN_KEEP)
+      .run();
+  } catch (_) {}
+}
+
+async function ensurePeriodicCloudBackup(
+  db,
+  {
+    userId,
+    revision,
+    encryptedPayloadOrMarker,
+    sizeBytes,
+    nowIso,
+    tzOffsetMinutes = -180,
+    forceNew = false,
+    isCompaction = false,
+    skipAntiWipe = false,
+  }
+) {
+  if (!userId || !encryptedPayloadOrMarker) return false;
+
+  const localNow = formatClientLocalTime(nowIso, tzOffsetMinutes);
+  const dateStr = localNow.dateStr;
+
+  try {
+    const todayRes = await db
+      .prepare(
+        `SELECT id, backup_date, revision, size_bytes, created_at
+         FROM user_database_backups
+         WHERE user_id = ?1 AND backup_date LIKE ?2
+         ORDER BY created_at DESC, backup_date DESC`
+      )
+      .bind(userId, `${dateStr}%`)
+      .all();
+
+    const todayBackups = (todayRes && todayRes.results) || [];
+
+    const lastAny = await db
+      .prepare(
+        `SELECT size_bytes FROM user_database_backups
+         WHERE user_id = ?1
+         ORDER BY created_at DESC, backup_date DESC
+         LIMIT 1`
+      )
+      .bind(userId)
+      .first();
+
+    if (
+      !skipAntiWipe &&
+      lastAny &&
+      Number(lastAny.size_bytes || 0) >= 2000 &&
+      sizeBytes < Number(lastAny.size_bytes) / 2
+    ) {
+      return false;
+    }
+
+    if (todayBackups.length > 0) {
+      const latest = todayBackups[0];
+      const latestSize = Number(latest.size_bytes || 0);
+      const latestCreatedMs = Date.parse(latest.created_at || "");
+      const elapsedSec = Number.isFinite(latestCreatedMs)
+        ? Math.max(0, (localNow.utcMs - latestCreatedMs) / 1000)
+        : 999999;
+
+      if (
+        !skipAntiWipe &&
+        latestSize >= 2000 &&
+        sizeBytes < latestSize / 2
+      ) {
+        return false;
+      }
+
+      const shouldUpgradeEmpty = latestSize < 2000 && sizeBytes >= 2000;
+      const shouldUpdateFreshCompaction =
+        isCompaction &&
+        elapsedSec < 60 &&
+        Number(revision || 0) > Number(latest.revision || 0);
+
+      if (!forceNew && (shouldUpgradeEmpty || shouldUpdateFreshCompaction)) {
+        await db
+          .prepare(
+            `UPDATE user_database_backups
+             SET revision = ?1, size_bytes = ?2, payload = ?3, created_at = ?4
+             WHERE id = ?5 AND user_id = ?6`
+          )
+          .bind(
+            revision,
+            sizeBytes,
+            encryptedPayloadOrMarker,
+            nowIso,
+            latest.id,
+            userId
+          )
+          .run();
+        return true;
+      }
+
+      if (!forceNew) {
+        if (todayBackups.length >= MAX_DAILY_AUTO_BACKUPS) {
+          return false;
+        }
+        const elapsedMinutes = elapsedSec / 60;
+        const latestPeriod = parseBackupLocalPeriod(latest, tzOffsetMinutes);
+        const periodChanged = localNow.period !== latestPeriod;
+        if (
+          elapsedMinutes < MIN_BACKUP_INTERVAL_MINUTES &&
+          !(periodChanged && elapsedMinutes >= MIN_PERIOD_CHANGE_INTERVAL_MINUTES)
+        ) {
+          return false;
+        }
+      }
+    }
+
+    const existingIds = new Set(todayBackups.map((b) => String(b.id || "")));
+    let slotIdx = 1;
+    while (existingIds.has(`${userId}_${dateStr}_${slotIdx}`)) {
+      slotIdx++;
+    }
+    const backupId = `${userId}_${dateStr}_${slotIdx}`;
+
+    const existingDates = new Set(
+      todayBackups.map((b) => String(b.backup_date || ""))
+    );
+    let backupDateLabel = localNow.label;
+    if (existingDates.has(backupDateLabel)) {
+      backupDateLabel = `${localNow.label}:${localNow.secStr}`;
+      if (existingDates.has(backupDateLabel)) {
+        backupDateLabel = `${localNow.label}:${localNow.secStr}_${slotIdx}`;
+      }
+    }
+
+    await db
+      .prepare(
+        `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+      )
+      .bind(
+        backupId,
+        userId,
+        backupDateLabel,
+        revision,
+        sizeBytes,
+        encryptedPayloadOrMarker,
+        nowIso
+      )
+      .run();
+
+    await pruneOldCloudBackups(db, userId);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function ensurePeriodicCloudBackupFromCurrentDb(
+  db,
+  userId,
+  nowIso,
+  tzOffsetMinutes = -180
+) {
+  if (!db || !userId) return false;
+  try {
+    const row = await db
+      .prepare(
+        `SELECT revision, payload FROM user_databases WHERE user_id = ?1`
+      )
+      .bind(userId)
+      .first();
+    if (!row || !row.payload) return false;
+
+    const meta = await ensureUserSyncMeta(db, userId);
+    const rev = Math.max(Number(row.revision || 1), Number(meta.snapshotSeq || 1));
+
+    // Tenta reutilizar o size_bytes exato se este mesmo payload já tiver sido salvo em backup
+    const matchedBackup = await db
+      .prepare(
+        `SELECT size_bytes FROM user_database_backups
+         WHERE user_id = ?1 AND payload = ?2
+         LIMIT 1`
+      )
+      .bind(userId, row.payload)
+      .first();
+
+    let sizeBytes = matchedBackup ? Number(matchedBackup.size_bytes || 0) : 0;
+    const isChunked =
+      typeof row.payload === "string" && row.payload.startsWith("chunked:");
+    if (sizeBytes <= 0) {
+      if (isChunked) {
+        const r = parseChunkRange(row.payload);
+        if (r) {
+          const sumRow = await db
+            .prepare(
+              `SELECT COALESCE(SUM(LENGTH(chunk_data)), 0) AS total
+               FROM user_database_chunks
+               WHERE user_id = ?1 AND chunk_index >= ?2 AND chunk_index < ?3`
+            )
+            .bind(userId, r.start, r.end)
+            .first();
+          sizeBytes = Number((sumRow && sumRow.total) || 0);
+        }
+      } else {
+        sizeBytes = String(row.payload).length;
+      }
+    }
+
+    const created = await ensurePeriodicCloudBackup(db, {
+      userId,
+      revision: rev,
+      encryptedPayloadOrMarker: row.payload,
+      sizeBytes,
+      nowIso,
+      tzOffsetMinutes,
+      skipAntiWipe: isChunked,
+    });
+    if (created) {
+      await cleanupOrphanedChunksForUser(db, userId);
+    }
+    return created;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function saveEncryptedPayloadToD1(
   db,
   userId,
@@ -872,8 +1176,9 @@ async function saveEncryptedPayloadToD1(
   encryptedPayload,
   prefsStr,
   nowIso,
-  todayDate,
-  sizeBytes
+  tzOffsetMinutes,
+  sizeBytes,
+  isCompaction = false
 ) {
   if (encryptedPayload.length <= MAX_D1_CHUNK_CHARS) {
     await db
@@ -890,31 +1195,15 @@ async function saveEncryptedPayloadToD1(
       .bind(userId, nextRev, encryptedPayload, prefsStr, nowIso)
       .run();
 
-    const backupId = `${userId}_${todayDate}`;
-    try {
-      await db
-        .prepare(
-          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-           ON CONFLICT(user_id, backup_date) DO UPDATE SET
-             revision = excluded.revision,
-             size_bytes = excluded.size_bytes,
-             payload = excluded.payload,
-             created_at = excluded.created_at
-           WHERE excluded.size_bytes >= (user_database_backups.size_bytes / 2)
-              OR user_database_backups.size_bytes < 2000`
-        )
-        .bind(
-          backupId,
-          userId,
-          todayDate,
-          nextRev,
-          sizeBytes,
-          encryptedPayload,
-          nowIso
-        )
-        .run();
-    } catch (_) {}
+    await ensurePeriodicCloudBackup(db, {
+      userId,
+      revision: nextRev,
+      encryptedPayloadOrMarker: encryptedPayload,
+      sizeBytes,
+      nowIso,
+      tzOffsetMinutes,
+      isCompaction,
+    });
 
     await cleanupOrphanedChunksForUser(db, userId);
   } else {
@@ -955,23 +1244,15 @@ async function saveEncryptedPayloadToD1(
       .bind(userId, nextRev, marker, prefsStr, nowIso)
       .run();
 
-    const backupId = `${userId}_${todayDate}`;
-    try {
-      await db
-        .prepare(
-          `INSERT INTO user_database_backups (id, user_id, backup_date, revision, size_bytes, payload, created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-           ON CONFLICT(user_id, backup_date) DO UPDATE SET
-             revision = excluded.revision,
-             size_bytes = excluded.size_bytes,
-             payload = excluded.payload,
-             created_at = excluded.created_at
-           WHERE excluded.size_bytes >= (user_database_backups.size_bytes / 2)
-              OR user_database_backups.size_bytes < 2000`
-        )
-        .bind(backupId, userId, todayDate, nextRev, sizeBytes, marker, nowIso)
-        .run();
-    } catch (_) {}
+    await ensurePeriodicCloudBackup(db, {
+      userId,
+      revision: nextRev,
+      encryptedPayloadOrMarker: marker,
+      sizeBytes,
+      nowIso,
+      tzOffsetMinutes,
+      isCompaction,
+    });
 
     // Limpa apenas blocos antigos que não são referenciados nem por user_databases nem por user_database_backups
     await cleanupOrphanedChunksForUser(db, userId);
@@ -2610,6 +2891,16 @@ export async function onRequest(context) {
     );
     const meta = await ensureUserSyncMeta(env.DB, userId);
 
+    if (url.searchParams.get("ensureBackup") === "1") {
+      const tzOffset = extractTzOffsetMinutes(request, url);
+      await ensurePeriodicCloudBackupFromCurrentDb(
+        env.DB,
+        userId,
+        new Date().toISOString(),
+        tzOffset
+      );
+    }
+
     // 1. Caminho ultrarrápido: cliente já está na sequência exata da nuvem
     if (since > 0 && since >= meta.seq && since >= meta.baseSeq) {
       return jsonResponse(
@@ -2901,6 +3192,7 @@ export async function onRequest(context) {
       const snapshotRev = Number(row.revision || 1);
       const syncSeq = Math.max(meta.seq, snapshotRev);
       const snapshotSeq = Math.min(meta.snapshotSeq, syncSeq);
+      const tzOffset = extractTzOffsetMinutes(request, url);
 
       if (wantBinary) {
         // Caminho binário ultrarrápido: retorna os bytes Gzip direto sem JSON.parse/decompress no Worker
@@ -2908,6 +3200,12 @@ export async function onRequest(context) {
           fullEncrypted,
           userId,
           env
+        );
+        await ensurePeriodicCloudBackupFromCurrentDb(
+          env.DB,
+          userId,
+          new Date().toISOString(),
+          tzOffset
         );
         return new Response(gzipBytes, {
           status: 200,
@@ -2931,6 +3229,13 @@ export async function onRequest(context) {
       try {
         parsedPrefs = JSON.parse(row.preferences || "{}");
       } catch (_) {}
+
+      await ensurePeriodicCloudBackupFromCurrentDb(
+        env.DB,
+        userId,
+        new Date().toISOString(),
+        tzOffset
+      );
 
       return jsonResponse(
         {
@@ -3081,7 +3386,7 @@ export async function onRequest(context) {
         );
       }
       const nowIso = new Date().toISOString();
-      const todayDate = nowIso.slice(0, 10);
+      const tzOffset = extractTzOffsetMinutes(request, url);
 
       await saveEncryptedPayloadToD1(
         env.DB,
@@ -3090,8 +3395,9 @@ export async function onRequest(context) {
         encryptedPayload,
         prefsStr,
         nowIso,
-        todayDate,
-        sizeBytes
+        tzOffset,
+        sizeBytes,
+        true
       );
 
       const minKeepSeq = Math.max(1, compactSeq - 500);
@@ -3142,7 +3448,7 @@ export async function onRequest(context) {
 
     const nextRev = Math.max(currentRev, isNaN(clientBaseRev) ? 0 : clientBaseRev) + 1;
     const nowIso = new Date().toISOString();
-    const todayDate = nowIso.slice(0, 10); // YYYY-MM-DD
+    const tzOffset = extractTzOffsetMinutes(request, url);
 
     await saveEncryptedPayloadToD1(
       env.DB,
@@ -3151,8 +3457,9 @@ export async function onRequest(context) {
       encryptedPayload,
       prefsStr,
       nowIso,
-      todayDate,
-      sizeBytes
+      tzOffset,
+      sizeBytes,
+      false
     );
 
     await env.DB.batch([
@@ -3180,15 +3487,6 @@ export async function onRequest(context) {
       );
     }
 
-    try {
-      await env.DB.prepare(
-        `DELETE FROM user_database_backups
-         WHERE user_id = ?1 AND backup_date < date('now', '-15 days')`
-      )
-        .bind(userId)
-        .run();
-    } catch (_) {}
-
     return jsonResponse(
       {
         ok: true,
@@ -3201,15 +3499,23 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 6. GET /api/backups (Lista os snapshots diários do próprio usuário)
+  // 6. GET /api/backups (Lista os snapshots automáticos do próprio usuário)
   // ==========================================================================
   if (path === "/api/backups" && request.method === "GET") {
+    const tzOffset = extractTzOffsetMinutes(request, url);
+    await ensurePeriodicCloudBackupFromCurrentDb(
+      env.DB,
+      userId,
+      new Date().toISOString(),
+      tzOffset
+    );
+
     const res = await env.DB.prepare(
       `SELECT id, backup_date, revision, size_bytes, created_at
        FROM user_database_backups
        WHERE user_id = ?1
-       ORDER BY backup_date DESC
-       LIMIT 15`
+       ORDER BY created_at DESC, backup_date DESC
+       LIMIT 30`
     )
       .bind(userId)
       .all();

@@ -367,5 +367,78 @@ void main() {
         } catch (_) {}
       }
     });
+
+    test('ensureDailyBackup gera de 3 a 4 backups por dia na abertura e respeita turnos e intervalo mínimo', () async {
+      final tempDir = Directory.systemTemp.createTempSync('om_multi_bkp_');
+      try {
+        final dbFile = File('${tempDir.path}/openmoney.json');
+        final payload = jsonEncode({
+          'v': 7,
+          'accounts': [{'id': 'a1', 'name': 'Conta', 'type': 'Corrente', 'opening': 1000}],
+          'cats': kDefaultCats.map((c) => c.toJson()).toList(),
+          'txs': [{'id': 'tx1', 'acc': 'a1', 'date': '2026-11-17', 'amt': -500, 'payee': 'Padaria', 'cat': 'Alimentação'}],
+        });
+        dbFile.writeAsStringSync(payload);
+
+        // 1. Abertura às 08:00 (Turno 1: Manhã) -> cria 1º backup
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 8, 0),
+        );
+        expect(BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path).length, 1);
+
+        // 2. Nova verificação às 08:20 (mesmo turno, < 3h) -> NÃO cria backup duplicado
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 8, 20),
+        );
+        expect(BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path).length, 1);
+
+        // 3. Abertura às 12:30 (Turno 2: Tarde, mudou turno e >= 30min / >= 3h) -> cria 2º backup
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 12, 30),
+        );
+        expect(BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path).length, 2);
+
+        // 4. Uso contínuo às 16:00 (mesmo turno, >= 3h30 desde 12:30) -> cria 3º backup
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 16, 0),
+        );
+        expect(BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path).length, 3);
+
+        // 5. Abertura às 20:00 (Turno 3: Noite, >= 3h e mudou turno) -> cria 4º backup
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 20, 0),
+        );
+        expect(BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path).length, 4);
+
+        // 6. Abertura às 23:30 (já atingiu teto de 4 backups no dia) -> mantém 4 backups
+        await BackupManager.instance.ensureDailyBackup(
+          appSupportDirPath: tempDir.path,
+          databasePath: dbFile.path,
+          nowOverride: DateTime(2026, 11, 17, 23, 30),
+        );
+        final all = BackupManager.instance.availableBackups(appSupportDirPath: tempDir.path);
+        expect(all.length, 4);
+        expect(all.map((b) => b.filename).toSet(), {
+          'openmoney-backup-2026-11-17_0800.zip',
+          'openmoney-backup-2026-11-17_1230.zip',
+          'openmoney-backup-2026-11-17_1600.zip',
+          'openmoney-backup-2026-11-17_2000.zip',
+        });
+      } finally {
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
   });
 }

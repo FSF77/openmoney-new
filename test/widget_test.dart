@@ -17,6 +17,7 @@ import 'package:openmoney/ui/views/due_bills_view.dart';
 import 'package:openmoney/ui/views/installments_view.dart';
 import 'package:openmoney/ui/views/reports_view.dart';
 import 'package:openmoney/ui/modals/account_multi_select_filter.dart';
+import 'package:openmoney/ui/modals/csv_qif_modal.dart';
 import 'package:openmoney/ui/modals/transaction_modal.dart';
 
 void main() {
@@ -1784,5 +1785,56 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(find.text('⇄ Transferência'), findsWidgets);
     expect(find.textContaining('Transferência Recorrente • Mensal (Ocorrência #3)'), findsOneWidget);
     expect(find.text('Conta de Destino da Transferência'), findsOneWidget);
+  });
+
+  testWidgets('37. CsvQifCenterModal renders cleanly on mobile screen without overflows across Import and Export tabs', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final store = MoneyStore();
+    store.db.accounts.add(Account(id: 'acc1', name: 'Banco Inter', type: 'Corrente', opening: 100000));
+    store.db.accounts.add(Account(id: 'card1', name: 'Cartão Black', type: 'Cartão de crédito', opening: 0));
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => showCsvQifCenterModal(ctx, store),
+            child: const Text('Abrir Central'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Abrir Central'));
+    await tester.pumpAndSettle();
+
+    // Valida aba Importar em tela mobile 360px
+    expect(find.text('Importação / Exportação'), findsOneWidget);
+    expect(find.text('Importar'), findsOneWidget);
+    expect(find.text('Exportar'), findsOneWidget);
+    expect(find.textContaining('Importação Geral de Lançamentos'), findsOneWidget);
+    expect(find.text('Importar Lançamentos (CSV)...'), findsOneWidget);
+    expect(find.text('Importar QIF (Money 99)...'), findsOneWidget);
+
+    // Muda para aba Exportar
+    await tester.tap(find.text('Exportar'));
+    await tester.pumpAndSettle();
+
+    // Valida aba Exportar em tela mobile 360px
+    expect(find.textContaining('Filtros para Exportação de Lançamentos'), findsOneWidget);
+    expect(find.text('Tudo'), findsOneWidget);
+    expect(find.text('Mês'), findsOneWidget);
+    expect(find.text('Período'), findsOneWidget);
+    expect(find.text('Exportar Categorias'), findsOneWidget);
+
+    // Fecha o modal
+    await tester.tap(find.text('Fechar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Importação / Exportação'), findsNothing);
   });
 }

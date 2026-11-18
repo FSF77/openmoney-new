@@ -1009,9 +1009,10 @@ class CloudSyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final tzOffset = DateTime.now().timeZoneOffset.inMinutes;
       final res = await platformHttpBinaryRequest(
         method: 'GET',
-        url: _endpoint('/api/db?format=binary'),
+        url: _endpoint('/api/db?format=binary&tzOffset=$tzOffset'),
         headers: {
           'Authorization': 'Bearer $reqToken',
           'Accept': 'application/octet-stream, application/json',
@@ -1334,6 +1335,7 @@ class CloudSyncService extends ChangeNotifier {
           'X-OpenMoney-Raw-Size': '${rawBytes.length}',
           'X-OpenMoney-Prefs': prefsB64,
           'X-OpenMoney-Base-Revision': '$_revision',
+          'X-OpenMoney-Tz-Offset': '${DateTime.now().timeZoneOffset.inMinutes}',
           if (force) 'X-OpenMoney-Force': 'true',
           if (compactSeq != null) 'X-OpenMoney-Compact-Seq': '$compactSeq',
         },
@@ -1403,13 +1405,14 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
-  /// Lista os backups diários automáticos armazenados na nuvem para este usuário
+  /// Lista os backups automáticos armazenados na nuvem para este usuário
   Future<List<CloudBackupInfo>> listCloudBackups() async {
     if (!isAuthenticated) return const [];
     try {
+      final tzOffset = DateTime.now().timeZoneOffset.inMinutes;
       final res = await platformHttpRequest(
         method: 'GET',
-        url: _endpoint('/api/backups'),
+        url: _endpoint('/api/backups?tzOffset=$tzOffset'),
         headers: _headers(),
       );
       final decoded = _tryDecodeJson(res.body);

@@ -322,14 +322,14 @@ Tabelas relacionais mantidas no banco de dados SQLite serverless (**Cloudflare D
 * `chunk_data` (`TEXT NOT NULL`): Bloco de até 380 KB do payload criptografado.
 * `PRIMARY KEY (user_id, chunk_index)`.
 
-### 4. `user_database_backups` (Snapshots Diários na Nuvem)
-* `id` (`TEXT PRIMARY KEY`): Identificador do backup (`bkp_...`).
+### 4. `user_database_backups` (Snapshots Automáticos na Nuvem — 3 a 4x ao Dia)
+* `id` (`TEXT PRIMARY KEY`): Identificador do backup (`<userId>_<YYYY-MM-DD>_<slot>`).
 * `user_id` (`TEXT NOT NULL`): Chave estrangeira referenciando `users(id)`.
-* `backup_date` (`TEXT NOT NULL`): Data de referência (`YYYY-MM-DD`).
+* `backup_date` (`TEXT NOT NULL`): Data e hora local de referência (`YYYY-MM-DD HH:mm`, ou legado `YYYY-MM-DD`).
 * `revision` (`INTEGER NOT NULL`): Revisão da base no momento do snapshot.
 * `size_bytes` (`INTEGER NOT NULL`): Tamanho em bytes da base.
-* `payload` (`TEXT NOT NULL`): Cópia criptografada da base no dia correspondente.
-* `created_at` (`TEXT NOT NULL`): Timestamp de geração.
+* `payload` (`TEXT NOT NULL`): Cópia criptografada da base (ou marcador `chunked:v3:...`) no momento correspondente.
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO-8601 UTC de geração.
 * `UNIQUE (user_id, backup_date)`.
 
 ### 5. `user_sync_meta`, `user_sync_records` e `user_sync_ops` (Sync v2 em Tempo Real)

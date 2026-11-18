@@ -163,7 +163,7 @@ class _BackupsHistoryDialogState extends State<_BackupsHistoryDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Cópias locais compactadas (.zip) no seu computador (base local ou nuvem).',
+                          'Cópias automáticas (.zip) geradas 3 a 4 vezes ao dia ao abrir o app (retenção de 7 dias / mín. 28 arquivos).',
                           style: TextStyle(
                             fontSize: 12,
                             color: colors.textSecondary,
@@ -238,7 +238,7 @@ class _BackupsHistoryDialogState extends State<_BackupsHistoryDialog> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Os backups diários são gerados automaticamente na inicialização do app e em gravações.',
+                                'Os backups automáticos são gerados de 3 a 4 vezes ao dia ao abrir o aplicativo e durante o uso.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: colors.textSecondary,

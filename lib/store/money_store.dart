@@ -657,6 +657,7 @@ class MoneyStore extends ChangeNotifier {
   bool _indexesDirty = true;
 
   Timer? _debounceSaveTimer;
+  Timer? _localBackupTimer;
   StreamSubscription<FileSystemEvent>? _fileWatcherSub;
   DateTime? _lastSavedModificationDate;
   late final String _appSupportDirPath;
@@ -1157,6 +1158,7 @@ class MoneyStore extends ChangeNotifier {
     _performDiskWrite();
     registerRecentFile(targetPath);
     _setupFileWatcher(targetPath);
+    _startLocalBackupTimer();
     notifyListeners();
     unawaited(checkAndRefreshRatesDaily());
   }
@@ -1547,6 +1549,7 @@ class MoneyStore extends ChangeNotifier {
       final modDate = f.lastModifiedSync();
       if (_lastSavedModificationDate != null &&
           !modDate.isAfter(_lastSavedModificationDate!)) {
+        ensureDailyLocalBackup();
         return;
       }
       reloadFromDisk();
@@ -1566,6 +1569,7 @@ class MoneyStore extends ChangeNotifier {
       syncCards(settleCardInvoices: _shouldSettleImportedCardInvoicesOnLoad());
       rebuildIndexes();
       _lastSavedModificationDate = f.lastModifiedSync();
+      ensureDailyLocalBackup();
       notifyListeners();
     } catch (_) {}
   }
@@ -1613,6 +1617,7 @@ class MoneyStore extends ChangeNotifier {
       if (!kIsWeb) {
         registerRecentFile(path);
         _setupFileWatcher(path);
+        _startLocalBackupTimer();
       }
       showMissingDatabasePrompt = false;
       showWelcomeScreen = false;
@@ -2175,6 +2180,7 @@ class MoneyStore extends ChangeNotifier {
 
   void disconnectLocalDatabase() {
     cancelPendingSave();
+    _stopLocalBackupTimer();
     SyncEngine.instance.stop();
     _fileWatcherSub?.cancel();
     _fileWatcherSub = null;
@@ -2307,6 +2313,8 @@ class MoneyStore extends ChangeNotifier {
       }
     }
     _setupFileWatcher(targetPath);
+    ensureDailyLocalBackup();
+    _startLocalBackupTimer();
     notifyListeners();
   }
 
@@ -2315,6 +2323,7 @@ class MoneyStore extends ChangeNotifier {
     bool preserveMemoryIfNoCache = false,
   }) async {
     cancelPendingSave();
+    _stopLocalBackupTimer();
     _fileWatcherSub?.cancel();
     _fileWatcherSub = null;
 
@@ -2459,8 +2468,8 @@ class MoneyStore extends ChangeNotifier {
     ensureDailyLocalBackup();
   }
 
-  /// Garante a criação do backup local diário (.zip), tanto para bases locais em disco
-  /// quanto para contas online (Cloud Sync v2), preservando uma cópia de segurança no computador.
+  /// Garante a criação de backups locais periódicos (.zip, 3 a 4 vezes ao dia),
+  /// tanto para bases locais em disco quanto para contas online (Cloud Sync v2).
   void ensureDailyLocalBackup({bool force = false}) {
     if (kIsWeb || _appSupportDirPath.isEmpty) return;
     if (db.accounts.isEmpty && db.txs.isEmpty) return;
@@ -2475,6 +2484,24 @@ class MoneyStore extends ChangeNotifier {
     if (!dbPath.startsWith('cloud://') && dbPath.isNotEmpty) {
       AuditLogManager.instance.pruneOldLogs(dbPath: dbPath, retentionDays: 30);
     }
+  }
+
+  void _startLocalBackupTimer() {
+    if (kIsWeb) return;
+    _localBackupTimer?.cancel();
+    _localBackupTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      if (!isCloudMode &&
+          !kIsWeb &&
+          !showWelcomeScreen &&
+          !showMissingDatabasePrompt) {
+        ensureDailyLocalBackup();
+      }
+    });
+  }
+
+  void _stopLocalBackupTimer() {
+    _localBackupTimer?.cancel();
+    _localBackupTimer = null;
   }
 
   Future<String?> createManualZipBackup() async {
@@ -6614,6 +6641,7 @@ class MoneyStore extends ChangeNotifier {
   @override
   void dispose() {
     _debounceSaveTimer?.cancel();
+    _stopLocalBackupTimer();
     _fileWatcherSub?.cancel();
     super.dispose();
   }

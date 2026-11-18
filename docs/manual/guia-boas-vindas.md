@@ -176,7 +176,7 @@ Em **Relatórios**, acompanhe receitas, despesas, saldo líquido e **Taxa de Pou
 
 ## 13. 🛡️ Segurança, Backups e Boas Práticas
 
-- **Backups Automáticos em `.zip`:** no Desktop e Mobile, o sistema gera snapshots diários compactados com retenção mínima de 7 dias/arquivos na pasta de backups do aplicativo (inclusive para contas do Modo Online). Na nuvem, o OpenMoney Cloud mantém **15 dias de snapshots diários** automáticos e **Logs de Alterações** por 30 dias.
+- **Backups Automáticos em `.zip`:** no Desktop e Mobile, o sistema gera de **3 a 4 snapshots automáticos ao dia** ao abrir o aplicativo e durante o uso, mantendo retenção mínima de 7 dias / 28 arquivos na pasta de backups (inclusive para contas do Modo Online). Na nuvem, o OpenMoney Cloud mantém **3 a 4 snapshots por dia durante 15 dias** (gerados ao abrir o app ou o site) e **Logs de Alterações** por 30 dias.
 - **Proteção Anti-Wipe:** o aplicativo impede abertura zerada ou sobrescrita acidental vazia de bases populadas.
 - **Conta com lançamentos não pode ser excluída:** use **Desativar / Arquivar conta** para ocultá-la dos seletores de novos lançamentos preservando todo o histórico contábil.
 - **Exclusão em lote** gera obrigatoriamente um backup preventivo antes de apagar qualquer registro.

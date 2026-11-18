@@ -875,7 +875,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           _isBusy = false;
           _isError = false;
           _statusMsg =
-              '✓ Backup do dia ${b.backupDate} restaurado com sucesso!';
+              '✓ Backup (${b.backupDate}) restaurado com sucesso!';
         });
       }
     } else if (mounted) {
@@ -1650,12 +1650,12 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
 
 
-        // Seção de Backups Diários na Nuvem
+        // Seção de Backups Automáticos na Nuvem
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Backups Diários na Nuvem (Isolados por Usuário)',
+              'Backups na Nuvem (3 a 4x ao dia • Isolados por Usuário)',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -1689,7 +1689,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                   ? Padding(
                       padding: const EdgeInsets.all(14),
                       child: Text(
-                        'O primeiro backup diário na nuvem é criado automaticamente ao salvar sua base.',
+                        'Snapshots automáticos na nuvem são gerados 3 a 4 vezes ao dia ao abrir o app/site e ao salvar sua base.',
                         style: TextStyle(
                           fontSize: 12,
                           color: colors.textSecondary,

@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS user_database_chunks (
   PRIMARY KEY (user_id, chunk_index)
 );
 
--- 3. Backups Diários Automáticos na Nuvem (Isolados e Criptografados por Usuário)
+-- 3. Backups Automáticos na Nuvem — 3 a 4 snapshots ao dia (Isolados e Criptografados por Usuário)
+--    backup_date armazena "YYYY-MM-DD HH:mm" (ou legado "YYYY-MM-DD")
 CREATE TABLE IF NOT EXISTS user_database_backups (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

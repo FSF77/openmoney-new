@@ -274,40 +274,68 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
+    final screenSize = MediaQuery.sizeOf(context);
+    final isMobile = screenSize.width < 700;
 
     return AlertDialog(
       backgroundColor: colors.bgSecondary,
       surfaceTintColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 32,
+        vertical: isMobile ? 16 : 24,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colors.borderGlass),
       ),
-      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+      titlePadding: EdgeInsets.fromLTRB(
+        isMobile ? 16 : 24,
+        isMobile ? 16 : 20,
+        isMobile ? 16 : 24,
+        isMobile ? 12 : 16,
+      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24),
+      actionsPadding: EdgeInsets.fromLTRB(
+        isMobile ? 16 : 24,
+        isMobile ? 8 : 12,
+        isMobile ? 16 : 24,
+        isMobile ? 14 : 20,
+      ),
       title: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(isMobile ? 6 : 8),
             decoration: BoxDecoration(
               color: colors.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.import_export, color: colors.accent, size: 24),
+            child: Icon(
+              Icons.import_export,
+              color: colors.accent,
+              size: isMobile ? 20 : 24,
+            ),
           ),
-          const SizedBox(width: 12),
-          const Expanded(
+          SizedBox(width: isMobile ? 8 : 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Central de Importação / Exportação',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'Importação / Exportação',
+                  style: TextStyle(
+                    fontSize: isMobile ? 15.5 : 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Lançamentos, faturas, carteira iOS, OCR e categorias (CSV & QIF)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  isMobile
+                      ? 'CSV, QIF, Carteira iOS e Categorias'
+                      : 'Lançamentos, faturas, carteira iOS, OCR e categorias (CSV & QIF)',
+                  style: TextStyle(
+                    fontSize: isMobile ? 11 : 12,
+                    color: Colors.grey,
+                  ),
                 ),
               ],
             ),
@@ -319,87 +347,93 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 660,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Abas Principais: Importar Dados vs Exportar Dados
-              SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment<int>(
-                    value: 0,
-                    icon: Icon(Icons.file_download_outlined, size: 18),
-                    label: Text(
-                      'Importar Dados',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  ButtonSegment<int>(
-                    value: 1,
-                    icon: Icon(Icons.file_upload_outlined, size: 18),
-                    label: Text(
-                      'Exportar Dados',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-                selected: {_selectedTab},
-                onSelectionChanged: (newVal) {
-                  setState(() {
-                    _selectedTab = newVal.first;
-                    _statusMessage = null;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              if (_selectedTab == 0)
-                _buildImportTab(colors)
-              else
-                _buildExportTab(colors),
-
-              if (_statusMessage != null) ...[
-                const SizedBox(height: 16),
-                Container(
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 660),
+        child: SizedBox(
+          width: isMobile ? double.maxFinite : 660,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Abas Principais: Importar Dados vs Exportar Dados
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (_isError ? colors.expense : colors.income)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _isError ? colors.expense : colors.income,
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        _isError
-                            ? Icons.error_outline
-                            : Icons.check_circle_outline,
-                        color: _isError ? colors.expense : colors.income,
-                        size: 20,
+                  child: SegmentedButton<int>(
+                    segments: [
+                      ButtonSegment<int>(
+                        value: 0,
+                        icon: const Icon(Icons.file_download_outlined, size: 18),
+                        label: Text(
+                          isMobile ? 'Importar' : 'Importar Dados',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _statusMessage!,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _isError ? colors.expense : colors.income,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      ButtonSegment<int>(
+                        value: 1,
+                        icon: const Icon(Icons.file_upload_outlined, size: 18),
+                        label: Text(
+                          isMobile ? 'Exportar' : 'Exportar Dados',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
+                    selected: {_selectedTab},
+                    onSelectionChanged: (newVal) {
+                      setState(() {
+                        _selectedTab = newVal.first;
+                        _statusMessage = null;
+                      });
+                    },
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                if (_selectedTab == 0)
+                  _buildImportTab(colors, isMobile)
+                else
+                  _buildExportTab(colors, isMobile),
+
+                if (_statusMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (_isError ? colors.expense : colors.income)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _isError ? colors.expense : colors.income,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          _isError
+                              ? Icons.error_outline
+                              : Icons.check_circle_outline,
+                          color: _isError ? colors.expense : colors.income,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _statusMessage!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _isError ? colors.expense : colors.income,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -412,14 +446,14 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
     );
   }
 
-  Widget _buildImportTab(OpenMoneyColors colors) {
+  Widget _buildImportTab(OpenMoneyColors colors, bool isMobile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Card de Configurações para Lançamentos
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(isMobile ? 12 : 14),
           decoration: BoxDecoration(
             color: colors.bgPrimary,
             borderRadius: BorderRadius.circular(12),
@@ -431,7 +465,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               Text(
                 'Importação Geral de Lançamentos (CSV & QIF)',
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: isMobile ? 13 : 13.5,
                   fontWeight: FontWeight.w700,
                   color: colors.textPrimary,
                 ),
@@ -439,6 +473,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 initialValue: _importAccountId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Conta de Destino',
                   contentPadding:
@@ -447,13 +482,23 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                   isDense: true,
                 ),
                 items: [
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: 'auto',
                     child: Text(
-                        'Automático (usar coluna "Conta" do arquivo / Extrato)'),
+                      isMobile
+                          ? 'Automático (coluna "Conta" / Extrato)'
+                          : 'Automático (usar coluna "Conta" do arquivo / Extrato)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   ...widget.store.db.accounts.map(
-                    (a) => DropdownMenuItem(value: a.id, child: Text(a.name)),
+                    (a) => DropdownMenuItem(
+                      value: a.id,
+                      child: Text(
+                        a.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -461,67 +506,110 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 },
               ),
               const SizedBox(height: 10),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text(
-                  'Permitir Lançamentos Duplicados',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  _allowDuplicates
-                      ? 'Atenção: Transações com a mesma conta, data, valor e favorecido serão importadas novamente.'
-                      : 'Proteção ativa: Transações idênticas já existentes na base serão ignoradas automaticamente.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: _allowDuplicates
-                        ? colors.expense
-                        : colors.textSecondary,
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Permitir Lançamentos Duplicados',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
+                  subtitle: Text(
+                    _allowDuplicates
+                        ? 'Atenção: Transações com a mesma conta, data, valor e favorecido serão importadas novamente.'
+                        : 'Proteção ativa: Transações idênticas já existentes na base serão ignoradas automaticamente.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: _allowDuplicates
+                          ? colors.expense
+                          : colors.textSecondary,
+                    ),
+                  ),
+                  value: _allowDuplicates,
+                  onChanged: (v) => setState(() => _allowDuplicates = v),
                 ),
-                value: _allowDuplicates,
-                onChanged: (v) => setState(() => _allowDuplicates = v),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: colors.accent,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+              if (isMobile) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      icon: const Icon(Icons.file_open_outlined, size: 18),
-                      label: const Text(
-                        'Importar Lançamentos (CSV)...',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: _handleImportCSV,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: BorderSide(color: colors.borderGlass),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.upload_file, size: 18),
-                      label: const Text(
-                        'Importar QIF (Money 99)...',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: _handleImportQIF,
+                    icon: const Icon(Icons.file_open_outlined, size: 18),
+                    label: const Text(
+                      'Importar Lançamentos (CSV)...',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
+                    onPressed: _handleImportCSV,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(color: colors.borderGlass),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text(
+                      'Importar QIF (Money 99)...',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: _handleImportQIF,
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: colors.accent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.file_open_outlined, size: 18),
+                        label: const Text(
+                          'Importar Lançamentos (CSV)...',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _handleImportCSV,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: colors.borderGlass),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.upload_file, size: 18),
+                        label: const Text(
+                          'Importar QIF (Money 99)...',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _handleImportQIF,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -543,6 +631,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             subtitle:
                 'Importação direta de arquivo de lançamentos rápidos capturados no aplicativo móvel.',
             buttonLabel: 'Importar Arquivo Inbox',
+            isMobile: isMobile,
             onTap: () {
               final parentCtx = widget.parentContext;
               Navigator.pop(context);
@@ -557,6 +646,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             subtitle:
                 'Reconhecimento ótico local e IA Gemini para ler cupons fiscais NFC-e, notas e comprovantes bancários.',
             buttonLabel: 'Abrir Leitor de Comprovantes',
+            isMobile: isMobile,
             onTap: () {
               final parentCtx = widget.parentContext;
               Navigator.pop(context);
@@ -571,6 +661,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             subtitle:
                 'Importação assistida de compras e faturas do Apple Wallet via Atalhos com revisão de De/Para de contas.',
             buttonLabel: 'Abrir Assistente da Carteira',
+            isMobile: isMobile,
             onTap: () {
               final parentCtx = widget.parentContext;
               Navigator.pop(context);
@@ -589,39 +680,77 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: colors.borderGlass),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.category_outlined,
-                  size: 24, color: colors.textSecondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          child: isMobile
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Catálogo de Categorias e Subcategorias',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.category_outlined,
+                            size: 20, color: colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Catálogo de Categorias',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       'Importe árvore completa de categorias via arquivo CSV padronizado.',
-                      style:
-                          TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Importar Categorias...'),
+                        onPressed: _handleImportCategories,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.category_outlined,
+                        size: 24, color: colors.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Catálogo de Categorias e Subcategorias',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Importe árvore completa de categorias via arquivo CSV padronizado.',
+                            style: TextStyle(
+                                fontSize: 11.5, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.folder_open, size: 16),
+                      label: const Text('Importar Categorias...'),
+                      onPressed: _handleImportCategories,
                     ),
                   ],
                 ),
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: const Text('Importar Categorias...'),
-                onPressed: _handleImportCategories,
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -634,7 +763,67 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
     required String subtitle,
     required String buttonLabel,
     required VoidCallback onTap,
+    bool isMobile = false,
   }) {
+    if (isMobile) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.bgPrimary,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colors.borderGlass),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: colors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 18, color: colors.accent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 11, color: colors.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(color: colors.borderGlass),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onPressed: onTap,
+                child: Text(buttonLabel, style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -690,7 +879,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
     );
   }
 
-  Widget _buildExportTab(OpenMoneyColors colors) {
+  Widget _buildExportTab(OpenMoneyColors colors, bool isMobile) {
     final count = _exportCount;
 
     return Column(
@@ -699,7 +888,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
         // Card de Filtros de Exportação de Lançamentos
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(isMobile ? 12 : 14),
           decoration: BoxDecoration(
             color: colors.bgPrimary,
             borderRadius: BorderRadius.circular(12),
@@ -711,7 +900,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               Text(
                 'Filtros para Exportação de Lançamentos (CSV)',
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: isMobile ? 13 : 13.5,
                   fontWeight: FontWeight.w700,
                   color: colors.textPrimary,
                 ),
@@ -721,6 +910,7 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               // 1. Filtro de Conta
               DropdownButtonFormField<String>(
                 initialValue: _exportAccountId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Conta',
                   contentPadding:
@@ -732,7 +922,10 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                   DropdownMenuItem(
                     value: 'all',
                     child: Text(
-                      'Todas as Contas (${widget.store.db.txs.length} lançamentos na base)',
+                      isMobile
+                          ? 'Todas as Contas (${widget.store.db.txs.length})'
+                          : 'Todas as Contas (${widget.store.db.txs.length} lançamentos na base)',
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   ...widget.store.db.accounts.map((a) {
@@ -741,7 +934,10 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                         .length;
                     return DropdownMenuItem(
                       value: a.id,
-                      child: Text('${a.name} ($accCount lançamentos)'),
+                      child: Text(
+                        '${a.name} ($accCount)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }),
                 ],
@@ -762,19 +958,27 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               ),
               const SizedBox(height: 6),
               SegmentedButton<_ExportPeriodMode>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: _ExportPeriodMode.all,
-                    label: Text('Todo o Período', style: TextStyle(fontSize: 12)),
+                    label: Text(
+                      isMobile ? 'Tudo' : 'Todo o Período',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                   ButtonSegment(
                     value: _ExportPeriodMode.month,
-                    label: Text('Apenas o Mês', style: TextStyle(fontSize: 12)),
+                    label: Text(
+                      isMobile ? 'Mês' : 'Apenas o Mês',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                   ButtonSegment(
                     value: _ExportPeriodMode.custom,
-                    label: Text('Definir Início e Fim',
-                        style: TextStyle(fontSize: 12)),
+                    label: Text(
+                      isMobile ? 'Período' : 'Definir Início e Fim',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
                 selected: {_periodMode},
@@ -786,14 +990,16 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
 
               // Detalhe do período selecionado
               if (_periodMode == _ExportPeriodMode.month) ...[
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     MonthYearPickerBar(
                       currentMonthYM: _exportMonthYM,
                       availableYears: widget.store.allYearsInDatabase(),
                       onMonthChanged: (ym) => setState(() => _exportMonthYM = ym),
                     ),
-                    const SizedBox(width: 8),
                     TextButton(
                       onPressed: () {
                         setState(() {
@@ -828,22 +1034,22 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                         },
                         borderRadius: BorderRadius.circular(8),
                         child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Data Inicial',
-                            prefixIcon: Icon(Icons.calendar_today, size: 16),
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isMobile ? 'Início' : 'Data Inicial',
+                            prefixIcon: const Icon(Icons.calendar_today, size: 16),
+                            border: const OutlineInputBorder(),
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                                horizontal: isMobile ? 8 : 10, vertical: 8),
                           ),
                           child: Text(
                             '${_startDate.day.toString().padLeft(2, '0')}/${_startDate.month.toString().padLeft(2, '0')}/${_startDate.year}',
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: isMobile ? 12 : 13),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: isMobile ? 8 : 12),
                     Expanded(
                       child: InkWell(
                         onTap: () async {
@@ -864,17 +1070,17 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                         },
                         borderRadius: BorderRadius.circular(8),
                         child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Data Final',
-                            prefixIcon: Icon(Icons.event, size: 16),
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isMobile ? 'Fim' : 'Data Final',
+                            prefixIcon: const Icon(Icons.event, size: 16),
+                            border: const OutlineInputBorder(),
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                                horizontal: isMobile ? 8 : 10, vertical: 8),
                           ),
                           child: Text(
                             '${_endDate.day.toString().padLeft(2, '0')}/${_endDate.month.toString().padLeft(2, '0')}/${_endDate.year}',
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: isMobile ? 12 : 13),
                           ),
                         ),
                       ),
@@ -885,35 +1091,40 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
               const SizedBox(height: 14),
 
               // Badge de contagem e botão de exportação
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: colors.income.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: colors.income.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.list_alt, size: 16, color: colors.income),
-                        const SizedBox(width: 6),
-                        Text(
+              if (isMobile) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: colors.income.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: colors.income.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.list_alt, size: 16, color: colors.income),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
                           '$count lançamento${count == 1 ? '' : 's'} filtrado${count == 1 ? '' : 's'}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: colors.income,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  FilledButton.icon(
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: colors.accent,
                       padding: const EdgeInsets.symmetric(
@@ -929,8 +1140,55 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                     ),
                     onPressed: count > 0 ? _handleExportCSV : null,
                   ),
-                ],
-              ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colors.income.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: colors.income.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.list_alt, size: 16, color: colors.income),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$count lançamento${count == 1 ? '' : 's'} filtrado${count == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.income,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colors.accent,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text(
+                        'Exportar Lançamentos (CSV)...',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: count > 0 ? _handleExportCSV : null,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -945,39 +1203,77 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: colors.borderGlass),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.folder_shared_outlined,
-                  size: 24, color: colors.textSecondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          child: isMobile
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Exportar Categorias e Subcategorias',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.folder_shared_outlined,
+                            size: 20, color: colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Exportar Categorias',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       'Exporta todas as ${widget.store.db.cats.length} categorias em formato CSV compatível.',
-                      style:
-                          TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.download_outlined, size: 16),
+                        label: const Text('Exportar Categorias...'),
+                        onPressed: _handleExportCategories,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.folder_shared_outlined,
+                        size: 24, color: colors.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Exportar Categorias e Subcategorias',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Exporta todas as ${widget.store.db.cats.length} categorias em formato CSV compatível.',
+                            style: TextStyle(
+                                fontSize: 11.5, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.download_outlined, size: 16),
+                      label: const Text('Exportar Categorias...'),
+                      onPressed: _handleExportCategories,
                     ),
                   ],
                 ),
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.download_outlined, size: 16),
-                label: const Text('Exportar Categorias...'),
-                onPressed: _handleExportCategories,
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -996,74 +1292,108 @@ Future<void> showDatabaseFileManagerModal(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setModalState) {
+        final screenSize = MediaQuery.sizeOf(context);
+        final isMobile = screenSize.width < 700;
+
         return AlertDialog(
           backgroundColor: colors.bgSecondary,
-          title: const Row(
+          surfaceTintColor: Colors.transparent,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 32,
+            vertical: isMobile ? 16 : 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: colors.borderGlass),
+          ),
+          titlePadding: EdgeInsets.fromLTRB(
+            isMobile ? 16 : 24,
+            isMobile ? 16 : 20,
+            isMobile ? 16 : 24,
+            isMobile ? 12 : 16,
+          ),
+          contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24),
+          actionsPadding: EdgeInsets.fromLTRB(
+            isMobile ? 16 : 24,
+            isMobile ? 8 : 12,
+            isMobile ? 16 : 24,
+            isMobile ? 14 : 20,
+          ),
+          title: Row(
             children: [
-              Icon(Icons.folder_open_outlined, color: Colors.lightBlueAccent),
-              SizedBox(width: 10),
+              Icon(Icons.folder_open_outlined,
+                  color: Colors.lightBlueAccent, size: isMobile ? 20 : 24),
+              SizedBox(width: isMobile ? 8 : 10),
               Expanded(
-                child: Text('Base de Dados Local'),
+                child: Text(
+                  'Base de Dados Local',
+                  style: TextStyle(
+                    fontSize: isMobile ? 16 : 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
-          content: SizedBox(
-            width: 540,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: colors.bgPrimary,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: colors.borderGlass),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, size: 16, color: colors.income),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Base de Dados em Uso',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.textSecondary,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540),
+            child: SizedBox(
+              width: isMobile ? double.maxFinite : 540,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: colors.bgPrimary,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.borderGlass),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, size: 16, color: colors.income),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Base de Dados em Uso',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                store.dbPath.isEmpty ? 'Memória Local' : store.dbPath,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontFamily: 'monospace',
-                                  color: colors.textPrimary,
+                                const SizedBox(height: 2),
+                                Text(
+                                  store.dbPath.isEmpty ? 'Memória Local' : store.dbPath,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'monospace',
+                                    color: colors.textPrimary,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
+                    const SizedBox(height: 16),
+                    if (isMobile) ...[
+                      SizedBox(
+                        width: double.infinity,
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
                             backgroundColor: colors.accent,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -1091,12 +1421,13 @@ Future<void> showDatabaseFileManagerModal(
                           },
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
                             foregroundColor: colors.textPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             side: BorderSide(color: colors.borderGlass),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1119,8 +1450,73 @@ Future<void> showDatabaseFileManagerModal(
                           },
                         ),
                       ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colors.accent,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.folder_open, size: 18),
+                              label: const Text(
+                                'Abrir Base Existente',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              onPressed: () async {
+                                final selected = await NativeFilePicker.pickFile(
+                                  title: 'Escolher Base OpenMoney (.json)',
+                                  allowedExtensions: ['json'],
+                                );
+                                if (selected != null && selected.isNotEmpty) {
+                                  if (store.openDatabaseFromPath(selected)) {
+                                    Navigator.pop(ctx);
+                                  } else {
+                                    setModalState(() {
+                                      feedback =
+                                          'Não foi possível abrir o arquivo "$selected". Verifique se o formato é válido.';
+                                    });
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colors.textPrimary,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                side: BorderSide(color: colors.borderGlass),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add_circle_outline, size: 18),
+                              label: const Text(
+                                'Criar Nova Base',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              onPressed: () async {
+                                final savePath = await NativeFilePicker.saveFile(
+                                  title: 'Escolher Local para Salvar Nova Base',
+                                  defaultName: 'openmoney.json',
+                                );
+                                if (savePath != null && savePath.isNotEmpty) {
+                                  store.createNewDatabaseAtPath(savePath);
+                                  Navigator.pop(ctx);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
-                  ),
                   if (feedback != null) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -1253,7 +1649,8 @@ Future<void> showDatabaseFileManagerModal(
               ),
             ),
           ),
-          actions: [
+        ),
+        actions: [
             if (store.hasConfiguredLocalDatabase)
               TextButton.icon(
                 style: TextButton.styleFrom(

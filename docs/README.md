@@ -803,6 +803,7 @@ ProjOpenMoney/
 
 ### Arquitetura e Dados (`architecture/`)
 - [Compilado de Engenharia, Regras de Negócio e Funcionalidades](architecture/compilado-do-sistema.md)
+- [Diagrama Completo da Arquitetura e Regras de Negócio (Flutter)](architecture/diagrama-arquitetura-flutter.md)
 - [Dicionário de Dados Completo (Schema v: 7)](architecture/dicionario-de-dados.md)
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](architecture/relatorio-comparacao-paridade.md)
 

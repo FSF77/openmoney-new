@@ -61,6 +61,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   bool _wsConnected = false;
   int _wsFailCount = 0;
   DateTime? _nextWsAttemptAt;
+  bool _needsBackupCheck = true;
+  DateTime? _lastBackupCheckAt;
 
   Timer? _deltaPollTimer;
   Timer? _wsPingTimer;
@@ -454,6 +456,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       },
       onVisibleOrFocus: () {
         if (CloudSyncService.instance.isAuthenticated) {
+          if (_lastBackupCheckAt == null ||
+              DateTime.now().difference(_lastBackupCheckAt!).inMinutes >= 30) {
+            _needsBackupCheck = true;
+            _store?.ensureDailyLocalBackup();
+          }
           _ensureWebSocket();
           syncNow();
         }
@@ -466,6 +473,7 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       },
     );
 
+    _needsBackupCheck = true;
     _isRunning = true;
     _startTimers();
     _ensureWebSocket();
@@ -478,6 +486,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _isRunning) {
       if (CloudSyncService.instance.isAuthenticated) {
+        if (_lastBackupCheckAt == null ||
+            DateTime.now().difference(_lastBackupCheckAt!).inMinutes >= 30) {
+          _needsBackupCheck = true;
+          _store?.ensureDailyLocalBackup();
+        }
         _ensureWebSocket();
         syncNow();
       }
@@ -491,6 +504,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     _isRunning = false;
     _hasLoadedRemoteState = false;
     _lastSeq = 0;
+    _needsBackupCheck = true;
+    _lastBackupCheckAt = null;
     _baseline.clear();
     _outbox.clear();
     _deltaPollTimer?.cancel();
@@ -730,6 +745,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     _deltaPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (!_isRunning || !CloudSyncService.instance.isAuthenticated) return;
       tick++;
+      if (_lastBackupCheckAt == null ||
+          DateTime.now().difference(_lastBackupCheckAt!).inMinutes >= 30) {
+        _needsBackupCheck = true;
+        _store?.ensureDailyLocalBackup();
+      }
       final visible = webIsDocumentVisible();
       // Quando visível: sincroniza delta a cada 2s (ou 6s se WebSocket estiver ativo)
       // Quando em segundo plano: sincroniza a cada 14s
@@ -955,6 +975,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       preferences: snap.preferences,
       newSeq: baseSeq,
     );
+    _needsBackupCheck = false;
+    _lastBackupCheckAt = DateTime.now();
 
     if (snap.syncSeq > baseSeq) {
       final deltaOk = await _pullDeltaIncremental(
@@ -975,9 +997,15 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     final base = cloud.resolvedBaseUrl;
     if (base.isEmpty) return false;
 
+    final includeEnsureBackup = _needsBackupCheck;
+    final tzOffset = DateTime.now().timeZoneOffset.inMinutes;
+    final url = includeEnsureBackup
+        ? '$base/api/sync?since=$since&ensureBackup=1&tzOffset=$tzOffset'
+        : '$base/api/sync?since=$since';
+
     final res = await platformHttpRequest(
       method: 'GET',
-      url: '$base/api/sync?since=$since',
+      url: url,
       headers: {
         'Authorization': 'Bearer ${cloud.authToken}',
       },
@@ -1003,7 +1031,14 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     final decoded = jsonDecode(res.body);
     if (decoded is! Map<String, dynamic>) return false;
 
+    if (includeEnsureBackup) {
+      _needsBackupCheck = false;
+      _lastBackupCheckAt = DateTime.now();
+    }
+
     final remoteSeq = (decoded['seq'] as num?)?.toInt() ?? _lastSeq;
+    final remoteSnapshotSeq =
+        (decoded['snapshotSeq'] as num?)?.toInt() ?? remoteSeq;
     final needFullReload = decoded['fullReloadRequired'] == true;
 
     if (needFullReload && allowRecursiveFullPull) {
@@ -1020,6 +1055,10 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     } else if (remoteSeq > _lastSeq) {
       _lastSeq = remoteSeq;
       _persistState();
+    }
+
+    if (remoteSnapshotSeq < _lastSeq && _outbox.isEmpty) {
+      _scheduleClientCompaction();
     }
 
     return true;

@@ -40,6 +40,10 @@ class BackupManager {
   BackupManager._();
   static final BackupManager instance = BackupManager._();
 
+  static const int maxDailyAutoBackups = 4;
+  static const int minBackupIntervalMinutes = 180;
+  static const int minPeriodChangeIntervalMinutes = 30;
+
   Directory getBackupsDirectory(String appSupportDirPath) {
     final sep = Platform.pathSeparator;
     final dir = Directory('$appSupportDirPath${sep}Backups');
@@ -51,13 +55,15 @@ class BackupManager {
     return dir;
   }
 
-  /// Garante que exista ao menos 1 backup em .zip para o dia atual e expurga os que têm mais de 7 dias.
+  /// Garante a criação de 3 a 4 backups automáticos ao dia em .zip (turnos de 6h ou intervalo >= 3h)
+  /// e expurga backups automáticos com mais de 7 dias mantendo ao menos 28 arquivos.
   /// Suporta bases locais em disco ou bases na nuvem via `jsonContent`.
   Future<void> ensureDailyBackup({
     required String appSupportDirPath,
     required String databasePath,
     String? jsonContent,
     bool force = false,
+    DateTime? nowOverride,
   }) async {
     if (kIsWeb) return;
     final hasDiskFile = databasePath.isNotEmpty &&
@@ -68,7 +74,14 @@ class BackupManager {
     if (!hasDiskFile && !hasJson) return;
 
     final backupsDir = getBackupsDirectory(appSupportDirPath);
-    final today = todayISO(); // YYYY-MM-DD
+    final now = nowOverride ?? DateTime.now();
+    final today = '${now.year.toString().padLeft(4, "0")}-'
+        '${now.month.toString().padLeft(2, "0")}-'
+        '${now.day.toString().padLeft(2, "0")}';
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    final ss = now.second.toString().padLeft(2, '0');
+
     final String baseName;
     if (databasePath.startsWith('cloud://')) {
       final email = databasePath.replaceFirst('cloud://', '').trim();
@@ -82,12 +95,74 @@ class BackupManager {
       baseName = 'openmoney';
     }
 
-    final sep = Platform.pathSeparator;
-    final zipFilename = '$baseName-backup-$today.zip';
-    final destZipFile = File('${backupsDir.path}$sep$zipFilename');
+    final prefixToday = '$baseName-backup-$today';
+    final pattern = RegExp(
+      '^${RegExp.escape(prefixToday)}(?:_(\\d{2})(\\d{2})(\\d{2})?)?\\.zip\$',
+      caseSensitive: false,
+    );
 
-    if (!force && destZipFile.existsSync() && destZipFile.lengthSync() > 200) {
-      return;
+    final todayBackups = <({File file, DateTime timestamp})>[];
+    try {
+      for (final e in backupsDir.listSync()) {
+        if (e is! File) continue;
+        final fname = e.uri.pathSegments.last;
+        final lower = fname.toLowerCase();
+        if (lower.contains('manual') ||
+            lower.contains('pre-update') ||
+            lower.contains('safety') ||
+            lower.contains('pre-exclusao')) {
+          continue;
+        }
+        final match = pattern.firstMatch(fname);
+        if (match == null) continue;
+        try {
+          if (e.lengthSync() <= 200) continue;
+          DateTime ts;
+          final gHour = match.group(1);
+          final gMin = match.group(2);
+          final gSec = match.group(3);
+          if (gHour != null && gMin != null) {
+            ts = DateTime(
+              now.year,
+              now.month,
+              now.day,
+              int.parse(gHour),
+              int.parse(gMin),
+              gSec != null ? int.parse(gSec) : 0,
+            );
+          } else {
+            ts = e.statSync().modified;
+          }
+          todayBackups.add((file: e, timestamp: ts));
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    todayBackups.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    if (!force && todayBackups.isNotEmpty) {
+      if (todayBackups.length >= maxDailyAutoBackups) {
+        return;
+      }
+      final latest = todayBackups.first;
+      final elapsedMinutes = now.difference(latest.timestamp).inMinutes;
+      final currentPeriod = now.hour ~/ 6;
+      final latestPeriod = latest.timestamp.hour ~/ 6;
+      final periodChanged = currentPeriod != latestPeriod;
+
+      if (elapsedMinutes < minBackupIntervalMinutes &&
+          !(periodChanged &&
+              elapsedMinutes >= minPeriodChangeIntervalMinutes)) {
+        return;
+      }
+    }
+
+    final sep = Platform.pathSeparator;
+    var zipFilename = '${prefixToday}_$hh$mm.zip';
+    var destZipFile = File('${backupsDir.path}$sep$zipFilename');
+    if (destZipFile.existsSync() && !force) {
+      zipFilename = '${prefixToday}_$hh$mm$ss.zip';
+      destZipFile = File('${backupsDir.path}$sep$zipFilename');
     }
 
     try {
@@ -99,7 +174,7 @@ class BackupManager {
         );
       } else if (hasJson) {
         success = await createZipArchiveFromBytes(
-          bytes: utf8.encode(jsonContent!),
+          bytes: utf8.encode(jsonContent),
           entryFileName: 'openmoney.json',
           destinationZipPath: destZipFile.path,
         );
@@ -108,7 +183,7 @@ class BackupManager {
         pruneBackups(
           appSupportDirPath: appSupportDirPath,
           retentionDays: 7,
-          minBackupsToKeep: 7,
+          minBackupsToKeep: 28,
         );
       }
     } catch (e) {
@@ -180,7 +255,7 @@ class BackupManager {
         pruneBackups(
           appSupportDirPath: appSupportDirPath,
           retentionDays: 7,
-          minBackupsToKeep: 7,
+          minBackupsToKeep: 28,
         );
       }
       return destZipFile.path;
@@ -441,7 +516,7 @@ class BackupManager {
   void pruneBackups({
     required String appSupportDirPath,
     int retentionDays = 7,
-    int minBackupsToKeep = 7,
+    int minBackupsToKeep = 28,
   }) {
     if (kIsWeb) return;
     try {

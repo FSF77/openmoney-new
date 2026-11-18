@@ -70,19 +70,19 @@ O OpenMoney garante que você **nunca perca dados**, mantendo múltiplas camadas
 ### A. Backups Locais no Computador para Contas Online (Desktop)
 Mesmo quando você utiliza uma conta na nuvem, o aplicativo desktop mantém uma cópia física segura no seu computador:
 
-1. **Backup Diário Automático ao Acessar o App:**
-   - Toda vez que você abre o aplicativo e os dados são carregados, é gerado automaticamente um arquivo compactado `.zip` na pasta de backups do computador:
-     - **macOS:** `~/Library/Application Support/OpenMoney/Backups/openmoney-cloud-[email]-backup-[YYYY-MM-DD].zip`
-     - **Windows:** `%APPDATA%\OpenMoney\Backups\openmoney-cloud-[email]-backup-[YYYY-MM-DD].zip`
+1. **Backup Automático ao Acessar o App (3 a 4x ao dia):**
+   - Toda vez que você abre o aplicativo (e periodicamente durante o uso, até 4 vezes ao dia por turno de 6h ou a cada 3h), é gerado automaticamente um arquivo compactado `.zip` na pasta de backups do computador:
+     - **macOS:** `~/Library/Application Support/OpenMoney/Backups/openmoney-cloud-[email]-backup-[YYYY-MM-DD_HHmm].zip`
+     - **Windows:** `%APPDATA%\OpenMoney\Backups\openmoney-cloud-[email]-backup-[YYYY-MM-DD_HHmm].zip`
 2. **Backup Manual Pontual:**
    - No menu lateral, clique em **"Backups de Segurança"** e clique no botão **"Criar Backup Agora"**.
    - É gerado um arquivo com carimbo de data e hora: `openmoney-cloud-[email]-manual-[YYYY-MM-DD_HHmmss].zip`.
 3. **Revelar no Finder / Explorer:**
    - Clique em "Revelar no Finder / Explorer" para visualizar todos os arquivos `.zip` salvos no seu disco rígido e copiá-los para um pendrive ou HD externo.
 
-### B. Backups Diários Automáticos na Nuvem (Snapshots de 15 dias)
-- O servidor Cloudflare mantém automaticamente o snapshot dos últimos **15 dias** da sua conta.
-- No painel **Cloud & Sincronização**, role até a seção **"Backups Diários na Nuvem"** e clique em **"Restaurar"** ao lado da data desejada se precisar recuperar o estado de um dia anterior.
+### B. Backups Automáticos na Nuvem (3 a 4x ao dia • Retenção de 15 dias)
+- O servidor Cloudflare mantém automaticamente de **3 a 4 snapshots por dia** nos últimos **15 dias** da sua conta, gerados assim que você abre o aplicativo ou o site (`https://openmoney.app.br`) e ao salvar alterações.
+- No painel **Cloud & Sincronização**, role até a seção **"Backups na Nuvem"** e clique em **"Restaurar"** ao lado do horário desejado (`YYYY-MM-DD HH:mm`) se precisar recuperar o estado de um momento anterior.
 
 ### C. Restauração Transparente
 - Ao restaurar qualquer backup `.zip` (seja local ou da nuvem), a base restaurada é aplicada e sincronizada automaticamente para a nuvem, atualizando todos os seus outros dispositivos.

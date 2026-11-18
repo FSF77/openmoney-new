@@ -59,17 +59,17 @@ Mesmo que o usuário utilize exclusivamente uma conta online na nuvem, o aplicat
    - No macOS, utiliza `/usr/bin/zip` nativo via diretório temporário para máxima velocidade e integridade. No Windows e Linux, utiliza o pacote multiplataforma `archive` com codificação `ZipEncoder`.
 
 2. **Nomenclatura Canônica dos Backups Cloud no Desktop:**
-   - **Backup Diário Automático:**
-     `openmoney-cloud-[email]-backup-[YYYY-MM-DD].zip`
+   - **Backup Automático Periódico (3 a 4x ao dia):**
+     `openmoney-cloud-[email]-backup-[YYYY-MM-DD_HHmm].zip`
    - **Backup Manual Pontual:**
      `openmoney-cloud-[email]-manual-[YYYY-MM-DD_HHmmss].zip`
    - **Local de Armazenamento:**
      - macOS: `~/Library/Application Support/OpenMoney/Backups/`
      - Windows: `%APPDATA%\OpenMoney\Backups\`
 
-3. **Backup Diário Automático ao Acessar o App (`ensureDailyLocalBackup`):**
-   - É disparado na inicialização (`boot`), após sincronização do snapshot remoto (`onRemoteChangesApplied` / `syncFromCloud`) e ao alternar para o modo online.
-   - **Otimização de Performance:** Verifica se o backup do dia já existe e possui tamanho válido (> 200 bytes), retornando instantaneamente (< 1ms) sem operações desnecessárias de disco.
+3. **Backups Automáticos 3 a 4x ao Dia ao Acessar o App ou o Site (`ensureDailyLocalBackup` e `ensurePeriodicCloudBackup`):**
+   - É disparado na inicialização (`boot`), ao retomar o app/site (`onAppDidBecomeActive` / `didChangeAppLifecycleState` / `GET /api/db` / `GET /api/sync?ensureBackup=1`), a cada 30 minutos com o app aberto, após sincronização do snapshot remoto e em gravações.
+   - **Cadência por Turnos (Até 4/dia):** Gera um novo snapshot quando não há backup no dia ou quando passaram >= 3h desde o último (ou houve troca de turno de 6h com >= 30 min), preservando imutável o snapshot de abertura daquele período e mantendo retenção mínima de 7 dias / 28 arquivos locais e 15 dias / 28 snapshots na nuvem.
 
 4. **Restauração Transparente:**
    - Ao selecionar qualquer backup `.zip` da lista no desktop e clicar em "Restaurar", se a aplicação estiver em modo Cloud, a base é extraída e enviada com substituição autorizada para a nuvem via `pushLocalToCloud(force: true)`, sincronizando todos os outros dispositivos automaticamente.
