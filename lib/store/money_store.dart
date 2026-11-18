@@ -10,6 +10,7 @@ import '../services/cloud_sync_service.dart';
 import '../services/currency_rate_service.dart';
 import '../services/importers_exporters.dart';
 import '../services/native_file_picker.dart';
+import '../services/ofx_reconciliation_service.dart';
 import '../services/platform_io.dart';
 import '../services/sync_engine.dart';
 import '../services/update_service.dart';
@@ -2977,9 +2978,17 @@ class MoneyStore extends ChangeNotifier {
         final cat = 'Transferência: $cardName';
         final payCat = 'Transferência: $payAccName';
         final isDueOnOrBeforeToday = inv.due.compareTo(today) <= 0;
+        final existingPayIdx = autoTxMap['$autoXid:p'];
+        final existingCardIdx = autoTxMap['$autoXid:c'];
+        final hasOfxSettled = (existingPayIdx != null &&
+                db.txs[existingPayIdx].rec &&
+                (db.txs[existingPayIdx].fitid?.isNotEmpty ?? false)) ||
+            (existingCardIdx != null &&
+                db.txs[existingCardIdx].rec &&
+                (db.txs[existingCardIdx].fitid?.isNotEmpty ?? false));
         final shouldSettle = (settleCardInvoices || settledForCard.contains(k)) &&
             isDueOnOrBeforeToday;
-        final isReconciled = shouldSettle;
+        final isReconciled = shouldSettle || hasOfxSettled;
 
         _upsertAutoTxFast(
           autoTxMap: autoTxMap,
@@ -5422,6 +5431,394 @@ class MoneyStore extends ChangeNotifier {
       summary: 'Importação QIF: ${result.newTxs.length} lançamentos adicionados, '
           '${result.skippedCount} ignorados',
     );
+    notifyListeners();
+    return summary;
+  }
+
+  ImportSummary applyOfxReconciliation({
+    required OfxStatement statement,
+    required String targetAccountId,
+    String? targetInvoiceKey,
+    required List<OfxReconcileDraftItem> drafts,
+    bool rememberAccountMapping = true,
+    bool includeBalanceAdjustment = false,
+    int adjustmentCents = 0,
+    String? adjustmentDate,
+    String adjustmentCategory = 'Outros',
+  }) {
+    final targetAccIdx = db.accounts.indexWhere((a) => a.id == targetAccountId);
+    final targetAcc = targetAccIdx != -1 ? db.accounts[targetAccIdx] : null;
+    final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
+    final accCur = targetAcc?.effectiveCurrency ?? 'BRL';
+
+    if (rememberAccountMapping && targetAccIdx != -1) {
+      final acc = db.accounts[targetAccIdx];
+      final aliasKey = statement.ofxAccountAliasKey.trim();
+      if (aliasKey.isNotEmpty) {
+        final normAlias = removeDiacritics(aliasKey).toLowerCase();
+        final aliases = List<String>.from(acc.walletAliases ?? []);
+        if (!aliases.any((a) => removeDiacritics(a.trim()).toLowerCase() == normAlias)) {
+          aliases.add(aliasKey);
+          acc.walletAliases = aliases;
+        }
+        // Remove de outras contas caso existisse
+        for (int i = 0; i < db.accounts.length; i++) {
+          if (i == targetAccIdx) continue;
+          final otherAliases = db.accounts[i].walletAliases;
+          if (otherAliases != null && otherAliases.isNotEmpty) {
+            otherAliases.removeWhere((a) => removeDiacritics(a.trim()).toLowerCase() == normAlias);
+            if (otherAliases.isEmpty) db.accounts[i].walletAliases = null;
+          }
+        }
+      }
+      if (!statement.isCreditCard) {
+        if ((acc.bankCode == null || acc.bankCode!.trim().isEmpty) &&
+            statement.effectiveBankCode.isNotEmpty) {
+          acc.bankCode = statement.effectiveBankCode.padLeft(3, '0');
+        }
+        if ((acc.agency == null || acc.agency!.trim().isEmpty) &&
+            statement.branchId.trim().isNotEmpty) {
+          acc.agency = statement.branchId.trim();
+        }
+        if ((acc.accountNumber == null || acc.accountNumber!.trim().isEmpty) &&
+            statement.accountId.trim().isNotEmpty) {
+          acc.accountNumber = statement.accountId.trim();
+        }
+      }
+    }
+
+    int newlyReconciledCount = 0;
+    int linkedAlreadyRecCount = 0;
+    int createdCount = 0;
+    int ignoredCount = 0;
+
+    final txById = <String, Transaction>{
+      for (final tx in db.txs) tx.id: tx,
+    };
+
+    for (final draft in drafts) {
+      if (draft.action == OfxReconcileAction.ignore) {
+        ignoredCount++;
+        continue;
+      }
+
+      if (draft.action == OfxReconcileAction.reconcileExisting) {
+        final tx = draft.matchedTxId != null ? txById[draft.matchedTxId!] : null;
+        if (tx == null) {
+          ignoredCount++;
+          continue;
+        }
+
+        final wasPending = !tx.rec;
+        tx.rec = true;
+        tx.fitid = draft.raw.compositeFitId;
+
+        if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+          for (final peerTx in db.txs) {
+            if (peerTx.xfer == tx.xfer && peerTx.id != tx.id) {
+              peerTx.rec = true;
+            }
+          }
+        }
+
+        if (draft.updateDateOnMatch) {
+          if (tx.auto == true && tx.card != null && tx.inv != null) {
+            final cardIdx = db.accounts.indexWhere((a) => a.id == tx.card);
+            if (cardIdx != -1) {
+              final cardAcc = db.accounts[cardIdx];
+              cardAcc.invoices ??= {};
+              final existingInv = cardAcc.invoices![tx.inv!];
+              if (existingInv != null) {
+                existingInv.due = draft.date;
+                existingInv.manual = true;
+              } else if (cardAcc.card != null) {
+                final d = invDates(cardAcc.card!, tx.inv!);
+                cardAcc.invoices![tx.inv!] = InvoiceInfo(
+                  close: d.close,
+                  due: draft.date,
+                  pay: cardAcc.card!.pay,
+                  manual: true,
+                );
+              }
+            }
+            tx.date = draft.date;
+            if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+              for (final peerTx in db.txs) {
+                if (peerTx.xfer == tx.xfer && peerTx.id != tx.id) {
+                  peerTx.date = draft.date;
+                }
+              }
+            }
+          } else {
+            tx.date = draft.date;
+            if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+              for (final peerTx in db.txs) {
+                if (peerTx.xfer == tx.xfer && peerTx.id != tx.id) {
+                  peerTx.date = draft.date;
+                }
+              }
+            }
+          }
+        }
+
+        if (draft.updateAmountOnMatch &&
+            tx.auto != true &&
+            tx.amt != draft.effectiveAmountCents) {
+          tx.amt = draft.effectiveAmountCents;
+          if (tx.xfer != null && tx.xfer!.isNotEmpty) {
+            for (final peerTx in db.txs) {
+              if (peerTx.xfer == tx.xfer && peerTx.id != tx.id) {
+                final peerCur = accById(peerTx.acc)?.effectiveCurrency ?? 'BRL';
+                if (peerCur == accCur) {
+                  peerTx.amt = -draft.effectiveAmountCents;
+                }
+              }
+            }
+          }
+        }
+
+        if (wasPending) {
+          newlyReconciledCount++;
+        } else {
+          linkedAlreadyRecCount++;
+        }
+        continue;
+      }
+
+      // Ação: createNew
+      final signedAmt = draft.effectiveAmountCents;
+      if (signedAmt == 0) {
+        ignoredCount++;
+        continue;
+      }
+
+      final cleanPayee = draft.payee.trim().isEmpty
+          ? (draft.raw.cleanPayee.isEmpty ? 'Lançamento OFX' : draft.raw.cleanPayee)
+          : draft.payee.trim();
+      final cleanMemo = draft.memo.trim();
+      final normalizedTags = normalizeTagList(draft.tags);
+      if (normalizedTags.isNotEmpty) {
+        _registerTagsInCatalog(normalizedTags);
+      }
+      final txTags = normalizedTags.isEmpty ? null : normalizedTags;
+
+      final isXfer = draft.categorySelection.startsWith('xfer:');
+      final peerId = isXfer ? draft.categorySelection.substring(5) : null;
+      final peerAcc = accById(peerId);
+      final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
+
+      String? resolvedIk;
+      if (isCard) {
+        resolvedIk = (targetInvoiceKey != null && targetInvoiceKey.isNotEmpty)
+            ? targetInvoiceKey
+            : invKeyFor(targetAcc!.card!, draft.date);
+      }
+
+      final resolvedRate = accCur != 'BRL'
+          ? resolveDefaultRateToBrl(targetAccountId, draft.date)
+          : null;
+
+      if (isXfer && peerId != null && peerAcc != null) {
+        final xid = uid();
+        final int peerAmt;
+        double? curRate = resolvedRate;
+        double? peerRate =
+            peerCurrency != 'BRL' ? resolveDefaultRateToBrl(peerId, draft.date) : null;
+
+        if (accCur == peerCurrency) {
+          peerAmt = -signedAmt;
+          peerRate = curRate;
+        } else {
+          peerAmt = -convertCents(
+            signedAmt,
+            fromCurrency: accCur,
+            toCurrency: peerCurrency,
+            rates: db.rates,
+          );
+          if (accCur == 'BRL' && peerCurrency != 'BRL' && peerAmt != 0) {
+            peerRate = signedAmt.abs() / peerAmt.abs();
+            curRate = null;
+          } else if (accCur != 'BRL' && peerCurrency == 'BRL' && signedAmt != 0) {
+            curRate = peerAmt.abs() / signedAmt.abs();
+            peerRate = null;
+          }
+        }
+
+        final peerIsCard = peerAcc.type == kCardType && peerAcc.card != null;
+        final peerIk = peerIsCard ? invKeyFor(peerAcc.card!, draft.date) : null;
+
+        db.txs.add(
+          Transaction(
+            id: uid(),
+            acc: targetAccountId,
+            peer: peerId,
+            date: draft.date,
+            payee: cleanPayee,
+            cat: 'Transferência: ${peerAcc.name}',
+            memo: cleanMemo,
+            amt: signedAmt,
+            rec: true,
+            xfer: xid,
+            ik: resolvedIk,
+            rate: curRate,
+            tags: txTags == null ? null : List<String>.from(txTags),
+            fitid: draft.raw.compositeFitId,
+          ),
+        );
+        db.txs.add(
+          Transaction(
+            id: uid(),
+            acc: peerId,
+            peer: targetAccountId,
+            date: draft.date,
+            payee: cleanPayee,
+            cat: 'Transferência: ${targetAcc?.name ?? ""}',
+            memo: cleanMemo,
+            amt: peerAmt,
+            rec: true,
+            xfer: xid,
+            ik: peerIk,
+            rate: peerRate,
+            tags: txTags == null ? null : List<String>.from(txTags),
+          ),
+        );
+        createdCount++;
+      } else if (isCard &&
+          draft.canProjectInstallments &&
+          draft.projectFutureInstallments) {
+        final pn = draft.raw.installmentCurrent!;
+        final pt = draft.raw.installmentTotal!;
+        final planId = uid();
+        final basePayee = cleanPayee
+            .replaceAll(
+              RegExp(r'(?:\s*-\s*)?(?:parcela|parc\.?)\s*\d{1,2}\s*/\s*\d{1,2}', caseSensitive: false),
+              '',
+            )
+            .replaceAll(RegExp(r'\s*\(\d{1,2}/\d{1,2}\)$'), '')
+            .trim();
+        final labelBase = basePayee.isEmpty ? cleanPayee : basePayee;
+        final baseIk = resolvedIk ?? invKeyFor(targetAcc!.card!, draft.date);
+
+        for (int k = pn; k <= pt; k++) {
+          final offset = k - pn;
+          final d = offset == 0 ? draft.date : addMonthsDate(draft.date, offset);
+          final ik = offset == 0 ? baseIk : addMonthsYM(baseIk, offset);
+          final isCurrent = k == pn;
+          db.txs.add(
+            Transaction(
+              id: uid(),
+              acc: targetAccountId,
+              date: d,
+              payee: '$labelBase ($k/$pt)',
+              cat: draft.categorySelection.isEmpty ? 'Outros' : draft.categorySelection,
+              memo: cleanMemo,
+              amt: signedAmt,
+              rec: isCurrent,
+              ik: ik,
+              plan: planId,
+              pn: k,
+              pt: pt,
+              rate: isCurrent ? resolvedRate : null,
+              tags: txTags == null ? null : List<String>.from(txTags),
+              fitid: isCurrent ? draft.raw.compositeFitId : null,
+            ),
+          );
+        }
+        createdCount++;
+      } else {
+        db.txs.add(
+          Transaction(
+            id: uid(),
+            acc: targetAccountId,
+            date: draft.date,
+            payee: cleanPayee,
+            cat: draft.categorySelection.isEmpty ? 'Outros' : draft.categorySelection,
+            memo: cleanMemo,
+            amt: signedAmt,
+            rec: true,
+            ik: resolvedIk,
+            rate: resolvedRate,
+            tags: txTags == null ? null : List<String>.from(txTags),
+            fitid: draft.raw.compositeFitId,
+          ),
+        );
+        createdCount++;
+      }
+    }
+
+    if (includeBalanceAdjustment && adjustmentCents != 0) {
+      final refDate = (adjustmentDate != null && adjustmentDate.isNotEmpty)
+          ? adjustmentDate
+          : (statement.ledgerBalanceDate ??
+              (statement.endDate.isNotEmpty ? statement.endDate : todayISO()));
+      final adjCat = adjustmentCategory.trim().isNotEmpty
+          ? adjustmentCategory.trim()
+          : (adjustmentCents < 0 ? 'Outros' : 'Outras Rendas');
+      final adjIk = isCard
+          ? ((targetInvoiceKey != null && targetInvoiceKey.isNotEmpty)
+              ? targetInvoiceKey
+              : invKeyFor(targetAcc!.card!, refDate))
+          : null;
+      db.txs.add(
+        Transaction(
+          id: uid(),
+          acc: targetAccountId,
+          date: refDate,
+          payee: 'Ajuste de Conciliação Bancária',
+          cat: adjCat,
+          memo: 'Ajuste automático para convergir com saldo OFX',
+          amt: adjustmentCents,
+          rec: true,
+          ik: adjIk,
+          rate: accCur != 'BRL' ? resolveDefaultRateToBrl(targetAccountId, refDate) : null,
+        ),
+      );
+      createdCount++;
+    }
+
+    if (isCard && targetInvoiceKey != null && targetInvoiceKey.isNotEmpty) {
+      _month = targetInvoiceKey;
+    } else if (statement.endDate.length >= 7) {
+      _month = statement.endDate.substring(0, 7);
+    }
+
+    migrate();
+    syncRecs();
+    syncCards(settleCardInvoices: true);
+    markIndexesDirty();
+    rebuildIndexes();
+    save(immediate: true);
+
+    final msgLines = <String>[
+      if (newlyReconciledCount > 0)
+        '✓ $newlyReconciledCount lançamento(s) pendente(s) conciliado(s).',
+      if (createdCount > 0)
+        '✓ $createdCount novo(s) lançamento(s) importado(s) como conciliado(s).',
+      if (linkedAlreadyRecCount > 0)
+        '• $linkedAlreadyRecCount lançamento(s) já conciliado(s) receberam vínculo FITID.',
+      if (ignoredCount > 0)
+        '• $ignoredCount item(ns) ignorado(s) ou já conciliado(s) anteriormente.',
+    ];
+    if (msgLines.isEmpty) {
+      msgLines.add('Nenhuma alteração aplicada.');
+    }
+
+    final summary = ImportSummary(
+      title: 'Conciliação OFX Concluída',
+      importedCount: newlyReconciledCount + createdCount,
+      skippedCount: ignoredCount,
+      customMessage: msgLines.join('\n'),
+    );
+    lastImportSummary = summary;
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.importBatch,
+      entity: AuditEntity.transaction,
+      summary:
+          'Conciliação OFX em ${targetAcc?.name ?? targetAccountId}: $newlyReconciledCount conciliados, $createdCount novos, $linkedAlreadyRecCount vínculos FITID, $ignoredCount ignorados',
+    );
+
     notifyListeners();
     return summary;
   }

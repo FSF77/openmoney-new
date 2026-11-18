@@ -177,6 +177,7 @@ Representa um registro contábil de movimentação financeira (despesa, receita,
 | `createdAt` | `Double?` | Não | `now()` | Timestamp epoch em segundos (com fração decimal) de quando o registro foi criado em disco. | Resolução de empates na ordenação de lançamentos do mesmo dia. |
 | `rate` | `Double?` | Não | `null` | Taxa de câmbio histórica gravada para a transação (**sempre normalizada como `moeda da conta → BRL`**), independente da `baseCurrency` ativa. Omitida quando a conta é `BRL`. | Preserva conversões históricas (PTAX/AwesomeAPI ou câmbio de transferência da época) em relatórios e fluxo de caixa. |
 | `tags` | `List<String>?` | Não | `null` | Lista de etiquetas livres (`#tags`) vinculadas à transação como complemento à categoria. Omitida do JSON quando nula ou vazia. | Indexada para filtros e busca textual; catalogada em `Database.tags`. |
+| `fitid` | `String?` | Não | `null` | Identificador determinístico do evento OFX (`<FITID>\|YYYY-MM-DD\|amtCents[\|#occ]`) vinculado durante conciliação bancária ou de fatura. Omitido do JSON quando nulo ou vazio. | Garante idempotência contra duplicidades em reimportações OFX sem conflitar IOF/estornos com `<FITID>` compartilhado. |
 
 ---
 

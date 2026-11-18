@@ -18,6 +18,7 @@ import 'modals/batch_delete_modal.dart';
 import 'modals/cloud_account_modal.dart';
 import 'modals/csv_qif_modal.dart';
 import 'modals/help_modal.dart';
+import 'modals/ofx_reconciliation_modal.dart';
 import 'modals/transaction_modal.dart';
 import 'modals/welcome_database_modal.dart';
 import 'theme/liquid_glass.dart';
@@ -184,6 +185,28 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             const SingleActivator(LogicalKeyboardKey.keyI,
                 meta: true, alt: true): () {
               showCsvQifCenterModal(context, widget.store);
+            },
+            const SingleActivator(LogicalKeyboardKey.keyO,
+                control: true, shift: true): () {
+              showOfxReconciliationModal(
+                context,
+                widget.store,
+                preferredAccountId:
+                    widget.store.activeModule == NavModule.account
+                        ? widget.store.selectedAccountId
+                        : null,
+              );
+            },
+            const SingleActivator(LogicalKeyboardKey.keyO,
+                meta: true, shift: true): () {
+              showOfxReconciliationModal(
+                context,
+                widget.store,
+                preferredAccountId:
+                    widget.store.activeModule == NavModule.account
+                        ? widget.store.selectedAccountId
+                        : null,
+              );
             },
             const SingleActivator(LogicalKeyboardKey.keyO, control: true): () {
               showDatabaseFileManagerModal(context, widget.store);

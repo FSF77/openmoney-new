@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
+import '../modals/ofx_reconciliation_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 
@@ -28,13 +29,18 @@ Future<void> showCommandPaletteModal(
   await showDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    builder: (ctx) => _CommandPaletteDialog(store: store),
+    builder: (ctx) =>
+        _CommandPaletteDialog(store: store, parentContext: context),
   );
 }
 
 class _CommandPaletteDialog extends StatefulWidget {
   final MoneyStore store;
-  const _CommandPaletteDialog({required this.store});
+  final BuildContext parentContext;
+  const _CommandPaletteDialog({
+    required this.store,
+    required this.parentContext,
+  });
 
   @override
   State<_CommandPaletteDialog> createState() => _CommandPaletteDialogState();
@@ -75,6 +81,23 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
       onSelect: () {
         Navigator.of(context).pop();
         showTransactionCreateModal(context, widget.store);
+      },
+    ));
+    list.add(_CommandItem(
+      title: 'Conciliar Extrato ou Fatura (OFX)',
+      subtitle: 'Importar arquivo .ofx/.qfx para conciliação bancária e faturas',
+      icon: Icons.fact_check_outlined,
+      iconColor: colors.accent,
+      category: 'AÇÕES RÁPIDAS',
+      onSelect: () {
+        Navigator.of(context).pop();
+        showOfxReconciliationModal(
+          widget.parentContext,
+          widget.store,
+          preferredAccountId: widget.store.activeModule == NavModule.account
+              ? widget.store.selectedAccountId
+              : null,
+        );
       },
     ));
     list.add(_CommandItem(

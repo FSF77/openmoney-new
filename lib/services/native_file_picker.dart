@@ -62,6 +62,14 @@ class NativeFilePicker {
         case 'qif':
           types.add('qif');
           break;
+        case 'ofx':
+        case 'qfx':
+          types.add('ofx');
+          types.add('qfx');
+          types.add('public.xml');
+          types.add('public.plain-text');
+          types.add('public.data');
+          break;
         case 'zip':
           types.add('public.zip-archive');
           types.add('com.pkware.zip-archive');

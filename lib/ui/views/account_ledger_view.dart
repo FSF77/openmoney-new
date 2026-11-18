@@ -7,6 +7,7 @@ import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_modal.dart';
 import '../modals/batch_delete_modal.dart';
+import '../modals/ofx_reconciliation_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
@@ -656,20 +657,22 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             onChanged: (_) => setState(() {}),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            minimumSize: const Size(0, 34),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                        Tooltip(
+                          message: 'Abatimento de previsões',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(36, 34),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            onPressed: () {
+                              final res = widget.store
+                                  .adjustPredictions(widget.store.month);
+                              showPredictionsAdjustModal(context, res);
+                            },
+                            child: const Icon(Icons.auto_fix_high, size: 16),
                           ),
-                          icon: const Icon(Icons.auto_fix_high, size: 14),
-                          label: const Text('Previsões',
-                              style: TextStyle(fontSize: 11.5)),
-                          onPressed: () {
-                            final res = widget.store
-                                .adjustPredictions(widget.store.month);
-                            showPredictionsAdjustModal(context, res);
-                          },
                         ),
                         PopupMenuButton<String>(
                           tooltip: 'Modo de abatimento das previsões',
@@ -685,6 +688,28 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                 value: 'invoice',
                                 child: Text('Por fatura (cartão)')),
                           ],
+                        ),
+                        Tooltip(
+                          message: isCard
+                              ? 'Importar Fatura OFX e Conciliar'
+                              : 'Importar Extrato OFX e Conciliar',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(36, 34),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            onPressed: () => showOfxReconciliationModal(
+                              context,
+                              widget.store,
+                              preferredAccountId: acc.id,
+                              preferredInvoiceKey:
+                                  isCard ? widget.store.month : null,
+                            ),
+                            child: const Icon(Icons.fact_check_outlined,
+                                size: 16),
+                          ),
                         ),
                         Tooltip(
                           message: 'Exportar CSV',
@@ -1008,20 +1033,21 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                       availableYears: widget.store.allYearsInDatabase(),
                       onMonthChanged: (ym) => widget.store.month = ym,
                     ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        minimumSize: const Size(0, 34),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                    Tooltip(
+                      message: 'Abatimento de previsões',
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: () {
+                          final res = widget.store
+                              .adjustPredictions(widget.store.month);
+                          showPredictionsAdjustModal(context, res);
+                        },
+                        child: const Icon(Icons.auto_fix_high, size: 17),
                       ),
-                      icon: const Icon(Icons.auto_fix_high, size: 14),
-                      label: const Text('Previsões',
-                          style: TextStyle(fontSize: 11.5)),
-                      onPressed: () {
-                        final res = widget.store
-                            .adjustPredictions(widget.store.month);
-                        showPredictionsAdjustModal(context, res);
-                      },
                     ),
                     PopupMenuButton<String>(
                       tooltip:
@@ -1039,6 +1065,26 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             value: 'invoice',
                             child: Text('Por fatura (cartão)')),
                       ],
+                    ),
+                    Tooltip(
+                      message: isCard
+                          ? 'Importar Fatura OFX e Conciliar'
+                          : 'Importar Extrato OFX e Conciliar',
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: () => showOfxReconciliationModal(
+                          context,
+                          widget.store,
+                          preferredAccountId: acc.id,
+                          preferredInvoiceKey:
+                              isCard ? widget.store.month : null,
+                        ),
+                        child: const Icon(Icons.fact_check_outlined, size: 17),
+                      ),
                     ),
                     Tooltip(
                       message: 'Exportar CSV',

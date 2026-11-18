@@ -539,6 +539,7 @@ class Transaction {
   double? createdAt;
   double? rate;
   List<String>? tags;
+  String? fitid;
 
   Transaction({
     String? id,
@@ -564,9 +565,13 @@ class Transaction {
     double? createdAt,
     this.rate,
     this.tags,
+    String? fitid,
   }) : id = id ?? uid(),
         createdAt =
-            createdAt ?? (DateTime.now().millisecondsSinceEpoch / 1000.0);
+            createdAt ?? (DateTime.now().millisecondsSinceEpoch / 1000.0),
+        fitid = (fitid != null && fitid.trim().isNotEmpty)
+            ? fitid.trim()
+            : null;
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     final dateStr = json['date'] as String? ?? todayISO();
@@ -581,6 +586,7 @@ class Transaction {
           .toList();
       if (list.isNotEmpty) parsedTags = list;
     }
+    final rawFit = (json['fitid'] as String?)?.trim();
 
     return Transaction(
       id: json['id'] as String? ?? uid(),
@@ -606,6 +612,7 @@ class Transaction {
       createdAt: (json['createdAt'] as num?)?.toDouble(),
       rate: (json['rate'] as num?)?.toDouble(),
       tags: parsedTags,
+      fitid: (rawFit != null && rawFit.isNotEmpty) ? rawFit : null,
     );
   }
 
@@ -633,6 +640,7 @@ class Transaction {
         if (createdAt != null) 'createdAt': createdAt,
         if (rate != null) 'rate': rate,
         if (tags != null && tags!.isNotEmpty) 'tags': tags,
+        if (fitid != null && fitid!.isNotEmpty) 'fitid': fitid,
       };
 
   Transaction copyWith({
@@ -659,6 +667,7 @@ class Transaction {
     double? createdAt,
     double? rate,
     List<String>? tags,
+    String? fitid,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -684,6 +693,7 @@ class Transaction {
       createdAt: createdAt ?? this.createdAt,
       rate: rate ?? this.rate,
       tags: tags ?? this.tags,
+      fitid: fitid ?? this.fitid,
     );
   }
 }

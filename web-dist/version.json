@@ -3,26 +3,26 @@
   "version": "2.5.0",
   "web": {
     "version": "2.5.0",
-    "build": 136,
-    "releaseDate": "17/11/2026"
+    "build": 137,
+    "releaseDate": "18/11/2026"
   },
-  "build": 136,
-  "notes": "Backup automático agora faz até 4 snapshots diários, melhorias e ajustes rotina de sincronismo desktop, novo recurso para classificar os lançamentos por tags, tela de lançamentos gerais agora permite mais filtros e edição em lotes, ajustes tela lançamentos, parâmetro para ocultar barra de inserção rápida, melhorias rotina de incluir novos lançamentos/transferências, Nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, possibilidade de usar conta e sincronismo online, contas em outras moedas e cotação online (beta), personalização Visual e Temas, Novo Dashboard Central Customizável, Navegação Desktop Flexível, Modo Tabela / Datagrid no Extrato, tela de lançamentos consolidado, versão web em https://openmoney.app.br",
-  "releaseDate": "17/11/2026",
+  "build": 137,
+  "notes": "Importar extrato OFX para conciliação, Backup automático agora faz até 4 snapshots diários, melhorias e ajustes rotina de sincronismo desktop, novo recurso para classificar os lançamentos por tags, tela de lançamentos gerais agora permite mais filtros e edição em lotes, ajustes tela lançamentos, parâmetro para ocultar barra de inserção rápida, melhorias rotina de incluir novos lançamentos/transferências, Nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, conta online, contas em outras moedas, personalização Visual e Temas, Novo Dashboard, tela de lançamentos consolidado, versão web em https://openmoney.app.br",
+  "releaseDate": "18/11/2026",
   "windows": {
-    "build": 135,
-    "version": "2.4.9",
+    "build": 136,
+    "version": "2.5.0",
     "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.4.9.zip",
-    "sha256": "829fefbb47728112b8e1895017e90d4326ca311863dd176fbd10873f41d77bd2",
-    "releaseDate": "16/11/2026"
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.0.zip",
+    "sha256": "5edae43117affa1a487e754099b0a0d5933cd23d5cf48e16c500ab31f3ab6c29",
+    "releaseDate": "17/11/2026"
   },
   "macos": {
     "version": "2.5.0",
-    "build": 136,
-    "releaseDate": "17/11/2026",
+    "build": 137,
+    "releaseDate": "18/11/2026",
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.0.zip",
-    "sha256": "6aa5f722d25ddad31419cd470509c46e591ff620dc8efafd3453a79c339ca8de",
+    "sha256": "a84d24c36c358dfdfdf6fbcf540ca3ee3f3dc37f3d301e1ba4da6bec5d7798c2",
     "sizeMb": 12
   },
   "title": "OpenMoney Flutter v2.5.0"

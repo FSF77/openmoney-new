@@ -7,6 +7,7 @@ import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'mobile_inbox_modal.dart';
+import 'ofx_reconciliation_modal.dart';
 import 'receipt_ocr_import_modal.dart';
 import 'wallet_import_modal.dart';
 
@@ -330,8 +331,8 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                 const SizedBox(height: 2),
                 Text(
                   isMobile
-                      ? 'CSV, QIF, Carteira iOS e Categorias'
-                      : 'Lançamentos, faturas, carteira iOS, OCR e categorias (CSV & QIF)',
+                      ? 'OFX, CSV, QIF, Carteira iOS e Categorias'
+                      : 'Conciliação OFX, lançamentos, faturas, carteira iOS e OCR (OFX, CSV & QIF)',
                   style: TextStyle(
                     fontSize: isMobile ? 11 : 12,
                     color: Colors.grey,
@@ -450,6 +451,27 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildSpecialRoutineCard(
+          colors: colors,
+          icon: Icons.fact_check_outlined,
+          title: 'Conciliação Bancária e Fatura (OFX / QFX)',
+          subtitle:
+              'Importe extratos bancários e faturas de cartão OFX, pareando lançamentos pendentes, sugerindo categorias/transferências e conferindo o saldo final.',
+          buttonLabel: 'Conciliar OFX...',
+          isMobile: isMobile,
+          onTap: () {
+            final parentCtx = widget.parentContext;
+            final preferredAcc =
+                _importAccountId == 'auto' ? null : _importAccountId;
+            Navigator.pop(context);
+            showOfxReconciliationModal(
+              parentCtx,
+              widget.store,
+              preferredAccountId: preferredAcc,
+            );
+          },
+        ),
+        const SizedBox(height: 12),
         // Card de Configurações para Lançamentos
         Container(
           width: double.infinity,
