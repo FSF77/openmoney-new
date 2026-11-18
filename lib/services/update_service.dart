@@ -8,7 +8,7 @@ import 'platform_io.dart';
 
 class OpenMoneyVersion {
   static const String fallbackVersion = '2.5.0';
-  static const int fallbackBuild = 137;
+  static const int fallbackBuild = 138;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
       'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';
