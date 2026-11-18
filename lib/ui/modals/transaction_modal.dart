@@ -648,81 +648,146 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       ),
       const SizedBox(height: 12),
 
-      // Conta do Lançamento
-      DropdownButtonFormField<String>(
-        value: _accId,
-        isDense: true,
-        style: TextStyle(fontSize: 13, color: colors.textPrimary),
-        decoration: const InputDecoration(
-          labelText: 'Conta do Lançamento (Mover entre Contas)',
-          labelStyle: TextStyle(fontSize: 13),
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: OutlineInputBorder(),
-        ),
-        items: widget.store.db.accounts
-            .map((a) => DropdownMenuItem(
-                value: a.id,
-                child: Text(a.name, style: const TextStyle(fontSize: 13))))
-            .toList(),
-        onChanged: (v) {
-          if (v != null) {
-            setState(() {
-              _accId = v;
-              final newAcc = widget.store.accById(v);
-              if (newAcc?.type == kCardType && newAcc?.card != null) {
-                _customIk = invKeyFor(newAcc!.card!, _resolveIsoDate());
-              } else {
-                _customIk = null;
-              }
-              if (_txType == 'transfer' &&
-                  _catSelection.startsWith('xfer:$_accId')) {
-                final others =
-                    widget.store.transferDestinationAccounts(excludeId: _accId);
-                if (others.isNotEmpty) {
-                  _catSelection = 'xfer:${others.first.id}';
+      // Conta e Data
+      Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<String>(
+              value: _accId,
+              isExpanded: true,
+              isDense: true,
+              style: TextStyle(fontSize: 13, color: colors.textPrimary),
+              decoration: const InputDecoration(
+                labelText: 'Conta',
+                labelStyle: TextStyle(fontSize: 13),
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: OutlineInputBorder(),
+              ),
+              items: widget.store.db.accounts
+                  .map((a) => DropdownMenuItem(
+                      value: a.id,
+                      child: Text(
+                        (a.isFavorite ? '★ ' : '') +
+                            a.name +
+                            (a.type == kCardType
+                                ? ' (Cartão)'
+                                : ' (${a.type})'),
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      )))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() {
+                    _accId = v;
+                    final newAcc = widget.store.accById(v);
+                    if (newAcc?.type == kCardType && newAcc?.card != null) {
+                      _customIk = invKeyFor(newAcc!.card!, _resolveIsoDate());
+                    } else {
+                      _customIk = null;
+                    }
+                    if (_txType == 'transfer' &&
+                        _catSelection.startsWith('xfer:$_accId')) {
+                      final others = widget.store
+                          .transferDestinationAccounts(excludeId: _accId);
+                      if (others.isNotEmpty) {
+                        _catSelection = 'xfer:${others.first.id}';
+                      }
+                    }
+                  });
                 }
-              }
-            });
-          }
-        },
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: TextField(
+              controller: _dateCtrl,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Data (DD/MM/AAAA)',
+                labelStyle: const TextStyle(fontSize: 13),
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                border: const OutlineInputBorder(),
+                suffixIconConstraints:
+                    const BoxConstraints(minWidth: 28, maxHeight: 24),
+                suffixIcon: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.calendar_month, size: 18),
+                  tooltip: 'Escolher data no calendário',
+                  onPressed: _pickDate,
+                ),
+              ),
+              onChanged: (v) {
+                if (isCard && targetAcc != null && targetAcc.card != null) {
+                  setState(() {
+                    _customIk = invKeyFor(
+                      targetAcc.card!,
+                      _resolveIsoDate(),
+                    );
+                  });
+                } else if (_isCompleteDateInput(v)) {
+                  setState(() {});
+                }
+              },
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 12),
 
-      // Data
-      TextField(
-        controller: _dateCtrl,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          labelText: 'Data (DD/MM/AAAA)',
-          labelStyle: const TextStyle(fontSize: 13),
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          border: const OutlineInputBorder(),
-          suffixIconConstraints:
-              const BoxConstraints(minWidth: 28, maxHeight: 24),
-          suffixIcon: IconButton(
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.calendar_month, size: 18),
-            tooltip: 'Escolher data no calendário',
-            onPressed: _pickDate,
-          ),
+      // Competência da Fatura se cartão
+      if (isCard && targetAcc != null && targetAcc.card != null) ...[
+        Builder(
+          builder: (context) {
+            final d = _resolveIsoDate();
+            final opts = invoiceOptions(
+              card: targetAcc.card!,
+              aroundDate: d,
+              existingKeys:
+                  _customIk != null ? [_customIk!] : const [],
+            );
+            final defaultIk = invKeyFor(targetAcc.card!, d);
+            final selIk = (_customIk == null || _customIk!.isEmpty)
+                ? defaultIk
+                : _customIk!;
+            return DropdownButtonFormField<String>(
+              value:
+                  opts.any((o) => o.key == selIk) ? selIk : opts.first.key,
+              isExpanded: true,
+              isDense: true,
+              style: TextStyle(fontSize: 13, color: colors.textPrimary),
+              decoration: const InputDecoration(
+                labelText: 'Fatura do Cartão (Competência)',
+                labelStyle: TextStyle(fontSize: 13),
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: OutlineInputBorder(),
+              ),
+              items: opts
+                  .map((o) => DropdownMenuItem(
+                        value: o.key,
+                        child: Text(
+                          o.key == defaultIk
+                              ? '${o.label} [Padrão]'
+                              : o.label,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _customIk = v),
+            );
+          },
         ),
-        onChanged: (v) {
-          if (isCard && targetAcc != null && targetAcc.card != null) {
-            setState(() {
-              _customIk = invKeyFor(
-                targetAcc.card!,
-                _resolveIsoDate(),
-              );
-            });
-          } else if (_isCompleteDateInput(v)) {
-            setState(() {});
-          }
-        },
-      ),
-      const SizedBox(height: 12),
+        const SizedBox(height: 12),
+      ],
 
       // Favorecido / Descrição
       TextField(
@@ -928,42 +993,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   ],
                 );
               }),
-              if (isCard && targetAcc?.card != null) ...[
-                const SizedBox(height: 12),
-                Builder(
-                  builder: (context) {
-                    final opts = invoiceOptions(
-                      card: targetAcc!.card!,
-                      aroundDate: _resolveIsoDate(),
-                      existingKeys:
-                          _customIk != null ? [_customIk!] : const [],
-                    );
-                    final selIk = _customIk ??
-                        invKeyFor(targetAcc.card!, _resolveIsoDate());
-                    return DropdownButtonFormField<String>(
-                      initialValue:
-                          opts.any((o) => o.key == selIk) ? selIk : opts.first.key,
-                      isExpanded: true,
-                      isDense: true,
-                      style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                      decoration: const InputDecoration(
-                        labelText: 'Competência da Fatura do Cartão',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: opts
-                          .map((o) => DropdownMenuItem(
-                                value: o.key,
-                                child: Text(o.label, style: const TextStyle(fontSize: 13)),
-                              ))
-                          .toList(),
-                      onChanged: (v) => setState(() => _customIk = v),
-                    );
-                  },
-                ),
-              ],
+
               if (isSeries) ...[
                 const SizedBox(height: 14),
                 const Text(
@@ -1038,8 +1068,25 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
             actions: [
-              if (widget.tx.auto != true) copyBtn,
-              deleteBtn,
+              if (widget.tx.auto != true)
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  tooltip: 'Copiar',
+                  color: colors.accent,
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showTransactionCopyModal(context, widget.store, widget.tx);
+                  },
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Excluir',
+                color: colors.expense,
+                onPressed: () {
+                  Navigator.pop(context);
+                  showDeleteTransactionDialog(context, widget.store, widget.tx);
+                },
+              ),
             ],
           ),
           body: SafeArea(
@@ -1087,7 +1134,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       backgroundColor: colors.bgSecondary,
       title: const Text('Editar Lançamento'),
       content: SizedBox(
-        width: 480,
+        width: 500,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1759,7 +1806,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                         ? defaultIk
                         : _customIk!;
                     return DropdownButtonFormField<String>(
-                      initialValue: opts.any((o) => o.key == selIk)
+                      value: opts.any((o) => o.key == selIk)
                           ? selIk
                           : opts.first.key,
                       isExpanded: true,
@@ -2755,7 +2802,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                         ? defaultIk
                         : _customIk!;
                     return DropdownButtonFormField<String>(
-                      initialValue: opts.any((o) => o.key == selIk)
+                      value: opts.any((o) => o.key == selIk)
                           ? selIk
                           : opts.first.key,
                       isExpanded: true,

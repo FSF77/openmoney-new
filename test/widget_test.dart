@@ -1795,7 +1795,7 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
       tester.view.resetDevicePixelRatio();
     });
 
-    final store = MoneyStore();
+    final store = MoneyStore(autoBoot: false);
     store.db.accounts.add(Account(id: 'acc1', name: 'Banco Inter', type: 'Corrente', opening: 100000));
     store.db.accounts.add(Account(id: 'card1', name: 'Cartão Black', type: 'Cartão de crédito', opening: 0));
 
@@ -1836,5 +1836,72 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     await tester.tap(find.text('Fechar'));
     await tester.pumpAndSettle();
     expect(find.text('Importação / Exportação'), findsNothing);
+  });
+
+  testWidgets('38. AccountLedgerView quick entry bar displays invoice selector on credit cards and omits on regular accounts', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = MoneyStore(autoBoot: false);
+    final cardAccount = Account(
+      id: 'card_xp',
+      name: 'Cartão XP',
+      type: kCardType,
+      opening: 0,
+      card: CardConfig(
+        closeDay: 10,
+        dueDay: 20,
+        pay: 'acc_checking',
+      ),
+    );
+    final bankAccount = Account(
+      id: 'acc_checking',
+      name: 'Banco Itaú',
+      type: 'Corrente',
+      opening: 500000,
+    );
+    store.db.accounts.addAll([cardAccount, bankAccount]);
+
+    // 1. Testa tela de conta bancária (não deve ter seletor de fatura)
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccountLedgerView(store: store, account: bankAccount),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fatura do Cartão (Competência)'), findsNothing);
+
+    // 2. Testa tela de fatura de cartão de crédito no desktop (deve exibir o seletor de fatura e padrão)
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccountLedgerView(store: store, account: cardAccount),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fatura do Cartão (Competência)'), findsOneWidget);
+    expect(find.textContaining('[Padrão]'), findsOneWidget);
+
+    // 3. Testa no mobile (360x740): abre recolhida, clica no botão de adicionar e exibe o seletor de fatura
+    tester.view.physicalSize = const Size(360, 740);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccountLedgerView(store: store, account: cardAccount),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // No mobile, a barra inicia recolhida
+    expect(find.text('Fatura do Cartão (Competência)'), findsNothing);
+
+    // Ao tocar no botão de inserção rápida, a barra se expande
+    await tester.tap(find.byTooltip('Novo Lançamento nesta conta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fatura do Cartão (Competência)'), findsOneWidget);
+    expect(find.textContaining('[Padrão]'), findsOneWidget);
   });
 }

@@ -191,7 +191,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     );
     if (picked != null) {
       setState(() {
-        _dateCtrl.text = fmtDate(isoFromDate(picked));
+        final newIso = isoFromDate(picked);
+        _dateCtrl.text = fmtDate(newIso);
+        final acc = widget.account;
+        if (acc.type == kCardType && acc.card != null) {
+          _customIk = invKeyFor(acc.card!, newIso);
+        }
         if (!_quickRateEditedManually) {
           _syncQuickRateForDate();
         }
@@ -282,6 +287,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
       _payeeCtrl.clear();
       _memoCtrl.clear();
       _amtCtrl.clear();
+      _customIk = null;
       _quickRateEditedManually = false;
       _syncQuickRateForDate();
       _mode = 'single';
@@ -1457,8 +1463,13 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             final trimmed = val.trim();
                             if (RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(trimmed) ||
                                 RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) {
+                              if (isCard && acc.card != null) {
+                                _customIk = invKeyFor(acc.card!, _resolveIsoDate());
+                              }
                               if (!_quickRateEditedManually) {
                                 setState(() => _syncQuickRateForDate());
+                              } else {
+                                setState(() {});
                               }
                             }
                           },
@@ -1482,6 +1493,73 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ),
                         ),
                       ),
+                      if (isCard && acc.card != null)
+                        Builder(
+                          builder: (context) {
+                            final d = _resolveIsoDate();
+                            final existingKeys = <String>[
+                              if (acc.invoices != null) ...acc.invoices!.keys,
+                              if (_customIk != null && _customIk!.isNotEmpty)
+                                _customIk!,
+                            ];
+                            final opts = invoiceOptions(
+                              card: acc.card!,
+                              aroundDate: d,
+                              existingKeys: existingKeys,
+                            );
+                            final defaultIk = invKeyFor(acc.card!, d);
+                            final selIk = (_customIk == null || _customIk!.isEmpty)
+                                ? defaultIk
+                                : _customIk!;
+                            final effectiveIk = opts.any((o) => o.key == selIk)
+                                ? selIk
+                                : (opts.any((o) => o.key == defaultIk)
+                                    ? defaultIk
+                                    : opts.first.key);
+                            return SizedBox(
+                              width: 230,
+                              child: DropdownButtonFormField<String>(
+                                value: effectiveIk,
+                                isExpanded: true,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: colors.textPrimary,
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: 'Fatura do Cartão (Competência)',
+                                  labelStyle: TextStyle(fontSize: 13),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: opts
+                                    .map(
+                                      (o) => DropdownMenuItem(
+                                        value: o.key,
+                                        child: Text(
+                                          o.key == defaultIk
+                                              ? '${o.label} [Padrão]'
+                                              : o.label,
+                                          style: const TextStyle(fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() {
+                                      _customIk = (v == defaultIk) ? null : v;
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
                       SizedBox(
                         width: 220,
                         child: TextField(
