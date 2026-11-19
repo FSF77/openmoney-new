@@ -1302,7 +1302,10 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     }
 
     if (_txType != 'transfer' && initialPayeeText.isNotEmpty) {
-      _suggestions = widget.store.payeeSuggestions(initialPayeeText);
+      _suggestions = widget.store.payeeSuggestions(
+        initialPayeeText,
+        isExpense: _isExpense,
+      );
     }
 
     final oneYearAhead = DateTime.now().add(const Duration(days: 365));
@@ -1410,8 +1413,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       return;
     }
     final clean = val.trim();
-    final list = widget.store.payeeSuggestions(val);
-    final match = widget.store.lastCategoryAndType(clean);
+    final bool isExp = _isExpense;
+    final list = widget.store.payeeSuggestions(val, isExpense: isExp);
+    final match = widget.store.lastCategoryAndType(clean, isExpense: isExp);
 
     setState(() {
       _suggestions = list;
@@ -1427,7 +1431,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
             _catSelection = match.category;
           }
         }
-        if (match.accountId.isNotEmpty) {
+        if (widget.store.payeeSuggestionIncludeAccount && match.accountId.isNotEmpty) {
           final matchedAcc = widget.store.accById(match.accountId);
           if (matchedAcc != null && !matchedAcc.isInactive) {
             _accId = match.accountId;
@@ -1457,7 +1461,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
           _catSelection = s.category;
         }
       }
-      if (s.accountId.isNotEmpty) {
+      if (widget.store.payeeSuggestionIncludeAccount && s.accountId.isNotEmpty) {
         final matchedAcc = widget.store.accById(s.accountId);
         if (matchedAcc != null && !matchedAcc.isInactive) {
           _accId = s.accountId;
@@ -1727,6 +1731,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                             _catSelection.startsWith('xfer:')) {
                           _catSelection = paths.isNotEmpty ? paths.first : '';
                         }
+                        if (_payeeCtrl.text.trim().isNotEmpty) {
+                          _suggestions = widget.store.payeeSuggestions(
+                            _payeeCtrl.text,
+                            isExpense: _isExpense,
+                          );
+                        }
                       }
                     });
                   },
@@ -1740,7 +1750,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   Expanded(
                     flex: 3,
                     child: DropdownButtonFormField<String>(
-                      initialValue: _accId,
+                      value: _accId,
                       isDense: true,
                       style: TextStyle(fontSize: 13, color: colors.textPrimary),
                       decoration: const InputDecoration(
@@ -1897,7 +1907,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   spacing: 6,
                   runSpacing: 6,
                   children: _suggestions.map((s) {
-                    final accName = widget.store.accById(s.accountId)?.name;
+                    final accName = widget.store.payeeSuggestionIncludeAccount
+                        ? widget.store.accById(s.accountId)?.name
+                        : null;
                     return ActionChip(
                       avatar: Icon(
                         s.isExpense

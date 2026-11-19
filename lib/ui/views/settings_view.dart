@@ -680,6 +680,80 @@ class _SettingsViewState extends State<SettingsView> {
                         widget.store.setShowInlineTransactionEntry(v),
                   ),
                 ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Preenchimento Automático por Histórico',
+                  subtitle:
+                      'Ao digitar o Favorecido/Descrição, sugere automaticamente os dados aprendidos de lançamentos anteriores.',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceGlass,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<bool>(
+                        value: widget.store.payeeSuggestionIncludeAccount,
+                        dropdownColor: colors.surfaceCard,
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        items: const [
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('Apenas Nome e Categoria (Padrão)'),
+                          ),
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text('Nome, Categoria e Conta'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            widget.store.setPayeeSuggestionIncludeAccount(v);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Período do Histórico para Sugestões',
+                  subtitle:
+                      'Intervalo de tempo dos lançamentos considerado para buscar sugestões de favorecidos.',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceGlass,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: [30, 60, 90, 180, 365, 0].contains(widget.store.payeeSuggestionLookbackDays)
+                            ? widget.store.payeeSuggestionLookbackDays
+                            : 90,
+                        dropdownColor: colors.surfaceCard,
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        items: const [
+                          DropdownMenuItem(value: 30, child: Text('Últimos 30 dias')),
+                          DropdownMenuItem(value: 60, child: Text('Últimos 60 dias')),
+                          DropdownMenuItem(value: 90, child: Text('Últimos 90 dias (Padrão)')),
+                          DropdownMenuItem(value: 180, child: Text('Últimos 6 meses')),
+                          DropdownMenuItem(value: 365, child: Text('Último 1 ano')),
+                          DropdownMenuItem(value: 0, child: Text('Todo o histórico')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            widget.store.setPayeeSuggestionLookbackDays(v);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),

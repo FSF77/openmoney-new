@@ -16,6 +16,7 @@ import 'package:openmoney/ui/views/cash_flow_view.dart';
 import 'package:openmoney/ui/views/due_bills_view.dart';
 import 'package:openmoney/ui/views/installments_view.dart';
 import 'package:openmoney/ui/views/reports_view.dart';
+import 'package:openmoney/ui/views/settings_view.dart';
 import 'package:openmoney/ui/modals/account_multi_select_filter.dart';
 import 'package:openmoney/ui/modals/account_modal.dart';
 import 'package:openmoney/ui/modals/batch_edit_transactions_modal.dart';
@@ -2055,5 +2056,161 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(find.widgetWithText(TextField, 'Nubank'), findsOneWidget);
     expect(find.widgetWithText(InkWell, 'Nubank'), findsOneWidget);
     expect(find.byIcon(Icons.clear), findsOneWidget);
+  });
+
+  testWidgets(
+      '40. Payee suggestions respect isExpense (Despesa vs Receita), lookback window, and account scope setting',
+      (WidgetTester tester) async {
+    final nowIso = todayISO();
+    final oldIso = '2020-01-01';
+
+    final store = MoneyStore(autoBoot: false);
+    store.payeeSuggestionIncludeAccount = false;
+    store.payeeSuggestionLookbackDays = 90;
+
+    store.db = Database(
+      v: 7,
+      accounts: [
+        Account(id: 'acc_a', name: 'Banco A', type: 'Corrente', opening: 100000),
+        Account(id: 'acc_b', name: 'Banco B', type: 'Poupança', opening: 50000),
+      ],
+      txs: [
+        // Despesa recente no Banco B
+        Transaction(
+          id: 't_exp',
+          acc: 'acc_b',
+          date: nowIso,
+          payee: 'Posto Estrela',
+          cat: 'Transporte:Combustível',
+          amt: -15000,
+        ),
+        // Receita recente no Banco A
+        Transaction(
+          id: 't_inc',
+          acc: 'acc_a',
+          date: nowIso,
+          payee: 'Posto Reembolso',
+          cat: 'Renda:Outros',
+          amt: 20000,
+        ),
+        // Despesa antiga (fora dos 90 dias)
+        Transaction(
+          id: 't_old',
+          acc: 'acc_a',
+          date: oldIso,
+          payee: 'Livraria Velha',
+          cat: 'Educação:Livros',
+          amt: -5000,
+        ),
+      ],
+      cats: [
+        CategoryItem(name: 'Transporte', type: 'Despesa'),
+        CategoryItem(name: 'Combustível', parent: 'Transporte', type: 'Despesa'),
+        CategoryItem(name: 'Educação', type: 'Despesa'),
+        CategoryItem(name: 'Livros', parent: 'Educação', type: 'Despesa'),
+        CategoryItem(name: 'Renda', type: 'Receita'),
+        CategoryItem(name: 'Outros', parent: 'Renda', type: 'Receita'),
+      ],
+    );
+    store.rebuildIndexes();
+
+    // 1. Testa filtro por tipo (Despesa vs. Receita)
+    final expSuggestions = store.payeeSuggestions('Posto', isExpense: true);
+    expect(expSuggestions.length, 1);
+    expect(expSuggestions.first.name, 'Posto Estrela');
+
+    final incSuggestions = store.payeeSuggestions('Posto', isExpense: false);
+    expect(incSuggestions.length, 1);
+    expect(incSuggestions.first.name, 'Posto Reembolso');
+
+    // 2. Testa janela de lookback (90 dias vs Todo o histórico)
+    final oldUnder90 = store.payeeSuggestions('Livraria', isExpense: true);
+    expect(oldUnder90, isEmpty);
+
+    store.setPayeeSuggestionLookbackDays(0); // Todo o histórico
+    final oldUnderAll = store.payeeSuggestions('Livraria', isExpense: true);
+    expect(oldUnderAll.length, 1);
+    expect(oldUnderAll.first.name, 'Livraria Velha');
+    store.setPayeeSuggestionLookbackDays(90);
+
+    // 3. Testa modal de inserção: quando payeeSuggestionIncludeAccount = false (padrão),
+    // ao selecionar sugestão, NÃO altera a conta selecionada
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => showTransactionCreateModal(
+              ctx,
+              store,
+              initialAccountId: 'acc_a',
+              initialTxType: 'expense',
+            ),
+            child: const Text('Abrir Modal'),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abrir Modal'));
+    await tester.pumpAndSettle();
+
+    // Digita "Posto" no Favorecido
+    final payeeField = find.widgetWithText(TextField, 'Favorecido / Descrição');
+    await tester.enterText(payeeField, 'Posto');
+    await tester.pumpAndSettle();
+
+    // Chip de sugestão não exibe o nome da conta quando includeAccount = false
+    expect(find.text('Posto Estrela • Transporte:Combustível'), findsOneWidget);
+    expect(find.textContaining('Banco B'), findsNothing);
+
+    // Clica na sugestão
+    await tester.tap(find.text('Posto Estrela • Transporte:Combustível'));
+    await tester.pumpAndSettle();
+
+    // Conta permanece Banco A (acc_a), não muda para Banco B
+    expect(find.textContaining('Banco A (Corrente)'), findsOneWidget);
+
+    // Fecha o modal
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    // 4. Ativa payeeSuggestionIncludeAccount = true: ao selecionar sugestão, altera a conta para Banco B
+    store.setPayeeSuggestionIncludeAccount(true);
+
+    await tester.tap(find.text('Abrir Modal'));
+    await tester.pumpAndSettle();
+
+    final payeeField2 = find.widgetWithText(TextField, 'Favorecido / Descrição');
+    await tester.enterText(payeeField2, 'Posto');
+    await tester.pumpAndSettle();
+
+    // Agora o chip mostra a conta
+    expect(find.text('Posto Estrela • Transporte:Combustível • Banco B'), findsOneWidget);
+
+    // Clica na sugestão
+    await tester.tap(find.text('Posto Estrela • Transporte:Combustível • Banco B'));
+    await tester.pumpAndSettle();
+
+    // Conta alterada para Banco B
+    expect(find.textContaining('Banco B (Poupança)'), findsOneWidget);
+
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    // 5. Verifica renderização dos controles na SettingsView
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SettingsView(store: store),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Preenchimento Automático por Histórico'),
+      300,
+    );
+    expect(find.text('Preenchimento Automático por Histórico'), findsOneWidget);
+    expect(find.text('Período do Histórico para Sugestões'), findsOneWidget);
   });
 }

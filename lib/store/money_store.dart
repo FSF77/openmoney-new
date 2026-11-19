@@ -591,6 +591,8 @@ class MoneyStore extends ChangeNotifier {
   bool hideInvestmentsBalance = false;
   bool hideCardsBalance = false;
   bool showInlineTransactionEntry = true;
+  bool payeeSuggestionIncludeAccount = false;
+  int payeeSuggestionLookbackDays = 90;
   bool showMissingDatabasePrompt = false;
   bool showWelcomeScreen = false;
   String missingDatabasePath = '';
@@ -801,6 +803,8 @@ class MoneyStore extends ChangeNotifier {
       'hideInvestmentsBalance': hideInvestmentsBalance,
       'hideCardsBalance': hideCardsBalance,
       'showInlineTransactionEntry': showInlineTransactionEntry,
+      'payeeSuggestionIncludeAccount': payeeSuggestionIncludeAccount,
+      'payeeSuggestionLookbackDays': payeeSuggestionLookbackDays,
       'lastUsedAccountId': _lastUsedAccountId,
     };
   }
@@ -948,6 +952,12 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['showInlineTransactionEntry'] is bool) {
       showInlineTransactionEntry = cfg['showInlineTransactionEntry'] as bool;
+    }
+    if (cfg['payeeSuggestionIncludeAccount'] is bool) {
+      payeeSuggestionIncludeAccount = cfg['payeeSuggestionIncludeAccount'] as bool;
+    }
+    if (cfg['payeeSuggestionLookbackDays'] is int) {
+      payeeSuggestionLookbackDays = cfg['payeeSuggestionLookbackDays'] as int;
     }
     if (cfg['lastUsedAccountId'] is String) {
       _lastUsedAccountId = cfg['lastUsedAccountId'] as String;
@@ -1524,6 +1534,24 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setPayeeSuggestionIncludeAccount(bool value) {
+    payeeSuggestionIncludeAccount = value;
+    final cfg = _readConfig();
+    cfg['payeeSuggestionIncludeAccount'] = payeeSuggestionIncludeAccount;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setPayeeSuggestionLookbackDays(int days) {
+    payeeSuggestionLookbackDays = days;
+    final cfg = _readConfig();
+    cfg['payeeSuggestionLookbackDays'] = payeeSuggestionLookbackDays;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
   void setReminderDaysAhead(int days) {
     reminderDaysAhead = days.clamp(1, 60);
     final cfg = _readConfig();
@@ -1863,21 +1891,22 @@ class MoneyStore extends ChangeNotifier {
             }
           }
           if (clean.isNotEmpty) {
-            final key = clean.toLowerCase();
+            final isExp = tx.amt < 0;
+            final key = '${isExp ? "exp" : "inc"}:${clean.toLowerCase()}';
             final entry = payeeMap[key];
             if (entry != null) {
               entry.count += 1;
               if (tx.date.compareTo(entry.lastDate) > 0) {
                 entry.lastDate = tx.date;
                 entry.cat = tx.cat;
-                entry.isExpense = tx.amt < 0;
+                entry.isExpense = isExp;
                 entry.accId = tx.acc;
               }
             } else {
               payeeMap[key] = _PayeeCacheEntry(
                 name: clean,
                 cat: tx.cat,
-                isExpense: tx.amt < 0,
+                isExpense: isExp,
                 count: 1,
                 lastDate: tx.date,
                 accId: tx.acc,
@@ -3744,16 +3773,27 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Payee Suggestions
 
-  List<PayeeSuggestion> payeeSuggestions(String query, {int limit = 6}) {
+  String? get payeeSuggestionCutoffDate {
+    if (payeeSuggestionLookbackDays <= 0) return null;
+    final now = DateTime.now();
+    final cutoff = now.subtract(Duration(days: payeeSuggestionLookbackDays));
+    return isoFromDate(cutoff);
+  }
+
+  List<PayeeSuggestion> payeeSuggestions(String query, {int limit = 6, bool? isExpense}) {
     final cleanQ = query.trim();
     if (cleanQ.isEmpty) return [];
     rebuildIndexesIfNeeded();
     final qFolded = removeDiacritics(cleanQ).toLowerCase();
+    final cutoff = payeeSuggestionCutoffDate;
 
     final prefixMatches = <PayeeSuggestion>[];
     final containsMatches = <PayeeSuggestion>[];
 
     for (final v in _cachedPayeeSuggestions.values) {
+      if (isExpense != null && v.isExpense != isExpense) continue;
+      if (cutoff != null && v.lastDate.compareTo(cutoff) < 0) continue;
+
       final nameFolded = removeDiacritics(v.name).toLowerCase();
       if (nameFolded == qFolded) continue;
       if (nameFolded.startsWith(qFolded)) {
@@ -3793,25 +3833,51 @@ class MoneyStore extends ChangeNotifier {
     return combined.length > limit ? combined.sublist(0, limit) : combined;
   }
 
-  ({String category, bool isExpense, String accountId})? lastCategoryAndType(String payee) {
+  ({String category, bool isExpense, String accountId})? lastCategoryAndType(
+    String payee, {
+    bool? isExpense,
+  }) {
     final cleanQ = payee.trim().toLowerCase();
     if (cleanQ.isEmpty) return null;
     rebuildIndexesIfNeeded();
-    final v = _cachedPayeeSuggestions[cleanQ];
-    if (v != null) {
-      return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
+    final cutoff = payeeSuggestionCutoffDate;
+
+    // 1. Busca exata (com e sem filtro de tipo)
+    if (isExpense != null) {
+      final key = '${isExpense ? "exp" : "inc"}:$cleanQ';
+      final v = _cachedPayeeSuggestions[key];
+      if (v != null) {
+        if (cutoff == null || v.lastDate.compareTo(cutoff) >= 0) {
+          return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
+        }
+      }
+    } else {
+      final vExp = _cachedPayeeSuggestions['exp:$cleanQ'];
+      final vInc = _cachedPayeeSuggestions['inc:$cleanQ'];
+      final best = (vExp != null && vInc != null)
+          ? (vExp.lastDate.compareTo(vInc.lastDate) >= 0 ? vExp : vInc)
+          : (vExp ?? vInc);
+      if (best != null) {
+        if (cutoff == null || best.lastDate.compareTo(cutoff) >= 0) {
+          return (category: best.cat, isExpense: best.isExpense, accountId: best.accId);
+        }
+      }
     }
 
-    // Fuzzy match por palavras com 4+ letras
+    // 2. Fuzzy match por substring ou palavras com 4+ letras
     final searchWords = cleanQ.split(' ').where((w) => w.length >= 4).toList();
     for (final entry in _cachedPayeeSuggestions.entries) {
-      final key = entry.key;
-      if (cleanQ.contains(key) || key.contains(cleanQ)) {
-        return (category: entry.value.cat, isExpense: entry.value.isExpense, accountId: entry.value.accId);
+      final v = entry.value;
+      if (isExpense != null && v.isExpense != isExpense) continue;
+      if (cutoff != null && v.lastDate.compareTo(cutoff) < 0) continue;
+
+      final nameClean = v.name.toLowerCase();
+      if (cleanQ.contains(nameClean) || nameClean.contains(cleanQ)) {
+        return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
       }
-      final keyWords = key.split(' ').where((w) => w.length >= 4).toList();
+      final keyWords = nameClean.split(' ').where((w) => w.length >= 4).toList();
       if (searchWords.any((w) => keyWords.contains(w))) {
-        return (category: entry.value.cat, isExpense: entry.value.isExpense, accountId: entry.value.accId);
+        return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
       }
     }
     return null;

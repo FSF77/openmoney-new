@@ -206,8 +206,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
 
   void _onPayeeChanged(String val) {
     final clean = val.trim();
-    final list = widget.store.payeeSuggestions(val);
-    final match = widget.store.lastCategoryAndType(clean);
+    final list = widget.store.payeeSuggestions(val, isExpense: _isExpense);
+    final match = widget.store.lastCategoryAndType(clean, isExpense: _isExpense);
     setState(() {
       _suggestions = list;
       if (match != null) {
@@ -1548,6 +1548,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               setState(() {
                                 _isExpense = !_isExpense;
                                 _syncDefaultCategory();
+                                if (_payeeCtrl.text.trim().isNotEmpty) {
+                                  _suggestions = widget.store.payeeSuggestions(
+                                    _payeeCtrl.text,
+                                    isExpense: _isExpense,
+                                  );
+                                }
                               });
                             },
                             child: Text(
