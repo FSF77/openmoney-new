@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+export BASH_SILENCE_DEPRECATION_WARNING=1
 
 # ==============================================================================
 # OpenMoney Flutter - Script de Compilação e Publicação para macOS
@@ -72,6 +73,14 @@ fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🚀 OpenMoney Flutter macOS — Build & Publish v${VERSION}+${BUILD_NUM}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Fecha qualquer instância em execução do OpenMoney para evitar concorrência e auto-update durante a publicação
+if pgrep -x "OpenMoney" > /dev/null 2>&1 || pgrep -x "openmoney" > /dev/null 2>&1; then
+    echo "⚠️  Fechando OpenMoney em execução..."
+    pkill -x "OpenMoney" 2>/dev/null || true
+    pkill -x "openmoney" 2>/dev/null || true
+    sleep 1
+fi
 
 # 1. Compilação do macOS Release
 echo "🔨 Compilando aplicativo macOS em modo Release..."
@@ -269,6 +278,7 @@ EOF
 cat > "${ROOT_DIR}/install.sh" << 'EOF'
 #!/bin/bash
 set -e
+export BASH_SILENCE_DEPRECATION_WARNING=1
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🚀 Instalador do OpenMoney para macOS              "
