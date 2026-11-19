@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # OpenMoney Flutter - Script de Compilacao e Publicacao para Windows (PowerShell)
 # Repositorio Oficial: https://github.com/FSF77/openmoney-new
 # ==============================================================================
@@ -167,8 +167,109 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($VersionJsonFile, $UpdatedJson, $Utf8NoBom)
 Write-Host "version.json atualizado com sucesso (UTF-8 sem BOM)." -ForegroundColor Green
 
+# 3b. Atualizacao do README.md com os links de download da versao oficial
+$ReadmeFile = "$RootDir\README.md"
+if (Test-Path $ReadmeFile) {
+    try {
+        $ReadmeContent = [System.IO.File]::ReadAllText($ReadmeFile, [System.Text.Encoding]::UTF8)
+
+        $MacVer = if ($Data.macos -and $Data.macos.version) { $Data.macos.version } else { $Version }
+        $MacBuild = if ($Data.macos -and $Data.macos.build) { $Data.macos.build } else { "" }
+        $MacUrl = if ($Data.macos -and $Data.macos.downloadUrl) { $Data.macos.downloadUrl } else { "" }
+        $MacSize = if ($Data.macos -and $Data.macos.sizeMb) { $Data.macos.sizeMb } else { "" }
+        $MacDate = if ($Data.macos -and $Data.macos.releaseDate) { $Data.macos.releaseDate } else { $ReleaseDate }
+        $MacZip = if ($MacUrl) { Split-Path $MacUrl -Leaf } else { "OpenMoney-macOS-$MacVer.zip" }
+
+        $WinVer = $Version
+        $WinBuild = $BuildNum
+        $WinUrl = $DownloadUrl
+        $WinSize = $FileSizeMb
+        $WinDate = $ReleaseDate
+        $WinZip = $ZipName
+
+        $WebVer = if ($Data.web -and $Data.web.version) { $Data.web.version } else { $Version }
+        $WebDate = if ($Data.web -and $Data.web.releaseDate) { $Data.web.releaseDate } else { $ReleaseDate }
+
+        $MacRow = if ($MacUrl) {
+            "| 🍏 **macOS** | **v$MacVer** (Build $MacBuild) | [⬇️ Baixar $MacZip]($MacUrl) | ~$MacSize MB | $MacDate |"
+        } else {
+            "| 🍏 **macOS** | Em breve | Compilação em andamento | — | — |"
+        }
+
+        $WinRow = "| 🪟 **Windows** | **v$WinVer** (Build $WinBuild) | [⬇️ Baixar $WinZip]($WinUrl) | ~$WinSize MB | $WinDate |"
+        $WebRow = "| 🌐 **Web** | **v$WebVer** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | $WebDate |"
+
+        $StartMarker = "<!-- LATEST_DOWNLOADS_START -->"
+        $EndMarker = "<!-- LATEST_DOWNLOADS_END -->"
+
+        $HeaderTemplate = @"
+$StartMarker
+## 📥 Downloads da Versão Oficial
+
+| Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
+| :--- | :--- | :--- | :--- | :--- |
+$MacRow
+$WinRow
+$WebRow
+
+"@
+
+        $CommandsTemplate = @'
+### ⚡ Instalação Rápida via Terminal / PowerShell
+
+- **macOS** (Terminal):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
+  ```
+
+- **Windows** (PowerShell):
+  ```powershell
+  irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
+  ```
+
+- **Windows** (Prompt / CMD):
+  ```cmd
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.bat -o install.bat && install.bat
+  ```
+
+---
+<!-- LATEST_DOWNLOADS_END -->
+'@
+
+        $DownloadBlock = $HeaderTemplate + $CommandsTemplate
+
+        $StartIdx = $ReadmeContent.IndexOf($StartMarker)
+        $EndIdx = $ReadmeContent.IndexOf($EndMarker)
+        if ($StartIdx -ge 0 -and $EndIdx -gt $StartIdx) {
+            $Pre = $ReadmeContent.Substring(0, $StartIdx)
+            $Post = $ReadmeContent.Substring($EndIdx + $EndMarker.Length)
+            $ReadmeContent = $Pre + $DownloadBlock + $Post
+        } else {
+            $DashSep = "---`n"
+            $SepIdx = $ReadmeContent.IndexOf($DashSep)
+            if ($SepIdx -lt 0) {
+                $DashSep = "---`r`n"
+                $SepIdx = $ReadmeContent.IndexOf($DashSep)
+            }
+            if ($SepIdx -ge 0) {
+                $Pre = $ReadmeContent.Substring(0, $SepIdx + $DashSep.Length)
+                $Post = $ReadmeContent.Substring($SepIdx + $DashSep.Length)
+                $ReadmeContent = $Pre + "`n" + $DownloadBlock + "`n`n" + $Post.TrimStart("`r`n".ToCharArray())
+            } else {
+                $ReadmeContent = $DownloadBlock + "`n`n" + $ReadmeContent
+            }
+        }
+
+        $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($ReadmeFile, $ReadmeContent, $Utf8NoBom)
+        Write-Host "README.md atualizado com os links de download com sucesso." -ForegroundColor Green
+    } catch {
+        Write-Warning "Aviso: Nao foi possivel atualizar README.md: $_"
+    }
+}
+
 # 4. Commit e Push no proprio repositorio openmoney-new
-& git add lib/services/update_service.dart pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
+& git add README.md lib/services/update_service.dart pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/windows/$ZipName"
 
 $GitStatus = & git status --porcelain
 if ([string]::IsNullOrWhiteSpace($GitStatus)) {

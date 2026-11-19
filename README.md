@@ -15,26 +15,28 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.0** (Build 139) | [⬇️ Baixar OpenMoney-macOS-2.5.0.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.0.zip) | ~12 MB | 18/11/2026 |
-| 🪟 **Windows** | **v2.5.0** (Build 136) | [⬇️ Baixar OpenMoney-Windows-2.5.0.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.0.zip) | ~13 MB | 17/11/2026 |
-| 🌐 **Web** | **v2.5.0** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 18/11/2026 |
+| 🍏 **macOS** | **v2.5.1** (Build 140) | [⬇️ Baixar OpenMoney-macOS-2.5.1.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.1.zip) | ~12 MB | 19/11/2026 |
+| 🪟 **Windows** | **v2.5.0** (Build 139) | [⬇️ Baixar OpenMoney-Windows-2.5.0.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.0.zip) | ~13 MB | 18/11/2026 |
+| 🌐 **Web** | **v2.5.1** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 19/11/2026 |
 
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
-  ```
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🚀 Instalador do OpenMoney para macOS              
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 Consultando versão mais recente...
+📦 Baixando OpenMoney v2.5.0...
+📂 Instalando em /Applications...
+
+✅ OpenMoney v2.5.0 instalado com sucesso!
+🚀 Abrindo aplicativo...
 
 - **Windows** (PowerShell):
-  ```powershell
-  irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
-  ```
+  
 
 - **Windows** (Prompt / CMD):
-  ```cmd
-  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.bat -o install.bat && install.bat
-  ```
+  
 
 ---
 <!-- LATEST_DOWNLOADS_END -->

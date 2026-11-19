@@ -689,6 +689,14 @@ class MoneyStore extends ChangeNotifier {
       _defaultDbFilePath = '$_appSupportDirPath${sep}openmoney.json';
       return;
     }
+    // Salvaguarda: em ambiente de testes automatizados (flutter test), nunca utilizar o Application Support real do usuário!
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      final testDir = '${Directory.systemTemp.path}${sep}OpenMoney_Test_Support';
+      _appSupportDirPath = testDir;
+      _configFilePath = '$_appSupportDirPath${sep}config.json';
+      _defaultDbFilePath = '$_appSupportDirPath${sep}openmoney.json';
+      return;
+    }
     String baseDir;
     if (Platform.isWindows) {
       baseDir = Platform.environment['APPDATA'] ??

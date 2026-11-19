@@ -30,6 +30,16 @@ String _getAppSupportDir() {
     }
     return dir.path;
   }
+  if (Platform.environment.containsKey('FLUTTER_TEST')) {
+    final dir = Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}OpenMoney_Test_Support');
+    if (!dir.existsSync()) {
+      try {
+        dir.createSync(recursive: true);
+      } catch (_) {}
+    }
+    return dir.path;
+  }
   final sep = Platform.pathSeparator;
   String baseDir;
   if (Platform.isWindows) {

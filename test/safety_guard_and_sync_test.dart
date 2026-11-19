@@ -99,10 +99,11 @@ void main() {
 
   group('StorageMode (Local vs. Cloud) Isolation', () {
     test('Alternância entre Modo Local e Modo Cloud preserva lastLocalDbPath', () async {
-      final tempFile = File('${Directory.systemTemp.path}/openmoney_test_db_${DateTime.now().millisecondsSinceEpoch}.json');
+      final tempDir = Directory.systemTemp.createTempSync('om_mode_test_');
+      final tempFile = File('${tempDir.path}/openmoney_test_db_${DateTime.now().millisecondsSinceEpoch}.json');
       tempFile.writeAsStringSync(jsonEncode({'v': 7, 'accounts': [], 'txs': []}));
       try {
-        final store = MoneyStore(autoBoot: false);
+        final store = MoneyStore(autoBoot: false, appSupportDirOverride: tempDir.path);
         expect(store.storageMode, 'local');
         expect(store.isCloudMode, isFalse);
 
@@ -112,7 +113,7 @@ void main() {
         expect(store.dbPath, tempFile.path);
       } finally {
         try {
-          tempFile.deleteSync();
+          tempDir.deleteSync(recursive: true);
         } catch (_) {}
       }
     });

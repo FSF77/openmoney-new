@@ -16,6 +16,7 @@ Future<void> showTransactionCreateModal(
   String? initialCategory,
   String? initialMemo,
   bool? initialIsExpense,
+  String? initialTxType,
   String? shortcutRawAccountName,
   bool fromShortcut = false,
 }) async {
@@ -30,6 +31,7 @@ Future<void> showTransactionCreateModal(
       initialCategory: initialCategory,
       initialMemo: initialMemo,
       initialIsExpense: initialIsExpense,
+      initialTxType: initialTxType,
       shortcutRawAccountName: shortcutRawAccountName,
       fromShortcut: fromShortcut,
     ),
@@ -1179,6 +1181,7 @@ class _TransactionCreateDialog extends StatefulWidget {
   final String? initialCategory;
   final String? initialMemo;
   final bool? initialIsExpense;
+  final String? initialTxType;
   final String? shortcutRawAccountName;
   final bool fromShortcut;
 
@@ -1191,6 +1194,7 @@ class _TransactionCreateDialog extends StatefulWidget {
     this.initialCategory,
     this.initialMemo,
     this.initialIsExpense,
+    this.initialTxType,
     this.shortcutRawAccountName,
     this.fromShortcut = false,
   });
@@ -1254,10 +1258,33 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     );
 
     final initialCat = widget.initialCategory?.trim() ?? '';
-    if (initialCat.startsWith('xfer:')) {
+    if (widget.initialTxType == 'transfer' || initialCat.startsWith('xfer:')) {
       _txType = 'transfer';
       _isExpense = true;
-      _catSelection = initialCat;
+      if (initialCat.startsWith('xfer:')) {
+        _catSelection = initialCat;
+      } else {
+        final others = widget.store.transferDestinationAccounts(excludeId: _accId);
+        _catSelection = others.isNotEmpty ? 'xfer:${others.first.id}' : '';
+      }
+    } else if (widget.initialTxType == 'income') {
+      _isExpense = false;
+      _txType = 'income';
+      final catPaths = widget.store.allCategoryPaths('Receita');
+      if (initialCat.isNotEmpty) {
+        _catSelection = initialCat;
+      } else {
+        _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+      }
+    } else if (widget.initialTxType == 'expense') {
+      _isExpense = true;
+      _txType = 'expense';
+      final catPaths = widget.store.allCategoryPaths('Despesa');
+      if (initialCat.isNotEmpty) {
+        _catSelection = initialCat;
+      } else {
+        _catSelection = catPaths.isNotEmpty ? catPaths.first : '';
+      }
     } else {
       _isExpense = widget.initialIsExpense ?? true;
       _txType = _isExpense ? 'expense' : 'income';
@@ -1270,7 +1297,11 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
       }
     }
 
-    if (initialPayeeText.isNotEmpty) {
+    if (_txType == 'transfer' && initialPayeeText.isEmpty) {
+      _payeeCtrl.text = 'Transferência';
+    }
+
+    if (_txType != 'transfer' && initialPayeeText.isNotEmpty) {
       _suggestions = widget.store.payeeSuggestions(initialPayeeText);
     }
 
@@ -1372,6 +1403,12 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   }
 
   void _onPayeeChanged(String val) {
+    if (_txType == 'transfer') {
+      setState(() {
+        _suggestions = [];
+      });
+      return;
+    }
     final clean = val.trim();
     final list = widget.store.payeeSuggestions(val);
     final match = widget.store.lastCategoryAndType(clean);
@@ -1665,6 +1702,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     setState(() {
                       _txType = s.first;
                       if (_txType == 'transfer') {
+                        _payeeCtrl.text = 'Transferência';
+                        _suggestions = [];
                         if (_mode == 'installment') _mode = 'single';
                         final others = widget.store
                             .transferDestinationAccounts(excludeId: _accId);
@@ -1677,6 +1716,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           }
                         }
                       } else {
+                        if (_payeeCtrl.text == 'Transferência') {
+                          _payeeCtrl.clear();
+                        }
                         _isExpense = _txType == 'expense';
                         final paths = widget.store.allCategoryPaths(
                           _isExpense ? 'Despesa' : 'Receita',

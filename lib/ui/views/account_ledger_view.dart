@@ -437,7 +437,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           ],
                         ),
                       ),
-                      if (!acc.isInactive) ...[
+                      if (!acc.isInactive && widget.store.showInlineTransactionEntry) ...[
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
@@ -450,7 +450,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              (widget.store.showInlineTransactionEntry && _mobileShowQuickEntry)
+                              _mobileShowQuickEntry
                                   ? Icons.close
                                   : Icons.add,
                               size: 16,
@@ -458,16 +458,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             ),
                           ),
                           onPressed: () {
-                            if (!widget.store.showInlineTransactionEntry) {
-                              showTransactionCreateModal(
-                                context,
-                                widget.store,
-                                initialAccountId: acc.id,
-                              );
-                            } else {
-                              setState(() =>
-                                  _mobileShowQuickEntry = !_mobileShowQuickEntry);
-                            }
+                            setState(() =>
+                                _mobileShowQuickEntry = !_mobileShowQuickEntry);
                           },
                         ),
                         const SizedBox(width: 4),
@@ -484,6 +476,71 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           editingAccount: acc,
                         ),
                       ),
+                      if (!acc.isInactive && !widget.store.showInlineTransactionEntry) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          tooltip: 'Nova Despesa',
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.arrow_downward_rounded, size: 15, color: Colors.redAccent),
+                          ),
+                          onPressed: () => showTransactionCreateModal(
+                            context,
+                            widget.store,
+                            initialAccountId: acc.id,
+                            initialTxType: 'expense',
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          tooltip: 'Nova Receita',
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.arrow_upward_rounded, size: 15, color: Colors.green),
+                          ),
+                          onPressed: () => showTransactionCreateModal(
+                            context,
+                            widget.store,
+                            initialAccountId: acc.id,
+                            initialTxType: 'income',
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          tooltip: 'Nova Transferência',
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: colors.accent.withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.swap_horiz_rounded, size: 15, color: colors.accent),
+                          ),
+                          onPressed: () => showTransactionCreateModal(
+                            context,
+                            widget.store,
+                            initialAccountId: acc.id,
+                            initialTxType: 'transfer',
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 4),
                       IconButton(
                         visualDensity: VisualDensity.compact,
@@ -951,26 +1008,6 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                     ),
                                   );
                                 }),
-                              if (!widget.store.showInlineTransactionEntry && !acc.isInactive)
-                                IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                  tooltip: 'Novo Lançamento nesta conta',
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: colors.accent.withValues(alpha: 0.16),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(Icons.add, size: 16, color: colors.accent),
-                                  ),
-                                  onPressed: () => showTransactionCreateModal(
-                                    context,
-                                    widget.store,
-                                    initialAccountId: acc.id,
-                                  ),
-                                ),
                               IconButton(
                                 tooltip: 'Editar Conta',
                                 icon: const Icon(Icons.settings_outlined,
@@ -981,6 +1018,71 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                                   editingAccount: acc,
                                 ),
                               ),
+                              if (!widget.store.showInlineTransactionEntry && !acc.isInactive) ...[
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  tooltip: 'Nova Despesa',
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent.withValues(alpha: 0.16),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.arrow_downward_rounded, size: 15, color: Colors.redAccent),
+                                  ),
+                                  onPressed: () => showTransactionCreateModal(
+                                    context,
+                                    widget.store,
+                                    initialAccountId: acc.id,
+                                    initialTxType: 'expense',
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  tooltip: 'Nova Receita',
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(alpha: 0.16),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.arrow_upward_rounded, size: 15, color: Colors.green),
+                                  ),
+                                  onPressed: () => showTransactionCreateModal(
+                                    context,
+                                    widget.store,
+                                    initialAccountId: acc.id,
+                                    initialTxType: 'income',
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  tooltip: 'Nova Transferência',
+                                  icon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: colors.accent.withValues(alpha: 0.16),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(Icons.swap_horiz_rounded, size: 15, color: colors.accent),
+                                  ),
+                                  onPressed: () => showTransactionCreateModal(
+                                    context,
+                                    widget.store,
+                                    initialAccountId: acc.id,
+                                    initialTxType: 'transfer',
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],

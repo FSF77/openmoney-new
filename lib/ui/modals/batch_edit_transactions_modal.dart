@@ -51,9 +51,17 @@ class _BatchEditTransactionsModalState
   void initState() {
     super.initState();
     final store = widget.store;
-    final cats = store.allCatNames();
-    if (cats.isNotEmpty) {
-      _selectedCategory = cats.first;
+    final catOpts = [
+      ...store.allCategoryOptions('Despesa'),
+      ...store.allCategoryOptions('Receita'),
+    ];
+    if (catOpts.isNotEmpty) {
+      _selectedCategory = catOpts.first.value;
+    } else {
+      final cats = store.allCatNames();
+      if (cats.isNotEmpty) {
+        _selectedCategory = cats.first;
+      }
     }
     final accs = store.db.accounts.where((a) => a.isInactive != true).toList();
     if (accs.isNotEmpty) {
@@ -203,7 +211,25 @@ class _BatchEditTransactionsModalState
     final c = OpenMoneyColors(isDark);
     final isMobile = MediaQuery.sizeOf(context).width < 640;
 
-    final categories = store.allCatNames();
+    final seenCats = <String>{};
+    final catOptions = <({String label, String value})>[];
+    for (final opt in [
+      ...store.allCategoryOptions('Despesa'),
+      ...store.allCategoryOptions('Receita'),
+    ]) {
+      if (seenCats.add(opt.value)) {
+        catOptions.add(opt);
+      }
+    }
+    if (_selectedCategory.isNotEmpty && !seenCats.contains(_selectedCategory)) {
+      catOptions.insert(
+        0,
+        (
+          label: _selectedCategory.replaceAll(':', ' › '),
+          value: _selectedCategory,
+        ),
+      );
+    }
     final accounts = store.db.accounts;
 
     return Dialog(
@@ -291,9 +317,9 @@ class _BatchEditTransactionsModalState
                       title: 'Categoria',
                       subtitle: 'Não altera transferências entre contas',
                       child: DropdownButtonFormField<String>(
-                        initialValue: categories.contains(_selectedCategory)
+                        value: catOptions.any((c) => c.value == _selectedCategory)
                             ? _selectedCategory
-                            : (categories.isNotEmpty ? categories.first : null),
+                            : (catOptions.isNotEmpty ? catOptions.first.value : null),
                         isExpanded: true,
                         dropdownColor: c.surfaceCard,
                         style: TextStyle(fontSize: 13, color: c.textPrimary),
@@ -305,11 +331,11 @@ class _BatchEditTransactionsModalState
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        items: categories
-                            .map((cat) => DropdownMenuItem(
-                                  value: cat,
+                        items: catOptions
+                            .map((opt) => DropdownMenuItem<String>(
+                                  value: opt.value,
                                   child: Text(
-                                    cat.replaceAll(':', ' › '),
+                                    opt.label,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ))

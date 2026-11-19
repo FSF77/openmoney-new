@@ -17,6 +17,8 @@ import 'package:openmoney/ui/views/due_bills_view.dart';
 import 'package:openmoney/ui/views/installments_view.dart';
 import 'package:openmoney/ui/views/reports_view.dart';
 import 'package:openmoney/ui/modals/account_multi_select_filter.dart';
+import 'package:openmoney/ui/modals/account_modal.dart';
+import 'package:openmoney/ui/modals/batch_edit_transactions_modal.dart';
 import 'package:openmoney/ui/modals/csv_qif_modal.dart';
 import 'package:openmoney/ui/modals/transaction_modal.dart';
 
@@ -1903,5 +1905,155 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
 
     expect(find.text('Fatura do Cartão (Competência)'), findsOneWidget);
     expect(find.textContaining('[Padrão]'), findsOneWidget);
+  });
+
+  testWidgets(
+      '39. Batch edit category indentation, quick action buttons on hidden inline bar, transfer payee auto-fill, and bank logo picker search',
+      (WidgetTester tester) async {
+    final store = MoneyStore(autoBoot: false);
+    store.db = Database(
+      v: 7,
+      accounts: [
+        Account(
+          id: 'acc1',
+          name: 'Conta Corrente',
+          type: 'Corrente',
+          opening: 100000,
+        ),
+        Account(
+          id: 'acc2',
+          name: 'Poupança',
+          type: 'Poupança',
+          opening: 50000,
+        ),
+      ],
+      txs: [
+        Transaction(
+          id: 't1',
+          acc: 'acc1',
+          date: '2026-11-01',
+          payee: 'Mercado',
+          cat: 'Alimentação:Mercado',
+          amt: -5000,
+        ),
+      ],
+      cats: [
+        CategoryItem(
+          name: 'Alimentação',
+          type: 'Despesa',
+        ),
+        CategoryItem(
+          name: 'Mercado',
+          parent: 'Alimentação',
+          type: 'Despesa',
+        ),
+        CategoryItem(
+          name: 'Restaurante',
+          parent: 'Alimentação',
+          type: 'Despesa',
+        ),
+        CategoryItem(
+          name: 'Salário',
+          type: 'Receita',
+        ),
+      ],
+    );
+
+    // 1. Edição em Lote: dropdown de categoria mostra subcategorias indentadas com "↳"
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: BatchEditTransactionsModal(
+          store: store,
+          selectedIds: const {'t1'},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Habilita a seção de categoria
+    await tester.tap(find.text('Categoria'));
+    await tester.pumpAndSettle();
+
+    // Abre o dropdown de categorias
+    final catDropdown = find.byType(DropdownButtonFormField<String>).first;
+    await tester.tap(catDropdown);
+    await tester.pumpAndSettle();
+
+    // Verifica que existe opção de subcategoria indentada
+    expect(find.textContaining('↳ Mercado'), findsWidgets);
+    expect(find.textContaining('↳ Restaurante'), findsWidgets);
+    // Fecha o dropdown selecionando Restaurante
+    await tester.tap(find.textContaining('↳ Restaurante').last);
+    await tester.pumpAndSettle();
+
+    // 2. Extrato: quando showInlineTransactionEntry = false, exibe os 3 botões de ação rápida após Editar Conta
+    store.showInlineTransactionEntry = false;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccountLedgerView(
+          store: store,
+          account: store.db.accounts.first,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Nova Despesa'), findsOneWidget);
+    expect(find.byTooltip('Nova Receita'), findsOneWidget);
+    expect(find.byTooltip('Nova Transferência'), findsOneWidget);
+
+    // 3. Ao abrir com Nova Transferência, preenche descrição com "Transferência" e não busca sugestões de histórico
+    await tester.tap(find.byTooltip('Nova Transferência'));
+    await tester.pumpAndSettle();
+
+    // Campo de descrição deve ter "Transferência"
+    expect(find.widgetWithText(TextField, 'Transferência'), findsOneWidget);
+
+    // Ao digitar no campo de descrição enquanto está em transferência, não abre histórico
+    await tester.enterText(find.widgetWithText(TextField, 'Transferência'), 'Transferência Pix');
+    await tester.pumpAndSettle();
+    expect(find.text('Histórico recente'), findsNothing);
+
+    // Fecha o modal de novo lançamento
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    // 4. Edição de conta: Busca no seletor de logos não reseta e mantém o filtro
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => showAccountModal(
+              ctx,
+              store,
+              editingAccount: store.db.accounts.first,
+            ),
+            child: const Text('Abrir Modal'),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abrir Modal'));
+    await tester.pumpAndSettle();
+
+    // Clica para escolher/trocar o logo
+    await tester.tap(find.byIcon(Icons.account_balance));
+    await tester.pumpAndSettle();
+
+    // Modal de logos aberto
+    expect(find.text('Escolher Logo do Banco'), findsOneWidget);
+    final searchInput = find.widgetWithText(TextField, 'Buscar banco...');
+    expect(searchInput, findsOneWidget);
+
+    // Digita "Nubank" na busca
+    await tester.enterText(searchInput, 'Nubank');
+    await tester.pumpAndSettle();
+
+    // Verifica que mantém o texto pesquisado e exibe o logo do Nubank
+    expect(find.widgetWithText(TextField, 'Nubank'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'Nubank'), findsOneWidget);
+    expect(find.byIcon(Icons.clear), findsOneWidget);
   });
 }
