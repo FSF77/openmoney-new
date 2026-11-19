@@ -1,7 +1,7 @@
 # OpenMoney
 
 <p align="center">
-  <strong>Aplicativo financeiro moderno, nativo e open source para Apple macOS.</strong>
+  <strong>Aplicativo financeiro moderno, nativo e open source para macOS, Windows e Web.</strong>
 </p>
 
 <p align="center">
@@ -10,17 +10,45 @@
 
 ---
 
+<!-- LATEST_DOWNLOADS_START -->
+## 📥 Downloads da Versão Oficial
+
+| Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
+| :--- | :--- | :--- | :--- | :--- |
+| 🍏 **macOS** | **v2.5.0** (Build 139) | [⬇️ Baixar OpenMoney-macOS-2.5.0.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.0.zip) | ~12 MB | 18/11/2026 |
+| 🪟 **Windows** | **v2.5.0** (Build 136) | [⬇️ Baixar OpenMoney-Windows-2.5.0.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.0.zip) | ~13 MB | 17/11/2026 |
+| 🌐 **Web** | **v2.5.0** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 18/11/2026 |
+
+### ⚡ Instalação Rápida via Terminal / PowerShell
+
+- **macOS** (Terminal):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
+  ```
+
+- **Windows** (PowerShell):
+  ```powershell
+  irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
+  ```
+
+- **Windows** (Prompt / CMD):
+  ```cmd
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.bat -o install.bat && install.bat
+  ```
+
+---
+<!-- LATEST_DOWNLOADS_END -->
+
 ## 🌟 Visão Geral
 
-O **OpenMoney** combina o poder de controle financeiro e o rigor contábil do clássico Microsoft Money 99 com as tecnologias mais modernas do ecossistema Apple (SwiftUI nativo). Seus dados pertencem exclusivamente a você: a base de dados é armazenada em um arquivo `openmoney.json` limpo e legível, sem dependência de servidores proprietários, cadastros externos ou telemetria.
+O **OpenMoney** combina o poder de controle financeiro e o rigor contábil do clássico Microsoft Money 99 com uma arquitetura multiplataforma moderna em **Flutter / Dart** e backend serverless **Cloudflare (Pages Functions, D1 e Durable Objects)**. Seus dados pertencem exclusivamente a você: a base de dados é armazenada em um arquivo `openmoney.json` limpo e legível, sem dependência obrigatória de servidores proprietários, cadastros externos ou telemetria.
 
 ### ✨ Principais Características
 
-- **💎 Design System Liquid Glass**: Interface moderna com efeito de vidro fosco translúcido (*glassmorphism* nativo com `.ultraThinMaterial`), iluminação ambiente, gradientes especulares nas bordas e cartões flutuantes para saldos e métricas.
-- **⚡ 100% Nativo & Ultrarrápido**: Desenvolvido em Swift + SwiftUI puro. O aplicativo compilado para macOS consome apenas ~2 MB em disco e inicia instantaneamente com mínimo uso de memória.
-- **📱 Multiplataforma (macOS, iOS e iPadOS)**: Código compartilhado e interfaces adaptadas com ergonomia para Desktop e Mobile.
-- **🔄 Modo Híbrido & Sync v2 em Tempo Real**: Alterne com 1 clique entre o **Modo Local** (arquivo `openmoney.json` no disco ou iCloud Drive) e o **Modo Online** (OpenMoney Cloud via Cloudflare D1/WebSockets com sincronização granular por registro, resolução automática e suporte a múltiplas contas salvas).
-- **🛡️ Soberania dos Dados & Backups Locais**: Mesmo no Modo Online, o app gera backups de segurança em `.zip` e JSON diretamente no disco rígido antes de qualquer sincronização destrutiva, além de manter backups diários automáticos na nuvem e travas invioláveis de *Anti-Wipe*.
+- **💎 Design System Liquid Glass & Flat Clean**: Interface moderna com efeito de vidro fosco translúcido (*glassmorphism*), iluminação ambiente, temas Claro/Escuro, **6 paletas de cor de destaque**, modo **Lista Diária** ou **Datagrid Contínua** e cartões flutuantes para saldos e métricas.
+- **⚡ Multiplataforma Nativo em Código Único (Flutter / Dart)**: Base única compilada nativamente para **macOS (`arm64`/`x64`)**, **Windows (`x64`)**, **Web PWA (`openmoney.app.br`)** e **Mobile (iOS/iPadOS e Android)**, iniciando instantaneamente com mínimo uso de memória.
+- **🔄 Modo Híbrido & Sync v2 em Tempo Real**: Alterne com 1 clique entre o **Modo Local** (arquivo `openmoney.json` no disco ou iCloud Drive) e o **Modo Online** (OpenMoney Cloud via Cloudflare Pages Functions, D1 e Durable Objects/WebSockets com sincronização granular por registro, criptografia `AES-256-GCM`, resolução automática e suporte a múltiplas contas salvas).
+- **🛡️ Soberania dos Dados & Backups Locais**: Mesmo no Modo Online, o app gera backups de segurança automáticos em `.zip` diretamente no disco rígido (até 4 snapshots diários com retenção mínima de 7+ dias), além de manter backups diários automáticos na nuvem e travas invioláveis de *Anti-Wipe* em 3 camadas.
 - **☁️ Sincronização Livre via Nuvem**: Escolha armazenar sua base local no **iCloud Drive**, **Dropbox**, **Google Drive**, **OneDrive** ou sincronizar em tempo real pelo OpenMoney Cloud.
 - **🔔 Central de Contas a Pagar & Receber**: Monitoramento ativo de lançamentos pendentes de conciliação com lembretes automáticos por janela temporal de vencimento (padrão 3 dias), badges no Dock/ícone e notificações nativas do sistema.
 - **📄 Impressão e Exportação em PDF A4 de Alta Fidelidade**: Emissão de Faturas de Cartão de Crédito e Extratos Mensais de Contas com layout otimizado, sem truncamento de textos, ícone de conciliação antes da data, notas em segunda linha, saldo acumulado por quebra de dia e valores em linha única.
@@ -300,52 +328,45 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 
 ## 🚀 Como Rodar e Compilar
 
-### 1. Compilação Nativa macOS (Script Automático)
+### 1. Execução em Modo de Desenvolvimento (Flutter)
 
-Para compilar o aplicativo diretamente do terminal sem necessidade de abrir o Xcode:
-
-```bash
-# 1. Torne o script executável (caso necessário)
-chmod +x ./build-app.sh
-
-# 2. Compile e gere o bundle nativo OpenMoney.app
-./build-app.sh
-
-# 3. Abra o aplicativo gerado
-open OpenMoney.app
-```
-
-O script `./build-app.sh`:
-- Gera automaticamente os ícones de alta resolução em formatos `.icns` e `.png` (1024x1024).
-- Compila de forma otimizada (`-O`) visando arquitetura Apple Silicon (`arm64`) nativa.
-- Gera o bundle `OpenMoney.app` assinado *ad-hoc* pronto para execução (compilação e assinatura são feitas em `/tmp` para evitar atributos do Finder/iCloud que invalidam a assinatura).
-- Gera o pacote de distribuição `dist/OpenMoney-<versão>.zip` e o feed `dist/version.json`.
-- Aceita parâmetros: `./build-app.sh [VERSÃO] ["Notas"] [--publish]`. Com `--publish`, envia a nova versão ao repositório público de releases (veja a seção *Atualização Automática pela Internet*).
-
-### 2. Compilação para iOS / iPadOS (Script Automático)
-
-Para gerar os pacotes do app para iOS (Simulador ou Dispositivo / `.ipa`):
+Com o SDK do Flutter instalado:
 
 ```bash
-./build-ios.sh
+# 1. Baixe as dependências do projeto
+flutter pub get
+
+# 2. Rode os testes e a análise estática
+flutter analyze
+flutter test
+
+# 3. Execute na plataforma desejada
+flutter run -d macos
+flutter run -d windows
+flutter run -d chrome
 ```
 
-O script oferece 3 opções:
-1. **Simulador iOS**: Gera `build/ios/OpenMoney-Simulator.app` (basta arrastar para a janela do simulador para instalar).
-2. **Dispositivo iOS (.ipa)**: Compila o binário `arm64` nativo e empacota em `build/ios/OpenMoney.ipa` e `OpenMoney-Device.app`.
-3. **Instalação Direta**: Compila e instala diretamente no simulador que estiver aberto no momento.
-
-### 3. Abrir e Rodar no iPhone Físico via Xcode (macOS / iOS / iPadOS)
-
-Para instalar diretamente no seu iPhone conectado ao Mac:
+### 2. Compilação e Publicação Oficial para macOS & Web
 
 ```bash
-open OpenMoney.xcodeproj
+./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]
 ```
 
-1. No topo do Xcode, escolha o target **OpenMoney** e selecione o seu **iPhone** (ou um Simulador).
-2. Na aba **Signing & Capabilities**, selecione a sua conta Apple (*Team*).
-3. Pressione **Cmd + R** (ou o botão Play ▶) para compilar e instalar no iPhone.
+O script `./scripts/publish_release_macos.sh`:
+- Incrementa automaticamente o *build number* no `pubspec.yaml` e sincroniza `lib/services/update_service.dart`.
+- Compila o aplicativo nativo macOS em modo Release (`flutter build macos --release`) e a versão Web (`flutter build web --release --no-tree-shake-icons`) em `web-dist/` para deploy contínuo no Cloudflare Pages (`openmoney.app.br`).
+- Empacota `downloads/macos/OpenMoney-macOS-<versão>.zip`, calcula `SHA-256`, atualiza `version.json`, `install.sh` e a tabela de downloads do `README.md`.
+- Realiza commit, cria a tag `v<versão>` e envia para `origin main` no repositório `FSF77/openmoney-new`.
+
+### 3. Compilação e Publicação Encadeada para Windows
+
+Após publicar o release no macOS (que define versão, notas e build):
+
+```cmd
+scripts\publish_release_windows.bat
+```
+
+O script executa `git pull origin main`, compila `flutter build windows --release`, gera `downloads/windows/OpenMoney-Windows-<versão>.zip` com `SHA-256`, atualiza a chave `"windows"` no `version.json`, atualiza o `README.md` e envia o commit com a tag `v<versão>-windows`.
 
 ---
 
@@ -659,36 +680,45 @@ open OpenMoney.xcodeproj
   - Acesso direto pelo menu do sistema **Ajuda** ou pelo atalho `Cmd + ?` (`⌘?`).
   - Opções para abrir a janela de ajuda interativa, abrir o `README.md` no editor de texto externo e recarregar os dados do disco.
 - **Sincronização Dinâmica em Tempo Real**:
-  - O motor de ajuda (`HelpManager`) lê o arquivo `README.md` dinamicamente do disco em tempo de execução (checando diretório do projeto, recursos empacotados no bundle e fallback compilado `EMBEDDED_README`).
+  - O motor de ajuda (`HelpManager` em `lib/services/help_manager.dart`) lê o arquivo `README.md` dinamicamente do disco em tempo de execução no Desktop, fazendo fallback para o asset empacotado no bundle Flutter (`pubspec.yaml`) e para o resumo embutido (`_fallbackReadme`).
   - Qualquer alteração realizada no `README.md` reflete imediatamente na tela de ajuda através do botão "Recarregar", sem necessidade de reiniciar o aplicativo.
-  - A rotina de compilação (`build-app.sh` e `build-ios.sh`) sincroniza automaticamente o `README.md` com o código-fonte (`HelpContent.swift`) e a pasta de recursos do aplicativo antes de cada build.
 - **Visualizador Estruturado com Busca e Blocos Ricos**:
   - Navegação lateral por tópicos indexados (Visão Geral, Regras de Negócio, Funcionalidades, Como Compilar e Manual Completo).
   - Campo de busca instantânea filtrando tópicos e regras.
   - Renderização rica em Liquid Glass com suporte a cabeçalhos, marcadores, listas numeradas, citações e blocos de código com botão de cópia com 1 clique.
   - Acessível também pelo botão `?` no cabeçalho da barra lateral no macOS e pela aba **Base** no iOS/iPadOS.
 
-### 16. Atualização Automática pela Internet (macOS)
+### 16. Atualização Automática e Instalação (macOS & Windows)
 - **Verificação ao Abrir e Sob Demanda**:
   - Ao iniciar, o app consulta silenciosamente se há uma versão mais nova; se não houver, nada é exibido.
   - Manualmente, use o menu **OpenMoney > Buscar Atualizações...** ou **Ajuda > Buscar Atualizações...**.
 - **Janela de Atualização Disponível**:
   - Mostra versão atual, nova versão, data e as notas da versão, com os botões **Instalar e Reiniciar**, **Lembrar Mais Tarde** e **Ver no GitHub**.
-  - O download exibe barra de progresso; ao concluir, o app descompacta o pacote, substitui o `OpenMoney.app`, fecha e reabre sozinho já atualizado.
+  - O download exibe barra de progresso; ao concluir, o app descompacta o pacote, substitui o executável, fecha e reabre sozinho já atualizado.
 - **Distribuição**:
-  - O código-fonte fica no repositório privado; os pacotes ficam no repositório público [`FSF77/openmoney-releases`](https://github.com/FSF77/openmoney-releases), no formato `downloads/OpenMoney-<versão>.zip`, junto com o feed `version.json`.
-  - A consulta ignora o cache do CDN do GitHub (usa o commit mais recente do repositório), detectando novas versões imediatamente após a publicação.
+  - Os pacotes oficiais e feeds ficam no repositório público oficial [`FSF77/openmoney-new`](https://github.com/FSF77/openmoney-new), nas pastas `downloads/macos/` e `downloads/windows/`, junto com o feed `version.json` e a seção de downloads no `README.md`.
+  - A consulta ignora o cache de CDN, detectando novas versões imediatamente após a publicação.
 - **Instalação Inicial ou Manual**:
-  - Instalação/atualização com um comando no Terminal:
+  - **macOS** (Terminal):
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-releases/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
+    ```
+  - **Windows** (PowerShell):
+    ```powershell
+    irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
     ```
   - Se o macOS exibir *"OpenMoney está danificado e não pode ser aberto"* após baixar o `.zip` pelo navegador (o app não é notarizado pela Apple), execute uma única vez: `xattr -cr /Applications/OpenMoney.app`. As atualizações feitas pelo próprio app não exibem esse aviso.
-- **Publicar uma Nova Versão (desenvolvedor)**:
-  ```bash
-  ./build-app.sh 1.0.29 "Notas da versão" --publish
-  ```
-  O script atualiza `VERSION` e `BUILD_NUMBER`, compila e assina o app, gera o `.zip` e o `version.json` e publica tudo no repositório de releases.
+- **Publicar uma Nova Versão (Fluxo Automatizado)**:
+  - **Passo 1 (macOS & Web)**:
+    ```bash
+    ./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]
+    ```
+    O script incrementa o build no `pubspec.yaml`, compila o app macOS e Web, gera o `.zip`, atualiza `version.json`, `install.sh` e atualiza automaticamente os links de download no `README.md` do GitHub.
+  - **Passo 2 (Windows)**:
+    ```cmd
+    scripts\publish_release_windows.bat
+    ```
+    O script sincroniza com `git pull origin main`, compila o binário Windows, gera o `.zip`, atualiza a chave `"windows"` no `version.json`, atualiza automaticamente os links de download no `README.md` e faz push com tag `v${VERSION}-windows`.
 
 ### 17. OpenMoney Coletor Mobile (PWA) e Rotina de Entrada Rápida na Rua
 - **Acesso pelo Navegador do Smartphone**:
@@ -743,7 +773,7 @@ open OpenMoney.xcodeproj
 - **Otimização do Cabeçalho Mobile em Lançamentos Gerais**: Botão de alternância (`Icons.tune` / `Icons.expand_less`) ao lado do botão `+` no cabeçalho mobile (idêntico à tela de extrato), permitindo recolher todos os filtros e ferramentas secundárias e manter visíveis apenas o resumo de KPIs e o seletor temporal (Dia/Mês/Ano), liberando espaço total para a listagem dos lançamentos, com indicador compacto de filtros ativos e atalho "Limpar".
 
 ### 22. Blindagem de Cache Cloud, Inicialização Segura e Proteção Anti-Wipe (>10MB)
-- **Isolamento Atômico de Cache por Conta**: No Desktop e Mobile, os snapshots offline da nuvem são gravados em arquivos individuais por usuário (`cloud_cache/` no Flutter e `cloud_sync/` no Swift), separados do registro leve de metadados (`sync_kv_store.json`), utilizando gravação atômica por arquivo temporário (`.tmp` + `rename`) para impedir qualquer corrupção durante atualizações do aplicativo.
+- **Isolamento Atômico de Cache por Conta**: No Desktop e Mobile, os snapshots offline da nuvem são gravados em arquivos individuais por usuário (`cloud_cache/`), separados do registro leve de metadados (`sync_kv_store.json`), utilizando gravação atômica por arquivo temporário (`.tmp` + `rename`) para impedir qualquer corrupção durante atualizações do aplicativo.
 - **Inicialização Síncrona & Tela de Carregamento Cloud**: O aplicativo inicializa sessão e cache sincronamente antes do primeiro frame e exibe obrigatoriamente a tela de sincronização Cloud enquanto o snapshot remoto não for carregado e validado (`!hasLoadedRemoteState`), eliminando exibições zeradas transitórias em bases extensas (`>10MB`).
 - **Descarte Automático de Cache Envenenado e Guarda Anti-Wipe em 3 Camadas**:
   - Caches locais vazios (`txs.isEmpty` e conta padrão `'a1'` zerada) para contas com `revision > 1` são rejeitados e limpos no `boot()`, forçando download completo com até **3 retentativas**.
@@ -756,68 +786,78 @@ open OpenMoney.xcodeproj
 ## 📁 Estrutura do Projeto
 
 ```text
-ProjOpenMoney/
-├── Package.swift                    # Configuração SPM (macOS 14+, iOS 17+)
-├── build-app.sh                     # Script de compilação autônoma do OpenMoney.app (macOS)
-├── build-ios.sh                     # Script de compilação do OpenMoney para iOS / iPadOS
-├── README.md                        # Documentação completa e regras de negócio
-├── VERSION / BUILD_NUMBER           # Versão e build atuais (atualizados pelo build-app.sh)
-├── Sources/
-│   └── OpenMoney/
-│       ├── OpenMoneyApp.swift       # Entry point do app (@main), menu bar e ciclo de vida
-│       ├── Models.swift             # Modelos de dados (Account, Transaction, Database) e helpers
-│       ├── GzipHelper.swift         # Compressão nativa zlib (RFC 1952) e gerador de .zip em Swift puro
-│       ├── CloudSyncService.swift   # Cliente REST Cloudflare (login, registro 2FA, backups na nuvem, D1 logs)
-│       ├── SyncEngine.swift         # Motor Sync v2 granular por registro, outbox offline e WebSocket realtime
-│       ├── BackupManager.swift      # Gestão de backups em ZIP, retenção diária de 7 dias e expurgo
-│       ├── NotificationManager.swift # Gerenciador de notificações locais do sistema (macOS/iOS) e badges
-│       ├── ImportersExporters.swift # Parsers de CSV, QIF (Money 99) e Coletor Mobile (inbox)
-│       ├── Store.swift              # MoneyStore (gerenciamento de estado híbrido Local/Cloud, I/O, regras de negócio)
-│       ├── Views.swift              # Componentes de UI Desktop macOS, barra lateral e alternador Local/Online
-│       ├── DashboardOverviewView.swift # Cockpit Dashboard Geral Executivo com cards responsivos
-│       ├── SettingsView.swift       # Central de Ajustes e Personalização de Parâmetros
-│       ├── CloudAccountSheet.swift  # Gerenciador de conta Cloud, alternância de contas e bases locais
-│       ├── WelcomeDatabaseView.swift # Tela de boas-vindas com seleção Local vs Cloud (Sync v2)
-│       ├── iOSViews.swift           # Componentes adaptados para iPhone e iPad (aba Base com Cloud Sync)
-│       ├── UpdateManager.swift      # Atualização automática pela internet (feed, download, instalação)
-│       ├── Resources/               # Ícones (.icns, .png)
-│       └── Assets.xcassets/         # Asset Catalog com ícones para todas as resoluções
-└── scripts/
-    ├── embed-readme.py              # Sincroniza README.md na ajuda interna do aplicativo
-    ├── generate-icon.swift          # Utilitário Swift para renderização procedural do ícone
-    └── publish-release.sh           # Publica o .zip e o version.json no repositório de releases
+OpenMoneyFlutter/
+├── pubspec.yaml                     # Dependências Dart/Flutter, assets e versão+build
+├── wrangler.toml                    # Configuração Cloudflare Pages & D1 Database
+├── version.json                     # Feed oficial de versão e hashes SHA-256 (macOS, Windows, Web)
+├── install.sh / install.ps1 / .bat  # Instaladores rápidos via Terminal / PowerShell / CMD
+├── lib/
+│   ├── main.dart                    # Entry point, atalhos de URL, tema e bootstrap síncrono
+│   ├── models/
+│   │   ├── openmoney_models.dart    # Modelos canônicos Schema v: 7, faturas (ik) e serialização JSON
+│   │   └── prediction_models.dart   # Estruturas de controle e abatimento de previsões
+│   ├── store/
+│   │   └── money_store.dart         # MoneyStore (estado global híbrido Local/Cloud, índices O(1), regras contábeis)
+│   ├── services/
+│   │   ├── sync_engine.dart         # Motor Sync v2 granular por registro, outbox offline, WebSocket e Anti-Wipe
+│   │   ├── cloud_sync_service.dart  # Cliente REST Cloudflare (Auth 2FA, snapshots Gzip, backups na nuvem, logs D1)
+│   │   ├── cash_flow_engine.dart    # Motor matricial de Fluxo de Caixa (diário, mensal, trimestral, semestral, anual)
+│   │   ├── ofx_reconciliation_service.dart # Parser OFX 1.x/2.x e motor de conciliação bancária e de faturas
+│   │   ├── importers_exporters.dart # Importação/Exportação CSV (17 colunas), QIF (Money 99) e Coletor Mobile
+│   │   ├── backup_manager.dart      # Backups automáticos em ZIP (até 4 snapshots diários, retenção de 7+ dias)
+│   │   ├── pdf_report_generator.dart # Geração vetorial de Faturas, Extratos e Relatórios em PDF A4
+│   │   ├── currency_rate_service.dart # Cotações multi-moeda (AwesomeAPI + histórico PTAX Banco Central)
+│   │   ├── local_ocr_service.dart   # OCR nativo local (Apple Vision/PDFKit no macOS e Windows.Media.Ocr)
+│   │   ├── gemini_receipt_service.dart # Extração multimodal de comprovantes via Google Gemini Flash (BYOK)
+│   │   ├── audit_log_manager.dart   # Registro e sincronização de logs de auditoria
+│   │   ├── help_manager.dart        # Leitor e indexador dinâmico do README.md para a Ajuda integrada
+│   │   └── update_service.dart      # Auto-Update in-place com verificação SHA-256 para macOS e Windows
+│   └── ui/
+│       ├── app_shell.dart           # Shell responsivo Desktop/Web/Mobile, barra lateral, Mini Rail e menus
+│       ├── theme/                   # Design System Liquid Glass / Flat Clean e 6 paletas de destaque
+│       ├── views/                   # Telas principais (Dashboard, Extrato, Lançamentos, Fluxo de Caixa, Relatórios, etc.)
+│       ├── modals/                  # Modais de lançamento, conciliação OFX, ajustes, conta Cloud, edição em lote, etc.
+│       └── widgets/                 # Componentes visuais reutilizáveis
+├── functions/api/[[route]].js       # Backend Cloudflare Pages Functions (API REST, Auth, D1, Anti-Wipe Guard)
+├── cloudflare/sync-worker/          # Cloudflare Worker & Durable Object (UserSyncRoom WebSocket realtime)
+├── coletor/                         # OpenMoney Coletor Mobile PWA (entrada rápida offline + scanner OCR)
+├── docs/                            # Documentação oficial (ADRs 001-029, Arquitetura, Dicionário de Dados e Manuais)
+├── scripts/                         # Scripts automatizados de build e publicação (macOS, Windows e Web)
+└── test/                            # Suíte de testes automatizados de regras contábeis e sincronização
 ```
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
-- **Linguagem**: Swift 5.9+
-- **Interface**: SwiftUI 5+ (materiais translúcidos nativos, escala responsiva, animações contínuas)
-- **Frameworks Apple**: `SwiftUI`, `AppKit` (macOS), `UIKit` (iOS), `UniformTypeIdentifiers`
-- **Armazenamento e Performance**: JSON Schema estruturado e atômico com indexação em memória $O(1)$, salvamento assíncrono em background (debounced, sem travamento de UI em bases com mais de 30.000 lançamentos) e importadores em lote otimizados via Sets hash.
+- **Framework & Linguagem**: Flutter 3.x / Dart 3.x (Compilação nativa `arm64`/`x64` para macOS e Windows, Web PWA e Mobile iOS/Android).
+- **Design System**: Liquid Glass & Flat Clean adaptativo com 6 paletas de destaque, modo claro/escuro e suporte a Lista Diária e Datagrid Contínua.
+- **Cloud & Sincronização em Tempo Real (Sync v2)**: Cloudflare Pages Functions, Cloudflare D1 (SQLite distribuído), Cloudflare Durable Objects (WebSockets em tempo real), criptografia `AES-256-GCM` por usuário (`HKDF-SHA256`) e compressão binária Gzip.
+- **Armazenamento Local e Performance**: JSON Schema `v: 7` atômico com indexação em memória $O(1)$, salvamento assíncrono com *debounce* de 350ms e cache isolado `cloud_cache/`.
 
 ---
 
-## 📚 Documentação Oficial do Ecossistema (`OpenMoneyDocs`)
+## 📚 Documentação Oficial do Ecossistema (`docs/`)
 
-### Arquitetura e Dados (`architecture/`)
+### Arquitetura e Dados (`docs/architecture/`)
 - [Compilado de Engenharia, Regras de Negócio e Funcionalidades](architecture/compilado-do-sistema.md)
-- [Diagrama Completo da Arquitetura e Regras de Negócio (Flutter)](architecture/diagrama-arquitetura-flutter.md)
+- [Diagrama Completo da Arquitetura OpenMoney Flutter](architecture/diagrama-arquitetura-flutter.md)
 - [Dicionário de Dados Completo (Schema v: 7)](architecture/dicionario-de-dados.md)
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](architecture/relatorio-comparacao-paridade.md)
 
-### Guias e Manuais do Usuário (`manual/`)
+### Guias e Manuais do Usuário (`docs/manual/`)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](manual/guia-boas-vindas.md)
+- [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](manual/guia-conciliacao-bancaria-ofx.md)
 - [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](manual/guia-dashboard-e-personalizacao.md)
 - [Guia do Usuário: Filtros Avançados e Edição em Massa (Lote)](manual/guia-edicao-em-massa.md)
 - [Guia do Usuário: Gestão e Acompanhamento de Previsões Orçamentárias](manual/guia-gestao-de-previsoes.md)
+- [Guia do Usuário: Lançamentos Parcelados e Transferências Recorrentes](manual/guia-lancamentos-e-transferencias-recorrentes.md)
 - [Guia do Usuário: Limite de Gastos e Alerta Preventivo de Orçamento](manual/guia-limite-de-gastos-e-alertas.md)
 - [Guia do Usuário: Contas Multi-Moeda, Câmbio e Cotações Históricas](manual/guia-multi-moeda-e-cambio.md)
 - [Guia do Usuário: Sincronização em Tempo Real (OpenMoney Cloud — Sync v2)](manual/guia-sincronizacao-cloud.md)
 - [Guia do Usuário: Sistema de Tags (`#tags`)](manual/guia-tags.md)
 
-### Decisões de Arquitetura (`adr/`)
+### Decisões de Arquitetura (`docs/adr/`)
 - [ADR 001: Adoção do Schema v: 7 como Padrão Unificado Multi-Stack](adr/001-schema-v7-adoption.md)
 - [ADR 002: Histórico de Versões do Schema e Alinhamento de Versão Padrão](adr/002-schema-default-version.md)
 - [ADR 003: Estratégia e Implementação da Vigência de Fatura (`isVigenteInvoice`)](adr/003-is-vigente-invoice-strategy.md)
@@ -843,6 +883,10 @@ ProjOpenMoney/
 - [ADR 023: Sistema de Tags nos Lançamentos, Filtros Avançados e Edição em Massa](adr/023-tags-and-batch-transaction-editing.md)
 - [ADR 024: Aperfeiçoamento do Modal de Detalhe de Lançamentos (Drill-Down), Filtro de Conciliação e Limpeza Visual](adr/024-drill-down-reconciliation-filter-and-ui-cleanup.md)
 - [ADR 025: Persistência Local do Key-Value Store de Sincronização (sync_kv_store.json) e Paridade Multiplataforma](adr/025-sync-kv-store-local-persistence.md)
+- [ADR 026: Paridade de Transferências Recorrentes Automáticas](adr/026-recurring-transfers-parity.md)
+- [ADR 027: Conciliação Bancária e de Faturas de Cartão via Arquivo OFX](adr/027-ofx-bank-and-invoice-reconciliation.md)
+- [ADR 028: Seletor de Fatura na Barra de Inserção Rápida de Cartão de Crédito](adr/028-quick-entry-invoice-selector-parity.md)
+- [ADR 029: Descontinuação da Stack Swift e Unificação Oficial na Stack Flutter Multiplataforma](adr/029-swift-deprecation-and-flutter-single-stack-unification.md)
 
 ---
 

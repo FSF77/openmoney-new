@@ -1,6 +1,6 @@
 # Guia do Usuário: Gestão e Acompanhamento de Previsões Orçamentárias
 
-Este documento descreve o funcionamento, as regras contábeis e o fluxo operacional da tela dedicada de **Previsões** no OpenMoney (disponível em Swift macOS/iOS e Flutter macOS/Windows/Web/Mobile).
+Este documento descreve o funcionamento, as regras contábeis e o fluxo operacional da tela dedicada de **Previsões** no OpenMoney (disponível para macOS, Windows, Web e Mobile).
 
 ---
 

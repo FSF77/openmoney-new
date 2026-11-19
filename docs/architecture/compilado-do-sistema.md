@@ -1,8 +1,8 @@
 # Compilado de Engenharia, Regras de Negócio e Funcionalidades do OpenMoney
 
-> **Schema da Base:** `v: 7` (Unificado Multi-Stack)  
-> **Stacks Oficiais:** **OpenMoneySwift** (macOS 14+ e iOS/iPadOS 17+ — Swift/SwiftUI) e **OpenMoneyFlutter** (macOS, Windows, Web PWA e Mobile — Flutter/Dart)  
-> **Governança:** Equivalência funcional estrita entre todas as plataformas, tendo o Swift como referência canônica e paridade 1:1 no Flutter  
+> **Schema da Base:** `v: 7` (Retrocompatível com a antiga stack Swift descontinuada na `v2.5.0` — ver [ADR 029](../adr/029-swift-deprecation-and-flutter-single-stack-unification.md))  
+> **Stack Oficial Única:** **OpenMoney Flutter** (macOS, Windows, Web PWA e Mobile iOS/Android — Flutter/Dart + Cloudflare D1/Durable Objects)  
+> **Governança:** Base de código única unificada para todas as plataformas em `/Users/fabiano/Developer/OpenMoneyFlutter`  
 > **Licença:** MIT (Código Aberto)
 
 ---
@@ -37,7 +37,7 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
 - `"Dinheiro"`: carteira física e pequenos gastos em espécie.
 
 ### 2.2 Raiz da Base (`Database`)
-- `v: Int` (`7`): versão canônica do schema (Swift `Models.swift` e Flutter `openmoney_models.dart`).
+- `v: Int` (`7`): versão canônica do schema (Flutter `lib/models/openmoney_models.dart`).
 - `accounts`: lista de contas (`Account`).
 - `cats`: hierarquia de categorias e subcategorias (`CategoryItem`).
 - `txs`: livro-razão de transações (`Transaction`).
@@ -58,7 +58,6 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
 
 ### 2.4 Persistência Local de Sincronização e Cache (`Sync v2`)
 - **Flutter Desktop / Mobile:** metadados leves (`seq`, `outbox`) em `sync_kv_store.json`; snapshots por usuário isolados em `cloud_cache/<key>.json` via escrita atômica (`.tmp.<pid>` + `renameSync`); credenciais/preferências em `config.json` (na Web, tudo utiliza `window.localStorage`).
-- **Swift macOS / iOS:** pasta `~/Library/Application Support/OpenMoney/cloud_sync/` (`seq_<userId>.txt`, `outbox_<userId>.json`, `cache_<userId>.json`) e `config.json` na raiz de suporte do app.
 
 ---
 
@@ -164,14 +163,9 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
 
 ---
 
-## 6. Procedimentos de Build e Publicação Multi-Stack
+## 6. Procedimentos de Build e Publicação (OpenMoney Flutter)
 
-### 6.1 OpenMoney Swift (`/Users/fabiano/Developer/OpenMoneySwift`)
-- **macOS (compilar e empacotar):** `./build-app.sh` (sincroniza `README.md` via `scripts/embed-readme.py`, gera ícones, compila `arm64 -O`, assina *ad-hoc* e gera `.zip` + `version.json`).
-- **macOS (publicar release):** `./build-app.sh [VERSÃO] ["Notas da Versão"] --publish` (incrementa `BUILD_NUMBER`, publica no repositório privado `FSF77/openmoney` e distribui em `FSF77/openmoney-releases`).
-- **iOS / iPadOS:** `./build-ios.sh` (Simulador, `.ipa` ou instalação direta) ou abrir `OpenMoney.xcodeproj`.
-
-### 6.2 OpenMoney Flutter (`/Users/fabiano/Developer/OpenMoneyFlutter`)
+### OpenMoney Flutter (`/Users/fabiano/Developer/OpenMoneyFlutter`)
 - **Testes e análise estática:** `flutter analyze` e `flutter test`.
 - **macOS e Web (publicar release):** `./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]` (incrementa build no `pubspec.yaml`, compila macOS release e `web-dist/`, sincroniza `version.json` e envia para `FSF77/openmoney-new`).
 - **Windows (encadeado após o macOS):** `scripts\publish_release_windows.bat` (puxa versão/notas do macOS via `git pull origin main`, compila binário Windows, atualiza `version.json` e faz push da tag `v${VERSION}-windows`).

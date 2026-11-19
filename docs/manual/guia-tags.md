@@ -1,6 +1,6 @@
 # Guia do Usuário: Sistema de Tags (`#tags`)
 
-Este manual apresenta o guia operacional para uso do **Sistema de Tags (`#tags`)** nos lançamentos e relatórios do **OpenMoney** (Swift macOS, Swift iOS e Flutter Desktop/Web/Mobile).
+Este manual apresenta o guia operacional para uso do **Sistema de Tags (`#tags`)** nos lançamentos e relatórios do **OpenMoney** (Desktop macOS/Windows, Web e Mobile).
 
 ---
 

@@ -5,6 +5,9 @@
 > **Status:** ✅ 100% Paridade Funcional Estrita Atingida  
 > **Escopo:** Comparativo arquitetural e funcional detalhado entre OpenMoneySwift e OpenMoneyFlutter  
 
+> [!NOTE]
+> **Marco Histórico Concluído (`v2.5.0`):** Este relatório documenta o atingimento de 100% de paridade funcional entre as duas stacks até a versão `v2.5.0`. Após essa conclusão, a stack Swift foi oficialmente descontinuada e arquivada, consolidando o **OpenMoney Flutter** como a única stack ativa e oficial do ecossistema (consulte o [ADR 029](../adr/029-swift-deprecation-and-flutter-single-stack-unification.md)).
+
 ---
 
 ## 🎯 1. Objetivo da Análise e Governança

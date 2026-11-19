@@ -1,6 +1,6 @@
 # Guia do Usuário: Filtros Avançados e Edição em Massa (Lote)
 
-Este manual apresenta o guia operacional para uso dos **Filtros Combináveis** e da **Edição e Exclusão em Massa (Lote)** na tela de **Lançamentos Gerais** do **OpenMoney** (Swift macOS, Swift iOS e Flutter Desktop/Web/Mobile).
+Este manual apresenta o guia operacional para uso dos **Filtros Combináveis** e da **Edição e Exclusão em Massa (Lote)** na tela de **Lançamentos Gerais** do **OpenMoney** (Desktop macOS/Windows, Web e Mobile).
 
 ---
 

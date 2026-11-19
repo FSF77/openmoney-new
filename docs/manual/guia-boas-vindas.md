@@ -1,6 +1,6 @@
 # Guia do Usuário: Boas-Vindas e Primeiros Passos
 
-Guia completo e direto para começar a usar o **OpenMoney** em minutos (disponível em **Swift macOS/iOS** e **Flutter macOS, Windows, Web e Mobile**).
+Guia completo e direto para começar a usar o **OpenMoney** em minutos (disponível para **macOS, Windows, Web e Mobile**).
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **Versão do Schema:** `v: 7`  
 > **Status:** Canônico e Homologado  
-> **Repositórios:** OpenMoneySwift & OpenMoneyFlutter  
+> **Repositório Oficial:** OpenMoneyFlutter ([FSF77/openmoney-new](https://github.com/FSF77/openmoney-new))  
 > **Arquivo da Base de Dados:** `openmoney.json`  
 > **Idioma:** Português (Brasil)  
 
@@ -367,20 +367,13 @@ Tabelas relacionais mantidas no banco de dados SQLite serverless (**Cloudflare D
 
 Além da base `openmoney.json`, os clientes mantêm artefatos locais para configurações e resiliência offline do Sync v2 (ver [ADR 025](../adr/025-sync-kv-store-local-persistence.md)):
 
-### 1. `sync_kv_store.json` (OpenMoney Flutter Desktop & Mobile)
-Localizado no diretório de dados do app (`Application Support/OpenMoneyNew` no macOS, `%APPDATA%\OpenMoneyNew` no Windows, `Documents/OpenMoneyNew` no iOS):
+### 1. `sync_kv_store.json` e `cloud_cache/` (OpenMoney Flutter Desktop & Mobile)
+Localizados no diretório de dados do app (`Application Support/OpenMoneyNew` no macOS, `%APPDATA%\OpenMoneyNew` no Windows, `Documents/OpenMoneyNew` no iOS):
 * `openmoney_sync_seq_<userId>`: Último número de sequência monotônico (`lastSeq`) recebido da nuvem (permite pull incremental rápido).
 * `openmoney_sync_outbox_<userId>`: Fila de mutações locais geradas offline pendentes de despacho para o Cloudflare D1/Durable Objects.
-* `openmoney_web_cache_<userId>`: Cache local do banco e preferências para inicialização instantânea offline-first.
+* `cloud_cache/<key>.json`: Snapshots em cache offline gravados em arquivos individuais por conta via escrita atômica (`.tmp.<pid>` + `rename`), separados do `sync_kv_store.json`.
 * `openmoney_sync_session` e `openmoney_saved_accounts`: Sessão de autenticação ativa e lista de contas conectadas.
 * `openmoney_web_config`: Configurações locais da aplicação.
 
 *(Na versão Web, essas mesmas chaves são armazenadas diretamente no `window.localStorage`).*
-
-### 2. Pasta `cloud_sync/` (OpenMoney Swift macOS & iOS)
-Localizada em `~/Library/Application Support/OpenMoney/cloud_sync/`:
-* `seq_<userId>.txt`: Sequencial monotônico `lastSeq`.
-* `outbox_<userId>.json`: Fila atômica de mutações offline.
-* `cache_<userId>.json`: Cache local do banco remoto.
-* `config.json` (na raiz do Application Support): Sessão e contas salvas.
 

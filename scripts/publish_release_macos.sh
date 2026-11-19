@@ -180,6 +180,89 @@ data["web"]["releaseDate"] = "${RELEASE_DATE}"
 with open(version_file, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
 print("version.json atualizado com sucesso.")
+
+readme_file = "${ROOT_DIR}/README.md"
+if os.path.exists(readme_file):
+    try:
+        with open(readme_file, "r", encoding="utf-8") as f:
+            readme_content = f.read()
+
+        mac_info = data.get("macos", {})
+        win_info = data.get("windows", {})
+        web_info = data.get("web", {})
+
+        mac_ver = mac_info.get("version", data.get("version", ""))
+        mac_build = mac_info.get("build", data.get("build", ""))
+        mac_url = mac_info.get("downloadUrl", "")
+        mac_size = mac_info.get("sizeMb", "")
+        mac_date = mac_info.get("releaseDate", data.get("releaseDate", ""))
+        mac_zip = mac_url.split("/")[-1] if mac_url else f"OpenMoney-macOS-{mac_ver}.zip"
+
+        win_ver = win_info.get("version", data.get("version", ""))
+        win_build = win_info.get("build", "")
+        win_url = win_info.get("downloadUrl", "")
+        win_size = win_info.get("sizeMb", "")
+        win_date = win_info.get("releaseDate", "")
+        win_zip = win_url.split("/")[-1] if win_url else f"OpenMoney-Windows-{win_ver}.zip"
+
+        web_ver = web_info.get("version", data.get("version", ""))
+        web_date = web_info.get("releaseDate", data.get("releaseDate", ""))
+
+        mac_row = f"| 🍏 **macOS** | **v{mac_ver}** (Build {mac_build}) | [⬇️ Baixar {mac_zip}]({mac_url}) | ~{mac_size} MB | {mac_date} |" if mac_url else "| 🍏 **macOS** | Em breve | Compilação em andamento | — | — |"
+        win_row = f"| 🪟 **Windows** | **v{win_ver}** (Build {win_build}) | [⬇️ Baixar {win_zip}]({win_url}) | ~{win_size} MB | {win_date} |" if win_url else "| 🪟 **Windows** | Em breve | Compilação em andamento | — | — |"
+        web_row = f"| 🌐 **Web** | **v{web_ver}** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | {web_date} |"
+
+        download_block = f"""<!-- LATEST_DOWNLOADS_START -->
+## 📥 Downloads da Versão Oficial
+
+| Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
+| :--- | :--- | :--- | :--- | :--- |
+{mac_row}
+{win_row}
+{web_row}
+
+### ⚡ Instalação Rápida via Terminal / PowerShell
+
+- **macOS** (Terminal):
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.sh | bash
+  ```
+
+- **Windows** (PowerShell):
+  ```powershell
+  irm https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.ps1 | iex
+  ```
+
+- **Windows** (Prompt / CMD):
+  ```cmd
+  curl -fsSL https://raw.githubusercontent.com/FSF77/openmoney-new/main/install.bat -o install.bat && install.bat
+  ```
+
+---
+<!-- LATEST_DOWNLOADS_END -->"""
+
+        start_marker = "<!-- LATEST_DOWNLOADS_START -->"
+        end_marker = "<!-- LATEST_DOWNLOADS_END -->"
+
+        start_idx = readme_content.find(start_marker)
+        end_idx = readme_content.find(end_marker)
+
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            readme_content = readme_content[:start_idx] + download_block + readme_content[end_idx + len(end_marker):]
+        else:
+            sep = "---\n"
+            sep_idx = readme_content.find(sep)
+            if sep_idx != -1:
+                idx = sep_idx + len(sep)
+                readme_content = readme_content[:idx] + "\n" + download_block + "\n\n" + readme_content[idx:].lstrip("\n")
+            else:
+                readme_content = download_block + "\n\n" + readme_content
+
+        with open(readme_file, "w", encoding="utf-8") as f:
+            f.write(readme_content)
+        print("README.md atualizado com os links de download com sucesso.")
+    except Exception as e:
+        print(f"Aviso: Não foi possível atualizar README.md: {e}")
 EOF
 
 # 3. Cria/atualiza o script de instalação rápida curl | bash
@@ -270,16 +353,6 @@ EOF
 chmod +x "${ROOT_DIR}/install.sh"
 
 # 4. Commit e Push no próprio repositório openmoney-new (dispara deploy automático no projeto openmoney-new da Cloudflare Pages)
-if [ -d "${ROOT_DIR}/../OpenMoneyDocs" ]; then
-    echo "📚 Sincronizando documentação de OpenMoneyDocs para docs/..."
-    mkdir -p "${ROOT_DIR}/docs"
-    rm -rf "${ROOT_DIR}/docs/adr" "${ROOT_DIR}/docs/architecture" "${ROOT_DIR}/docs/manual"
-    cp -f "${ROOT_DIR}/../OpenMoneyDocs/README.md" "${ROOT_DIR}/docs/README.md"
-    sed -i '' 's|\.\./OpenMoneySwift/Sources/OpenMoney/Resources/icon-1024\.png|../logo/openmoney_app_icon.png|g' "${ROOT_DIR}/docs/README.md"
-    cp -R "${ROOT_DIR}/../OpenMoneyDocs/adr" "${ROOT_DIR}/docs/"
-    cp -R "${ROOT_DIR}/../OpenMoneyDocs/architecture" "${ROOT_DIR}/docs/"
-    cp -R "${ROOT_DIR}/../OpenMoneyDocs/manual" "${ROOT_DIR}/docs/"
-fi
 cp -f "${VERSION_JSON_FILE}" "${ROOT_DIR}/web-dist/version.json" 2>/dev/null || true
 echo "📤 Comitando e enviando para o repositório openmoney-new..."
 git add README.md AGENTS.md .gitignore docs/ scripts/ lib/ macos/ windows/ web/ web-dist/ coletor/ functions/ cloudflare/ wrangler.toml test/ logo/ pubspec.yaml pubspec.lock version.json install.sh install.ps1 install.bat "downloads/macos/${ZIP_NAME}"

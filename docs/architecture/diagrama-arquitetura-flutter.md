@@ -1,7 +1,7 @@
 # Diagrama Completo da Aplicação OpenMoney Flutter — Arquitetura, Modelos, Fluxos e Regras de Negócio
 
 > **Stack Documentada:** **OpenMoneyFlutter** ([`/Users/fabiano/Developer/OpenMoneyFlutter`](file:///Users/fabiano/Developer/OpenMoneyFlutter)) — Flutter/Dart (macOS, Windows, Web PWA e Mobile)  
-> **Schema da Base:** `v: 7` (Unificado Multi-Stack com **OpenMoneySwift**)  
+> **Schema da Base:** `v: 7` (Canônico Oficial — OpenMoney Flutter)  
 > **Escopo:** Visão integral de bootstrap, UI responsiva, gerenciamento de estado (`MoneyStore`), motor de sincronização em tempo real (`SyncEngine` — Sync v2), blindagem Anti-Wipe, modelo de dados e todas as regras de negócio contábeis, cambiais e de importação.
 
 ---

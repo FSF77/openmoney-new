@@ -1,70 +1,58 @@
-# Memória do Projeto e Arquitetura Multi-Stack
+# Memória do Projeto e Arquitetura Unificada (OpenMoney Flutter)
 
-Este documento registra as diretrizes, repositórios, versionamento e fluxos de build do ecossistema **OpenMoney**.
+Este documento registra as diretrizes, repositório oficial, versionamento e fluxos de build do ecossistema **OpenMoney**.
 
 ## Estrutura de Diretórios e Repositórios
 
-| Plataforma / Stack | Caminho Local | Repositório Principal | Finalidade / Observações |
+| Plataforma / Stack | Caminho Local | Repositório | Finalidade / Observações |
 | :--- | :--- | :--- | :--- |
-| **Swift (Principal / Nativo macOS & iOS)** | `/Users/fabiano/Developer/OpenMoneySwift` | [FSF77/openmoney](https://github.com/FSF77/openmoney) *(Privado)* | Versão de referência de todas as regras de negócio, modelos e telas. Repositório auxiliar de releases e downloads: [FSF77/openmoney-releases](https://github.com/FSF77/openmoney-releases). |
-| **Flutter / Dart (Multiplataforma macOS, Windows, Web, Mobile)** | `/Users/fabiano/Developer/OpenMoneyFlutter` | [FSF77/openmoney-new](https://github.com/FSF77/openmoney-new) *(Público)* | Versão convertida em Flutter/Dart. Deve replicar fielmente o comportamento da versão Swift. |
-| **Documentação Central (Arquitetura, ADRs, Docs)** | `/Users/fabiano/Developer/OpenMoneyDocs` | [FSF77/openmoney-new/docs](https://github.com/FSF77/openmoney-new/tree/main/docs) *(Espelhado)* | Raiz única oficial de documentação do ecossistema, ADRs, auditorias técnicas e especificações. |
+| **Aplicação Oficial Multiplataforma (Flutter / Dart — macOS, Windows, Web, iOS e Android)** | `/Users/fabiano/Developer/OpenMoneyFlutter` | [FSF77/openmoney-new](https://github.com/FSF77/openmoney-new) *(Público)* | Fonte única da verdade para todas as regras de negócio, modelos, telas, sincronização Cloud Sync v2 (Cloudflare D1 / Durable Objects) e distribuição oficial. |
+| **Documentação Oficial do Ecossistema (Arquitetura, ADRs, Manuais)** | `/Users/fabiano/Developer/OpenMoneyFlutter/docs` | [FSF77/openmoney-new/docs](https://github.com/FSF77/openmoney-new/tree/main/docs) | Raiz única oficial de documentação, ADRs, diagramas de arquitetura, dicionário de dados e manuais do usuário. |
+| **Legado Arquivado (Swift — Descontinuado na v2.5.0)** | `/Users/fabiano/Developer/OpenMoneySwift` | [FSF77/openmoney-swift](https://github.com/FSF77/openmoney-swift) / [FSF77/openmoney-swift-releases](https://github.com/FSF77/openmoney-swift-releases) | Congelado e descontinuado na `v2.5.0` (ADR 029). Não recebe novas alterações. |
+
+> [!NOTE]
+> O nome do repositório oficial no GitHub (`FSF77/openmoney-new`) é mantido intencionalmente para preservar a retrocompatibilidade integral do auto-update Desktop (`raw.githubusercontent.com/FSF77/openmoney-new/...`), dos instaladores rápidos via terminal e da integração contínua com Cloudflare Pages (`openmoney.app.br`).
 
 ---
 
-## Diretrizes de Desenvolvimento Conjunto
+## Diretrizes de Desenvolvimento
 
-1. **Equivalência Funcional Estrita:**
-   - O aplicativo em **Swift** é a fonte da verdade para fluxos, modelos, cálculos, regras de negócio e comportamento da interface.
-   - Qualquer funcionalidade criada, ajustada ou corrigida no Swift deve ser replicada e rodar com o mesmo comportamento no Flutter/Dart (e vice-versa).
-   - **Toda mudança deve ser aplicada em todas as plataformas:** Flutter (macOS, Windows, Web, Mobile), Swift macOS e Swift iOS. Nunca entregar uma funcionalidade, ajuste ou correção em apenas uma delas; se alguma plataforma não puder ser feita, avisar explicitamente.
-   - **Operação Híbrida Unificada (Modo Local ↔ Online com Cloud Sync v2):** Ambas as stacks (**Swift macOS/iOS** e **Flutter/Dart Desktop/Web/Mobile**) possuem paridade funcional integral e suportam nativamente operação híbrida completa: uso 100% offline local sobre arquivo `openmoney.json` e sincronização em tempo real (Sync v2) via Cloudflare D1/Durable Objects com resolução granular por registro, WebSocket, snapshot binário Gzip, autenticação em duas etapas, backups de segurança locais e Anti-Wipe Guard estritamente equivalentes. Não há exceções funcionais entre as versões.
+1. **Fonte Única da Verdade (Single-Stack Flutter):**
+   - Toda evolução funcional, ajuste ou correção é implementada exclusivamente no projeto **Flutter / Dart** (`/Users/fabiano/Developer/OpenMoneyFlutter`), garantindo suporte coeso e comportamento consistente para **Desktop (macOS e Windows)**, **Web PWA (`openmoney.app.br`)** e **Mobile (iOS/iPadOS e Android)**.
+   - Toda mudança deve contemplar todas as plataformas atendidas pelo código Flutter (Desktop, Web e Mobile responsivos); se alguma plataforma exigir tratamento específico ou tiver limitação nativa (ex.: OCR local Desktop vs. Web), documentar e tratar explicitamente.
+   - **Operação Híbrida Unificada (Modo Local ↔ Online com Cloud Sync v2):** O aplicativo suporta nativamente operação híbrida completa: uso 100% offline local sobre arquivo `openmoney.json` e sincronização em tempo real (Sync v2) via Cloudflare Pages Functions, D1 e Durable Objects com resolução granular por registro, WebSocket, snapshot binário Gzip, autenticação em duas etapas, backups de segurança locais/nuvem e Anti-Wipe Guard.
 
 2. **Compatibilidade da Base de Dados (`openmoney.json`) e Regras de Persistência / Anti-Wipe:**
-   - Ambas as plataformas operam sobre a mesma base de dados.
-   - **Schema unificado `v: 7`**: regras idênticas de leitura/escrita, campos em centavos inteiros (`amt`, `opening`), debounce de 350ms, migração de chaves de faturas para a competência de vencimento (`dueDay <= closeDay`) e backup atômico diário.
-   - **Cache Cloud Isolado e Escrita Atômica (`Sync v2`):** Snapshots em cache offline são gravados em arquivos individuais por conta (`cloud_cache/` no Flutter Desktop/Mobile e `cloud_sync/` no Swift), separados do arquivo leve de metadados (`sync_kv_store.json`), sempre via escrita atômica (`.tmp` + `rename`) para prevenir corrupção pós-atualizações.
+   - **Schema unificado `v: 7`**: regras estritas de leitura/escrita, campos em centavos inteiros (`amt`, `opening`), debounce de 350ms, migração de chaves de faturas para a competência de vencimento (`dueDay <= closeDay`) e backup atômico diário (até 4 snapshots `.zip` diários e retenção mínima de 7+ dias).
+   - **Cache Cloud Isolado e Escrita Atômica (`Sync v2`):** Snapshots em cache offline no Desktop/Mobile são gravados em arquivos individuais por conta (`cloud_cache/<key>.json`), separados do arquivo leve de metadados (`sync_kv_store.json`), sempre via escrita atômica (`.tmp.<pid>` + `rename`) para prevenir corrupção pós-atualizações. Na Web, utilizam `window.localStorage`.
    - **Validação de Cache e Inicialização Segura:** O `boot()` executa sincronamente antes do primeiro frame; enquanto `!hasLoadedRemoteState` no modo Online, a interface exibe a tela de carregamento Cloud (nunca tela zerada). Caches locais vazios (`txs.isEmpty` e conta `'a1'` padrão zerada) para contas com `revision > 1` são descartados automaticamente, forçando `forceFullPull: true` com até 3 retentativas.
    - **Bloqueio Anti-Wipe em 3 Camadas:** Deltas pré-carga (`_applyIncomingDelta`) e gravações/compactações vazias não forçadas (`_isSuspiciousEmptyDb` no `SyncEngine` e `CloudSyncService`) são bloqueados no cliente; `disconnectLocalDatabase()` interrompe obrigatoriamente o `SyncEngine`; e o backend Cloudflare (`PUT /api/db`) bloqueia com `HTTP 409` qualquer payload `< 50 KB` sobre bases `chunked:*` sem `force=true` explícito (incluindo requisições `compactSeq`).
 
 3. **Política de Versionamento:**
-   - **Versão Semântica (`Version`):** Sempre equalizada entre Swift e Flutter (ex: `2.1.1`).
-   - **Build Number:** Mantido de forma independente em cada repositório (ex: Swift `70`, Flutter `20`), com incremento automático (`+1`) a cada compilação de release.
+   - **Versão Semântica (`Version`):** Controlada em `pubspec.yaml` (ex: `2.5.0`).
+   - **Build Number:** Incrementado automaticamente (`+1`) a cada compilação de release no `pubspec.yaml` e sincronizado em `lib/services/update_service.dart` e `version.json`.
 
 ---
 
-## Fluxo Automatizado de Releases
+## Fluxo Automatizado de Releases (OpenMoney Flutter)
 
-### 1. OpenMoney Swift
-- **Comando único de compilação e publicação:**
-  ```bash
-  cd /Users/fabiano/Developer/OpenMoneySwift
-  ./build-app.sh [VERSÃO] ["Notas da Versão"] --publish
-  ```
-  *(Exemplo: `./build-app.sh 2.1.1 "Notas da versão..." --publish`)*
-- **Comportamento automatizado:**
-  1. Incrementa o `BUILD_NUMBER` automaticamente (`+1`) e atualiza o arquivo `VERSION`.
-  2. Compila e assina o app nativo via `codesign`.
-  3. No repositório principal ([`FSF77/openmoney`](https://github.com/FSF77/openmoney)): commita o código-fonte, atualiza a tag `v${VERSION}` e faz `git push origin main --tags`.
-  4. No repositório de distribuição ([`FSF77/openmoney-releases`](https://github.com/FSF77/openmoney-releases)): publica o `.zip`, atualiza o `version.json`, `install.sh` e faz push com tag.
-
-### 2. OpenMoney Flutter (macOS)
+### 1. macOS & Web (Cloudflare Pages)
 - **Comando único de compilação e publicação:**
   ```bash
   cd /Users/fabiano/Developer/OpenMoneyFlutter
   ./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]
   ```
-  *(Exemplo: `./scripts/publish_release_macos.sh 2.1.1 "Notas da versão..."`)*
+  *(Exemplo: `./scripts/publish_release_macos.sh 2.5.1 "Notas da versão..."`)*
 - **Comportamento automatizado:**
-  1. Incrementa o build no `pubspec.yaml` (`+1`), sincroniza `update_service.dart` e `version.json`.
-  2. Compila o binário macOS release (`flutter build macos --release`).
-  3. No repositório ([`FSF77/openmoney-new`](https://github.com/FSF77/openmoney-new)): commita os arquivos, gera o pacote `.zip`, atualiza a tag `v${VERSION}` e faz `git push origin main`.
+  1. Incrementa o build no `pubspec.yaml` (`+1`), sincroniza `lib/services/update_service.dart`, `version.json` e atualiza a seção de downloads no `README.md` com a nova versão compilada para macOS e Web.
+  2. Compila o binário macOS release (`flutter build macos --release`) e a versão Web (`web-dist/`).
+  3. No repositório ([`FSF77/openmoney-new`](https://github.com/FSF77/openmoney-new)): commita os arquivos (incluindo `README.md` e `docs/`), gera o pacote `.zip`, atualiza a tag `v${VERSION}` e faz `git push origin main`.
 
-### 3. OpenMoney Flutter (Windows)
+### 2. Windows
 - **Fluxo encadeado após o macOS:**
   1. O release deve ser publicado **primeiro no macOS** (que define versão, notas e build).
   2. No Windows, execute:
      ```cmd
      scripts\publish_release_windows.bat
      ```
-  3. Ao confirmar com `S`, o script executa `git pull origin main` (puxando a versão, build e notas exatas do Mac), compila o binário Windows, atualiza a chave `"windows"` no `version.json` e faz push da tag `v${VERSION}-windows`.
+  3. Ao confirmar com `S`, o script executa `git pull origin main` (puxando a versão, build e notas exatas do Mac), compila o binário Windows, atualiza a chave `"windows"` no `version.json`, atualiza a seção de downloads no `README.md` com os links e hashes do pacote Windows compilado e faz push (incluindo `README.md`) com a tag `v${VERSION}-windows`.
