@@ -150,10 +150,21 @@ DOWNLOAD_URL="https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/${
 # 2. Atualização do version.json
 VERSION_JSON_FILE="${ROOT_DIR}/version.json"
 
-python3 - << EOF
+export ROOT_DIR VERSION_JSON_FILE VERSION BUILD_NUM RELEASE_DATE NOTES DOWNLOAD_URL SHA256 FILE_SIZE_MB
+
+python3 - << 'EOF'
 import json, os
 
-version_file = "${VERSION_JSON_FILE}"
+root_dir = os.environ["ROOT_DIR"]
+version_file = os.environ["VERSION_JSON_FILE"]
+version = os.environ["VERSION"]
+build_num = int(os.environ["BUILD_NUM"])
+release_date = os.environ["RELEASE_DATE"]
+notes = os.environ["NOTES"]
+download_url = os.environ["DOWNLOAD_URL"]
+sha256 = os.environ["SHA256"]
+file_size_mb = int(os.environ["FILE_SIZE_MB"])
+
 data = {}
 if os.path.exists(version_file):
     try:
@@ -162,35 +173,35 @@ if os.path.exists(version_file):
     except Exception:
         data = {}
 
-data["version"] = "${VERSION}"
-data["build"] = int("${BUILD_NUM}")
-data["releaseDate"] = "${RELEASE_DATE}"
-data["title"] = "OpenMoney Flutter v${VERSION}"
-data["notes"] = """${NOTES}"""
+data["version"] = version
+data["build"] = build_num
+data["releaseDate"] = release_date
+data["title"] = f"OpenMoney Flutter v{version}"
+data["notes"] = notes
 data["githubReleaseUrl"] = "https://github.com/FSF77/openmoney-new"
 
 if "macos" not in data:
     data["macos"] = {}
 
-data["macos"]["version"] = "${VERSION}"
-data["macos"]["build"] = int("${BUILD_NUM}")
-data["macos"]["releaseDate"] = "${RELEASE_DATE}"
-data["macos"]["downloadUrl"] = "${DOWNLOAD_URL}"
-data["macos"]["sha256"] = "${SHA256}"
-data["macos"]["sizeMb"] = int("${FILE_SIZE_MB}")
+data["macos"]["version"] = version
+data["macos"]["build"] = build_num
+data["macos"]["releaseDate"] = release_date
+data["macos"]["downloadUrl"] = download_url
+data["macos"]["sha256"] = sha256
+data["macos"]["sizeMb"] = file_size_mb
 
 if "web" not in data:
     data["web"] = {}
 
-data["web"]["version"] = "${VERSION}"
-data["web"]["build"] = int("${BUILD_NUM}")
-data["web"]["releaseDate"] = "${RELEASE_DATE}"
+data["web"]["version"] = version
+data["web"]["build"] = build_num
+data["web"]["releaseDate"] = release_date
 
 with open(version_file, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
 print("version.json atualizado com sucesso.")
 
-readme_file = "${ROOT_DIR}/README.md"
+readme_file = os.path.join(root_dir, "README.md")
 if os.path.exists(readme_file):
     try:
         with open(readme_file, "r", encoding="utf-8") as f:
