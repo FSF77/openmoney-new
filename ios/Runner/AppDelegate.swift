@@ -123,6 +123,13 @@ import UniformTypeIdentifiers
           contentTypes.append(.commaSeparatedText)
         } else if clean == "qif" || clean == "txt" {
           contentTypes.append(.plainText)
+        } else if clean == "ofx" || clean == "qfx" {
+          if let ut = UTType(filenameExtension: clean) {
+            contentTypes.append(ut)
+          }
+          contentTypes.append(.xml)
+          contentTypes.append(.plainText)
+          contentTypes.append(.data)
         } else if let ut = UTType(filenameExtension: clean) {
           contentTypes.append(ut)
         }
