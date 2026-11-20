@@ -8,6 +8,7 @@ import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../services/receipt_parser_engine.dart';
 import '../../store/money_store.dart';
+import '../widgets/date_input_formatter.dart';
 
 /// Abre o fluxo de importação inteligente de comprovantes via pasta selecionada
 Future<void> showReceiptOcrImportModal(
@@ -672,6 +673,8 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _dateCtrl,
+                  keyboardType: TextInputType.datetime,
+                  inputFormatters: [DateInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Data (DD/MM/AAAA)',
                     border: OutlineInputBorder(),

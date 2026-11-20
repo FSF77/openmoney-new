@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/currency_rate_service.dart';
+import '../../services/math_expression_evaluator.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
+import '../widgets/date_input_formatter.dart';
+import '../widgets/mini_calculator_dialog.dart';
 import '../widgets/tag_input_field.dart';
 
 Future<void> showTransactionCreateModal(
@@ -265,6 +268,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   late final TextEditingController _payeeCtrl;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  final FocusNode _amtFocus = FocusNode();
   late final TextEditingController _peerAmtCtrl;
   late final TextEditingController _rateCtrl;
   late String _txType; // 'expense', 'income', 'transfer'
@@ -351,10 +355,28 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     _rateCtrl = TextEditingController(
       text: initRate.toStringAsFixed(4).replaceAll('.', ','),
     );
+    _amtFocus.addListener(() {
+      if (!_amtFocus.hasFocus) {
+        _evaluateAmount();
+      }
+    });
+  }
+
+  void _evaluateAmount() {
+    final evaluated = MathExpressionEvaluator.evaluateToFormatted(_amtCtrl.text);
+    if (evaluated != null && evaluated != _amtCtrl.text) {
+      setState(() {
+        _amtCtrl.text = evaluated;
+      });
+      final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+      final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+      _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
+    }
   }
 
   @override
   void dispose() {
+    _amtFocus.dispose();
     _dateCtrl.dispose();
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
@@ -709,6 +731,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
             flex: 2,
             child: TextField(
               controller: _dateCtrl,
+              keyboardType: TextInputType.datetime,
+              inputFormatters: [DateInputFormatter()],
               style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 labelText: 'Data (DD/MM/AAAA)',
@@ -892,10 +916,10 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                         Expanded(
                           child: TextField(
                             controller: _amtCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
+                            focusNode: _amtFocus,
+                            keyboardType: TextInputType.text,
                             style: const TextStyle(fontSize: 13),
+                            onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
                               if (!isCross || _isUpdatingCross) return;
                               _isUpdatingCross = true;
@@ -915,6 +939,31 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 10),
                               border: const OutlineInputBorder(),
+                              suffixIconConstraints:
+                                  const BoxConstraints(minWidth: 28, maxHeight: 24),
+                              suffixIcon: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.calculate_outlined, size: 18),
+                                tooltip: 'Calculadora',
+                                onPressed: () async {
+                                  final res = await showMiniCalculatorDialog(
+                                    context: context,
+                                    initialValue: _amtCtrl.text,
+                                    colors: colors,
+                                  );
+                                  if (res != null) {
+                                    setState(() {
+                                      _amtCtrl.text = res;
+                                    });
+                                    final srcCents =
+                                        (parseCents(_amtCtrl.text) ?? 0).abs();
+                                    final r =
+                                        _parseRateInput(_rateCtrl.text) ?? 1.0;
+                                    _peerAmtCtrl.text =
+                                        formatInputCents((srcCents * r).round());
+                                  }
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -1211,6 +1260,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   late final FocusNode _payeeFocus;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  final FocusNode _amtFocus = FocusNode();
   late final TextEditingController _peerAmtCtrl;
   late final TextEditingController _rateCtrl;
   late final TextEditingController _endDateCtrl;
@@ -1328,10 +1378,28 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     _rateCtrl = TextEditingController(
       text: initDisplayRate.toStringAsFixed(4).replaceAll('.', ','),
     );
+    _amtFocus.addListener(() {
+      if (!_amtFocus.hasFocus) {
+        _evaluateAmount();
+      }
+    });
+  }
+
+  void _evaluateAmount() {
+    final evaluated = MathExpressionEvaluator.evaluateToFormatted(_amtCtrl.text);
+    if (evaluated != null && evaluated != _amtCtrl.text) {
+      setState(() {
+        _amtCtrl.text = evaluated;
+      });
+      final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+      final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+      _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
+    }
   }
 
   @override
   void dispose() {
+    _amtFocus.dispose();
     _dateCtrl.dispose();
     _payeeCtrl.dispose();
     _payeeFocus.dispose();
@@ -1807,6 +1875,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     flex: 2,
                     child: TextField(
                       controller: _dateCtrl,
+                      keyboardType: TextInputType.datetime,
+                      inputFormatters: [DateInputFormatter()],
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
@@ -2004,10 +2074,10 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                         Expanded(
                           child: TextField(
                             controller: _amtCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
+                            focusNode: _amtFocus,
+                            keyboardType: TextInputType.text,
                             style: const TextStyle(fontSize: 13),
+                            onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
                               if (!isCross || _isUpdatingCross) return;
                               _isUpdatingCross = true;
@@ -2027,6 +2097,31 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 10),
                               border: const OutlineInputBorder(),
+                              suffixIconConstraints:
+                                  const BoxConstraints(minWidth: 28, maxHeight: 24),
+                              suffixIcon: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.calculate_outlined, size: 18),
+                                tooltip: 'Calculadora',
+                                onPressed: () async {
+                                  final res = await showMiniCalculatorDialog(
+                                    context: context,
+                                    initialValue: _amtCtrl.text,
+                                    colors: colors,
+                                  );
+                                  if (res != null) {
+                                    setState(() {
+                                      _amtCtrl.text = res;
+                                    });
+                                    final srcCents =
+                                        (parseCents(_amtCtrl.text) ?? 0).abs();
+                                    final r =
+                                        _parseRateInput(_rateCtrl.text) ?? 1.0;
+                                    _peerAmtCtrl.text =
+                                        formatInputCents((srcCents * r).round());
+                                  }
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -2196,6 +2291,8 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   const SizedBox(height: 4),
                   TextField(
                     controller: _endDateCtrl,
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [DateInputFormatter()],
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       labelText: 'Data de Término (DD/MM/AAAA)',
@@ -2442,6 +2539,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   late final TextEditingController _payeeCtrl;
   late final TextEditingController _memoCtrl;
   late final TextEditingController _amtCtrl;
+  final FocusNode _amtFocus = FocusNode();
   late final TextEditingController _peerAmtCtrl;
   late final TextEditingController _rateCtrl;
   late final TextEditingController _endDateCtrl;
@@ -2528,10 +2626,28 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     if (curCur != destCur && t.amt.abs() > 0) {
       _peerAmtCtrl.text = formatInputCents((t.amt.abs() * r).round());
     }
+    _amtFocus.addListener(() {
+      if (!_amtFocus.hasFocus) {
+        _evaluateAmount();
+      }
+    });
+  }
+
+  void _evaluateAmount() {
+    final evaluated = MathExpressionEvaluator.evaluateToFormatted(_amtCtrl.text);
+    if (evaluated != null && evaluated != _amtCtrl.text) {
+      setState(() {
+        _amtCtrl.text = evaluated;
+      });
+      final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+      final r = _parseRateInput(_rateCtrl.text) ?? 1.0;
+      _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
+    }
   }
 
   @override
   void dispose() {
+    _amtFocus.dispose();
     _dateCtrl.dispose();
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
@@ -2762,6 +2878,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   Expanded(
                     child: TextField(
                       controller: _dateCtrl,
+                      keyboardType: TextInputType.datetime,
+                      inputFormatters: [DateInputFormatter()],
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
@@ -2953,10 +3071,10 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                         Expanded(
                           child: TextField(
                             controller: _amtCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
+                            focusNode: _amtFocus,
+                            keyboardType: TextInputType.text,
                             style: const TextStyle(fontSize: 13),
+                            onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
                               if (!isCross || _isUpdatingCross) return;
                               _isUpdatingCross = true;
@@ -2976,6 +3094,31 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 10),
                               border: const OutlineInputBorder(),
+                              suffixIconConstraints:
+                                  const BoxConstraints(minWidth: 28, maxHeight: 24),
+                              suffixIcon: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.calculate_outlined, size: 18),
+                                tooltip: 'Calculadora',
+                                onPressed: () async {
+                                  final res = await showMiniCalculatorDialog(
+                                    context: context,
+                                    initialValue: _amtCtrl.text,
+                                    colors: colors,
+                                  );
+                                  if (res != null) {
+                                    setState(() {
+                                      _amtCtrl.text = res;
+                                    });
+                                    final srcCents =
+                                        (parseCents(_amtCtrl.text) ?? 0).abs();
+                                    final r =
+                                        _parseRateInput(_rateCtrl.text) ?? 1.0;
+                                    _peerAmtCtrl.text =
+                                        formatInputCents((srcCents * r).round());
+                                  }
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -3145,6 +3288,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   const SizedBox(height: 4),
                   TextField(
                     controller: _endDateCtrl,
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [DateInputFormatter()],
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       labelText: 'Data de Término (DD/MM/AAAA)',

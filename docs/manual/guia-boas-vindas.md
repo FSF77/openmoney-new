@@ -74,10 +74,11 @@ Na barra lateral (expansível ou no modo compacto *Mini Rail*), você encontra:
 Entre em uma conta e use a **barra de inserção rápida** no topo do extrato, ou clique em **+ Novo Lançamento** (no cabeçalho ou barra lateral):
 
 1. **Tipo:** escolha **`− Despesa`**, **`+ Receita`** ou **`⇄ Transferência`**.
-2. **Data.**
-3. **Favorecido / Descrição:** ex.: *Supermercado*. Ao digitar, o app sugere nomes já usados e preenche automaticamente a última categoria utilizada.
+   - *Dica:* quando a barra rápida de inserção estiver oculta no extrato da conta, três botões rápidos coloridos (**−**, **+**, **⇄**) ficam disponíveis no cabeçalho ao lado do ícone de edição da conta, abrindo o formulário já com a opção selecionada.
+2. **Data:** conta com **preenchimento automático da barra (`/`)**: basta digitar os números do dia e mês (ex.: `15112026`) que o app insere as barras instantaneamente.
+3. **Favorecido / Descrição:** ex.: *Supermercado*. Ao digitar, o app busca no histórico respeitando o tipo ativo (despesas mostram apenas despesas; receitas mostram apenas receitas) e preenche automaticamente a categoria. Em **Ajustes**, você pode personalizar o tempo de verificação do histórico (ex.: últimos 90 dias) e o escopo de sugestão. Ao selecionar **Transferência**, a descrição é preenchida automaticamente como *"Transferência"*.
 4. **Categoria** (ou **Conta de Destino**, no caso de transferência).
-5. **Valor** (em contas em moeda estrangeira, é possível revisar ou buscar a cotação histórica no Banco Central).
+5. **Valor:** conta com **calculadora integrada**. Você pode digitar expressões matemáticas diretamente (ex.: `10 + 10`, `150 / 3`, `80,50 * 2`); ao pressionar `Enter` ou mudar de campo, o resultado é calculado e formatado automaticamente. Se preferir, clique no ícone de calculadora no campo para abrir a **Mini Calculadora** interativa com teclado de apoio.
 6. **Tags** *(opcional)*: digite etiquetas separadas por vírgula (`,`) ou `Enter` (ex.: `#Viagem`, `#Reembolso`).
 7. **Nota / Observação** *(opcional)*.
 8. Use **Salvar** para fechar ou **Salvar e Criar Outro** para lançar vários itens em sequência.
@@ -188,5 +189,5 @@ Em **Relatórios**, acompanhe receitas, despesas, saldo líquido e **Taxa de Pou
 - **O saldo não bate com o banco:** confira o *Saldo Inicial de Abertura* da conta e verifique se há lançamentos não conciliados ou faltantes.
 - **Lancei errado, e agora?** Clique no lançamento para **Editar**, **Copiar** ou **Excluir** (ou selecione vários em **Lançamentos** para editar em lote).
 - **Posso lançar gastos pelo celular na rua?** Sim — usando a versão Web/Mobile sincronizada via OpenMoney Cloud (`https://openmoney.app.br`), o app nativo no iOS ou o [OpenMoney Coletor PWA](https://fsf77.github.io/openmoney-new/coletor/) com leitura de recibos por câmera e importação via `openmoney_inbox.json`.
-- **Já usava outro programa financeiro (como Microsoft Money 99 ou planilhas):** use **Módulos › Importação / Exportação** para importar arquivos `.csv` ou `.qif`.
+- **Já usava outro programa financeiro (como Microsoft Money 99 ou planilhas):** use **Módulos › Importação / Exportação** para importar arquivos `.csv`, `.qif` ou `.ofx` e transferir contas, categorias e lançamentos (veja o [Guia de Importação e Exportação](guia-importacao-e-exportacao-csv-ofx.md)).
 - **Quer personalizar a tela e a cor do app?** Acesse **Ajustes & Personalização** (`Cmd + ,` / `Ctrl + ,`) para escolher a tela inicial, widgets do Dashboard, modo *Mini Rail*, visualização em *Datagrid*, moeda padrão e paleta de cores.

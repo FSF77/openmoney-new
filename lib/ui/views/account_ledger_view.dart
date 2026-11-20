@@ -3,6 +3,7 @@ import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
 import '../../services/currency_rate_service.dart';
 import '../../services/importers_exporters.dart';
+import '../../services/math_expression_evaluator.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_modal.dart';
@@ -13,6 +14,8 @@ import '../theme/liquid_glass.dart';
 import '../widgets/category_select_form_field.dart';
 import '../widgets/csv_export.dart';
 import '../widgets/datagrid_transaction_table.dart';
+import '../widgets/date_input_formatter.dart';
+import '../widgets/mini_calculator_dialog.dart';
 
 class AccountLedgerView extends StatefulWidget {
   final MoneyStore store;
@@ -34,6 +37,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   final TextEditingController _payeeCtrl = TextEditingController();
   final TextEditingController _memoCtrl = TextEditingController();
   final TextEditingController _amtCtrl = TextEditingController();
+  final FocusNode _amtFocus = FocusNode();
   final TextEditingController _quickRateCtrl = TextEditingController();
   final TextEditingController _searchCtrl = TextEditingController();
   bool _quickRateEditedManually = false;
@@ -55,6 +59,20 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     _checkCreditCardOpenInvoice();
     _syncDefaultCategory();
     _syncQuickRateForDate();
+    _amtFocus.addListener(() {
+      if (!_amtFocus.hasFocus) {
+        _evaluateQuickAmount();
+      }
+    });
+  }
+
+  void _evaluateQuickAmount() {
+    final evaluated = MathExpressionEvaluator.evaluateToFormatted(_amtCtrl.text);
+    if (evaluated != null && evaluated != _amtCtrl.text) {
+      setState(() {
+        _amtCtrl.text = evaluated;
+      });
+    }
   }
 
   @override
@@ -97,6 +115,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
 
   @override
   void dispose() {
+    _amtFocus.dispose();
     _dateCtrl.dispose();
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
@@ -1566,6 +1585,8 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         width: 118,
                         child: TextField(
                           controller: _dateCtrl,
+                          keyboardType: TextInputType.datetime,
+                          inputFormatters: [DateInputFormatter()],
                           style: const TextStyle(fontSize: 13),
                           onChanged: (val) {
                             final trimmed = val.trim();
@@ -1717,13 +1738,12 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         ),
                       ),
                       SizedBox(
-                        width: 120,
+                        width: 136,
                         child: TextField(
                           controller: _amtCtrl,
+                          focusNode: _amtFocus,
                           style: const TextStyle(fontSize: 13),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
+                          keyboardType: TextInputType.text,
                           decoration: InputDecoration(
                             labelText:
                                 'Valor (${currencyMetaFor(acc.effectiveCurrency).symbol})',
@@ -1734,8 +1754,30 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               vertical: 10,
                             ),
                             border: const OutlineInputBorder(),
+                            suffixIconConstraints:
+                                const BoxConstraints(minWidth: 26, maxHeight: 24),
+                            suffixIcon: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.calculate_outlined, size: 16),
+                              tooltip: 'Calculadora',
+                              onPressed: () async {
+                                final res = await showMiniCalculatorDialog(
+                                  context: context,
+                                  initialValue: _amtCtrl.text,
+                                  colors: colors,
+                                );
+                                if (res != null) {
+                                  setState(() {
+                                    _amtCtrl.text = res;
+                                  });
+                                }
+                              },
+                            ),
                           ),
-                          onSubmitted: (_) => _submitQuickEntry(),
+                          onSubmitted: (_) {
+                            _evaluateQuickAmount();
+                            _submitQuickEntry();
+                          },
                         ),
                       ),
                       if (acc.effectiveCurrency != 'BRL' &&

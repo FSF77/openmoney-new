@@ -606,18 +606,6 @@ class DashboardOverviewView extends StatelessWidget {
             )
           else ...[
             if (favAccounts.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'CONTAS FAVORITAS ★',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: colors.textMuted,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
               ...favAccounts.map((a) {
                 final real = store.balance(a, predicted: false);
                 final pred = store.balance(a, predicted: true);
@@ -629,22 +617,8 @@ class DashboardOverviewView extends StatelessWidget {
                   predCents: pred,
                 );
               }),
-              const SizedBox(height: 8),
             ],
             if (showActive && regActive.isNotEmpty) ...[
-              if (favAccounts.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    'DEMAIS CONTAS ATIVAS',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: colors.textMuted,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
               ...regActive.map((a) {
                 final real = store.balance(a, predicted: false);
                 final pred = store.balance(a, predicted: true);
@@ -1604,7 +1578,7 @@ class DashboardOverviewView extends StatelessWidget {
                         children: [
                           Text(
                             closeDate.isNotEmpty && dueDate.isNotEmpty
-                                ? 'Fecha: ${fmtDate(closeDate)} • Vence: ${fmtDate(dueDate)}'
+                                ? 'Fecha: ${fmtDateShortYear(closeDate)} • Vence: ${fmtDateShortYear(dueDate)}'
                                 : 'Fatura do ciclo',
                             style: TextStyle(fontSize: 11, color: colors.textSecondary),
                           ),

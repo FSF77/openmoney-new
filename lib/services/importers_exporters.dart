@@ -375,6 +375,53 @@ class CSVExporter {
       filtered = filtered.where((t) => t.date.compareTo(endDate) <= 0).toList();
     }
 
+    // Inclui lançamento com o saldo inicial da conta (positivo ou negativo)
+    final initialBalanceTxs = <Transaction>[];
+    if (accountFilterId != null && accountFilterId.isNotEmpty) {
+      final acc = accMap[accountFilterId];
+      if (acc != null && acc.opening != 0) {
+        final date = (startDate != null && startDate.isNotEmpty)
+            ? startDate
+            : (filtered.isNotEmpty ? filtered.first.date : todayISO());
+        initialBalanceTxs.add(
+          Transaction(
+            id: 'init_${acc.id}',
+            acc: acc.id,
+            date: date,
+            payee: 'SALDO INICIAL',
+            cat: '',
+            memo: '',
+            amt: acc.opening,
+            rec: true,
+            createdAt: -9999999999.0,
+          ),
+        );
+      }
+    } else {
+      for (final acc in accounts) {
+        if (acc.opening != 0) {
+          final accTxs = filtered.where((t) => t.acc == acc.id).toList();
+          final date = (startDate != null && startDate.isNotEmpty)
+              ? startDate
+              : (accTxs.isNotEmpty ? accTxs.first.date : todayISO());
+          initialBalanceTxs.add(
+            Transaction(
+              id: 'init_${acc.id}',
+              acc: acc.id,
+              date: date,
+              payee: 'SALDO INICIAL',
+              cat: '',
+              memo: '',
+              amt: acc.opening,
+              rec: true,
+              createdAt: -9999999999.0,
+            ),
+          );
+        }
+      }
+    }
+    filtered.addAll(initialBalanceTxs);
+
     filtered.sort((a, b) {
       final dc = a.date.compareTo(b.date);
       if (dc != 0) return dc;
@@ -1523,6 +1570,223 @@ class CategoryCSVImporter {
         lower == 'income' ||
         lower == 'd' ||
         lower == 'r';
+  }
+}
+
+class AccountCSVExporter {
+  static String generateCSV(List<Account> accounts) {
+    final lines = <String>[
+      '"ID";"Nome";"Tipo";"Saldo Inicial";"Moeda";"Favorita";"Inativa";"Entidade";"Código Banco";"Agência";"Número Conta";"Observações";"Saldo Mínimo";"Logo";"Dia Fechamento";"Dia Vencimento";"Conta Pagamento Fatura";"Atalhos Carteira"',
+    ];
+
+    for (final acc in accounts) {
+      final idEsc = _escapeCSV(acc.id);
+      final nameEsc = _escapeCSV(acc.name);
+      final typeEsc = _escapeCSV(acc.type);
+      final openingEsc = _formatCSVAmount(acc.opening);
+      final currencyEsc = _escapeCSV(acc.effectiveCurrency);
+      final favEsc = acc.favorite == true ? 'Sim' : 'Não';
+      final inactEsc = acc.inactive == true ? 'Sim' : 'Não';
+      final businessEsc = _escapeCSV(acc.business ?? '');
+      final bankCodeEsc = _escapeCSV(acc.bankCode ?? '');
+      final agencyEsc = _escapeCSV(acc.agency ?? '');
+      final accNumEsc = _escapeCSV(acc.accountNumber ?? '');
+      final commentsEsc = _escapeCSV(acc.comments ?? '');
+      final minBalEsc = acc.minBalance != null ? _formatCSVAmount(acc.minBalance!) : '';
+      final logoEsc = _escapeCSV(acc.logo ?? '');
+      final closeDayEsc = acc.card?.closeDay != null ? acc.card!.closeDay.toString() : '';
+      final dueDayEsc = acc.card?.dueDay != null ? acc.card!.dueDay.toString() : '';
+      final payEsc = _escapeCSV(acc.card?.pay ?? '');
+      final aliasesEsc = _escapeCSV((acc.walletAliases ?? const []).join(', '));
+
+      lines.add(
+        '"$idEsc";"$nameEsc";"$typeEsc";"$openingEsc";"$currencyEsc";"$favEsc";"$inactEsc";"$businessEsc";"$bankCodeEsc";"$agencyEsc";"$accNumEsc";"$commentsEsc";"$minBalEsc";"$logoEsc";"$closeDayEsc";"$dueDayEsc";"$payEsc";"$aliasesEsc"',
+      );
+    }
+
+    return '\uFEFF${lines.join('\r\n')}';
+  }
+}
+
+class AccountCSVImporter {
+  static ({
+    List<Account> newAccounts,
+    List<Account> updatedAccounts,
+    int skippedCount,
+  }) parse({
+    required String content,
+    required List<Account> existingAccounts,
+  }) {
+    final rawLines = content
+        .replaceAll('\uFEFF', '')
+        .split(RegExp(r'\r?\n'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+
+    if (rawLines.isEmpty) {
+      return (newAccounts: [], updatedAccounts: [], skippedCount: 0);
+    }
+
+    final delimiter = _detectCsvDelimiter(rawLines[0]);
+    final records = rawLines.map((line) => _parseCsvLine(line, delimiter)).toList();
+    if (records.isEmpty) {
+      return (newAccounts: [], updatedAccounts: [], skippedCount: 0);
+    }
+
+    final headers = records[0].map((h) => removeDiacritics(h.trim().toLowerCase())).toList();
+    int? findCol(List<String> candidates) {
+      for (final c in candidates) {
+        final idx = headers.indexOf(c);
+        if (idx != -1) return idx;
+      }
+      return null;
+    }
+
+    final idCol = findCol(['id', 'codigo', 'cod']);
+    final nameCol = findCol(['nome', 'conta', 'name', 'descricao', 'titulo']);
+    final typeCol = findCol(['tipo', 'type']);
+    final openingCol = findCol(['saldo inicial', 'opening', 'saldo']);
+    final currencyCol = findCol(['moeda', 'currency']);
+    final favCol = findCol(['favorita', 'favorito', 'favorite']);
+    final inactCol = findCol(['inativa', 'inativo', 'inactive']);
+    final businessCol = findCol(['entidade', 'business', 'empresa']);
+    final bankCodeCol = findCol(['codigo banco', 'banco', 'bankcode']);
+    final agencyCol = findCol(['agencia', 'agency']);
+    final accNumCol = findCol(['numero conta', 'num conta', 'conta corrente', 'accountnumber']);
+    final commentsCol = findCol(['observacoes', 'observacao', 'nota', 'notas', 'comments', 'obs']);
+    final minBalCol = findCol(['saldo minimo', 'minbalance']);
+    final logoCol = findCol(['logo', 'icone']);
+    final closeDayCol = findCol(['dia fechamento', 'fechamento', 'closeday']);
+    final dueDayCol = findCol(['dia vencimento', 'vencimento', 'dueday']);
+    final payCol = findCol(['conta pagamento fatura', 'conta pagamento', 'pagamento fatura', 'pay']);
+    final aliasesCol = findCol(['atalhos carteira', 'atalhos', 'walletaliases', 'aliases']);
+
+    final newAccounts = <Account>[];
+    final updatedAccounts = <Account>[];
+    int skippedCount = 0;
+
+    final existingMapById = {for (final a in existingAccounts) a.id: a};
+    final existingMapByName = {for (final a in existingAccounts) a.name.trim().toLowerCase(): a};
+
+    String getVal(List<String> row, int? col) {
+      if (col == null || col < 0 || col >= row.length) return '';
+      return row[col].trim();
+    }
+
+    for (int i = 1; i < records.length; i++) {
+      final row = records[i];
+      if (row.isEmpty || row.every((c) => c.trim().isEmpty)) {
+        continue;
+      }
+
+      final rawName = getVal(row, nameCol);
+      if (rawName.isEmpty) {
+        skippedCount++;
+        continue;
+      }
+
+      final rawId = getVal(row, idCol);
+      final rawType = getVal(row, typeCol);
+      final rawOpening = getVal(row, openingCol);
+      final rawCurrency = getVal(row, currencyCol);
+      final rawFav = getVal(row, favCol);
+      final rawInact = getVal(row, inactCol);
+      final rawBusiness = getVal(row, businessCol);
+      final rawBankCode = getVal(row, bankCodeCol);
+      final rawAgency = getVal(row, agencyCol);
+      final rawAccNum = getVal(row, accNumCol);
+      final rawComments = getVal(row, commentsCol);
+      final rawMinBal = getVal(row, minBalCol);
+      final rawLogo = getVal(row, logoCol);
+      final rawCloseDay = getVal(row, closeDayCol);
+      final rawDueDay = getVal(row, dueDayCol);
+      final rawPay = getVal(row, payCol);
+      final rawAliases = getVal(row, aliasesCol);
+
+      final effectiveType = rawType.isNotEmpty ? rawType : 'Corrente';
+      final effectiveOpening = parseAmountCents(rawOpening) ?? 0;
+      final effectiveCurrency = _normalizeSupportedCurrencyCode(rawCurrency) ?? 'BRL';
+      final isFav = rawFav.toLowerCase() == 'sim' || rawFav.toLowerCase() == 'true' || rawFav == '1';
+      final isInact = rawInact.toLowerCase() == 'sim' || rawInact.toLowerCase() == 'true' || rawInact == '1';
+      final minBal = rawMinBal.isNotEmpty ? parseAmountCents(rawMinBal) : null;
+
+      CardConfig? cardConfig;
+      final closeDayInt = int.tryParse(rawCloseDay);
+      final dueDayInt = int.tryParse(rawDueDay);
+      if (effectiveType == kCardType || closeDayInt != null || dueDayInt != null || rawPay.isNotEmpty) {
+        cardConfig = CardConfig(
+          closeDay: closeDayInt ?? 1,
+          dueDay: dueDayInt ?? 10,
+          pay: rawPay,
+        );
+      }
+
+      List<String>? aliases;
+      if (rawAliases.isNotEmpty) {
+        aliases = rawAliases.split(',').map((a) => a.trim()).where((a) => a.isNotEmpty).toList();
+      }
+
+      // Check if updating existing or creating new
+      Account? existing;
+      if (rawId.isNotEmpty && existingMapById.containsKey(rawId)) {
+        existing = existingMapById[rawId];
+      } else if (existingMapByName.containsKey(rawName.toLowerCase())) {
+        existing = existingMapByName[rawName.toLowerCase()];
+      }
+
+      if (existing != null) {
+        final updated = Account(
+          id: existing.id,
+          name: rawName,
+          type: effectiveType,
+          opening: effectiveOpening,
+          currency: effectiveCurrency,
+          favorite: isFav,
+          inactive: isInact,
+          business: rawBusiness.isNotEmpty ? rawBusiness : existing.business,
+          bankCode: rawBankCode.isNotEmpty ? rawBankCode : existing.bankCode,
+          agency: rawAgency.isNotEmpty ? rawAgency : existing.agency,
+          accountNumber: rawAccNum.isNotEmpty ? rawAccNum : existing.accountNumber,
+          comments: rawComments.isNotEmpty ? rawComments : existing.comments,
+          minBalance: minBal ?? existing.minBalance,
+          logo: rawLogo.isNotEmpty ? rawLogo : existing.logo,
+          card: cardConfig ?? existing.card,
+          invoices: existing.invoices,
+          walletAliases: aliases ?? existing.walletAliases,
+        );
+        updatedAccounts.add(updated);
+      } else {
+        final newId = rawId.isNotEmpty ? rawId : uid();
+        final created = Account(
+          id: newId,
+          name: rawName,
+          type: effectiveType,
+          opening: effectiveOpening,
+          currency: effectiveCurrency,
+          favorite: isFav,
+          inactive: isInact,
+          business: rawBusiness.isNotEmpty ? rawBusiness : null,
+          bankCode: rawBankCode.isNotEmpty ? rawBankCode : null,
+          agency: rawAgency.isNotEmpty ? rawAgency : null,
+          accountNumber: rawAccNum.isNotEmpty ? rawAccNum : null,
+          comments: rawComments.isNotEmpty ? rawComments : null,
+          minBalance: minBal,
+          logo: rawLogo.isNotEmpty ? rawLogo : null,
+          card: cardConfig,
+          walletAliases: aliases,
+        );
+        newAccounts.add(created);
+        existingMapById[newId] = created;
+        existingMapByName[rawName.toLowerCase()] = created;
+      }
+    }
+
+    return (
+      newAccounts: newAccounts,
+      updatedAccounts: updatedAccounts,
+      skippedCount: skippedCount,
+    );
   }
 }
 

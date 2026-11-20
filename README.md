@@ -15,9 +15,10 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.1** (Build 145) | [⬇️ Baixar OpenMoney-macOS-2.5.1.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.1.zip) | ~12 MB | 19/11/2026 |
+| 🍏 **macOS** | **v2.5.2** (Build 146) | [⬇️ Baixar OpenMoney-macOS-2.5.2.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip) | ~12 MB | 19/11/2026 |
 | 🪟 **Windows** | **v2.5.1** (Build 145) | [⬇️ Baixar OpenMoney-Windows-2.5.1.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.1.zip) | ~13 MB | 19/11/2026 |
-| 🌐 **Web** | **v2.5.1** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 19/11/2026 |
+| 🌐 **Web** | **v2.5.2** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 19/11/2026 |
+
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -779,6 +780,28 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
   - Deltas recebidos antes do carregamento do snapshot base nunca marcam a base como carregada e disparam `forceFullPull: true`.
   - O motor de sincronização (`SyncEngine`), o cliente REST (`CloudSyncService`) e o servidor Cloudflare (`PUT /api/db`) bloqueiam qualquer compactação ou envio vazio não forçado sobre bases populadas (incluindo barreira mínima de **50 KB** para bases `chunked:*` no D1).
   - Ao desconectar a base local (`disconnectLocalDatabase`), o motor de sincronização é imediatamente encerrado (`stop()`).
+
+### 23. Autopreenchimento Inteligente, Sugestões Preditivas e Ações Rápidas de Extrato
+- **Botões Rápidos no Cabeçalho do Extrato**: Quando a barra rápida de inserção estiver oculta, três botões de ação rápida (**− Despesa**, **+ Receita** e **⇄ Transferência**) são exibidos no cabeçalho ao lado do ícone de edição da conta, abrindo o modal com o tipo correto já pré-selecionado.
+- **Autopreenchimento Imediato em Transferências**: Ao selecionar a opção de transferência, o campo de favorecido recebe automaticamente a descrição `"Transferência"`, suprimindo o histórico de compras e autocompletar irrelevante.
+- **Sugestões Preditivas Filtradas por Tipo**: Ao digitar a descrição, despesas buscam e sugerem exclusivamente lançamentos de despesas anteriores, enquanto receitas buscam exclusivamente lançamentos de receitas anteriores.
+- **Parâmetros Configuráveis em Ajustes (`SettingsView`)**:
+  - **Janela de Histórico**: Definição do intervalo de busca de sugestões (*Últimos 30 dias*, *60 dias*, *90 dias (padrão)*, *3 meses*, *6 meses*, *1 ano* ou *Todo o histórico*).
+  - **Escopo de Sugestão**: Opção de preencher apenas *Favorecido e Categoria (padrão)* ou preencher *Favorecido, Categoria e Conta*.
+- **Hierarquia Visual na Edição em Lote**: No seletor de categorias do modal de edição em massa, as subcategorias são apresentadas com recuo visual e prefixo `↳` para máxima clareza.
+- **Busca Resiliente de Logos Bancários**: Campo de pesquisa com controlador persistente, garantindo que o filtro de busca de bancos permaneça ativo durante a digitação.
+
+### 24. Saldo Inicial no CSV, Exportação/Importação de Contas, Máscara Automática de Data e Calculadora Integrada
+- **Saldo Inicial no CSV de Lançamentos**: A exportação de extrato em CSV inclui automaticamente um lançamento de abertura com descrição `"SALDO INICIAL"`, categoria vazia `""` e conciliação `"Sim"` para contas com saldo inicial diferente de zero (positivo ou negativo), garantindo que a soma em planilhas externas reflita o saldo real bancário.
+- **Central de Exportação e Importação de Contas em CSV**: Exporta e importa o cadastro completo de contas bancárias e cartões com todos os atributos: ID, Nome, Tipo, Saldo Inicial, Moeda, Favorita, Inativa, Entidade/Negócio, Código Banco, Agência, Conta Corrente, Observações, Saldo Mínimo, Logo, Dia Fechamento, Dia Vencimento, Conta Pagamento Fatura e Atalhos Apple Wallet.
+- **Máscara Automática de Data (`DateInputFormatter`)**: Inserção dinâmica da barra (`/`) após 2 dígitos e após 4 dígitos em todos os campos de data do aplicativo, suportando apagamento fluido por backspace e formatação instantânea de colagens de 8 dígitos.
+- **Calculadora e Avaliação Matemática em Campos de Valor**:
+  - **Avaliação Automática**: Permite digitar operações matemáticas diretamente no campo de valor (ex.: `10 + 10`, `150 / 3`, `80,50 * 2`). Ao pressionar `Enter` ou mudar de campo, o resultado é calculado e formatado automaticamente.
+  - **Mini Calculadora Integrada**: Ícone de calculadora (`Icons.calculate_outlined`) no campo de valor que abre um modal com teclado numérico, operadores aritméticos, parênteses, preview dinâmico do resultado e botão para aplicar.
+- **Limpeza Visual e Compactação no Dashboard**: Remoção dos cabeçalhos textuais redundantes no card de Contas (mantendo a ordenação por favoritas primeiro) e compactação das datas de faturas de cartão de crédito no formato `dd/mm/aa`.
+
+### 25. Proteção de Dados e Isolamento em Testes Automatizados (Zero-Impact Guard)
+- Redirecionamento transparente do diretório de armazenamento e do arquivo `config.json` para sandboxes temporárias durante a execução de testes automatizados (`Platform.environment['FLUTTER_TEST']`), blindando permanentemente a máquina de desenvolvimento e bases locais/nuvem contra perdas ou corrupções acidentais.
 
 ---
 

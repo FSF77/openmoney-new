@@ -5924,6 +5924,36 @@ class MoneyStore extends ChangeNotifier {
     return summary;
   }
 
+  ImportSummary importAccountsCSVBytes(Uint8List bytes) {
+    final content = readTextBytesWithEncoding(bytes);
+    final result = AccountCSVImporter.parse(
+      content: content,
+      existingAccounts: db.accounts,
+    );
+    for (final acc in result.newAccounts) {
+      db.accounts.add(acc);
+    }
+    for (final updated in result.updatedAccounts) {
+      final idx = db.accounts.indexWhere((a) => a.id == updated.id);
+      if (idx != -1) {
+        db.accounts[idx] = updated;
+      }
+    }
+    rebuildIndexes();
+    save(immediate: true);
+
+    final summary = ImportSummary(
+      title: 'Importação de Contas Concluída',
+      importedCount: result.newAccounts.length + result.updatedAccounts.length,
+      skippedCount: result.skippedCount,
+      newCategoriesCount: 0,
+      newAccountsCount: result.newAccounts.length,
+    );
+    lastImportSummary = summary;
+    notifyListeners();
+    return summary;
+  }
+
   MobileInboxImportResult importMobileInboxBytes(Uint8List bytes) {
     final result = MobileInboxImporter.parse(
       bytes: bytes,
@@ -6030,6 +6060,10 @@ class MoneyStore extends ChangeNotifier {
 
   String exportCategoriesCSVString() {
     return CategoryCSVExporter.generateCSV(db.cats);
+  }
+
+  String exportAccountsCSVString() {
+    return AccountCSVExporter.generateCSV(db.accounts);
   }
 
   String exportCashFlowCSVString(CashFlowMatrix matrix) {

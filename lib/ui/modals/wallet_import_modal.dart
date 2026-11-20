@@ -6,6 +6,7 @@ import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../services/wallet_import_service.dart';
 import '../../store/money_store.dart';
+import '../widgets/date_input_formatter.dart';
 
 /// Abre o fluxo de importação dos lançamentos exportados pelo app Carteira (Apple Wallet / Atalhos iOS CSV)
 Future<void> showWalletImportModal(
@@ -753,6 +754,8 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _dateCtrl,
+                  keyboardType: TextInputType.datetime,
+                  inputFormatters: [DateInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Data (DD/MM/AAAA)',
                     border: OutlineInputBorder(),

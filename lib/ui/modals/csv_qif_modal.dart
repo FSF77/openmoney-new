@@ -271,6 +271,63 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
     }
   }
 
+  Future<void> _handleImportAccounts() async {
+    final selected = await NativeFilePicker.pickFile(
+      title: 'Selecionar Arquivo CSV de Contas',
+      allowedExtensions: ['csv'],
+    );
+    if (selected != null && selected.isNotEmpty) {
+      try {
+        final bytes = File(selected).readAsBytesSync();
+        final summary = widget.store.importAccountsCSVBytes(bytes);
+        setState(() {
+          _isError = false;
+          _statusMessage = '✓ ${summary.formattedMessage}';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Erro ao importar contas: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _handleExportAccounts() async {
+    final savePath = await NativeFilePicker.saveFile(
+      title: 'Escolher Local para Salvar CSV de Contas',
+      defaultName: 'openmoney-contas-${todayISO()}.csv',
+      allowedExtensions: ['csv'],
+    );
+
+    if (savePath != null && savePath.isNotEmpty) {
+      try {
+        final csv = widget.store.exportAccountsCSVString();
+        if (!kIsWeb) {
+          final f = File(savePath);
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync(csv, flush: true);
+          setState(() {
+            _isError = false;
+            _statusMessage =
+                '✓ Contas exportadas com sucesso em:\n$savePath';
+          });
+          return;
+        }
+        Clipboard.setData(ClipboardData(text: csv));
+        setState(() {
+          _isError = false;
+          _statusMessage = '✓ Contas copiadas para a área de transferência!';
+        });
+      } catch (e) {
+        setState(() {
+          _isError = true;
+          _statusMessage = 'Erro ao exportar contas: $e';
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -770,6 +827,89 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                       icon: const Icon(Icons.folder_open, size: 16),
                       label: const Text('Importar Categorias...'),
                       onPressed: _handleImportCategories,
+                    ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+
+        // Contas Cadastradas
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.account_balance_outlined,
+                            size: 20, color: colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Contas Cadastradas',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Importe contas bancárias e cartões via arquivo CSV padronizado.',
+                      style: TextStyle(
+                          fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Importar Contas...'),
+                        onPressed: _handleImportAccounts,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.account_balance_outlined,
+                        size: 24, color: colors.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Contas Cadastradas',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Importe contas bancárias e cartões via arquivo CSV padronizado.',
+                            style: TextStyle(
+                                fontSize: 11.5, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.folder_open, size: 16),
+                      label: const Text('Importar Contas...'),
+                      onPressed: _handleImportAccounts,
                     ),
                   ],
                 ),
@@ -1293,6 +1433,89 @@ class _CsvQifCenterDialogState extends State<_CsvQifCenterDialog> {
                       icon: const Icon(Icons.download_outlined, size: 16),
                       label: const Text('Exportar Categorias...'),
                       onPressed: _handleExportCategories,
+                    ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+
+        // Contas Cadastradas Exportação
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colors.bgPrimary,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colors.borderGlass),
+          ),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.account_balance_outlined,
+                            size: 20, color: colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Exportar Contas Cadastradas',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Exporta todas as ${widget.store.db.accounts.length} contas em formato CSV compatível.',
+                      style: TextStyle(
+                          fontSize: 11.5, color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.download_outlined, size: 16),
+                        label: const Text('Exportar Contas...'),
+                        onPressed: _handleExportAccounts,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.account_balance_outlined,
+                        size: 24, color: colors.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Exportar Contas Cadastradas',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Exporta todas as ${widget.store.db.accounts.length} contas em formato CSV compatível.',
+                            style: TextStyle(
+                                fontSize: 11.5, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.download_outlined, size: 16),
+                      label: const Text('Exportar Contas...'),
+                      onPressed: _handleExportAccounts,
                     ),
                   ],
                 ),

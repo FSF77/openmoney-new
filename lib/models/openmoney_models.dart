@@ -1465,6 +1465,13 @@ String fmtDate(String iso) {
   return '${parts[2]}/${parts[1]}/${parts[0]}';
 }
 
+String fmtDateShortYear(String iso) {
+  final parts = iso.split('-');
+  if (parts.length != 3) return iso;
+  final year = parts[0].length >= 2 ? parts[0].substring(parts[0].length - 2) : parts[0];
+  return '${parts[2]}/${parts[1]}/$year';
+}
+
 const List<String> _ptMonthsFull = [
   'janeiro',
   'fevereiro',

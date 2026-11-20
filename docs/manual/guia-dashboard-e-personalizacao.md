@@ -33,7 +33,7 @@ Reúne o panorama patrimonial líquido de todas as contas ativas cadastradas:
 Apresenta o livro resumido de contas correntes e caixas financeiros ativos (excluindo cartões de crédito e contas de investimentos/poupança, que contam com cards dedicados):
 - **Privacidade Individual (Ocultar Saldos):** Ícone de olho no cabeçalho com tooltip, permitindo ocultar/exibir os saldos de contas de forma totalmente independente e persistida nas preferências.
 - **Ordem dos Registros:** A listagem segue rigorosamente a hierarquia visual definida na barra lateral: primeiro as **Contas Favoritas (★)** e, opcionalmente, as **Demais Contas Ativas**.
-- **Design Limpo e sem Botões Manuais:** As setas de subir/descer foram removidas do card para evitar poluição visual; a ordenação é herdada diretamente do menu lateral.
+- **Design Limpo e sem Rótulos Redundantes:** Os cabeçalhos de texto ("CONTAS FAVORITAS ★" e "DEMAIS CONTAS ATIVAS") foram removidos para proporcionar um visual contínuo, limpo e direto, mantendo com fidelidade a priorização: primeiro as contas favoritas, seguidas pelas demais contas ativas.
 - **Apresentação Clara de Saldos:**
   - O saldo real é exibido de forma direta e limpa (sem o prefixo redundante "Real").
   - A linha **Prev. mês** é exibida **apenas quando o saldo previsto for diferente do saldo real**, evitando repetições desnecessárias quando não há lançamentos futuros pendentes.
@@ -57,7 +57,7 @@ Consolida o ciclo atual de todos os cartões de crédito ativos:
 - **Linha "Conciliado":** Substitui o antigo termo "Atual", destacando o valor já conferido e faturado. É exibida **apenas quando o valor conciliado for diferente do valor total da fatura**.
   > *Exemplo prático:* Se a fatura total for de R$ 5.000,00 e já foram conciliados R$ 4.000,00, a linha secundária exibe `Conciliado -R$ 4.000,00`. Se todos os R$ 5.000,00 já estiverem conciliados, a linha secundária não é exibida, mantendo o card limpo e direto.
 - **Filtro de Faturas Zeradas (R$ 0,00):** Configuração personalizável que permite ocultar do card cartões que não possuam gastos no ciclo atual, destacando somente as faturas com compromissos abertos.
-- **Datas do Ciclo:** Indicação visual da data de fechamento e da data de vencimento da fatura.
+- **Datas do Ciclo Compactas:** Indicação das datas de fechamento e vencimento no padrão compacto `dd/mm/aa` (ex.: `Fecha: 10/11/26 • Vence: 18/11/26`), economizando espaço horizontal e garantindo legibilidade imediata em qualquer monitor.
 - **Atalho "Ver Fatura":** Direciona com um clique para a tela do cartão com a fatura aberta já pré-selecionada.
 
 ### 2.5. A Pagar (Despesas a Vencer)
