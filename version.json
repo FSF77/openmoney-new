@@ -1,29 +1,29 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.5.2",
-  "web": {
-    "version": "2.5.2",
-    "build": 148,
-    "releaseDate": "20/11/2026"
-  },
-  "build": 148,
-  "notes": "Melhorias visuais e aprimoramento na tela de inserção de datas e valores, campo de valor com calculadora dinâmica, parâmetro para preenchimento automático. Anteriores: Rotina para importar extrato OFX para conciliação, Backup automático agora faz até 4 snapshots diários, novo recurso para classificar os lançamentos por tags, tela de lançamentos gerais agora permite mais filtros e edição em lotes, nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, conta online, contas em outras moedas, personalização visual/temas, nova tela de Dashboard, versão web em https://openmoney.app.br",
-  "releaseDate": "20/11/2026",
-  "windows": {
-    "build": 145,
-    "version": "2.5.1",
-    "sizeMb": 13,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.1.zip",
-    "sha256": "900864e0eb30be5394efb05bf830622b0b48d7ef56daa0e04003835a66e5734e",
-    "releaseDate": "19/11/2026"
-  },
-  "macos": {
-    "version": "2.5.2",
-    "build": 148,
-    "releaseDate": "20/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip",
-    "sha256": "6bfb4b7287affc39f6fa289605e7ee6c0898c15f9f99e7ba593817783554b415",
-    "sizeMb": 12
-  },
-  "title": "OpenMoney Flutter v2.5.2"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "version":  "2.5.2",
+    "web":  {
+                "version":  "2.5.2",
+                "build":  148,
+                "releaseDate":  "20/11/2026"
+            },
+    "build":  148,
+    "notes":  "Melhorias visuais e aprimoramento na tela de inserção de datas e valores, campo de valor com calculadora dinâmica, parâmetro para preenchimento automático. Anteriores: Rotina para importar extrato OFX para conciliação, Backup automático agora faz até 4 snapshots diários, novo recurso para classificar os lançamentos por tags, tela de lançamentos gerais agora permite mais filtros e edição em lotes, nova tela para controle e acompanhamentos das previsões, limite de gasto agora pode ser usado para alertar quando está gastando mais que o definido, conta online, contas em outras moedas, personalização visual/temas, nova tela de Dashboard, versão web em https://openmoney.app.br",
+    "releaseDate":  "20/11/2026",
+    "windows":  {
+                    "build":  148,
+                    "version":  "2.5.2",
+                    "sizeMb":  13,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.2.zip",
+                    "sha256":  "d5eae8e7a92cdd3b1693b17f2e5d9907b09e868dc69b375a508d2930602aaa11",
+                    "releaseDate":  "20/11/2026"
+                },
+    "macos":  {
+                  "version":  "2.5.2",
+                  "build":  148,
+                  "releaseDate":  "20/11/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip",
+                  "sha256":  "6bfb4b7287affc39f6fa289605e7ee6c0898c15f9f99e7ba593817783554b415",
+                  "sizeMb":  12
+              },
+    "title":  "OpenMoney Flutter v2.5.2"
 }
