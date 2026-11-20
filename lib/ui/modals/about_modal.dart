@@ -45,14 +45,15 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
 
     return Dialog(
       backgroundColor: colors.bgSecondary,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colors.borderGlass),
       ),
-      child: SizedBox(
-        width: 440,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -102,7 +103,7 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
               ),
               const SizedBox(height: 18),
 
-              // Card com detalhes da plataforma e base
+              // Card com detalhes da plataforma
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -116,12 +117,6 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
                     _buildInfoRow(
                       label: 'Plataforma',
                       value: isWin ? 'Windows (x64)' : platform,
-                      colors: colors,
-                    ),
-                    const Divider(height: 14),
-                    _buildInfoRow(
-                      label: 'Base de Dados',
-                      value: 'Schema v7 • Centavos Inteiros',
                       colors: colors,
                     ),
                     const Divider(height: 14),
@@ -187,35 +182,54 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
                   color: colors.textSecondary.withValues(alpha: 0.65),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
 
               // Ações inferiores
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.open_in_browser, size: 16),
-                    label: const Text('GitHub'),
-                    onPressed: () => _openUrl(OpenMoneyVersion.releasesRepoUrl),
-                  ),
-                  Row(
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.system_update_alt, size: 15),
-                        label: const Text('Atualizações'),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          UpdateService.showUpdateDialog(context, manual: true);
-                        },
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('OK'),
-                      ),
-                    ],
-                  ),
-                ],
+                      icon: const Icon(Icons.open_in_browser, size: 15),
+                      label: const Text('GitHub', style: TextStyle(fontSize: 12.5)),
+                      onPressed: () => _openUrl(OpenMoneyVersion.releasesRepoUrl),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          icon: const Icon(Icons.system_update_alt, size: 15),
+                          label: const Text('Atualizações', style: TextStyle(fontSize: 12.5)),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            UpdateService.showUpdateDialog(context, manual: true);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('OK', style: TextStyle(fontSize: 12.5)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -230,7 +244,6 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
     required OpenMoneyColors colors,
   }) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
@@ -240,12 +253,17 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
             color: colors.textSecondary,
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: colors.textPrimary,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
           ),
         ),
       ],

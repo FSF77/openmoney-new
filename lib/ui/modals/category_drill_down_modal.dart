@@ -759,7 +759,7 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                           return ListTile(
                             dense: true,
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 6),
+                                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             leading: Icon(
                               t.rec
                                   ? Icons.check_circle
@@ -768,16 +768,48 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
                               color:
                                   t.rec ? colors.income : colors.textMuted,
                             ),
-                            title: Text(
-                              t.payee,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
+                            title: isMobile
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '$accName • ${fmtDate(t.date)}',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: colors.accent,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        t.payee,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    t.payee,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                             subtitle: Text(
-                              '${fmtDate(t.date)} • $accName • ${t.cat}${t.memo.isNotEmpty ? " • ${t.memo}" : ""}',
+                              isMobile
+                                  ? '${t.cat}${t.memo.isNotEmpty ? " • ${t.memo}" : ""}'
+                                  : '${fmtDate(t.date)} • $accName • ${t.cat}${t.memo.isNotEmpty ? " • ${t.memo}" : ""}',
                               style: const TextStyle(fontSize: 11.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             trailing: Text(
                               formatCurrency(t.amt, txCur),

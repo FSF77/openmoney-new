@@ -45,22 +45,24 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                 children: [
                   Icon(Icons.auto_fix_high, color: colors.accent, size: 22),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Previsões',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Previsões',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Gerencie tetos de gastos previstos e acompanhe os abatimentos reais',
-                        style: TextStyle(fontSize: 12, color: colors.textSecondary),
-                      ),
-                    ],
+                        Text(
+                          'Gerencie tetos de gastos previstos e acompanhe os abatimentos reais',
+                          style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -270,46 +272,71 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
               ),
               const SizedBox(height: 10),
               ...grp.predictions.map((p) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(p.tx.payee, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 4),
-                    Text('(${p.accountName})', style: TextStyle(fontSize: 10, color: colors.textSecondary)),
-                    if (p.isExhausted) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: colors.expense,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'ESGOTADA',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.tx.payee,
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                p.accountName,
+                                style: TextStyle(fontSize: 10.5, color: colors.textSecondary),
+                              ),
+                              if (p.isExhausted)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: colors.expense,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'ESGOTADA',
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                    const Spacer(),
-                    Text(
-                      formatCurrency(p.currentCents, p.accountCurrency),
-                      style: TextStyle(fontSize: 12, color: p.isExhausted ? colors.textMuted : colors.textPrimary),
                     ),
                     const SizedBox(width: 8),
+                    Text(
+                      formatCurrency(p.currentCents, p.accountCurrency),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: p.isExhausted ? colors.textMuted : colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     IconButton(
-                      icon: const Icon(Icons.edit, size: 14),
+                      icon: const Icon(Icons.edit, size: 15),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                       onPressed: () async {
                         await showTransactionEditModal(context, store, p.tx);
                         setState(() {});
                       },
                     ),
                     IconButton(
-                      icon: const Icon(Icons.refresh, size: 14),
+                      icon: const Icon(Icons.refresh, size: 15),
                       tooltip: 'Restaurar teto original',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                       onPressed: () {
                         store.restorePredictionBase(p.tx.id);
                         setState(() {});

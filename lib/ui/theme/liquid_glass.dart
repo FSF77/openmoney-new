@@ -253,9 +253,13 @@ class KpiMetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
 
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 14,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -263,19 +267,19 @@ class KpiMetricCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: EdgeInsets.all(isMobile ? 5 : 6),
                 decoration: BoxDecoration(
                   color: valueColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 16, color: valueColor),
+                child: Icon(icon, size: isMobile ? 14 : 16, color: valueColor),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isMobile ? 6 : 8),
               Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: isMobile ? 11 : 12,
                     fontWeight: FontWeight.w600,
                     color: colors.textSecondary,
                   ),
@@ -284,14 +288,18 @@ class KpiMetricCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              color: valueColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          SizedBox(height: isMobile ? 6 : 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: isMobile ? 15.5 : 19,
+                fontWeight: FontWeight.w800,
+                color: valueColor,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
           if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -302,6 +310,7 @@ class KpiMetricCard extends StatelessWidget {
                 fontSize: 11,
                 color: colors.textMuted,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],

@@ -920,15 +920,14 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                       color: colors.textPrimary,
                     ),
                   ),
-                  Text(
-                    _cloud.isAuthenticated
-                        ? 'Conectado como ${_cloud.userEmail} • ${_cloud.statusLabel}'
-                        : 'Sincronize e alterne entre múltiplas contas e bases openmoney.json',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 11.5 : 12,
-                      color: colors.textSecondary,
+                  if (!_cloud.isAuthenticated)
+                    Text(
+                      'Sincronize e alterne entre múltiplas contas e bases openmoney.json',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 11.5 : 12,
+                        color: colors.textSecondary,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -1139,98 +1138,132 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: colors.borderGlass),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: colors.accentBlue.withValues(alpha: 0.2),
-                child: Text(
-                  (_cloud.userName.isNotEmpty
-                          ? _cloud.userName[0]
-                          : (_cloud.userEmail.isNotEmpty
-                              ? _cloud.userEmail[0]
-                              : 'U'))
-                      .toUpperCase(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: colors.accentBlue,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: colors.accentBlue.withValues(alpha: 0.2),
+                    child: Text(
+                      (_cloud.userName.isNotEmpty
+                              ? _cloud.userName[0]
+                              : (_cloud.userEmail.isNotEmpty
+                                  ? _cloud.userEmail[0]
+                                  : 'U'))
+                          .toUpperCase(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: colors.accentBlue,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Text(
-                            _cloud.userName.isNotEmpty
-                                ? _cloud.userName
-                                : _cloud.userEmail,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: colors.textPrimary,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _cloud.userName.isNotEmpty
+                                    ? _cloud.userName
+                                    : _cloud.userEmail,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.accentGreen.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'ATIVA',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.accentGreen,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.accentGreen.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'ATIVA',
+                        if (_cloud.userName.isNotEmpty &&
+                            _cloud.userEmail.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            _cloud.userEmail,
                             style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: colors.accentGreen,
+                              fontSize: 12,
+                              color: colors.textSecondary,
                             ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        const SizedBox(height: 2),
+                        Text(
+                          'Revisão na nuvem: r${_cloud.revision}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
                           ),
                         ),
                       ],
                     ),
-                    Text(
-                      '${_cloud.userEmail} • Revisão na nuvem: r${_cloud.revision}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              TextButton.icon(
-                onPressed: () {
-                  widget.store.stopPeriodicCloudSync();
-                  _cloud.logout();
-                  widget.store.saveCloudSessionToConfig();
-                  if (widget.store.hasConfiguredLocalDatabase) {
-                    widget.store.switchToLocalMode();
-                  } else {
-                    widget.store.disconnectLocalDatabase();
-                  }
-                  Navigator.of(context).pop();
-                },
-                icon: Icon(
-                  Icons.logout,
-                  size: 16,
-                  color: colors.accentRed,
-                ),
-                label: Text(
-                  'Desconectar Conta (Logout)',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
+              const SizedBox(height: 10),
+              Divider(height: 1, color: colors.borderGlass),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    widget.store.stopPeriodicCloudSync();
+                    _cloud.logout();
+                    widget.store.saveCloudSessionToConfig();
+                    if (widget.store.hasConfiguredLocalDatabase) {
+                      widget.store.switchToLocalMode();
+                    } else {
+                      widget.store.disconnectLocalDatabase();
+                    }
+                    Navigator.of(context).pop();
+                  },
+                  icon: Icon(
+                    Icons.logout,
+                    size: 16,
                     color: colors.accentRed,
+                  ),
+                  label: Text(
+                    'Desconectar Conta (Logout)',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: colors.accentRed,
+                    ),
                   ),
                 ),
               ),
@@ -1250,45 +1283,45 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.switch_account_rounded,
-                        size: 16,
-                        color: colors.accentBlue,
-                      ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Text(
-                          'Alternar entre Contas e Bases (${savedAccounts.length})',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.switch_account_rounded,
+                          size: 16,
+                          color: colors.accentBlue,
+                        ),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            'Alternar entre Contas e Bases (${savedAccounts.length})',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (savedAccounts.length > 1) ...[
                         IconButton(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.all(6),
                           constraints: const BoxConstraints(),
                           icon: Icon(
                             _sortAccountsAscending
                                 ? Icons.sort_by_alpha_rounded
                                 : Icons.arrow_downward_rounded,
-                            size: 15,
+                            size: 17,
                             color: colors.accentBlue,
                           ),
                           tooltip: _sortAccountsAscending
@@ -1301,39 +1334,35 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                           },
                         ),
                         const SizedBox(width: 4),
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                            foregroundColor: colors.accentRed,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                            Icons.delete_sweep_outlined,
+                            size: 18,
+                            color: colors.accentRed,
                           ),
+                          tooltip: 'Desconectar Todas as Contas Salvas',
                           onPressed: _isBusy
                               ? null
                               : () async {
                                   widget.store.removeAllSavedCloudAccounts();
                                   if (mounted) setState(() {});
                                 },
-                          icon: const Icon(Icons.delete_sweep_outlined, size: 14),
-                          label: const Text(
-                            'Desconectar Todas',
-                            style: TextStyle(fontSize: 11.5),
-                          ),
                         ),
                         const SizedBox(width: 4),
                       ],
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          Icons.login_rounded,
+                          size: 18,
+                          color: colors.accentBlue,
                         ),
+                        tooltip: 'Conectar Outra Conta Existente',
                         onPressed: _isBusy
                             ? null
                             : () {
@@ -1345,22 +1374,18 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                                   _statusMsg = null;
                                 });
                               },
-                        icon: const Icon(Icons.login, size: 14),
-                        label: const Text(
-                          'Outra Conta',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
                       ),
                       const SizedBox(width: 4),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          Icons.person_add_alt_1_rounded,
+                          size: 18,
+                          color: colors.accentBlue,
                         ),
+                        tooltip: '+ Criar Nova Conta / Base na Nuvem',
                         onPressed: _isBusy
                             ? null
                             : () {
@@ -1374,11 +1399,6 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                                   _statusMsg = null;
                                 });
                               },
-                        icon: const Icon(Icons.person_add_alt_1, size: 14),
-                        label: const Text(
-                          '+ Nova Conta/Base',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
                       ),
                     ],
                   ),
@@ -1387,7 +1407,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
               if (savedAccounts.length > 1) ...[
                 const SizedBox(height: 8),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 130),
+                  constraints: const BoxConstraints(maxHeight: 165),
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: savedAccounts.length,
@@ -1401,7 +1421,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                       return ListTile(
                         dense: true,
                         contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 6),
+                            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         leading: Icon(
                           isCurrent
                               ? Icons.radio_button_checked
@@ -1412,24 +1432,37 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                               : colors.textSecondary,
                         ),
                         title: Text(
-                          acc.name.isNotEmpty
-                              ? '${acc.name} (${acc.email})'
-                              : acc.email,
+                          acc.name.isNotEmpty ? acc.name : acc.email,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: isCurrent
                                 ? FontWeight.w700
-                                : FontWeight.w500,
+                                : FontWeight.w600,
                             color: colors.textPrimary,
                           ),
                         ),
-                        subtitle: Text(
-                          'Revisão r${acc.revision}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                          ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (acc.name.isNotEmpty)
+                              Text(
+                                acc.email,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            Text(
+                              'Revisão r${acc.revision}',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1468,32 +1501,31 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
                               ),
                             if (!isCurrent) ...[
                               const SizedBox(width: 4),
-                              OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: colors.accentRed,
-                                  side: BorderSide(
-                                    color: colors.accentRed.withValues(alpha: 0.35),
+                              Tooltip(
+                                message: 'Desconectar esta conta',
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: colors.accentRed,
+                                    side: BorderSide(
+                                      color: colors.accentRed.withValues(alpha: 0.35),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: _isBusy
-                                    ? null
-                                    : () {
-                                        widget.store.removeSavedCloudAccount(
-                                          acc.userId,
-                                        );
-                                        if (mounted) setState(() {});
-                                      },
-                                icon: const Icon(Icons.close, size: 12),
-                                label: const Text(
-                                  'Desconectar',
-                                  style: TextStyle(fontSize: 11),
+                                  onPressed: _isBusy
+                                      ? null
+                                      : () {
+                                          widget.store.removeSavedCloudAccount(
+                                            acc.userId,
+                                          );
+                                          if (mounted) setState(() {});
+                                        },
+                                  child: const Icon(Icons.close, size: 14),
                                 ),
                               ),
                             ],
@@ -1506,7 +1538,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
               ] else ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Use "Outra Conta" ou "+ Nova Conta/Base" acima para conectar múltiplos e-mails e alternar entre suas bases com 1 clique.',
+                  'Use os ícones acima (Conectar Outra Conta ou Criar Nova Conta/Base) para conectar múltiplos e-mails e alternar entre suas bases com 1 clique.',
                   style: TextStyle(
                     fontSize: 11.5,
                     color: colors.textSecondary,

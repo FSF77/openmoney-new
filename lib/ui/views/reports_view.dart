@@ -21,6 +21,12 @@ class _ReportsViewState extends State<ReportsView> {
   CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   String _tagFilter = 'all';
   late int _selectedYear;
+  bool _mobileShowFilters = false;
+
+  bool get _hasActiveFilters =>
+      _selectedAccountIds.isNotEmpty ||
+      _tagFilter != 'all' ||
+      _statusFilter != CashFlowStatusFilter.all;
 
   @override
   void initState() {
@@ -70,19 +76,28 @@ class _ReportsViewState extends State<ReportsView> {
     final isForeign = cur != baseCur;
     final rateInfo = isForeign ? widget.store.rateInfoFor(cur) : null;
     final curMeta = currencyMetaFor(cur);
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 12 : 16,
+        isMobile ? 10 : 14,
+        isMobile ? 12 : 16,
+        24,
+      ),
       children: [
         GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 16,
+            vertical: isMobile ? 10 : 14,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Linha 1: Título e Exportação PDF
+              // Linha 1: Título, Filtro Mobile e Exportação PDF
               Row(
                 children: [
-                  Icon(Icons.pie_chart_outline, color: colors.accent, size: 24),
+                  Icon(Icons.pie_chart_outline, color: colors.accent, size: isMobile ? 22 : 24),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -93,26 +108,49 @@ class _ReportsViewState extends State<ReportsView> {
                               ? 'Relatório Anual $_selectedYear'
                               : 'Relatório',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: isMobile ? 16.5 : 18,
                             fontWeight: FontWeight.w800,
                             color: colors.textPrimary,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 1),
                         Text(
-                          'Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar • Moeda: ${curMeta.flag} $cur${isForeign ? " (Base: $baseCur${rateInfo != null ? " • ${formatRateDate(rateInfo.updatedAt)}" : ""})" : ""}',
+                          'Moeda: ${curMeta.flag} $cur${isForeign ? " (Base: $baseCur${rateInfo != null ? " • ${formatRateDate(rateInfo.updatedAt)}" : ""})" : ""}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isMobile ? 11.5 : 12,
                             color: colors.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  if (isMobile) ...[
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Filtros e Parâmetros',
+                      icon: Icon(
+                        _mobileShowFilters ? Icons.expand_less : Icons.tune,
+                        size: 20,
+                        color: (_mobileShowFilters || _hasActiveFilters)
+                            ? colors.accent
+                            : colors.textSecondary,
+                      ),
+                      onPressed: () => setState(
+                          () => _mobileShowFilters = !_mobileShowFilters),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   Tooltip(
                     message:
                         isAnnual ? 'Exportar PDF Anual' : 'Exportar PDF A4',
                     child: OutlinedButton(
+                      style: isMobile
+                          ? OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              minimumSize: const Size(36, 34),
+                            )
+                          : null,
                       onPressed: () {
                         final pdfBytes =
                             PdfReportGenerator.buildMonthlyReportPdfBytes(
@@ -128,24 +166,24 @@ class _ReportsViewState extends State<ReportsView> {
                               : 'Relatorio-${widget.store.month}.pdf',
                         );
                       },
-                      child: const Icon(Icons.picture_as_pdf, size: 18),
+                      child: const Icon(Icons.picture_as_pdf, size: 17),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Divider(height: 1, color: colors.borderGlass),
-              const SizedBox(height: 12),
-              // Linha 2: Filtros e Seletores
+              const SizedBox(height: 10),
+              // Linha 2: Período e Filtros
               Wrap(
-                spacing: 12,
-                runSpacing: 10,
+                spacing: 10,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SegmentedButton<ReportPeriodKind>(
                     style: const ButtonStyle(
                       textStyle: WidgetStatePropertyAll(
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                       ),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -161,102 +199,6 @@ class _ReportsViewState extends State<ReportsView> {
                     onSelectionChanged: (s) =>
                         setState(() => _periodKind = s.first),
                   ),
-                  AccountMultiSelectFilter(
-                    store: widget.store,
-                    selectedAccountIds: _selectedAccountIds,
-                    asFormField: true,
-                    width: 200,
-                    onSelectionChanged: (set) =>
-                        setState(() => _selectedAccountIds = set),
-                  ),
-                  Builder(
-                    builder: (context) {
-                      final tags = widget.store.allTags;
-                      final effectiveTag = (_tagFilter == 'all' ||
-                              _tagFilter == '__untagged__' ||
-                              tags.any((t) =>
-                                  t.toLowerCase() == _tagFilter.toLowerCase()))
-                          ? _tagFilter
-                          : 'all';
-                      return SizedBox(
-                        width: 155,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: effectiveTag,
-                          isExpanded: true,
-                          isDense: true,
-                          dropdownColor: colors.surfaceCard,
-                          style: TextStyle(
-                              fontSize: 13, color: colors.textPrimary),
-                          decoration: InputDecoration(
-                            labelText: 'Tag',
-                            labelStyle: TextStyle(
-                                fontSize: 11, color: colors.textMuted),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide:
-                                  BorderSide(color: colors.borderGlass),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide:
-                                  BorderSide(color: colors.borderGlass),
-                            ),
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                                value: 'all', child: Text('Todas')),
-                            const DropdownMenuItem(
-                                value: '__untagged__',
-                                child: Text('Sem tag')),
-                            ...tags.map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Text('#$t',
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _tagFilter = v);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  SizedBox(
-                    width: 200,
-                    child: DropdownButtonFormField<CashFlowStatusFilter>(
-                      initialValue: _statusFilter,
-                      isExpanded: true,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: colors.textPrimary,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Status de Conciliação',
-                        labelStyle: TextStyle(fontSize: 13),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: CashFlowStatusFilter.values
-                          .map((s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s.shortLabel,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setState(() => _statusFilter = v);
-                      },
-                    ),
-                  ),
                   if (!isAnnual)
                     MonthYearPickerBar(
                       currentMonthYM: widget.store.month,
@@ -268,6 +210,9 @@ class _ReportsViewState extends State<ReportsView> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                           icon: const Icon(Icons.chevron_left),
                           tooltip: 'Ano anterior',
                           onPressed: () => setState(() => _selectedYear--),
@@ -280,6 +225,9 @@ class _ReportsViewState extends State<ReportsView> {
                           ),
                         ),
                         IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                           icon: const Icon(Icons.chevron_right),
                           tooltip: 'Próximo ano',
                           onPressed: () => setState(() => _selectedYear++),
@@ -287,17 +235,174 @@ class _ReportsViewState extends State<ReportsView> {
                         const SizedBox(width: 4),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            textStyle: const TextStyle(fontSize: 13),
+                            textStyle: const TextStyle(fontSize: 12),
                             visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           onPressed: () => setState(
                               () => _selectedYear = DateTime.now().year),
-                          child: const Text('Ano Atual'),
+                          child: const Text('Atual'),
                         ),
                       ],
                     ),
                 ],
               ),
+              if (isMobile && !_mobileShowFilters && _hasActiveFilters) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colors.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: colors.accent.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.filter_alt, size: 13, color: colors.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Filtros aplicados',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => setState(() {
+                          _selectedAccountIds.clear();
+                          _tagFilter = 'all';
+                          _statusFilter = CashFlowStatusFilter.all;
+                        }),
+                        child: Text(
+                          'Limpar',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.accent,
+                            fontWeight: FontWeight.w800,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (!isMobile || _mobileShowFilters) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    AccountMultiSelectFilter(
+                      store: widget.store,
+                      selectedAccountIds: _selectedAccountIds,
+                      asFormField: true,
+                      width: isMobile ? 160 : 200,
+                      onSelectionChanged: (set) =>
+                          setState(() => _selectedAccountIds = set),
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final tags = widget.store.allTags;
+                        final effectiveTag = (_tagFilter == 'all' ||
+                                _tagFilter == '__untagged__' ||
+                                tags.any((t) =>
+                                    t.toLowerCase() == _tagFilter.toLowerCase()))
+                            ? _tagFilter
+                            : 'all';
+                        return SizedBox(
+                          width: isMobile ? 135 : 155,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: effectiveTag,
+                            isExpanded: true,
+                            isDense: true,
+                            dropdownColor: colors.surfaceCard,
+                            style: TextStyle(
+                                fontSize: 12.5, color: colors.textPrimary),
+                            decoration: InputDecoration(
+                              labelText: 'Tag',
+                              labelStyle: TextStyle(
+                                  fontSize: 11, color: colors.textMuted),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: colors.borderGlass),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: colors.borderGlass),
+                              ),
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: 'all', child: Text('Todas')),
+                              const DropdownMenuItem(
+                                  value: '__untagged__',
+                                  child: Text('Sem tag')),
+                              ...tags.map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text('#$t',
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setState(() => _tagFilter = v);
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                    SizedBox(
+                      width: isMobile ? 170 : 200,
+                      child: DropdownButtonFormField<CashFlowStatusFilter>(
+                        initialValue: _statusFilter,
+                        isExpanded: true,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Status de Conciliação',
+                          labelStyle: TextStyle(fontSize: 11, color: colors.textMuted),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: colors.borderGlass),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: colors.borderGlass),
+                          ),
+                        ),
+                        items: CashFlowStatusFilter.values
+                            .map((s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(
+                                    s.shortLabel,
+                                    style: const TextStyle(fontSize: 12.5),
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _statusFilter = v);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -546,24 +651,29 @@ class _ReportsViewState extends State<ReportsView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '↳ ${sub.name}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colors.textSecondary,
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          '↳ ${sub.name}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: colors.textSecondary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.open_in_new,
-                                      size: 11,
-                                      color: colors.accent,
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.open_in_new,
+                                        size: 11,
+                                        color: colors.accent,
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   '${sub.percentage}% • ${formatCurrency(sub.amount, currency)}',
                                   style: TextStyle(

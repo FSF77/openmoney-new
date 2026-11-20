@@ -424,7 +424,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                   children: [
                     Expanded(
                       child: _SummaryKpiPill(
-                        label: 'Total Receitas',
+                        label: isMobile ? 'Receitas' : 'Total Receitas',
                         cents: res.incomeCents,
                         currency: res.currency,
                         color: colors.income,
@@ -432,10 +432,10 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         colors: colors,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: isMobile ? 6 : 8),
                     Expanded(
                       child: _SummaryKpiPill(
-                        label: 'Total Despesas',
+                        label: isMobile ? 'Despesas' : 'Total Despesas',
                         cents: res.expenseCents,
                         currency: res.currency,
                         color: colors.expense,
@@ -444,10 +444,10 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                         isNegativeDisplay: true,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: isMobile ? 6 : 8),
                     Expanded(
                       child: _SummaryKpiPill(
-                        label: 'Resultado Líquido',
+                        label: isMobile ? 'Resultado' : 'Resultado Líquido',
                         cents: res.netCents,
                         currency: res.currency,
                         color: res.netCents >= 0 ? colors.income : colors.expense,
@@ -1191,106 +1191,144 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                     ),
                   ],
                 ),
-                title: Row(
-                  children: [
-                    if (acc != null) ...[
-                      AccountLogoWidget(
-                        account: acc,
-                        size: isMobile ? 16 : 18,
-                        cornerRadius: 4,
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        constraints: const BoxConstraints(maxWidth: 130),
-                        child: Text(
-                          acc.name,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: colors.accent,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      flex: 3,
-                      child: Text(
-                        tx.payee,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: isMobile ? 12.5 : 13.5,
-                          color: colors.textPrimary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (!isMobile) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text('•',
+                title: isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (acc != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AccountLogoWidget(
+                                  account: acc,
+                                  size: 14,
+                                  cornerRadius: 3,
+                                ),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    acc.name,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.accent,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          Text(
+                            tx.payee,
                             style: TextStyle(
-                                fontSize: 12, color: colors.textMuted)),
-                      ),
-                      Flexible(
-                        flex: 4,
-                        child: Text(
-                          tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: tx.cat.isEmpty
-                                ? colors.textMuted
-                                : colors.textSecondary,
-                            fontStyle: tx.cat.isEmpty
-                                ? FontStyle.italic
-                                : FontStyle.normal,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: colors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          if (acc != null) ...[
+                            AccountLogoWidget(
+                              account: acc,
+                              size: 18,
+                              cornerRadius: 4,
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              child: Text(
+                                acc.name,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.accent,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Flexible(
+                            flex: 3,
+                            child: Text(
+                              tx.payee,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                color: colors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text('•',
+                                style: TextStyle(
+                                    fontSize: 12, color: colors.textMuted)),
+                          ),
+                          Flexible(
+                            flex: 4,
+                            child: Text(
+                              tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: tx.cat.isEmpty
+                                    ? colors.textMuted
+                                    : colors.textSecondary,
+                                fontStyle: tx.cat.isEmpty
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isPred) ...[
+                            const SizedBox(width: 5),
+                            StatusBadge(
+                              text: 'PREVISÃO',
+                              color: colors.accentCyan,
+                              fontSize: 8.5,
+                            ),
+                          ],
+                          if (tx.recId != null) ...[
+                            const SizedBox(width: 5),
+                            StatusBadge(
+                              text: recurrenceFrequencyLabel(tx.recFreq).toUpperCase(),
+                              color: colors.accent,
+                              icon: Icons.repeat,
+                              fontSize: 8.5,
+                            ),
+                          ],
+                          if (tx.auto == true) ...[
+                            const SizedBox(width: 5),
+                            StatusBadge(
+                              text: 'FATURA AUTO',
+                              color: colors.warning,
+                              fontSize: 8.5,
+                            ),
+                          ],
+                          if (tx.ik != null && tx.ik!.isNotEmpty && tx.auto != true) ...[
+                            const SizedBox(width: 5),
+                            StatusBadge(
+                              text: 'FATURA ${formatInvoiceKeyForDisplay(tx.ik!)}',
+                              color: colors.accentIndigo,
+                              icon: Icons.receipt_outlined,
+                              fontSize: 8.5,
+                            ),
+                          ],
+                          if (tx.tags != null && tx.tags!.isNotEmpty) ...[
+                            const SizedBox(width: 5),
+                            ..._buildTagChips(tx.tags!, colors),
+                          ],
+                        ],
                       ),
-                      if (isPred) ...[
-                        const SizedBox(width: 5),
-                        StatusBadge(
-                          text: 'PREVISÃO',
-                          color: colors.accentCyan,
-                          fontSize: 8.5,
-                        ),
-                      ],
-                      if (tx.recId != null) ...[
-                        const SizedBox(width: 5),
-                        StatusBadge(
-                          text: recurrenceFrequencyLabel(tx.recFreq).toUpperCase(),
-                          color: colors.accent,
-                          icon: Icons.repeat,
-                          fontSize: 8.5,
-                        ),
-                      ],
-                      if (tx.auto == true) ...[
-                        const SizedBox(width: 5),
-                        StatusBadge(
-                          text: 'FATURA AUTO',
-                          color: colors.warning,
-                          fontSize: 8.5,
-                        ),
-                      ],
-                      if (tx.ik != null && tx.ik!.isNotEmpty && tx.auto != true) ...[
-                        const SizedBox(width: 5),
-                        StatusBadge(
-                          text: 'FATURA ${formatInvoiceKeyForDisplay(tx.ik!)}',
-                          color: colors.accentIndigo,
-                          icon: Icons.receipt_outlined,
-                          fontSize: 8.5,
-                        ),
-                      ],
-                      if (tx.tags != null && tx.tags!.isNotEmpty) ...[
-                        const SizedBox(width: 5),
-                        ..._buildTagChips(tx.tags!, colors),
-                      ],
-                    ],
-                  ],
-                ),
                 subtitle: isMobile
                     ? Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -1423,47 +1461,54 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                 top: BorderSide(color: colors.borderGlass),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${fmtDate(dg.date)} · ${weekdayShort(dg.date).toUpperCase()}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: colors.accent,
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '${fmtDate(dg.date)} · ${weekdayShort(dg.date).toUpperCase()}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: colors.accent,
+                    ),
                   ),
-                ),
-                Wrap(
-                  spacing: 12,
-                  children: [
-                    Text(
-                      'Receitas: +${formatCurrency(dayInc, summaryCurrency)}',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: colors.income,
+                  Wrap(
+                    spacing: isMobile ? 8 : 12,
+                    runSpacing: 2,
+                    children: [
+                      Text(
+                        '${isMobile ? "Rec" : "Receitas"}: +${formatCurrency(dayInc, summaryCurrency)}',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.income,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Despesas: -${formatCurrency(dayExp, summaryCurrency)}',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: colors.expense,
+                      Text(
+                        '${isMobile ? "Desp" : "Despesas"}: -${formatCurrency(dayExp, summaryCurrency)}',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.expense,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Resultado: ${formatCurrency(dayNet, summaryCurrency)}',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: dayNet >= 0 ? colors.income : colors.expense,
+                      Text(
+                        '${isMobile ? "Res" : "Resultado"}: ${formatCurrency(dayNet, summaryCurrency)}',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: dayNet >= 0 ? colors.income : colors.expense,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1787,11 +1832,15 @@ class _SummaryKpiPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
     final displayStr = isNegativeDisplay && cents > 0
         ? '- ${formatCurrency(cents, currency)}'
         : formatCurrency(cents, currency);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 12,
+        vertical: isMobile ? 6 : 8,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
@@ -1802,13 +1851,13 @@ class _SummaryKpiPill extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 5),
+              Icon(icon, size: isMobile ? 12 : 14, color: color),
+              const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: isMobile ? 10 : 11,
                     fontWeight: FontWeight.w600,
                     color: colors.textSecondary,
                   ),
@@ -1818,15 +1867,18 @@ class _SummaryKpiPill extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          Text(
-            displayStr,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              displayStr,
+              style: TextStyle(
+                fontSize: isMobile ? 13 : 15,
+                fontWeight: FontWeight.w800,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

@@ -22,63 +22,82 @@ class _DueBillsViewState extends State<DueBillsView> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
     final ids = _selectedAccountIds;
     final items = store.dueBillItems(accountIds: ids);
     final summary = store.dueBillsSummary(accountIds: ids);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 12 : 16,
+        isMobile ? 10 : 14,
+        isMobile ? 12 : 16,
+        24,
+      ),
       children: [
         GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 16,
+            vertical: isMobile ? 10 : 12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     Icons.notifications_active_outlined,
                     color: colors.accent,
-                    size: 22,
+                    size: isMobile ? 20 : 22,
                   ),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Contas a Pagar e Receber (Vencimentos & Conciliação)',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isMobile
+                              ? 'Contas a Pagar e Receber'
+                              : 'Contas a Pagar e Receber (Vencimentos & Conciliação)',
+                          style: TextStyle(
+                            fontSize: isMobile ? 16 : 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Monitoramento de lançamentos não conciliados atrasados, vencendo hoje e nos próximos ${store.reminderDaysAhead} dias',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
+                        const SizedBox(height: 2),
+                        Text(
+                          'Monitoramento de lançamentos não conciliados atrasados, vencendo hoje e nos próximos ${store.reminderDaysAhead} dias',
+                          style: TextStyle(
+                            fontSize: isMobile ? 11.5 : 12,
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SizedBox(
-                    width: 195,
+                    width: isMobile ? 160 : 195,
                     child: DropdownButtonFormField<int>(
                       initialValue: const [1, 2, 3, 5, 7, 10, 15, 30]
                               .contains(store.reminderDaysAhead)
                           ? store.reminderDaysAhead
                           : 3,
                       isExpanded: true,
+                      style: TextStyle(
+                        fontSize: isMobile ? 12 : 13,
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Antecedência',
                         isDense: true,
@@ -97,17 +116,20 @@ class _DueBillsViewState extends State<DueBillsView> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 10),
                   AccountMultiSelectFilter(
                     store: store,
                     selectedAccountIds: _selectedAccountIds,
                     onSelectionChanged: (set) =>
                         setState(() => _selectedAccountIds = set),
                   ),
-                  const SizedBox(width: 10),
                   Tooltip(
                     message: 'Exportar CSV',
                     child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(38, 36),
+                      ),
                       onPressed: items.isEmpty
                           ? null
                           : () => exportCsvWithFeedback(
@@ -117,14 +139,20 @@ class _DueBillsViewState extends State<DueBillsView> {
                                     'openmoney-contas-a-pagar-receber.csv',
                                 title: 'Exportar Contas a Pagar e Receber (CSV)',
                               ),
-                      child: const Icon(Icons.download, size: 18),
+                      child: const Icon(Icons.download, size: 17),
                     ),
                   ),
-                  const SizedBox(width: 10),
                   if (items.isNotEmpty)
                     FilledButton.icon(
-                      icon: const Icon(Icons.done_all, size: 17),
-                      label: Text('Conciliar Todos (${items.length})'),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      icon: const Icon(Icons.done_all, size: 16),
+                      label: Text(
+                        'Conciliar Todos (${items.length})',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                      ),
                       onPressed: () {
                         showDialog(
                           context: context,
@@ -241,68 +269,147 @@ class _DueBillsViewState extends State<DueBillsView> {
 
           return GlassCard(
             margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 14,
+              vertical: isMobile ? 8 : 10,
+            ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 IconButton(
+                  visualDensity: isMobile ? VisualDensity.compact : null,
+                  padding: isMobile ? const EdgeInsets.all(4) : null,
+                  constraints: isMobile ? const BoxConstraints() : null,
                   tooltip: 'Conciliar com 1 clique',
                   icon: Icon(
                     Icons.radio_button_unchecked,
                     color: badgeColor,
+                    size: isMobile ? 20 : 22,
                   ),
                   onPressed: () => store.toggleReconciled(item.tx.id),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: isMobile ? 8 : 6),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          StatusBadge(text: badgeLabel, color: badgeColor),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item.tx.payee,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
+                      if (isMobile) ...[
+                        Row(
+                          children: [
+                            StatusBadge(
+                              text: badgeLabel,
+                              color: badgeColor,
+                              fontSize: 9,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                item.accountName,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.accent,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        (item.dueDate != null && item.dueDate != item.tx.date)
-                            ? 'Venc: ${fmtDate(item.effectiveDueDate)} (Compra: ${fmtDate(item.tx.date)}) • ${item.accountName} • ${item.tx.cat}'
-                            : '${fmtDate(item.effectiveDueDate)} • ${item.accountName} • ${item.tx.cat}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
+                          ],
                         ),
-                      ),
+                        const SizedBox(height: 3),
+                        Text(
+                          item.tx.payee,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          (item.dueDate != null && item.dueDate != item.tx.date)
+                              ? 'Venc: ${fmtDate(item.effectiveDueDate)} (Compra: ${fmtDate(item.tx.date)})${item.tx.cat.isNotEmpty ? " • ${item.tx.cat}" : ""}'
+                              : '${fmtDate(item.effectiveDueDate)}${item.tx.cat.isNotEmpty ? " • ${item.tx.cat}" : ""}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            StatusBadge(text: badgeLabel, color: badgeColor),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item.tx.payee,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          (item.dueDate != null && item.dueDate != item.tx.date)
+                              ? 'Venc: ${fmtDate(item.effectiveDueDate)} (Compra: ${fmtDate(item.tx.date)}) • ${item.accountName} • ${item.tx.cat}'
+                              : '${fmtDate(item.effectiveDueDate)} • ${item.accountName} • ${item.tx.cat}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                Text(
-                  formatCurrency(
-                    item.tx.amt,
-                    store.accById(item.tx.acc)?.effectiveCurrency ??
-                        store.baseCurrency,
-                  ),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: item.tx.amt >= 0 ? colors.income : colors.expense,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      formatCurrency(
+                        item.tx.amt,
+                        store.accById(item.tx.acc)?.effectiveCurrency ??
+                            store.baseCurrency,
+                      ),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: isMobile ? 13 : 14,
+                        color: item.tx.amt >= 0 ? colors.income : colors.expense,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    if (isMobile) ...[
+                      const SizedBox(height: 4),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () => store.navigateToTransaction(item.tx),
+                        child: const Text('Ver', style: TextStyle(fontSize: 11.5)),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: () => store.navigateToTransaction(item.tx),
-                  child: const Text('Ver'),
-                ),
+                if (!isMobile) ...[
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                    onPressed: () => store.navigateToTransaction(item.tx),
+                    child: const Text('Ver'),
+                  ),
+                ],
               ],
             ),
           );
