@@ -15,9 +15,9 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.2** (Build 146) | [⬇️ Baixar OpenMoney-macOS-2.5.2.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip) | ~12 MB | 19/11/2026 |
+| 🍏 **macOS** | **v2.5.2** (Build 147) | [⬇️ Baixar OpenMoney-macOS-2.5.2.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip) | ~12 MB | 20/11/2026 |
 | 🪟 **Windows** | **v2.5.1** (Build 145) | [⬇️ Baixar OpenMoney-Windows-2.5.1.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.1.zip) | ~13 MB | 19/11/2026 |
-| 🌐 **Web** | **v2.5.2** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 19/11/2026 |
+| 🌐 **Web** | **v2.5.2** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 20/11/2026 |
 
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
@@ -802,6 +802,19 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 
 ### 25. Proteção de Dados e Isolamento em Testes Automatizados (Zero-Impact Guard)
 - Redirecionamento transparente do diretório de armazenamento e do arquivo `config.json` para sandboxes temporárias durante a execução de testes automatizados (`Platform.environment['FLUTTER_TEST']`), blindando permanentemente a máquina de desenvolvimento e bases locais/nuvem contra perdas ou corrupções acidentais.
+
+### 26. Otimização de Visibilidade e Ergonomia Mobile & Desktop
+- **Cards de Valores com Escala Automática (`FittedBox`)**: Os cards de resumo financeiro em **Lançamentos Gerais**, **Previsões**, **Contas a Pagar e Receber**, **Compras Parceladas** e **Relatório** redimensionam a fonte proporcionalmente em telas pequenas, eliminando o corte de números com `...`.
+- **Lançamentos Gerais e Previsões em Linhas Distintas**:
+  - Na lista de **Lançamentos Gerais** no mobile, o ícone e o nome da conta ficam na primeira linha e a descrição do lançamento fica em sua própria linha abaixo, garantindo leitura completa.
+  - Na tela de **Previsões**, a descrição da previsão e o nome da conta (junto à tag `ESGOTADA`) ficam em linhas separadas, impedindo qualquer sobreposição com os valores e botões de ação.
+- **Cloud & Sincronização Compacta**:
+  - O cabeçalho do modal exibe apenas o título principal quando conectado, concentrando os dados da sessão ativa exclusivamente no card da conta.
+  - No card da **Conta Ativa**, os dados da conta e o botão **Desconectar Conta (Logout)** ficam em linhas separadas.
+  - No card **Alternar entre Contas e Bases**, o nome e o e-mail de cada conta ficam em linhas distintas e os botões de ação no cabeçalho (**Ordenar A-Z**, **Desconectar Todas**, **Conectar Outra Conta** e **+ Criar Nova Conta/Base**) exibem apenas ícones com `tooltip` de ajuda.
+- **Tela Sobre Enxuta**: Layout responsivo sem estouro lateral de textos e sem exibição da linha técnica de Base de Dados.
+- **Contas a Pagar/Receber e Compras Parceladas Organizadas**: Cabeçalhos sem corte de texto e relação de itens no mobile estruturada em 3 linhas limpas (1. Badge de status/parcela + Conta; 2. Descrição completa; 3. Vencimento e Categoria).
+- **Tela Relatório Otimizada**: Cabeçalho limpo (exibindo apenas a moeda) e filtros de Conta, Tag e Status de Conciliação recolhíveis sob o botão de filtro (`Icons.tune`) no mobile, liberando espaço vertical imediato para os indicadores e categorias.
 
 ---
 

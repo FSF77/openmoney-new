@@ -140,10 +140,12 @@ A versão Web (`openmoney.app.br`) foi desenhada com foco na agilidade e tempo r
 
 ---
 
-## 🗑️ 10. Gerenciamento de Contas Salvas no Dispositivo (Acesso Rápido)
+## 🗑️ 10. Gerenciamento e Alternância de Contas Salvas no Dispositivo
 
-Ao utilizar o OpenMoney no navegador ou computador:
+No painel **OpenMoney Cloud & Sincronização**:
 
-1. Ao desconectar de uma conta, ela permanece listada na seção de **Acesso Rápido** para facilitar a reconexão.
-2. Se desejar remover o acesso salvo (por exemplo, em um computador compartilhado ou após trocar de dispositivo), clique no **ícone de lixeira** ao lado do botão "Entrar".
-3. A conta é esquecida pelo dispositivo e, caso você tente entrar novamente, será exigido informar a senha de acesso.
+1. **Card da Conta Ativa:** Exibe o nome, e-mail, badge `ATIVA` e revisão na nuvem em linhas organizadas, com o botão **Desconectar Conta (Logout)** posicionado na linha inferior do card (sem repetição redundante no cabeçalho da janela).
+2. **Card Alternar entre Contas e Bases:**
+   - Permite alternar com 1 clique entre múltiplas contas salvas (ex.: Pessoal e Consultoria/Empresa), exibindo o **nome** na linha principal e o **e-mail** e revisão nas linhas seguintes para leitura clara mesmo em telas pequenas.
+   - Os controles de topo utilizam **ícones compactos com tooltip de ajuda**: **Ordenar A-Z / Z-A**, **Desconectar Todas as Contas Salvas**, **Conectar Outra Conta Existente** e **+ Criar Nova Conta / Base na Nuvem**.
+3. **Acesso Rápido na Tela de Login:** Ao desconectar de uma conta, você também pode removê-la definitivamente do dispositivo clicando no ícone de fechar/lixeira.

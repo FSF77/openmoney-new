@@ -39,8 +39,7 @@ Cada categoria que possui previsões ganha um card estruturado:
   - 🟡 **Amarelo**: Atenção (entre 70% e 99% do teto).
   - 🔴 **Vermelho**: Teto atingido / esgotado (≥ 100%).
 - **Lista de Previsões Cadastradas**:
-  - Exibe a conta associada, a descrição e o valor atual disponível.
-  - Previsões com saldo zerado ganham o badge **ESGOTADA**.
+  - Exibe a **descrição da previsão** na linha superior e, logo abaixo, o **nome da conta associada** junto ao badge **ESGOTADA** (quando o saldo estiver zerado), evitando sobreposição com o valor disponível à direita em telas estreitas.
   - Ações rápidas:
     - ✏️ **Editar**: Abre o modal de edição do lançamento.
     - 🔄 **Restaurar Teto**: Reseta o valor atual de volta para o valor base original gravado no memo.

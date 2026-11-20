@@ -62,6 +62,32 @@ Na auditoria de usabilidade mobile, foram identificados gargalos decorrentes da 
 ### 3.5. Barra Superior Global (`AppShell`)
 - Na versão mobile, a `AppBar` ganhou o botão direto de status e acesso ao modal **Cloud & Sincronização** e truncamento automático por elipse para evitar quebras em títulos longos.
 
+### 3.6. Aprimoramentos de Visibilidade e Organização em Telas Pequenas (20/11/2026)
+- **Cards de KPIs com Escala Automática (`KpiMetricCard` e `_SummaryKpiPill`):**
+  - Todos os cards de resumo monetário e contadores nas telas **Lançamentos Gerais**, **Previsões**, **Contas a Pagar e Receber**, **Compras Parceladas** e **Relatório** utilizam `FittedBox(fit: BoxFit.scaleDown)` e tipografia proporcional (`13pt` a `15.5pt` no mobile), eliminando qualquer corte de números com `...` mesmo em valores na casa dos milhares ou milhões.
+- **Lançamentos Gerais (`AllTransactionsView`):**
+  - Na listagem mobile, o **ícone e nome da conta** ficam em uma linha superior dedicada (`10.5pt`, cor de destaque) e a **descrição do lançamento (`payee`)** fica em sua própria linha abaixo (`13pt`, negrito), seguida pela linha de categoria, nota e badges. No Desktop, o limite do nome da conta também foi ampliado (`maxWidth: 160`).
+  - O rodapé diário de fechamento utiliza `Wrap` responsivo com rótulos compactos (`Rec`, `Desp`, `Res`) no mobile para evitar cortes laterais.
+- **Previsões (`PredictionsManagementView`):**
+  - Na lista de previsões de cada categoria, a **descrição da previsão** fica na linha superior e o **nome da conta + badge `ESGOTADA`** ficam em uma segunda linha estruturada com `Wrap`, eliminando qualquer sobreposição com o valor em reais e os botões de editar/restaurar.
+- **Cloud & Sincronização (`CloudAccountModal`):**
+  - Removida a repetição dos dados da conta conectada no cabeçalho superior do modal quando autenticado, mantendo as informações concentradas apenas no card da conta ativa.
+  - No card da **Conta Ativa**, o nome, e-mail e revisão ficam em linhas separadas e o botão **Desconectar Conta (Logout)** fica posicionado em uma linha inferior dedicada alinhada à direita.
+  - No card **Alternar entre Contas e Bases**, os botões de ação no cabeçalho (**Ordenar A-Z**, **Desconectar Todas**, **Conectar Outra Conta** e **+ Criar Nova Conta/Base**) utilizam **apenas ícones com `tooltip` de ajuda**, evitando estouro horizontal. Na lista de contas salvas, o **nome** e o **e-mail** ficam em linhas separadas.
+- **Modal Sobre (`AboutModal`):**
+  - Removida a linha técnica **Base de Dados**, mantendo apenas **Plataforma**, **Licença & Código** e **Contato** com `Expanded` e truncamento seguro, além de barra de botões inferior em `Wrap` responsivo.
+- **Contas a Pagar e Receber (`DueBillsView`) e Compras Parceladas (`InstallmentsView`):**
+  - Cabeçalhos com quebra de linha fluida e controles em `Wrap`.
+  - Listagem de lançamentos e parcelas no mobile organizada em 3 linhas limpas:
+    1. **Linha 1:** Badge de status (`ATRASADO`, `VENCE HOJE`, `EM X DIAS` ou `PARCELA X/Y`) + Nome da Conta em destaque.
+    2. **Linha 2:** Descrição completa do favorecido (`payee`) sem quebrar palavras ao meio.
+    3. **Linha 3:** Data de vencimento e Categoria.
+  - Coluna direita com valor tabular e botão `Ver` compacto logo abaixo.
+- **Relatório (`ReportsView` e `CategoryDrillDownModal`):**
+  - Removido o texto secundário longo do cabeçalho (*"Ignora estritamente transferências entre contas • Clique em qualquer categoria para auditar"*), mantendo apenas a indicação limpa da moeda (`Moeda: 🇧🇷 BRL`).
+  - No mobile, os filtros de **Contas**, **Tag** e **Status de Conciliação** ficam recolhidos sob o botão de filtro (`Icons.tune`) no topo do card (com indicador visual quando há filtros ativos e atalho *"Limpar"*), deixando visíveis apenas o seletor `Mês / Ano` e o navegador de período.
+  - Subcategorias e itens do modal de auditoria (`CategoryDrillDownModal`) estruturados com `Expanded` e linhas separadas para Conta + Data e Descrição.
+
 ---
 
 ## 4. Consequências e Resultados
