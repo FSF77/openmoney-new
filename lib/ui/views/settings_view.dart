@@ -1,5 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/ai_assistant_service.dart';
+import '../../services/cloud_sync_service.dart';
+import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -13,18 +17,28 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   late TextEditingController _geminiKeyCtrl;
+  late TextEditingController _claudeKeyCtrl;
+  late TextEditingController _openaiKeyCtrl;
   bool _obscureGeminiKey = true;
+  bool _obscureClaudeKey = true;
+  bool _obscureOpenaiKey = true;
+  bool _isTestingAi = false;
+  String _aiTestStatusMessage = '';
   bool _isRecalculatingHistory = false;
 
   @override
   void initState() {
     super.initState();
     _geminiKeyCtrl = TextEditingController(text: widget.store.geminiApiKey);
+    _claudeKeyCtrl = TextEditingController(text: widget.store.claudeApiKey);
+    _openaiKeyCtrl = TextEditingController(text: widget.store.openaiApiKey);
   }
 
   @override
   void dispose() {
     _geminiKeyCtrl.dispose();
+    _claudeKeyCtrl.dispose();
+    _openaiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -682,6 +696,18 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ),
                 ],
+                if (widget.store.isAiAssistantEnabled)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Assistente & Insights IA'),
+                    subtitle: const Text(
+                      'Resumo proativo de variações de categorias, recorrências detectadas e acesso rápido à Assistente IA.',
+                    ),
+                    value: widget.store.dashboardWidgets['aiInsights'] ?? true,
+                    onChanged: (v) =>
+                        widget.store.setDashboardWidget('aiInsights', v ?? true),
+                  ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
@@ -824,96 +850,319 @@ class _SettingsViewState extends State<SettingsView> {
             const SizedBox(height: 16),
 
             // =================================================================
-            // 6. INTELIGÊNCIA ARTIFICIAL (GEMINI BYOK)
+            // 6. INTELIGÊNCIA ARTIFICIAL & ASSISTENTE (MULTI-PROVEDOR)
             // =================================================================
             _buildSectionCard(
               colors: colors,
-              title: 'Inteligência Artificial (Google Gemini BYOK)',
-              icon: Icons.psychology_outlined,
+              title:
+                  'Assistente Financeira & Inteligência Artificial (Gemini, Claude, ChatGPT e Siri)',
+              icon: Icons.auto_awesome_outlined,
               children: [
                 _buildSettingRow(
                   colors: colors,
-                  title: 'Assistente de Comprovantes com IA',
+                  title: 'Ativar Assistente Financeira com IA',
                   subtitle:
-                      'Permite extrair favorecido, data, valor e categoria automaticamente de fotos e PDFs de comprovantes.',
+                      'Habilita lançamento por texto, leitura de documentos/faturas PDF, análise de tendências, explicação de aumentos em categorias e detecção de recorrências.',
                   trailing: Switch(
-                    value: widget.store.isGeminiAiEnabled,
-                    onChanged: (v) => widget.store.setGeminiAiEnabled(v),
+                    value: widget.store.isAiAssistantEnabled,
+                    onChanged: (v) => widget.store.setAiAssistantEnabled(v),
                   ),
                 ),
-                if (widget.store.isGeminiAiEnabled) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _geminiKeyCtrl,
-                          obscureText: _obscureGeminiKey,
-                          decoration: InputDecoration(
-                            labelText: 'Chave Gemini API (Google AI Studio)',
-                            hintText: 'AIzaSy...',
-                            isDense: true,
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscureGeminiKey
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                size: 18,
+                if (widget.store.isAiAssistantEnabled) ...[
+                  const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Provedor de IA Preferido',
+                  subtitle:
+                      'Escolha qual inteligência artificial responderá no painel da Assistente (Cmd/Ctrl + J). Os cálculos contábeis base sempre rodam 100% localmente.',
+                  trailing: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceGlass,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: AIProviderType.fromId(widget.store.aiProvider).id,
+                        dropdownColor: colors.surfaceCard,
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        items: [
+                          for (final p in AIProviderType.values)
+                            if (p != AIProviderType.appleIntelligence ||
+                                (!kIsWeb &&
+                                    (Platform.isMacOS || Platform.isIOS)))
+                              DropdownMenuItem(
+                                value: p.id,
+                                child: Text('${p.label} — ${p.subtitle}'),
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscureGeminiKey = !_obscureGeminiKey;
-                                });
-                              },
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            widget.store.setAiAssistantConfig(
+                              enabled: true,
+                              provider: v,
+                              consumptionMode: v == AIProviderType.bridge.id
+                                  ? 'promptBridge'
+                                  : (widget.store.aiConsumptionMode ==
+                                          'promptBridge'
+                                      ? 'byok'
+                                      : widget.store.aiConsumptionMode),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Forma de Consumo',
+                  subtitle:
+                      'Use sua própria chave (BYOK), a nuvem OpenMoney Cloud (quando autenticado) ou o Modo Sem Chave (copiar/colar prompt pronto no ChatGPT/Claude Web).',
+                  trailing: SegmentedButton<String>(
+                    segments: [
+                      const ButtonSegment(
+                        value: 'byok',
+                        label: Text('Minha Chave'),
+                        icon: Icon(Icons.key_outlined, size: 15),
+                        tooltip:
+                            'Usa sua própria chave de API (Gemini gratuito, Claude ou ChatGPT) conectando direto do seu dispositivo ao provedor.',
+                      ),
+                      if (CloudSyncService.instance.isAuthenticated)
+                        const ButtonSegment(
+                          value: 'cloudManaged',
+                          label: Text('Nuvem Cloud'),
+                          icon: Icon(Icons.cloud_outlined, size: 15),
+                          tooltip:
+                              'Usa a IA integrada da nuvem OpenMoney Cloud da sua conta, sem precisar criar ou configurar chaves de API externas.',
+                        ),
+                      const ButtonSegment(
+                        value: 'promptBridge',
+                        label: Text('Sem Chave'),
+                        icon: Icon(Icons.copy_all_outlined, size: 15),
+                        tooltip:
+                            'Gera o contexto financeiro pronto para você copiar e colar gratuitamente no ChatGPT, Claude ou Gemini Web.',
+                      ),
+                    ],
+                    selected: {
+                      AIConsumptionMode.fromId(widget.store.aiConsumptionMode).id
+                    },
+                    onSelectionChanged: (s) {
+                      final mode = s.first;
+                      widget.store.setAiAssistantConfig(
+                        enabled: true,
+                        consumptionMode: mode,
+                        provider: mode == 'promptBridge'
+                            ? AIProviderType.bridge.id
+                            : (widget.store.aiProvider ==
+                                    AIProviderType.bridge.id
+                                ? AIProviderType.gemini.id
+                                : widget.store.aiProvider),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Chave Google Gemini
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _geminiKeyCtrl,
+                        obscureText: _obscureGeminiKey,
+                        decoration: InputDecoration(
+                          labelText:
+                              'Chave Google Gemini API (Google AI Studio — Gratuita)',
+                          hintText: 'AIzaSy...',
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureGeminiKey
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18,
                             ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureGeminiKey = !_obscureGeminiKey;
+                              });
+                            },
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () {
-                          widget.store.setGeminiApiKey(_geminiKeyCtrl.text.trim());
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Chave Gemini API salva com sucesso!'),
-                              duration: Duration(seconds: 2),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Chave Anthropic Claude
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _claudeKeyCtrl,
+                        obscureText: _obscureClaudeKey,
+                        decoration: InputDecoration(
+                          labelText:
+                              'Chave Anthropic Claude API (Console Anthropic — Opcional)',
+                          hintText: 'sk-ant-...',
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureClaudeKey
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18,
                             ),
-                          );
-                        },
-                        child: const Text('Salvar Chave'),
+                            onPressed: () {
+                              setState(() {
+                                _obscureClaudeKey = !_obscureClaudeKey;
+                              });
+                            },
+                          ),
+                        ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Chave OpenAI ChatGPT
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _openaiKeyCtrl,
+                        obscureText: _obscureOpenaiKey,
+                        decoration: InputDecoration(
+                          labelText:
+                              'Chave OpenAI ChatGPT API (Platform OpenAI — Opcional)',
+                          hintText: 'sk-proj-...',
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureOpenaiKey
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureOpenaiKey = !_obscureOpenaiKey;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      icon: const Icon(Icons.save_outlined, size: 16),
+                      label: const Text('Salvar Chaves de IA'),
+                      onPressed: () {
+                        widget.store.setAiAssistantConfig(
+                          enabled: true,
+                          geminiKey: _geminiKeyCtrl.text.trim(),
+                          claudeKey: _claudeKeyCtrl.text.trim(),
+                          openaiKey: _openaiKeyCtrl.text.trim(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Configurações e chaves de IA salvas localmente com segurança!',
+                            ),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      icon: _isTestingAi
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.bolt_outlined, size: 16),
+                      label: const Text('Testar Conexão'),
+                      onPressed: _isTestingAi
+                          ? null
+                          : () async {
+                              setState(() {
+                                _isTestingAi = true;
+                                _aiTestStatusMessage =
+                                    'Validando conexão com o provedor selecionado...';
+                              });
+                              final prov =
+                                  AIProviderType.fromId(widget.store.aiProvider);
+                              final key = prov == AIProviderType.claude
+                                  ? _claudeKeyCtrl.text.trim()
+                                  : prov == AIProviderType.openai
+                                      ? _openaiKeyCtrl.text.trim()
+                                      : _geminiKeyCtrl.text.trim();
+                              final res = await AIAssistantService.instance
+                                  .testProviderConnection(
+                                provider: prov,
+                                apiKey: key,
+                                useCloudManaged:
+                                    widget.store.aiConsumptionMode ==
+                                        'cloudManaged',
+                              );
+                              if (!mounted) return;
+                              setState(() {
+                                _isTestingAi = false;
+                                _aiTestStatusMessage =
+                                    '${res.ok ? "✅" : "⚠️"} ${res.message}';
+                              });
+                            },
+                    ),
+                  ],
+                ),
+                if (_aiTestStatusMessage.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _aiTestStatusMessage,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                    ),
                   ),
                 ],
+                const Divider(height: 22),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Siri IA, Spotlight & Atalhos (macOS / iOS / Web)',
+                  subtitle:
+                      'Você pode acionar a Assistente por voz via Siri/Atalhos da Apple abrindo a URL "openmoney://?prompt=Seu+Comando" ou "https://openmoney.app.br/?prompt=Seu+Comando".',
+                  trailing: Icon(
+                    Icons.mic_none_rounded,
+                    color: colors.accent,
+                    size: 20,
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 16),
+            ],
+          ),
+          const SizedBox(height: 16),
 
-            // =================================================================
-            // 7. GUIA DE ATALHOS DE TECLADO
-            // =================================================================
-            _buildSectionCard(
-              colors: colors,
-              title: 'Atalhos Rápidos de Teclado',
-              icon: Icons.keyboard_outlined,
-              children: [
-                _buildShortcutRow(colors, 'Cmd / Ctrl + K', 'Abrir Command Palette (Busca e Comandos)'),
-                _buildShortcutRow(colors, 'Cmd / Ctrl + ,', 'Abrir esta tela de Ajustes & Personalização'),
-                _buildShortcutRow(colors, 'Cmd / Ctrl + B', 'Alternar Barra Lateral (Expandida / Mini / Oculta)'),
-                _buildShortcutRow(colors, 'Cmd / Ctrl + D', 'Alternar Modo Escuro / Claro'),
-                _buildShortcutRow(colors, 'Cmd / Ctrl + F', 'Ir para Pesquisa Global'),
-                _buildShortcutRow(colors, 'F1', 'Abrir Ajuda e Manual do Usuário'),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // =================================================================
-            // 8. MOEDAS & COTAÇÕES
-            // =================================================================
-            _buildSectionCard(
-              colors: colors,
-              title: 'Moedas & Cotações',
+          // =================================================================
+          // 7. MOEDAS & COTAÇÕES
+          // =================================================================
+          _buildSectionCard(
+            colors: colors,
+            title: 'Moedas & Cotações',
               icon: Icons.currency_exchange_outlined,
               children: [
                 _buildSettingRow(
@@ -1128,6 +1377,33 @@ class _SettingsViewState extends State<SettingsView> {
                     ],
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // =================================================================
+            // 8. GUIA DE ATALHOS DE TECLADO
+            // =================================================================
+            _buildSectionCard(
+              colors: colors,
+              title: 'Atalhos Rápidos de Teclado',
+              icon: Icons.keyboard_outlined,
+              children: [
+                if (widget.store.isAiAssistantEnabled)
+                  _buildShortcutRow(colors, 'Cmd / Ctrl + J',
+                      'Abrir / Fechar Assistente Financeira IA'),
+                _buildShortcutRow(colors, 'Cmd / Ctrl + K',
+                    'Abrir Command Palette (Busca e Comandos)'),
+                _buildShortcutRow(colors, 'Cmd / Ctrl + ,',
+                    'Abrir esta tela de Ajustes & Personalização'),
+                _buildShortcutRow(colors, 'Cmd / Ctrl + B',
+                    'Alternar Barra Lateral (Expandida / Mini / Oculta)'),
+                _buildShortcutRow(
+                    colors, 'Cmd / Ctrl + D', 'Alternar Modo Escuro / Claro'),
+                _buildShortcutRow(
+                    colors, 'Cmd / Ctrl + F', 'Ir para Pesquisa Global'),
+                _buildShortcutRow(
+                    colors, 'F1', 'Abrir Ajuda e Manual do Usuário'),
               ],
             ),
             const SizedBox(height: 32),

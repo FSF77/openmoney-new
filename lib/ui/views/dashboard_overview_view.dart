@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
 import '../../services/cloud_sync_service.dart';
+import '../../services/financial_insights_engine.dart';
 import '../../store/money_store.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/ai_assistant_drawer.dart';
 
 class DashboardOverviewView extends StatelessWidget {
   final MoneyStore store;
@@ -60,6 +62,16 @@ class DashboardOverviewView extends StatelessWidget {
             totalPred: totalPred,
             totalPredYear: totalPredYear,
             width: width,
+            widgetKey: key,
+          );
+          break;
+        case 'aiInsights':
+          if (!store.isAiAssistantEnabled) {
+            continue;
+          }
+          cardWidget = _buildAiInsightsCard(
+            context,
+            colors,
             widgetKey: key,
           );
           break;
@@ -1798,10 +1810,277 @@ class DashboardOverviewView extends StatelessWidget {
                 label: const Text('Relatórios'),
                 onPressed: () => store.navigateTo(NavModule.reports),
               ),
+              if (store.isAiAssistantEnabled)
+                ActionChip(
+                  avatar: Icon(Icons.auto_awesome,
+                      size: 16, color: colors.accent),
+                  label: const Text('Assistente IA'),
+                  onPressed: () {
+                    final isDesktop = MediaQuery.of(context).size.width >= 860;
+                    if (isDesktop) {
+                      store.toggleAiAssistantPanel();
+                    } else {
+                      showAiAssistantModal(context, store);
+                    }
+                  },
+                ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAiInsightsCard(
+    BuildContext context,
+    OpenMoneyColors colors, {
+    required String widgetKey,
+  }) {
+    return _AiInsightsCacheScope(
+      store: store,
+      builder: (context, spikes, recs, opps) {
+        final isDesktop = MediaQuery.sizeOf(context).width >= 860;
+
+        void openWithPrompt([String? prompt]) {
+          if (isDesktop) {
+            store.openAiAssistant(initialPrompt: prompt);
+          } else {
+            showAiAssistantModal(context, store, initialPrompt: prompt);
+          }
+        }
+
+        return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.auto_awesome,
+                  size: 17,
+                  color: colors.accent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assistente & Insights IA',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: colors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'Análise de faturas, variações e lançamentos (Cmd/Ctrl+J)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              _buildMoveButtons(widgetKey, colors),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (spikes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => openWithPrompt(
+                  'Explique os aumentos de categorias neste mês',
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.warning.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: colors.warning.withValues(alpha: 0.32),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.trending_up_rounded,
+                        size: 16,
+                        color: colors.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          spikes.first.buildSummarySentence(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (recs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => openWithPrompt(
+                  'Identifique assinaturas e recorrências na minha base',
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: colors.accent.withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.repeat_rounded,
+                        size: 16,
+                        color: colors.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${recs.length} assinatura(s)/recorrência(s) detectada(s) no histórico (ex: ${recs.take(2).map((r) => r.displayPayee).join(", ")}).',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (spikes.isEmpty && recs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                opps.isNotEmpty
+                    ? 'Encontrei ${opps.length} oportunidade(s) de organização de categorias/lançamentos.'
+                    : 'Seus gastos por categoria estão dentro da média trimestral. Use a Assistente para lançar despesas por texto, ler faturas PDF ou tirar dúvidas.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.auto_awesome, size: 15),
+                label: const Text(
+                  'Abrir Assistente',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                onPressed: () => openWithPrompt(),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.credit_card_rounded, size: 15),
+                label: const Text(
+                  'Raio-X Faturas',
+                  style: TextStyle(fontSize: 12),
+                ),
+                onPressed: () => openWithPrompt(
+                  'Analise minhas faturas de cartão de crédito atuais',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+      },
+    );
+  }
+}
+
+class _AiInsightsCacheScope extends StatefulWidget {
+  final MoneyStore store;
+  final Widget Function(
+    BuildContext context,
+    List<CategorySpikeInsight> spikes,
+    List<RecurringCandidate> recs,
+    List<OrganizationOpportunity> opps,
+  ) builder;
+
+  const _AiInsightsCacheScope({
+    required this.store,
+    required this.builder,
+  });
+
+  @override
+  State<_AiInsightsCacheScope> createState() => _AiInsightsCacheScopeState();
+}
+
+class _AiInsightsCacheScopeState extends State<_AiInsightsCacheScope> {
+  @override
+  void initState() {
+    super.initState();
+    AiInsightsCache.instance.attach(widget.store);
+  }
+
+  @override
+  void dispose() {
+    AiInsightsCache.instance.detach(widget.store);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AiInsightsCache.instance,
+      builder: (ctx, _) {
+        final cache = AiInsightsCache.instance;
+        return widget.builder(
+          ctx,
+          cache.spikes,
+          cache.recurrences,
+          cache.opportunities,
+        );
+      },
     );
   }
 }

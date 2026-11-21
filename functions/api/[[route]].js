@@ -135,6 +135,14 @@ async function ensureSchema(db) {
       CREATE INDEX IF NOT EXISTS idx_audit_user_created
       ON user_audit_logs (user_id, created_at DESC)
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_ai_usage (
+        user_id TEXT NOT NULL,
+        usage_date TEXT NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, usage_date)
+      )
+    `),
   ]);
   try {
     await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
@@ -176,7 +184,7 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset",
+      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset, X-OpenMoney-AI-Key, X-OpenMoney-AI-Provider",
     "Access-Control-Expose-Headers":
       "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
@@ -3822,6 +3830,9 @@ export async function onRequest(context) {
           `DELETE FROM user_audit_logs WHERE user_id = ?1`
         ).bind(userId),
         env.DB.prepare(
+          `DELETE FROM user_ai_usage WHERE user_id = ?1`
+        ).bind(userId),
+        env.DB.prepare(
           `DELETE FROM user_databases WHERE user_id = ?1`
         ).bind(userId),
         env.DB.prepare(`DELETE FROM users WHERE id = ?1`).bind(userId),
@@ -3928,6 +3939,285 @@ export async function onRequest(context) {
         deletedAccount: false,
         revision: nextRev,
         backupEmailed: emailDispatched,
+      },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 9. GET /api/ai/capabilities & POST /api/ai/chat (Assistente IA & Proxy CORS)
+  // ==========================================================================
+  if (path === "/api/ai/capabilities" && request.method === "GET") {
+    const managedProviders = [];
+    if (env.AI_MANAGED_GEMINI_KEY) managedProviders.push("gemini");
+    if (env.AI_MANAGED_ANTHROPIC_KEY) managedProviders.push("claude");
+    if (env.AI_MANAGED_OPENAI_KEY) managedProviders.push("openai");
+
+    const dailyLimit = Math.max(1, Number(env.AI_DAILY_LIMIT || 25));
+    const todayIso = new Date().toISOString().substring(0, 10);
+    const usageRow = await env.DB.prepare(
+      "SELECT request_count FROM user_ai_usage WHERE user_id = ?1 AND usage_date = ?2"
+    )
+      .bind(userId, todayIso)
+      .first();
+
+    return jsonResponse(
+      {
+        ok: true,
+        managedAvailable: managedProviders.length > 0,
+        managedProviders,
+        dailyLimit,
+        usedToday: usageRow ? Number(usageRow.request_count || 0) : 0,
+      },
+      200,
+      origin
+    );
+  }
+
+  if (path === "/api/ai/chat" && request.method === "POST") {
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "Payload JSON inválido." }, 400, origin);
+    }
+
+    const provider = String(
+      body.provider || request.headers.get("X-OpenMoney-AI-Provider") || "gemini"
+    )
+      .trim()
+      .toLowerCase();
+    const useManaged = body.useManaged === true;
+    const systemPrompt = String(body.systemPrompt || "").trim();
+    const userPrompt = String(body.userPrompt || "").trim();
+    const preferredModel = String(body.model || "").trim();
+    const attachment =
+      body.attachment && typeof body.attachment === "object"
+        ? body.attachment
+        : null;
+
+    if (!userPrompt) {
+      return jsonResponse(
+        { error: "Informe a mensagem para a Assistente." },
+        400,
+        origin
+      );
+    }
+
+    let apiKey = "";
+    if (useManaged) {
+      if (provider === "gemini") apiKey = String(env.AI_MANAGED_GEMINI_KEY || "").trim();
+      else if (provider === "claude") apiKey = String(env.AI_MANAGED_ANTHROPIC_KEY || "").trim();
+      else if (provider === "openai") apiKey = String(env.AI_MANAGED_OPENAI_KEY || "").trim();
+
+      if (!apiKey) {
+        return jsonResponse(
+          {
+            error:
+              "O provedor gerenciado solicitado não está ativo neste servidor. Configure sua própria chave (BYOK) ou use o Modo Sem Chave.",
+          },
+          400,
+          origin
+        );
+      }
+
+      const dailyLimit = Math.max(1, Number(env.AI_DAILY_LIMIT || 25));
+      const todayIso = new Date().toISOString().substring(0, 10);
+      const usageRow = await env.DB.prepare(
+        "SELECT request_count FROM user_ai_usage WHERE user_id = ?1 AND usage_date = ?2"
+      )
+        .bind(userId, todayIso)
+        .first();
+      const usedToday = usageRow ? Number(usageRow.request_count || 0) : 0;
+
+      if (usedToday >= dailyLimit) {
+        return jsonResponse(
+          {
+            error: `Limite diário de ${dailyLimit} consultas gratuitas atingido. Configure sua própria chave de API ou aguarde a renovação diária.`,
+          },
+          429,
+          origin
+        );
+      }
+
+      await env.DB.prepare(
+        `INSERT INTO user_ai_usage (user_id, usage_date, request_count)
+         VALUES (?1, ?2, 1)
+         ON CONFLICT(user_id, usage_date) DO UPDATE SET
+           request_count = user_ai_usage.request_count + 1`
+      )
+        .bind(userId, todayIso)
+        .run();
+    } else {
+      apiKey = String(request.headers.get("X-OpenMoney-AI-Key") || "").trim();
+      if (!apiKey) {
+        return jsonResponse(
+          { error: "Chave de API não fornecida no cabeçalho X-OpenMoney-AI-Key." },
+          401,
+          origin
+        );
+      }
+    }
+
+    let replyText = null;
+
+    if (provider === "claude") {
+      const model = preferredModel || "claude-3-7-sonnet-latest";
+      const contentBlocks = [];
+      if (attachment && attachment.data) {
+        const mime = String(attachment.mimeType || "image/jpeg");
+        contentBlocks.push({
+          type: mime === "application/pdf" ? "document" : "image",
+          source: {
+            type: "base64",
+            media_type: mime,
+            data: String(attachment.data),
+          },
+        });
+      }
+      contentBlocks.push({ type: "text", text: userPrompt });
+
+      const upstream = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2048,
+          temperature: 0.15,
+          system: systemPrompt,
+          messages: [{ role: "user", content: contentBlocks }],
+        }),
+      });
+      if (!upstream.ok) {
+        return jsonResponse(
+          { error: `Erro no provedor Claude (HTTP ${upstream.status}).` },
+          upstream.status,
+          origin
+        );
+      }
+      const data = await upstream.json();
+      const firstBlock =
+        Array.isArray(data.content) &&
+        data.content.find((b) => b && b.type === "text" && b.text);
+      replyText = firstBlock ? String(firstBlock.text).trim() : null;
+    } else if (provider === "openai") {
+      const model = preferredModel || "gpt-4o-mini";
+      const userContent = [{ type: "text", text: userPrompt }];
+      if (
+        attachment &&
+        attachment.data &&
+        String(attachment.mimeType || "").startsWith("image/")
+      ) {
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${attachment.mimeType};base64,${attachment.data}`,
+          },
+        });
+      }
+
+      const upstream = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.15,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userContent },
+            ],
+          }),
+        }
+      );
+      if (!upstream.ok) {
+        return jsonResponse(
+          { error: `Erro no provedor OpenAI (HTTP ${upstream.status}).` },
+          upstream.status,
+          origin
+        );
+      }
+      const data = await upstream.json();
+      replyText =
+        data &&
+        Array.isArray(data.choices) &&
+        data.choices[0] &&
+        data.choices[0].message &&
+        data.choices[0].message.content
+          ? String(data.choices[0].message.content).trim()
+          : null;
+    } else {
+      const model = preferredModel || "gemini-2.5-flash";
+      const parts = [
+        { text: `${systemPrompt}\n\nPEDIDO DO USUÁRIO:\n${userPrompt}` },
+      ];
+      if (attachment && attachment.data) {
+        parts.push({
+          inline_data: {
+            mime_type: String(attachment.mimeType || "image/jpeg"),
+            data: String(attachment.data),
+          },
+        });
+      }
+      const upstream = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          model
+        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.15,
+              response_mime_type: "application/json",
+            },
+          }),
+        }
+      );
+      if (!upstream.ok) {
+        return jsonResponse(
+          { error: `Erro no provedor Gemini (HTTP ${upstream.status}).` },
+          upstream.status,
+          origin
+        );
+      }
+      const data = await upstream.json();
+      replyText =
+        data &&
+        Array.isArray(data.candidates) &&
+        data.candidates[0] &&
+        data.candidates[0].content &&
+        Array.isArray(data.candidates[0].content.parts) &&
+        data.candidates[0].content.parts[0] &&
+        data.candidates[0].content.parts[0].text
+          ? String(data.candidates[0].content.parts[0].text).trim()
+          : null;
+    }
+
+    if (!replyText) {
+      return jsonResponse(
+        { error: "Resposta vazia do provedor de IA." },
+        502,
+        origin
+      );
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        provider,
+        text: replyText,
       },
       200,
       origin

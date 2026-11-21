@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
 import '../../services/currency_rate_service.dart';
+import '../../services/date_validator.dart';
 import '../../services/importers_exporters.dart';
 import '../../services/math_expression_evaluator.dart';
 import '../../services/pdf_report_generator.dart';
@@ -16,6 +17,7 @@ import '../widgets/csv_export.dart';
 import '../widgets/datagrid_transaction_table.dart';
 import '../widgets/date_input_formatter.dart';
 import '../widgets/mini_calculator_dialog.dart';
+import '../widgets/ai_assistant_drawer.dart';
 
 class AccountLedgerView extends StatefulWidget {
   final MoneyStore store;
@@ -257,8 +259,28 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (payee.isEmpty || absCents == 0) return;
 
+    final dateVal = validateTransactionDate(_dateCtrl.text);
+    if (!dateVal.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(dateVal.error ?? 'A data informada é inválida.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    if (dateVal.isWarning) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final ok = await confirmDateWarningDialog(
+        context,
+        dateVal.warningMessage!,
+        colors: OpenMoneyColors(isDark),
+      );
+      if (!ok) return;
+    }
+
     final signedAmt = _isExpense ? -absCents : absCents;
-    final isoDate = _resolveIsoDate();
+    final isoDate = dateVal.isoDate!;
 
     double? txRate;
     final accCur = widget.account.effectiveCurrency;
@@ -1193,6 +1215,44 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                             child: Text('Por fatura (cartão)')),
                       ],
                     ),
+                    if (widget.store.isAiAssistantEnabled)
+                      Tooltip(
+                        message: isCard
+                            ? 'Analisar Fatura com Assistente IA (composição, parcelas e variações)'
+                            : 'Analisar Conta com Assistente IA',
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            minimumSize: const Size(36, 34),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () {
+                            final prompt = isCard
+                                ? 'Analise a fatura do cartão ${acc.name} em ${widget.store.month}'
+                                : 'Analise as movimentações da conta ${acc.name} em ${widget.store.month}';
+                            final isDesktop =
+                                MediaQuery.of(context).size.width >= 860;
+                            if (isDesktop) {
+                              widget.store.openAiAssistant(
+                                initialPrompt: prompt,
+                                focusAccountId: acc.id,
+                              );
+                            } else {
+                              showAiAssistantModal(
+                                context,
+                                widget.store,
+                                initialPrompt: prompt,
+                                focusAccountId: acc.id,
+                              );
+                            }
+                          },
+                          child: Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: colors.accent,
+                          ),
+                        ),
+                      ),
                     Tooltip(
                       message: isCard
                           ? 'Importar Fatura OFX e Conciliar'

@@ -1,9 +1,16 @@
 import Flutter
 import UIKit
 import UniformTypeIdentifiers
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+#if canImport(AppIntents)
+import AppIntents
+#endif
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  static weak var sharedAiChannel: FlutterMethodChannel?
   private var activeSecurityScopedURL: URL?
 
   override func application(
@@ -16,6 +23,51 @@ import UniformTypeIdentifiers
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     setupNativeFileChannel(engineBridge: engineBridge)
+    setupAppleIntelligenceChannel(engineBridge: engineBridge)
+  }
+
+  private func setupAppleIntelligenceChannel(engineBridge: FlutterImplicitEngineBridge) {
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleIntelligencePlugin") else {
+      return
+    }
+    let channel = FlutterMethodChannel(name: "openmoney/apple_intelligence", binaryMessenger: registrar.messenger())
+    AppDelegate.sharedAiChannel = channel
+
+    channel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      switch call.method {
+      case "checkAvailability":
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+          result(SystemLanguageModel.default.isAvailable)
+          return
+        }
+        #endif
+        result(true)
+
+      case "generateResponse":
+        let args = call.arguments as? [String: Any]
+        let systemPrompt = (args?["systemPrompt"] as? String) ?? ""
+        let userPrompt = (args?["userPrompt"] as? String) ?? ""
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), SystemLanguageModel.default.isAvailable {
+          Task {
+            do {
+              let session = LanguageModelSession(instructions: systemPrompt)
+              let response = try await session.respond(to: userPrompt)
+              result(response.content)
+            } catch {
+              result(nil)
+            }
+          }
+          return
+        }
+        #endif
+        result(nil)
+
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   private func setupNativeFileChannel(engineBridge: FlutterImplicitEngineBridge) {
@@ -257,3 +309,21 @@ private class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
     onCancel()
   }
 }
+
+#if canImport(AppIntents)
+@available(iOS 17.0, *)
+struct OpenMoneyAskAssistantIntent: AppIntent {
+  static var title: LocalizedStringResource = "Perguntar ou Lançar no OpenMoney"
+  static var description = IntentDescription("Envia um comando de lançamento ou pergunta financeira para a Assistente IA do OpenMoney.")
+  static var openAppWhenRun: Bool = true
+
+  @Parameter(title: "Comando ou Lançamento", requestValueDialog: "O que você deseja lançar ou perguntar ao OpenMoney?")
+  var commandText: String
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ProvidesDialog {
+    AppDelegate.sharedAiChannel?.invokeMethod("onSiriCommand", arguments: ["prompt": commandText])
+    return .result(dialog: "Abrindo a Assistente do OpenMoney com seu comando.")
+  }
+}
+#endif

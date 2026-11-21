@@ -75,8 +75,8 @@ Entre em uma conta e use a **barra de inserção rápida** no topo do extrato, o
 
 1. **Tipo:** escolha **`− Despesa`**, **`+ Receita`** ou **`⇄ Transferência`**.
    - *Dica:* quando a barra rápida de inserção estiver oculta no extrato da conta, três botões rápidos coloridos (**−**, **+**, **⇄**) ficam disponíveis no cabeçalho ao lado do ícone de edição da conta, abrindo o formulário já com a opção selecionada.
-2. **Data:** conta com **preenchimento automático da barra (`/`)**: basta digitar os números do dia e mês (ex.: `15112026`) que o app insere as barras instantaneamente.
-3. **Favorecido / Descrição:** ex.: *Supermercado*. Ao digitar, o app busca no histórico respeitando o tipo ativo (despesas mostram apenas despesas; receitas mostram apenas receitas) e preenche automaticamente a categoria. Em **Ajustes**, você pode personalizar o tempo de verificação do histórico (ex.: últimos 90 dias) e o escopo de sugestão. Ao selecionar **Transferência**, a descrição é preenchida automaticamente como *"Transferência"*.
+2. **Data:** conta com **preenchimento automático da barra (`/`)**: basta digitar os números do dia e mês (ex.: `15112026`) que o app insere as barras instantaneamente. O campo possui validação de calendário estrita (impede dias ou meses impossíveis como 31/02 ou mês 13) e exibe um alerta preventivo se a data for anterior a mais de 30 dias ou posterior a mais de 12 meses da data atual, solicitando confirmação para evitar lançamentos acidentais em datas incorretas.
+3. **Favorecido / Descrição:** ex.: *Supermercado*. Ao digitar, o app busca no histórico respeitando o tipo ativo (despesas mostram apenas despesas; receitas mostram apenas receitas), exclui automaticamente previsões do histórico de sugestões e preenche a categoria correspondente. Em **Ajustes**, você pode personalizar o tempo de verificação do histórico (ex.: últimos 90 dias) e o escopo de sugestão. Ao selecionar **Transferência**, a descrição é preenchida automaticamente como *"Transferência"*.
 4. **Categoria** (ou **Conta de Destino**, no caso de transferência).
 5. **Valor:** conta com **calculadora integrada**. Você pode digitar expressões matemáticas diretamente (ex.: `10 + 10`, `150 / 3`, `80,50 * 2`); ao pressionar `Enter` ou mudar de campo, o resultado é calculado e formatado automaticamente. Se preferir, clique no ícone de calculadora no campo para abrir a **Mini Calculadora** interativa com teclado de apoio.
 6. **Tags** *(opcional)*: digite etiquetas separadas por vírgula (`,`) ou `Enter` (ex.: `#Viagem`, `#Reembolso`).
@@ -148,6 +148,8 @@ Em **Fluxo de Caixa**, você visualiza uma matriz completa (**Diária, Mensal, T
 - **Total de Rendimentos** e **Total de Despesas**
 - **Rendimento menos Despesas** (resultado do período)
 - **Saldo Final Acumulado** (com suporte a adicionar comentários/anotações clicando em qualquer célula da linha final)
+- **Detalhamento Interativo de Lançamentos:** clique em qualquer valor numérico da matriz (seja em um determinado mês, na categoria ou no totalizador) para abrir a tela de detalhe completo com busca, filtros rápidos de conciliação e edição direta de cada lançamento.
+- **Recolher / Expandir Categorias:** botão dedicado no cabeçalho da matriz para alternar com 1 clique entre exibir apenas as categorias principais ou todas as subcategorias detalhadas (o estado é salvo de forma persistente).
 
 Você pode filtrar por todas as contas, selecionar contas específicas, alternar entre **Data do Lançamento** vs. **Data de Pagamento da Fatura** e exportar para Excel/Numbers em CSV.
 
@@ -164,7 +166,10 @@ Em **Relatórios**, acompanhe receitas, despesas, saldo líquido e **Taxa de Pou
 ## 11. 🎯 Limite de Gastos e Previsões Orçamentárias
 
 - **Limite de Gastos:** defina tetos mensais por categoria. Ao cadastrar uma nova despesa que ultrapasse o teto da categoria no mês, o OpenMoney exibe um **alerta preventivo** antes de salvar (veja o [Guia de Limite de Gastos e Alertas](guia-limite-de-gastos-e-alertas.md)).
-- **Previsões Orçamentárias:** crie reservas planejadas com nome iniciado por **`Previsão`** (ex.: *Previsão Mercado*, *Previsão Combustível*). Na tela **Previsões**, o botão **Ajustar** abate os gastos reais do mês da reserva sem duplicar descontos. Se o teto for totalmente consumido, a previsão é mantida com valor **R$ 0,00** e badge **ESGOTADA** para preservar o histórico (veja o [Guia de Gestão de Previsões](guia-gestao-de-previsoes.md)).
+- **Previsões Orçamentárias:** crie reservas planejadas com nome iniciado por **`Previsão`** (ex.: *Previsão Mercado*, *Previsão Combustível*). O sistema vincula a previsão ao mês com base na sua **data de lançamento** (mesmo em contas de cartão de crédito). Na tela **Previsões** ou no botão da barra do extrato, o botão **Ajustar** abate os gastos reais da categoria sem duplicar descontos.
+  - **Dois Regimes de Abatimento:** escolha entre **Por Mês** (despesas com data no mês civil) e **Por Fatura** (despesas de banco com data no mês + compras de cartão cuja fatura vence no mês).
+  - **Horizonte de Meses Configurável:** em **Ajustes & Personalização**, configure se a rotina avalia **1 mês**, **2 meses**, **3 meses (Padrão)**, **6 meses** ou **12 meses** consecutivos.
+  - Se o teto for totalmente consumido, a previsão é mantida com valor **R$ 0,00** e badge **ESGOTADA** para preservar o histórico contábil (veja o [Guia de Gestão de Previsões](guia-gestao-de-previsoes.md)).
 
 ---
 

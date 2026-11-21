@@ -21,7 +21,8 @@ Acessível na seção **PLANEJAMENTO** do menu lateral (acima de *Limite de Gast
 - **Modo de Apuração**: Alterna entre:
   - **Por Mês**: Abate despesas reais cuja data do lançamento pertence ao mês civil.
   - **Por Fatura do Cartão**: Abate despesas bancárias com data no mês e despesas de cartão cuja fatura vence no mês (regime de desembolso de caixa).
-- **Botão "Ajustar"**: Executa a rotina automática que calcula todos os gastos reais das categorias e abate dos tetos previstos, exibindo o modal de resumo com status semânticos.
+- **Horizonte de Meses Avaliados**: Configurado em **Ajustes & Personalização** (1, 2, 3, 6 ou 12 meses, padrão: **3 meses**), definindo quantas competências consecutivas a rotina avalia e ajusta ao ser disparada.
+- **Botão "Ajustar"**: Executa a rotina automática que calcula todos os gastos reais das categorias e abate dos tetos previstos, exibindo o modal de resumo com a data de cada previsão (`dd/mm/aaaa`), valor original, gastos consumidos e novo saldo.
 - **Botão "+ Nova Previsão"**: Abre o formulário padronizado de criação.
 
 ### 2.2 Cards de Indicadores (KPIs)
@@ -67,9 +68,28 @@ Cada categoria que possui previsões ganha um card estruturado:
 - O seu valor (`amt`) é atualizado para **R$ 0,00**, mantendo a base original memorizada.
 - **Motivo**: Preservar o histórico completo do planejamento, permitindo ao usuário auditar o que havia sido planejado e restaurar o teto a qualquer momento.
 
-### 3.4 Modos de Abatimento (`predMode`)
-- **`month` (Padrão)**: Considera os gastos com data dentro do mês alvo.
-- **`invoice` (Por Fatura)**: Considera os gastos com cartão cuja fatura vence no mês alvo + despesas em contas correntes/dinheiro do mês alvo. O escopo estendido projeta a apuração para o mês corrente e os 2 meses seguintes.
+### 3.4 Regra Contábil de Vinculação da Previsão
+- **A previsão orçamentária pertence ao mês estritamente pela sua data de lançamento (`tx.date`):**
+  - Mesmo que uma previsão tenha sido criada em uma conta de cartão de crédito, o sistema **não desloca** a previsão para a data da fatura daquele cartão.
+  - Uma previsão com data de lançamento em Novembro (`05/11/2026`) representa com exatidão o teto planejado para **Novembro**.
+
+### 3.5 Modos de Abatimento (`predMode`) e Regime de Desembolso
+1. **Regime Civil (`predMode == "month"` — Por Mês):**
+   - Abate todos os gastos reais da categoria cuja **data de lançamento** pertença ao mês (`date.startsWith(targetMonth)`).
+   - Engloba transações em contas correntes, caixas e cartões de crédito sem distinção de vencimento de fatura.
+2. **Regime de Caixa / Desembolso (`predMode == "invoice"` — Por Fatura de Cartão):**
+   - **Gastos bancários (corrente, poupança, dinheiro):** entram pela **data do lançamento**, pois a saída do saldo ocorre imediatamente no próprio mês.
+   - **Gastos em cartão de crédito:** entram pela **competência de vencimento da fatura** (`(t.ik ?? invKeyFor(cardCfg, t.date)) == targetMonth`), pois o desembolso efetivo para o pagamento ocorre na data de vencimento da fatura.
+
+### 3.6 Horizonte Configurável de Meses (`predMonths`)
+- **Parâmetro nos Ajustes:** Em **Ajustes & Personalização › Geral & Inicialização › Meses no Ajuste de Previsões**, o usuário pode configurar quantos meses consecutivos são avaliados ao disparar a rotina:
+  - **1 mês** (apenas a competência selecionada).
+  - **2 meses** (mês selecionado + próximo mês).
+  - **3 meses (Padrão)** (mês selecionado + 2 meses futuros).
+  - **6 meses** (semestre a partir do mês selecionado).
+  - **12 meses** (ano completo a partir do mês selecionado).
+- **Validade:** Aplica-se a **ambos os regimes** (`Por Mês` e `Por Fatura de Cartão`).
+- **Tooltip Dinâmico:** No cabeçalho do extrato de contas, o botão de modo de abatimento exibe no tooltip a quantidade de meses ativa configurada (ex.: *"...(3 meses)"* ou *"...(1 mês)"*).
 
 ---
 

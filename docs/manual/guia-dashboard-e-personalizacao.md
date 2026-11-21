@@ -90,36 +90,56 @@ Grade de atalhos rápidos com 1 clique para as principais funções do sistema:
 - Gestão de Categorias e Subcategorias
 - Ajustes & Personalização
 
+### 2.9. Insights Financeiros com IA
+Card dinâmico de inteligência preditiva que resume os principais pontos de atenção do mês:
+- **Resumo Inteligente:** Destaca categorias com aumento atípico de gastos em relação à média, resumo consolidado de faturas abertas e oportunidades de economia.
+- **Atalho Direto:** Botão para abrir o painel lateral completo da Assistente (`Cmd/Ctrl + J`).
+- **Visibilidade Condicional:** Este card só é exibido no Dashboard e na lista de configuração de cards de Ajustes quando a **Assistente Financeira & IA** estiver ativada nas preferências globais.
+
 ---
 
 ## 3. ⚙️ Central de Ajustes & Personalização (`SettingsView`)
 
-A Central de Ajustes unifica todas as preferências operacionais e visuais do sistema em um único painel acessível pelo menu superior, pela barra lateral em **MÓDULOS › Ajustes & Personalização** ou pelo atalho `Cmd + ,` (`Ctrl + ,`):
+A Central de Ajustes unifica todas as preferências operacionais e visuais do sistema em um único painel acessível pelo menu superior, pela barra lateral em **MÓDULOS › Ajustes & Personalização** ou pelo atalho `Cmd + ,` (`Ctrl + ,`). O painel está organizado na seguinte sequência:
 
-1. **Inicialização do Sistema:**
-   - Escolha entre abrir diretamente no **Dashboard Geral**, na **Última Conta Utilizada** ou em uma **Conta Específica**.
-2. **Personalização do Dashboard:**
-   - Ativação ou desativação individual de cada um dos cards (**Patrimônio**, **Contas**, **Investimentos**, **A Pagar**, **A Receber**, **Cartões**, **Categorias** e **Ações Rápidas**).
+1. **Geral:**
+   - **Inicialização do Sistema:** Escolha entre abrir diretamente no **Dashboard Geral**, na **Última Conta Utilizada** ou em uma **Conta Específica**.
+   - **Previsões Orçamentárias & Abatimento:**
+     - **Meses no Ajuste de Previsões:** Define o horizonte consecutivo de meses avaliados pela rotina automática de abatimento de previsões (**1 mês**, **2 meses**, **3 meses (Padrão)**, **6 meses** ou **12 meses**), aplicável a ambos os regimes.
+     - **Modo de Abatimento de Previsões:** Seleção entre **Por Mês** (regime civil pela data de lançamento) e **Por Fatura** (regime de desembolso de caixa pelas faturas de cartão de crédito).
+2. **Dashboard:**
+   - Ativação ou desativação individual de cada um dos cards (**Patrimônio**, **Contas**, **Investimentos**, **A Pagar**, **A Receber**, **Cartões**, **Categorias**, **Ações Rápidas** e **Insights Financeiros com IA**).
    - Parâmetro para **Exibir/Ocultar contas com saldo zerado (R$ 0,00)** no card Contas.
    - Parâmetro para **Exibir/Ocultar investimentos com saldo zerado (R$ 0,00)** no card Investimentos.
    - Parâmetro para **Exibir ou ocultar faturas com valor zerado (R$ 0,00)** no card de Cartões de Crédito.
    - Parâmetro para **Exibir ou ocultar as demais contas ativas** no card Contas (mantendo apenas favoritas).
    - Definição da antecedência em dias de contas a pagar e receber.
-3. **Lançamentos & Extratos:**
+3. **Aparência e Cores de Destaque:**
+   - Seleção de paleta de destaque dinâmica (**Azul Oceano**, **Esmeralda**, **Índigo**, **Sunset Laranja**, **Ciano Futurista** ou **Titanium Slate**).
+   - **Padronização Visual Completa:** Todos os botões contornados (`Outlined`), botões preenchidos (`Filled`), seletores de abas (`SegmentedButton`), chips de filtro e botões de exportação (CSV, PDF) adotam a cor de destaque com fundo translúcido suave.
+4. **Lançamentos & Extratos:**
    - **Direção Padrão de Ordenação por Data:** Escolha entre **Crescente** (mais antigos primeiro, padrão contábil) ou **Decrescente** (mais recentes primeiro).
    - **Inserção Rápida no Extrato das Contas:** Habilita ou desabilita o bloco inline de campos no topo do extrato de cada conta. Ao desativar, todos os campos inline são ocultados para maximizar o espaço útil vertical de rolagem dos lançamentos, e um botão circular de destaque `+` é adicionado ao lado do nome da conta no cabeçalho para abrir a janela modal de lançamento pré-selecionando a conta atual.
-4. **Aparência e Cores de Destaque:**
-   - Seleção de paleta de destaque dinâmica (**Azul Oceano**, **Esmeralda**, **Índigo**, **Sunset Laranja**, **Ciano Futurista** ou **Titanium Slate**).
-   - **Padronização Visual Completa:** Todos os botões contornados (`Outlined`), botões preenchidos (`Filled`), seletores de abas (`SegmentedButton`), chips de filtro e botões de exportação (CSV, PDF) adotam a cor de destaque com fundo translúcido suave, eliminando qualquer tom lilás padrão do sistema.
-5. **Layout e Densidade:**
-   - Modo de exibição da barra lateral: **Expandida** (285px com lista detalhada de contas e seções completas de Planejamento e Módulos) vs. **Mini Rail** (64px com navegação condensada por ícones).
-   - **Navegação Integral no Mini Rail:** O Mini Rail disponibiliza a lista completa de ícones e tooltips em duas seções organizadas por divisores:
-     - **Planejamento:** Lançamentos, Contas a Pagar & Receber, Compras Parceladas, Fluxo de Caixa, Relatório, Previsões, Limite de Gastos e Pesquisa Global.
-     - **Módulos & Ferramentas:** Categorias e Subcategorias, Tags, Ajustes & Personalização, Incluir Nova Conta, Logs de Alterações, Importação / Exportação, Cloud & Sincronização, Excluir Lançamentos, Ajuda e Manual e Sobre o OpenMoney.
    - Modo de exibição do extrato (Lista Diária vs. Datagrid Contínua).
-   - Escala tipográfica e zoom visual de acessibilidade.
-6. **Inteligência Artificial (BYOK):**
-   - Ativação e configuração da chave de API do Google Gemini Flash para leitura e interpretação multimodal de recibos fiscais.
+5. **Tags:**
+   - Painel para gerenciamento, unificação e limpeza de `#tags` utilizadas nos lançamentos.
+6. **Assistente Financeira & IA:**
+   - **Chave Mestre:** Ativação ou desativação global da Assistente. Quando desativada, remove todos os botões, atalhos e o card do Dashboard.
+   - **Provedor Preferido:** Seleção entre Google Gemini, Anthropic Claude, OpenAI ChatGPT, Apple Intelligence ou Modo Sem Chave.
+   - **Forma de Consumo:** Seletor segmentado com tooltips explicativos entre **Minha Chave (BYOK)**, **Nuvem Cloud** e **Sem Chave (Prompt Bridge)**.
+   - **Configuração de Chaves (BYOK):** Campo seguro para inserção de chave com botão de **Testar Conexão** em 1 clique.
+7. **Moedas & Cotações:**
+   - Gerenciamento de moedas ativas, seleção da moeda principal (`baseCurrency`), cotações automáticas com atualização periódica e conversão manual.
+8. **Atalhos Rápidos de Teclado:**
+   - Bloco consolidado ao final da tela com a tabela completa de atalhos globais e de navegação rápida:
+     - `Cmd/Ctrl + J`: Abrir / fechar Assistente Financeira com IA.
+     - `Cmd/Ctrl + N`: Novo Lançamento.
+     - `Cmd/Ctrl + K`: Paleta de Comandos rápida.
+     - `Cmd/Ctrl + F`: Pesquisa Global.
+     - `Cmd/Ctrl + ,`: Ajustes & Personalização.
+     - `Cmd/Ctrl + D`: Alternar entre Lista Diária e Datagrid.
+     - `Cmd/Ctrl + B`: Alternar visualização da barra lateral (Expandida / Mini Rail).
+
 
 ---
 

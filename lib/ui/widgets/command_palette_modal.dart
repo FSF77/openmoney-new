@@ -5,6 +5,7 @@ import '../../store/money_store.dart';
 import '../modals/ofx_reconciliation_modal.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
+import 'ai_assistant_drawer.dart';
 
 class _CommandItem {
   final String title;
@@ -72,6 +73,72 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
     final list = <_CommandItem>[];
 
     // Ações Rápidas
+    if (widget.store.isAiAssistantEnabled) {
+      list.add(_CommandItem(
+        title: 'Assistente Financeira IA (Cmd/Ctrl+J)',
+        subtitle:
+            'Lançar por texto, ler faturas/PDFs, explicar variações e recorrências',
+        icon: Icons.auto_awesome,
+        iconColor: colors.accent,
+        category: 'AÇÕES RÁPIDAS',
+        onSelect: () {
+          Navigator.of(context).pop();
+          final isDesktop =
+              MediaQuery.of(widget.parentContext).size.width >= 860;
+          if (isDesktop) {
+            widget.store.toggleAiAssistantPanel();
+          } else {
+            showAiAssistantModal(widget.parentContext, widget.store);
+          }
+        },
+      ));
+      list.add(_CommandItem(
+        title: 'IA: Explicar Aumentos de Categorias do Mês',
+        subtitle:
+            'Diagnóstico nominal dos estabelecimentos que puxaram os gastos',
+        icon: Icons.trending_up_rounded,
+        iconColor: colors.accent,
+        category: 'AÇÕES RÁPIDAS',
+        onSelect: () {
+          Navigator.of(context).pop();
+          final prompt = 'Explique os aumentos por categoria deste mês';
+          final isDesktop =
+              MediaQuery.of(widget.parentContext).size.width >= 860;
+          if (isDesktop) {
+            widget.store.openAiAssistant(initialPrompt: prompt);
+          } else {
+            showAiAssistantModal(
+              widget.parentContext,
+              widget.store,
+              initialPrompt: prompt,
+            );
+          }
+        },
+      ));
+      list.add(_CommandItem(
+        title: 'IA: Detectar Assinaturas e Recorrências Implícitas',
+        subtitle:
+            'Identificar cobranças periódicas e reajustes de preço na base',
+        icon: Icons.repeat_rounded,
+        iconColor: colors.accent,
+        category: 'AÇÕES RÁPIDAS',
+        onSelect: () {
+          Navigator.of(context).pop();
+          final prompt = 'Identifique assinaturas e recorrências na minha base';
+          final isDesktop =
+              MediaQuery.of(widget.parentContext).size.width >= 860;
+          if (isDesktop) {
+            widget.store.openAiAssistant(initialPrompt: prompt);
+          } else {
+            showAiAssistantModal(
+              widget.parentContext,
+              widget.store,
+              initialPrompt: prompt,
+            );
+          }
+        },
+      ));
+    }
     list.add(_CommandItem(
       title: 'Novo Lançamento',
       subtitle: 'Criar uma nova receita, despesa ou transferência',

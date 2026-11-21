@@ -107,19 +107,19 @@ Analise as informações do comprovante e extraia um JSON com as chaves:
         }
       };
 
-      final client = HttpClient();
       try {
-        final req = await client.postUrl(uri);
-        req.headers.set('Content-Type', 'application/json; charset=utf-8');
-        req.add(utf8.encode(jsonEncode(payload)));
-
-        final res = await req.close();
+        final res = await platformHttpRequest(
+          method: 'POST',
+          url: uri.toString(),
+          headers: {'Content-Type': 'application/json; charset=utf-8'},
+          body: jsonEncode(payload),
+          timeout: const Duration(seconds: 30),
+        );
         if (res.statusCode != 200) {
           continue;
         }
 
-        final resBody = await res.transform(utf8.decoder).join();
-        final parsed = jsonDecode(resBody);
+        final parsed = jsonDecode(res.body);
         final candidates = parsed['candidates'] as List?;
         if (candidates == null || candidates.isEmpty) continue;
 
@@ -144,8 +144,6 @@ Analise as informações do comprovante e extraia um JSON com as chaves:
         }
       } catch (_) {
         continue;
-      } finally {
-        client.close();
       }
     }
 

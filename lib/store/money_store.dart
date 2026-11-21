@@ -561,6 +561,7 @@ class MoneyStore extends ChangeNotifier {
   bool dashboardCardsShowZeroBalance = true;
   List<String> dashboardWidgetsOrder = [
     'patrimony',
+    'aiInsights',
     'accounts',
     'investments',
     'dueBills',
@@ -571,6 +572,7 @@ class MoneyStore extends ChangeNotifier {
   ];
   Map<String, bool> dashboardWidgets = {
     'patrimony': true,
+    'aiInsights': true,
     'accounts': true,
     'investments': true,
     'dueBills': true,
@@ -580,7 +582,17 @@ class MoneyStore extends ChangeNotifier {
     'quickActions': true,
   };
   bool isGeminiAiEnabled = false;
+  bool get isAiAssistantEnabled => isGeminiAiEnabled;
   String geminiApiKey = '';
+  String claudeApiKey = '';
+  String openaiApiKey = '';
+  String aiProvider = 'gemini'; // 'gemini' | 'claude' | 'openai' | 'apple' | 'bridge'
+  String aiConsumptionMode = 'byok'; // 'byok' | 'cloudManaged' | 'promptBridge'
+  String aiPreferredModel = '';
+  bool isAiAssistantPanelOpen = false;
+  String? pendingAiInitialPrompt;
+  String? pendingAiFocusAccountId;
+  String? pendingAiFocusCategory;
   bool sidebarShowFavorites = true;
   bool sidebarShowActiveAccounts = true;
   bool sidebarShowInactiveAccounts = false;
@@ -806,6 +818,10 @@ class MoneyStore extends ChangeNotifier {
       'payeeSuggestionIncludeAccount': payeeSuggestionIncludeAccount,
       'payeeSuggestionLookbackDays': payeeSuggestionLookbackDays,
       'lastUsedAccountId': _lastUsedAccountId,
+      'aiProvider': aiProvider,
+      'aiConsumptionMode': aiConsumptionMode,
+      'aiPreferredModel': aiPreferredModel,
+      'isGeminiAiEnabled': isGeminiAiEnabled,
     };
   }
 
@@ -864,6 +880,7 @@ class MoneyStore extends ChangeNotifier {
         dashboardWidgetsOrder = list;
         for (final k in [
           'patrimony',
+          'aiInsights',
           'accounts',
           'investments',
           'dueBills',
@@ -873,9 +890,12 @@ class MoneyStore extends ChangeNotifier {
           'quickActions'
         ]) {
           if (!dashboardWidgetsOrder.contains(k)) {
+            final patIdx = dashboardWidgetsOrder.indexOf('patrimony');
             final accIdx = dashboardWidgetsOrder.indexOf('accounts');
             final dueIdx = dashboardWidgetsOrder.indexOf('dueBills');
-            if (k == 'investments' && accIdx != -1) {
+            if (k == 'aiInsights' && patIdx != -1) {
+              dashboardWidgetsOrder.insert(patIdx + 1, k);
+            } else if (k == 'investments' && accIdx != -1) {
               dashboardWidgetsOrder.insert(accIdx + 1, k);
             } else if (k == 'receivables' && dueIdx != -1) {
               dashboardWidgetsOrder.insert(dueIdx + 1, k);
@@ -919,6 +939,23 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['geminiApiKey'] is String) {
       geminiApiKey = cfg['geminiApiKey'] as String;
+    }
+    if (cfg['claudeApiKey'] is String) {
+      claudeApiKey = cfg['claudeApiKey'] as String;
+    }
+    if (cfg['openaiApiKey'] is String) {
+      openaiApiKey = cfg['openaiApiKey'] as String;
+    }
+    if (cfg['aiProvider'] is String &&
+        (cfg['aiProvider'] as String).trim().isNotEmpty) {
+      aiProvider = (cfg['aiProvider'] as String).trim();
+    }
+    if (cfg['aiConsumptionMode'] is String &&
+        (cfg['aiConsumptionMode'] as String).trim().isNotEmpty) {
+      aiConsumptionMode = (cfg['aiConsumptionMode'] as String).trim();
+    }
+    if (cfg['aiPreferredModel'] is String) {
+      aiPreferredModel = (cfg['aiPreferredModel'] as String).trim();
     }
     if (cfg['isSidebarVisible'] is bool) {
       isSidebarVisible = cfg['isSidebarVisible'] as bool;
@@ -1418,7 +1455,19 @@ class MoneyStore extends ChangeNotifier {
   }
 
   void setGeminiAiEnabled(bool enabled) {
-    setGeminiConfig(enabled: enabled, apiKey: geminiApiKey);
+    setAiAssistantEnabled(enabled);
+  }
+
+  void setAiAssistantEnabled(bool enabled) {
+    isGeminiAiEnabled = enabled;
+    if (!enabled) {
+      isAiAssistantPanelOpen = false;
+    }
+    final cfg = _readConfig();
+    cfg['isGeminiAiEnabled'] = isGeminiAiEnabled;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
   }
 
   void setGeminiApiKey(String apiKey) {
@@ -1427,12 +1476,96 @@ class MoneyStore extends ChangeNotifier {
 
   void setGeminiConfig({required bool enabled, required String apiKey}) {
     isGeminiAiEnabled = enabled;
+    if (!enabled) {
+      isAiAssistantPanelOpen = false;
+    }
     geminiApiKey = apiKey.trim();
     final cfg = _readConfig();
     cfg['isGeminiAiEnabled'] = isGeminiAiEnabled;
     cfg['geminiApiKey'] = geminiApiKey;
     _writeConfig(cfg);
+    _syncPreferencesOnWeb();
     notifyListeners();
+  }
+
+  void setAiAssistantConfig({
+    bool? enabled,
+    String? provider,
+    String? consumptionMode,
+    String? geminiKey,
+    String? claudeKey,
+    String? openaiKey,
+    String? preferredModel,
+  }) {
+    if (enabled != null) {
+      isGeminiAiEnabled = enabled;
+      if (!enabled) {
+        isAiAssistantPanelOpen = false;
+      }
+    }
+    if (provider != null && provider.trim().isNotEmpty) {
+      aiProvider = provider.trim();
+    }
+    if (consumptionMode != null && consumptionMode.trim().isNotEmpty) {
+      aiConsumptionMode = consumptionMode.trim();
+    }
+    if (geminiKey != null) geminiApiKey = geminiKey.trim();
+    if (claudeKey != null) claudeApiKey = claudeKey.trim();
+    if (openaiKey != null) openaiApiKey = openaiKey.trim();
+    if (preferredModel != null) aiPreferredModel = preferredModel.trim();
+
+    final cfg = _readConfig();
+    cfg['isGeminiAiEnabled'] = isGeminiAiEnabled;
+    cfg['aiProvider'] = aiProvider;
+    cfg['aiConsumptionMode'] = aiConsumptionMode;
+    cfg['aiPreferredModel'] = aiPreferredModel;
+    cfg['geminiApiKey'] = geminiApiKey;
+    cfg['claudeApiKey'] = claudeApiKey;
+    cfg['openaiApiKey'] = openaiApiKey;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void toggleAiAssistantPanel() {
+    if (!isAiAssistantEnabled) {
+      isAiAssistantPanelOpen = false;
+      notifyListeners();
+      return;
+    }
+    isAiAssistantPanelOpen = !isAiAssistantPanelOpen;
+    notifyListeners();
+  }
+
+  void openAiAssistant({
+    String? initialPrompt,
+    String? focusAccountId,
+    String? focusCategory,
+  }) {
+    if (!isAiAssistantEnabled) return;
+    if (initialPrompt != null && initialPrompt.trim().isNotEmpty) {
+      pendingAiInitialPrompt = initialPrompt.trim();
+    }
+    if (focusAccountId != null) {
+      pendingAiFocusAccountId = focusAccountId;
+    }
+    if (focusCategory != null) {
+      pendingAiFocusCategory = focusCategory;
+    }
+    isAiAssistantPanelOpen = true;
+    notifyListeners();
+  }
+
+  void closeAiAssistantPanel() {
+    if (!isAiAssistantPanelOpen) return;
+    isAiAssistantPanelOpen = false;
+    notifyListeners();
+  }
+
+  String? consumePendingAiPrompt() {
+    final p = pendingAiInitialPrompt;
+    pendingAiInitialPrompt = null;
+    return p;
   }
 
   void toggleSidebar() {
@@ -1827,6 +1960,7 @@ class MoneyStore extends ChangeNotifier {
 
   void markIndexesDirty() {
     _indexesDirty = true;
+    dataRevision++;
   }
 
   void rebuildIndexesIfNeeded() {
@@ -1879,7 +2013,7 @@ class MoneyStore extends ChangeNotifier {
         }
       }
 
-      if (tx.auto != true && tx.xfer == null) {
+      if (tx.auto != true && tx.xfer == null && !isPredictionPayee(tx.payee)) {
         final raw = tx.payee.trim();
         if (raw.isNotEmpty) {
           String clean = raw;
@@ -1989,7 +2123,13 @@ class MoneyStore extends ChangeNotifier {
     _debounceSaveTimer = null;
   }
 
+  /// Contador monotônico de revisões de dados (incrementado a cada mutação salva
+  /// ou alteração remota aplicada). Usado por caches analíticos (IA/Insights)
+  /// para invalidação O(1) sem varrer `db.txs`.
+  int dataRevision = 0;
+
   void save({bool immediate = false}) {
+    dataRevision++;
     rebuildIndexesIfNeeded();
     notifyListeners();
 
@@ -2020,6 +2160,7 @@ class MoneyStore extends ChangeNotifier {
 
   /// Aplica alterações recebidas em tempo real do servidor sem disparar eco de save()
   void onRemoteChangesApplied({Map<String, dynamic>? updatedPrefs}) {
+    dataRevision++;
     if (updatedPrefs != null && updatedPrefs.isNotEmpty) {
       applyPreferencesMap(updatedPrefs);
       final cfg = _readConfig();
@@ -3782,7 +3923,7 @@ class MoneyStore extends ChangeNotifier {
 
   List<PayeeSuggestion> payeeSuggestions(String query, {int limit = 6, bool? isExpense}) {
     final cleanQ = query.trim();
-    if (cleanQ.isEmpty) return [];
+    if (cleanQ.isEmpty || isPredictionPayee(cleanQ)) return [];
     rebuildIndexesIfNeeded();
     final qFolded = removeDiacritics(cleanQ).toLowerCase();
     final cutoff = payeeSuggestionCutoffDate;
@@ -3791,6 +3932,7 @@ class MoneyStore extends ChangeNotifier {
     final containsMatches = <PayeeSuggestion>[];
 
     for (final v in _cachedPayeeSuggestions.values) {
+      if (isPredictionPayee(v.name)) continue;
       if (isExpense != null && v.isExpense != isExpense) continue;
       if (cutoff != null && v.lastDate.compareTo(cutoff) < 0) continue;
 
@@ -3838,7 +3980,7 @@ class MoneyStore extends ChangeNotifier {
     bool? isExpense,
   }) {
     final cleanQ = payee.trim().toLowerCase();
-    if (cleanQ.isEmpty) return null;
+    if (cleanQ.isEmpty || isPredictionPayee(cleanQ)) return null;
     rebuildIndexesIfNeeded();
     final cutoff = payeeSuggestionCutoffDate;
 
@@ -3847,7 +3989,7 @@ class MoneyStore extends ChangeNotifier {
       final key = '${isExpense ? "exp" : "inc"}:$cleanQ';
       final v = _cachedPayeeSuggestions[key];
       if (v != null) {
-        if (cutoff == null || v.lastDate.compareTo(cutoff) >= 0) {
+        if (!isPredictionPayee(v.name) && (cutoff == null || v.lastDate.compareTo(cutoff) >= 0)) {
           return (category: v.cat, isExpense: v.isExpense, accountId: v.accId);
         }
       }
@@ -3857,7 +3999,7 @@ class MoneyStore extends ChangeNotifier {
       final best = (vExp != null && vInc != null)
           ? (vExp.lastDate.compareTo(vInc.lastDate) >= 0 ? vExp : vInc)
           : (vExp ?? vInc);
-      if (best != null) {
+      if (best != null && !isPredictionPayee(best.name)) {
         if (cutoff == null || best.lastDate.compareTo(cutoff) >= 0) {
           return (category: best.cat, isExpense: best.isExpense, accountId: best.accId);
         }
@@ -3868,6 +4010,7 @@ class MoneyStore extends ChangeNotifier {
     final searchWords = cleanQ.split(' ').where((w) => w.length >= 4).toList();
     for (final entry in _cachedPayeeSuggestions.entries) {
       final v = entry.value;
+      if (isPredictionPayee(v.name)) continue;
       if (isExpense != null && v.isExpense != isExpense) continue;
       if (cutoff != null && v.lastDate.compareTo(cutoff) < 0) continue;
 

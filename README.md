@@ -15,9 +15,10 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.2** (Build 149) | [⬇️ Baixar OpenMoney-macOS-2.5.2.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.2.zip) | ~12 MB | 20/11/2026 |
+| 🍏 **macOS** | **v2.5.3** (Build 150) | [⬇️ Baixar OpenMoney-macOS-2.5.3.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.3.zip) | ~12 MB | 21/11/2026 |
 | 🪟 **Windows** | **v2.5.2** (Build 149) | [⬇️ Baixar OpenMoney-Windows-2.5.2.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.2.zip) | ~13 MB | 20/11/2026 |
-| 🌐 **Web** | **v2.5.2** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 20/11/2026 |
+| 🌐 **Web** | **v2.5.3** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 21/11/2026 |
+
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -450,12 +451,17 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
   - **Backup Prévio Obrigatório**: Exportação compulsória de arquivo JSON da base completa via `NSSavePanel` antes de efetuar a exclusão (se cancelado o backup, a exclusão é abortada).
   - Recálculo dinâmico automático de conciliações e faturas de cartão de crédito (`syncCards`).
 - **Ajuste Inteligente de Previsões Orçamentárias ("Ajustar Previsões")**:
-  - **Botão na Barra do Mês (macOS e iOS)**: Localizado estrategicamente ao lado do filtro e da busca rápida no cabeçalho do mês.
+  - **Botão na Barra do Mês e Tela de Previsões**: Localizado estrategicamente ao lado do filtro e da busca rápida no cabeçalho do extrato e na tela dedicada de Previsões.
+  - **Vinculação Estrita por Data de Lançamento**: A previsão orçamentária pertence ao mês estritamente pela sua **data de lançamento** (`tx.date`), inclusive para previsões alocadas em cartões de crédito (desconsidera-se a fatura da previsão para evitar deslocamentos indevidos de planejamento).
+  - **Dois Regimes Contábeis de Abatimento (`predMode`)**:
+    - **Por Mês (`month` — Padrão)**: Abate despesas reais cuja data de lançamento pertence ao mês civil.
+    - **Por Fatura (`invoice`)**: Considera a data do lançamento para contas bancárias/dinheiro e a **competência de vencimento da fatura** para compras de cartão de crédito (regime de desembolso de caixa).
+  - **Horizonte de Meses Configurável (`predMonths`)**: Na tela de **Ajustes & Personalização**, o usuário define quantos meses consecutivos são avaliados na execução (**1 mês**, **2 meses**, **3 meses (Padrão)**, **6 meses** ou **12 meses**), aplicável a ambos os regimes e com tooltip dinâmico no extrato.
   - **Identificação Automática**: Localiza instantaneamente todos os lançamentos do mês cuja descrição comece com `Previsão` (ex: `Previsão Posto`, `Previsão Mercado`), sem distinção de maiúsculas/minúsculas e acentos.
-  - **Apuração Global de Gastos da Categoria**: Varre todas as contas ativas no mês e calcula o total dos gastos efetivamente realizados na mesma categoria (desconsiderando transferências e outras previsões).
+  - **Apuração Global de Gastos da Categoria**: Varre todas as contas ativas no período e calcula o total dos gastos efetivamente realizados na mesma categoria (desconsiderando transferências e outras previsões).
   - **Abatimento Proporcional Inteligente**: Reduz o valor da previsão com base nos gastos reais da categoria. A base original é gravada de forma transparente na nota (`[Previsão base: R$ X,XX]`), garantindo que execuções sucessivas não causem deduções repetidas.
   - **Retenção de Previsão Esgotada (Valor Zerado sem Exclusão)**: Caso as despesas da categoria alcancem ou superem o valor previsto (saldo restante $\le 0$), a previsão **não é excluída**: seu valor passa a **R$ 0,00**, recebendo a tag **ESGOTADA** para preservar o histórico contábil e permitir restauração de teto a qualquer momento.
-  - **Relatório de Ajuste Instantâneo**: Exibe modal com o resumo categorizado das previsões ajustadas, previsões esgotadas (`R$ 0,00`) e previsões que permaneceram em dia.
+  - **Relatório de Ajuste Instantâneo**: Exibe modal com a data de cada previsão (`dd/mm/aaaa`), resumo categorizado das previsões ajustadas, previsões esgotadas (`R$ 0,00`) e previsões que permaneceram em dia.
 
 ### 4. Pesquisa em Toda a Base de Dados (Busca Global)
 - **Consulta Global Unificada em Todas as Contas e Períodos**:
@@ -548,6 +554,11 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
   - **Rendimento menos Despesas**: Resultado operacional líquido do período (superávit em verde, déficit em vermelho).
   - **Saldo Anterior Acumulado**: Apuração matemática exata do saldo real transitado de períodos anteriores (saldos iniciais + movimentações passadas).
   - **Saldo Final Acumulado**: Consolidação do saldo em caixa/bancos ao final de cada período (`Saldo Anterior + Rendimento - Despesas`).
+- **Detalhamento Interativo dos Lançamentos (Drill-Down Completo)**:
+  - Ao clicar em qualquer célula de valor numérico na matriz (seja em um determinado mês, na linha de uma categoria/subcategoria ou no total geral acumulado), o OpenMoney abre instantaneamente a janela de **Detalhamento de Lançamentos** com visão estruturada dos lançamentos correspondentes.
+  - Oferece **busca textual em tempo real**, filtros de **status de conciliação** (Todos, Conciliados ou Pendentes), visualização de contas/datas/favorecidos/valores, exportação em CSV e **edição direta** de qualquer lançamento com 1 clique.
+- **Botão Recolher / Expandir Categorias com Persistência**:
+  - Controle no cabeçalho permitindo recolher todas as subcategorias para visualização executiva ou expandir todos os detalhes analíticos com 1 clique. A preferência é memorizada para as próximas aberturas.
 - **Filtros e Controles Avançados**:
   - **Filtro Multiconta por Checkbox e Agrupador por Negócio**: Permite filtrar "Todas as Contas", contas avulsas via seleção múltipla com checkboxes ou conjuntos predefinidos por Negócio (ex.: **PF**, **PJ**).
   - **Conciliação Inteligente de Transferências Multiconta**:
@@ -880,6 +891,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](docs/architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](docs/manual/guia-assistente-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](docs/manual/guia-boas-vindas.md)
 - [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](docs/manual/guia-conciliacao-bancaria-ofx.md)
 - [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](docs/manual/guia-dashboard-e-personalizacao.md)
@@ -921,6 +933,11 @@ OpenMoneyFlutter/
 - [ADR 027: Conciliação Bancária e de Faturas de Cartão via Arquivo OFX](docs/adr/027-ofx-bank-and-invoice-reconciliation.md)
 - [ADR 028: Seletor de Fatura na Barra de Inserção Rápida de Cartão de Crédito](docs/adr/028-quick-entry-invoice-selector-parity.md)
 - [ADR 029: Descontinuação da Stack Swift e Unificação Oficial na Stack Flutter Multiplataforma](docs/adr/029-swift-deprecation-and-flutter-single-stack-unification.md)
+- [ADR 030: Assistente Financeira Multi-Provedor com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](docs/adr/030-ai-assistant-multi-provider-and-siri.md)
+- [ADR 031: Isolamento de Armazenamento em Ambiente de Testes e Proteção do Config.json Real](docs/adr/031-test-environment-storage-isolation-and-config-guard.md)
+- [ADR 032: Filtros de Sugestão de Favorecido por Tipo e Escopo Configurável](docs/adr/032-payee-suggestion-filters-and-configurable-scope.md)
+- [ADR 033: Saldo Inicial no CSV, Exportação/Importação de Contas, Máscara de Data e Calculadora Integrada](docs/adr/033-csv-opening-balance-accounts-auto-date-calculator.md)
+- [ADR 034: Validação Estrita de Datas, Alertas de Janela Temporal e Exclusão de Previsões no Autocompletar](docs/adr/034-date-validation-range-warnings-and-prediction-payee-exclusion.md)
 
 ---
 

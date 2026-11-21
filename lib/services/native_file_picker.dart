@@ -79,6 +79,23 @@ class NativeFilePicker {
           types.add('com.adobe.pdf');
           types.add('pdf');
           break;
+        case 'png':
+          types.add('public.png');
+          types.add('public.image');
+          types.add('png');
+          break;
+        case 'jpg':
+        case 'jpeg':
+          types.add('public.jpeg');
+          types.add('public.image');
+          types.add('jpg');
+          types.add('jpeg');
+          break;
+        case 'heic':
+          types.add('public.heic');
+          types.add('public.image');
+          types.add('heic');
+          break;
         case 'txt':
           types.add('public.plain-text');
           types.add('txt');

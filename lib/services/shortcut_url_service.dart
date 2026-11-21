@@ -60,14 +60,31 @@ class ShortcutUrlService extends ChangeNotifier {
   static final ShortcutUrlService instance = ShortcutUrlService._();
 
   ShortcutReceiptDraft? _pendingDraft;
+  String? _pendingAiPrompt;
   bool _isModalOpen = false;
   bool _hasCapturedInitialUrl = false;
 
   bool get hasPendingDraft => _pendingDraft != null;
+  bool get hasPendingAiPrompt =>
+      _pendingAiPrompt != null && _pendingAiPrompt!.trim().isNotEmpty;
   bool get isModalOpen => _isModalOpen;
 
   void setModalOpen(bool value) {
     _isModalOpen = value;
+  }
+
+  void enqueueAiPrompt(String prompt) {
+    final clean = prompt.trim();
+    if (clean.isEmpty) return;
+    _pendingAiPrompt = clean;
+    notifyListeners();
+  }
+
+  String? consumePendingAiPrompt() {
+    final p = _pendingAiPrompt;
+    _pendingAiPrompt = null;
+    webClearUrlQueryParams();
+    return p;
   }
 
   ShortcutReceiptDraft? consumePendingDraft() {
@@ -86,6 +103,17 @@ class ShortcutUrlService extends ChangeNotifier {
 
     final search = webWindowSearch();
     final hash = webWindowHash();
+
+    final aiPrompt = extractAiPromptFromQuery(search) ??
+        (hash.contains('?')
+            ? extractAiPromptFromQuery(hash.substring(hash.indexOf('?')))
+            : null);
+    if (aiPrompt != null && aiPrompt.trim().isNotEmpty) {
+      _pendingAiPrompt = aiPrompt.trim();
+      webClearUrlQueryParams();
+      notifyListeners();
+      return true;
+    }
 
     ShortcutReceiptDraft? parsed;
     if (search.isNotEmpty) {
@@ -106,6 +134,21 @@ class ShortcutUrlService extends ChangeNotifier {
   }
 
   /// Analisa uma query string bruta (ex: `?recibo=Data:07/11/2026;Conta: Nubank;Favorecido:Posto;Valor:100.99;`)
+  static String? extractAiPromptFromQuery(String rawQuery) {
+    final trimmed = rawQuery.trim();
+    if (trimmed.isEmpty) return null;
+    final clean = trimmed.startsWith('?') ? trimmed.substring(1) : trimmed;
+    if (clean.isEmpty) return null;
+    final m = RegExp(
+      r'(?:^|&)(?:prompt|assistente|ai|siri)=([^&]+)',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (m != null && m.group(1) != null) {
+      return _safeDecodeUriComponent(m.group(1)!).trim();
+    }
+    return null;
+  }
+
   static ShortcutReceiptDraft? parseQueryString(String rawQuery) {
     final trimmed = rawQuery.trim();
     if (trimmed.isEmpty) return null;

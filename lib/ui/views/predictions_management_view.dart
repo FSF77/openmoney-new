@@ -5,6 +5,7 @@ import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../modals/transaction_modal.dart';
 import '../modals/batch_delete_modal.dart';
+import '../widgets/ai_assistant_drawer.dart';
 import '../widgets/category_select_form_field.dart';
 
 class PredictionsManagementView extends StatefulWidget {
@@ -89,6 +90,36 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                       PopupMenuItem(value: 'invoice', child: Text('Por Fatura do Cartão')),
                     ],
                   ),
+                  if (store.isAiAssistantEnabled)
+                    OutlinedButton.icon(
+                      icon: Icon(
+                        Icons.auto_awesome,
+                        size: 16,
+                        color: colors.accent,
+                      ),
+                      label: Text(
+                        'Analisar IA',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: colors.accent,
+                        ),
+                      ),
+                      onPressed: () {
+                        final prompt =
+                            'Explique minhas previsões orçamentárias e aumentos de categorias em ${store.month}';
+                        final isDesktop =
+                            MediaQuery.of(context).size.width >= 860;
+                        if (isDesktop) {
+                          store.openAiAssistant(initialPrompt: prompt);
+                        } else {
+                          showAiAssistantModal(
+                            context,
+                            store,
+                            initialPrompt: prompt,
+                          );
+                        }
+                      },
+                    ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.auto_fix_normal, size: 16),
                     label: const Text('Ajustar'),

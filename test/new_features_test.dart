@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
+import 'package:openmoney/services/date_validator.dart';
 import 'package:openmoney/services/importers_exporters.dart';
 import 'package:openmoney/services/math_expression_evaluator.dart';
 import 'package:openmoney/store/money_store.dart';
@@ -275,6 +275,142 @@ void main() {
       expect(MathExpressionEvaluator.evaluateToFormatted('10 + 10'), equals('20,00'));
       expect(MathExpressionEvaluator.evaluateToFormatted('100 / 4'), equals('25,00'));
       expect(MathExpressionEvaluator.evaluateToFormatted('15,00'), isNull); // not an expression
+    });
+  });
+
+  group('Item 7: Transaction Date Validation and Range Warnings', () {
+    test('Valid date within normal window', () {
+      final now = DateTime.now();
+      final dayStr = now.day.toString().padLeft(2, '0');
+      final monthStr = now.month.toString().padLeft(2, '0');
+      final res = validateTransactionDate('$dayStr/$monthStr/${now.year}');
+      expect(res.isValid, isTrue);
+      expect(res.isWarning, isFalse);
+      expect(res.isoDate, equals('${now.year}-$monthStr-$dayStr'));
+    });
+
+    test('Rejects invalid calendar dates', () {
+      expect(validateTransactionDate('32/01/2026').isValid, isFalse);
+      expect(validateTransactionDate('31/02/2026').isValid, isFalse);
+      expect(validateTransactionDate('29/02/2025').isValid, isFalse); // Not leap year
+      expect(validateTransactionDate('29/02/2024').isValid, isTrue); // Leap year
+      expect(validateTransactionDate('31/04/2026').isValid, isFalse); // April has 30 days
+      expect(validateTransactionDate('00/05/2026').isValid, isFalse);
+      expect(validateTransactionDate('15/13/2026').isValid, isFalse);
+      expect(validateTransactionDate('abc').isValid, isFalse);
+    });
+
+    test('Warns when date is more than 30 days in the past', () {
+      final pastDate = DateTime.now().subtract(const Duration(days: 45));
+      final dayStr = pastDate.day.toString().padLeft(2, '0');
+      final monthStr = pastDate.month.toString().padLeft(2, '0');
+      final res = validateTransactionDate('$dayStr/$monthStr/${pastDate.year}');
+      expect(res.isValid, isTrue);
+      expect(res.isWarning, isTrue);
+      expect(res.warningMessage, contains('mais de 30 dias'));
+    });
+
+    test('Warns when date is more than 12 months in the future', () {
+      final futureDate = DateTime.now().add(const Duration(days: 400));
+      final dayStr = futureDate.day.toString().padLeft(2, '0');
+      final monthStr = futureDate.month.toString().padLeft(2, '0');
+      final res = validateTransactionDate('$dayStr/$monthStr/${futureDate.year}');
+      expect(res.isValid, isTrue);
+      expect(res.isWarning, isTrue);
+      expect(res.warningMessage, contains('posterior a 12 meses'));
+    });
+
+    test('DateInputFormatter clamps impossible days and months during typing', () {
+      final formatter = DateInputFormatter();
+      // Day 35 clamped to 31
+      var val = formatter.formatEditUpdate(
+        const TextEditingValue(text: ''),
+        const TextEditingValue(text: '35', selection: TextSelection.collapsed(offset: 2)),
+      );
+      expect(val.text, equals('31/'));
+
+      // Month 15 clamped to 12
+      val = formatter.formatEditUpdate(
+        const TextEditingValue(text: '15/'),
+        const TextEditingValue(text: '15/15', selection: TextSelection.collapsed(offset: 5)),
+      );
+      expect(val.text, equals('15/12/'));
+
+      // Feb 31 clamped to 29
+      val = formatter.formatEditUpdate(
+        const TextEditingValue(text: '31/'),
+        const TextEditingValue(text: '31/02', selection: TextSelection.collapsed(offset: 5)),
+      );
+      expect(val.text, equals('29/02/'));
+    });
+  });
+
+  group('Item 8: Prediction Payees Excluded from Suggestions and Auto-complete', () {
+    test('payeeSuggestions and lastCategoryAndType never suggest Previsão items', () {
+      final store = MoneyStore();
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      // Seed with accounts and transactions
+      store.loadFromJsonString(jsonEncode({
+        'v': 7,
+        'accounts': [
+          {'id': 'a1', 'name': 'Conta Corrente', 'type': 'Corrente', 'opening': 0, 'cur': 'BRL'},
+        ],
+        'categories': {
+          'Despesa': ['Moradia', 'Alimentação'],
+          'Receita': ['Salário'],
+        },
+        'txs': [
+          // Normal transactions
+          {
+            'id': 't1',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Padaria Central',
+            'cat': 'Alimentação',
+            'amt': -2500,
+            'rec': true,
+          },
+          // Prediction transactions (with "Previsão" and "Previsao")
+          {
+            'id': 't2',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Previsão Aluguel',
+            'cat': 'Moradia',
+            'amt': -150000,
+            'rec': false,
+            'auto': true,
+          },
+          {
+            'id': 't3',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Previsao Salário Extra',
+            'cat': 'Salário',
+            'amt': 500000,
+            'rec': false,
+          },
+        ],
+      }));
+
+      // Search for "Padaria" -> should suggest Padaria Central
+      final normalSuggestions = store.payeeSuggestions('Pad', isExpense: true);
+      expect(normalSuggestions.any((s) => s.name == 'Padaria Central'), isTrue);
+
+      // Search for "Prev" -> should return empty suggestions (predictions are filtered)
+      final prevSuggestions = store.payeeSuggestions('Prev', isExpense: true);
+      expect(prevSuggestions.isEmpty, isTrue);
+
+      // lastCategoryAndType for "Previsão Aluguel" -> should be null
+      final lastCatPrev = store.lastCategoryAndType('Previsão Aluguel', isExpense: true);
+      expect(lastCatPrev, isNull);
+
+      // lastCategoryAndType for "Padaria" -> should return Alimentação
+      final lastCatNormal = store.lastCategoryAndType('Padaria', isExpense: true);
+      expect(lastCatNormal, isNotNull);
+      expect(lastCatNormal?.category, equals('Alimentação'));
     });
   });
 }

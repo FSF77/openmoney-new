@@ -382,22 +382,30 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                       ],
                     ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => _showAiConfigModal(context),
-                    icon: Icon(
-                      Icons.auto_awesome,
-                      size: 16,
-                      color: widget.store.isGeminiAiEnabled ? Colors.blueAccent : Colors.grey,
-                    ),
-                    label: Text(
-                      widget.store.isGeminiAiEnabled ? 'IA Ativada' : 'Ativar IA (Gemini)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: widget.store.isGeminiAiEnabled ? Colors.blueAccent : (isDark ? Colors.white70 : Colors.black87),
+                  if (widget.store.isAiAssistantEnabled) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _showAiConfigModal(context),
+                      icon: Icon(
+                        Icons.auto_awesome,
+                        size: 16,
+                        color: widget.store.isGeminiAiEnabled
+                            ? Colors.blueAccent
+                            : Colors.grey,
+                      ),
+                      label: Text(
+                        widget.store.isGeminiAiEnabled
+                            ? 'IA Ativada'
+                            : 'Ativar IA (Gemini)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: widget.store.isGeminiAiEnabled
+                              ? Colors.blueAccent
+                              : (isDark ? Colors.white70 : Colors.black87),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),

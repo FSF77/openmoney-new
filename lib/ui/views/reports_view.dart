@@ -6,6 +6,7 @@ import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
 import '../modals/category_drill_down_modal.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/ai_assistant_drawer.dart';
 
 class ReportsView extends StatefulWidget {
   final MoneyStore store;
@@ -139,6 +140,50 @@ class _ReportsViewState extends State<ReportsView> {
                           () => _mobileShowFilters = !_mobileShowFilters),
                     ),
                     const SizedBox(width: 4),
+                  ],
+                  if (widget.store.isAiAssistantEnabled) ...[
+                    Tooltip(
+                      message:
+                          'Explicar aumentos e variações de categorias com a Assistente IA',
+                      child: OutlinedButton.icon(
+                        style: isMobile
+                            ? OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 10),
+                              )
+                            : null,
+                        icon: Icon(
+                          Icons.auto_awesome,
+                          size: 16,
+                          color: colors.accent,
+                        ),
+                        label: Text(
+                          isMobile ? 'Explicar IA' : 'Explicar Variações',
+                          style: TextStyle(
+                            fontSize: isMobile ? 12 : 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: colors.accent,
+                          ),
+                        ),
+                        onPressed: () {
+                          final prompt =
+                              'Explique os aumentos e variações por categoria em $periodKey';
+                          final isDesktop =
+                              MediaQuery.of(context).size.width >= 860;
+                          if (isDesktop) {
+                            widget.store.openAiAssistant(initialPrompt: prompt);
+                          } else {
+                            showAiAssistantModal(
+                              context,
+                              widget.store,
+                              initialPrompt: prompt,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                   ],
                   Tooltip(
                     message:

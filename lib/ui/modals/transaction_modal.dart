@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/currency_rate_service.dart';
+import '../../services/date_validator.dart';
 import '../../services/math_expression_evaluator.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
@@ -278,6 +279,26 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   List<String> _tags = [];
   ScopeChoice _scope = ScopeChoice.only;
   bool _isUpdatingCross = false;
+  String? _dateError;
+  String? _dateWarning;
+
+  void _checkDateWarning() {
+    final clean = _dateCtrl.text.trim();
+    if (clean.length == 10 || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(clean)) {
+      final res = validateTransactionDate(clean);
+      setState(() {
+        _dateError = res.isValid ? null : res.error;
+        _dateWarning = res.isWarning ? res.warningMessage : null;
+      });
+    } else {
+      if (_dateError != null || _dateWarning != null) {
+        setState(() {
+          _dateError = null;
+          _dateWarning = null;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -360,6 +381,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
         _evaluateAmount();
       }
     });
+    _checkDateWarning();
   }
 
   void _evaluateAmount() {
@@ -412,6 +434,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
         if (targetAcc?.type == kCardType && targetAcc?.card != null) {
           _customIk = invKeyFor(targetAcc!.card!, isoFromDate(picked));
         }
+        _checkDateWarning();
       });
     }
   }
@@ -442,7 +465,35 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       if (confirm != true) return;
     }
 
-    final isoDate = _resolveIsoDate();
+    final dateVal = validateTransactionDate(_dateCtrl.text);
+    if (!dateVal.isValid) {
+      setState(() => _dateError = dateVal.error);
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Data Inválida'),
+          content: Text(dateVal.error ?? 'A data informada é inválida.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (dateVal.isWarning) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final ok = await confirmDateWarningDialog(
+        context,
+        dateVal.warningMessage!,
+        colors: OpenMoneyColors(isDark),
+      );
+      if (!ok) return;
+    }
+
+    final isoDate = dateVal.isoDate!;
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     final signedAmt =
         (_txType == 'transfer' || _isExpense) ? -absCents : absCents;
@@ -737,6 +788,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
               decoration: InputDecoration(
                 labelText: 'Data (DD/MM/AAAA)',
                 labelStyle: const TextStyle(fontSize: 13),
+                errorText: _dateError,
                 isDense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -751,6 +803,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                 ),
               ),
               onChanged: (v) {
+                _checkDateWarning();
                 if (isCard && targetAcc != null && targetAcc.card != null) {
                   setState(() {
                     _customIk = invKeyFor(
@@ -766,6 +819,21 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
           ),
         ],
       ),
+      if (_dateWarning != null) ...[
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                _dateWarning!,
+                style: const TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ],
       const SizedBox(height: 12),
 
       // Competência da Fatura se cartão
@@ -1271,12 +1339,23 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
   List<String> _tags = [];
   bool _isUpdatingCross = false;
 
+  String? _dateError;
+  String? _dateWarning;
+
   String _mode = 'single';
   String _freq = 'monthly';
   int _installments = 2;
   bool _hasEndDate = false;
 
   List<PayeeSuggestion> _suggestions = [];
+
+  void _checkDateWarning() {
+    final res = validateTransactionDate(_dateCtrl.text);
+    setState(() {
+      _dateError = res.isValid ? null : res.error;
+      _dateWarning = res.isWarning ? res.warningMessage : null;
+    });
+  }
 
   @override
   void initState() {
@@ -1383,6 +1462,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         _evaluateAmount();
       }
     });
+    _checkDateWarning();
   }
 
   void _evaluateAmount() {
@@ -1469,6 +1549,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         if (targetAcc?.type == kCardType && targetAcc?.card != null) {
           _customIk = invKeyFor(targetAcc!.card!, isoFromDate(picked));
         }
+        _checkDateWarning();
       });
     }
   }
@@ -1549,6 +1630,34 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (absCents <= 0) return;
 
+    final dateVal = validateTransactionDate(_dateCtrl.text);
+    if (!dateVal.isValid) {
+      setState(() => _dateError = dateVal.error);
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Data Inválida'),
+          content: Text(dateVal.error ?? 'A data informada é inválida.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (dateVal.isWarning) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final ok = await confirmDateWarningDialog(
+        context,
+        dateVal.warningMessage!,
+        colors: OpenMoneyColors(isDark),
+      );
+      if (!ok) return;
+    }
+
     final isXfer = _txType == 'transfer' || _catSelection.startsWith('xfer:');
     final signedAmt = isXfer ? -absCents : (_isExpense ? -absCents : absCents);
 
@@ -1558,10 +1667,28 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
         : rawPayee;
 
     final trimmedMemo = _memoCtrl.text.trim();
-    final dateStr = _resolveIsoDate(_dateCtrl.text);
-    final endStr = (_mode == 'recurring' && _hasEndDate)
-        ? _resolveIsoDate(_endDateCtrl.text)
-        : null;
+    final dateStr = dateVal.isoDate!;
+    String? endStr;
+    if (_mode == 'recurring' && _hasEndDate) {
+      final endDateVal = validateTransactionDate(_endDateCtrl.text);
+      if (!endDateVal.isValid) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Data de Término Inválida'),
+            content: Text(endDateVal.error ?? 'A data de término da recorrência é inválida.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      endStr = endDateVal.isoDate;
+    }
 
     final targetAcc = widget.store.accById(_accId);
     final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
@@ -1881,6 +2008,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
                         labelStyle: const TextStyle(fontSize: 13),
+                        errorText: _dateError,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
@@ -1893,6 +2021,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                         ),
                       ),
                       onChanged: (v) {
+                        _checkDateWarning();
                         if (isCard &&
                             targetAcc != null &&
                             targetAcc.card != null) {
@@ -1910,6 +2039,21 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   ),
                 ],
               ),
+              if (_dateWarning != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _dateWarning!,
+                        style: const TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
 
               // Competência da Fatura se cartão
@@ -2549,10 +2693,21 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   List<String> _tags = [];
   bool _isUpdatingCross = false;
 
+  String? _dateError;
+  String? _dateWarning;
+
   String _mode = 'single'; // 'single', 'installment', 'recurring'
   String _freq = 'monthly';
   int _installments = 2;
   bool _hasEndDate = false;
+
+  void _checkDateWarning() {
+    final res = validateTransactionDate(_dateCtrl.text);
+    setState(() {
+      _dateError = res.isValid ? null : res.error;
+      _dateWarning = res.isWarning ? res.warningMessage : null;
+    });
+  }
 
   @override
   void initState() {
@@ -2631,6 +2786,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         _evaluateAmount();
       }
     });
+    _checkDateWarning();
   }
 
   void _evaluateAmount() {
@@ -2698,6 +2854,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         if (targetAcc?.type == kCardType && targetAcc?.card != null) {
           _customIk = invKeyFor(targetAcc!.card!, isoFromDate(picked));
         }
+        _checkDateWarning();
       });
     }
   }
@@ -2705,6 +2862,34 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   Future<void> _commitCopy() async {
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
     if (absCents <= 0) return;
+
+    final dateVal = validateTransactionDate(_dateCtrl.text);
+    if (!dateVal.isValid) {
+      setState(() => _dateError = dateVal.error);
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Data Inválida'),
+          content: Text(dateVal.error ?? 'A data informada é inválida.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (dateVal.isWarning) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final ok = await confirmDateWarningDialog(
+        context,
+        dateVal.warningMessage!,
+        colors: OpenMoneyColors(isDark),
+      );
+      if (!ok) return;
+    }
 
     final isXfer = _catSelection.startsWith('xfer:');
     final signedAmt = isXfer ? -absCents : (_isExpense ? -absCents : absCents);
@@ -2715,10 +2900,28 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
         : rawPayee;
 
     final trimmedMemo = _memoCtrl.text.trim();
-    final dateStr = _resolveIsoDate(_dateCtrl.text);
-    final endStr = (_mode == 'recurring' && _hasEndDate)
-        ? _resolveIsoDate(_endDateCtrl.text)
-        : null;
+    final dateStr = dateVal.isoDate!;
+    String? endStr;
+    if (_mode == 'recurring' && _hasEndDate) {
+      final endDateVal = validateTransactionDate(_endDateCtrl.text);
+      if (!endDateVal.isValid) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Data de Término Inválida'),
+            content: Text(endDateVal.error ?? 'A data de término da recorrência é inválida.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      endStr = endDateVal.isoDate;
+    }
 
     final targetAcc = widget.store.accById(_accId);
     final isCard = targetAcc?.type == kCardType && targetAcc?.card != null;
@@ -2884,6 +3087,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                       decoration: InputDecoration(
                         labelText: 'Data (DD/MM/AAAA)',
                         labelStyle: const TextStyle(fontSize: 13),
+                        errorText: _dateError,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         border: const OutlineInputBorder(),
@@ -2896,6 +3100,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                         ),
                       ),
                       onChanged: (v) {
+                        _checkDateWarning();
                         if (isCard && targetAcc != null && targetAcc.card != null) {
                           setState(() {
                             _customIk = invKeyFor(
@@ -2956,6 +3161,21 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   ],
                 ],
               ),
+              if (_dateWarning != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _dateWarning!,
+                        style: const TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
 
               // Competência da Fatura se cartão

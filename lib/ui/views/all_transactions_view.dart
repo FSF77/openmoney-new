@@ -11,6 +11,7 @@ import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 import '../widgets/csv_export.dart';
 import '../widgets/datagrid_transaction_table.dart';
+import '../widgets/ai_assistant_drawer.dart';
 
 enum ConsolidatedPeriodFilter {
   day,
@@ -394,7 +395,47 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                           );
                         },
                       ),
-                    ] else
+                    ] else ...[
+                      if (widget.store.isAiAssistantEnabled) ...[
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          icon: Icon(
+                            Icons.auto_awesome,
+                            size: 15,
+                            color: colors.accent,
+                          ),
+                          label: Text(
+                            'Organizar com IA',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: colors.accent,
+                            ),
+                          ),
+                          onPressed: () {
+                            const prompt =
+                                'Organizar lançamentos sem categoria e duplicados';
+                            final isDesktop =
+                                MediaQuery.of(context).size.width >= 860;
+                            if (isDesktop) {
+                              widget.store
+                                  .openAiAssistant(initialPrompt: prompt);
+                            } else {
+                              showAiAssistantModal(
+                                context,
+                                widget.store,
+                                initialPrompt: prompt,
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
                           visualDensity: VisualDensity.compact,
@@ -415,6 +456,7 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                           );
                         },
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 12),

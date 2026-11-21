@@ -3,6 +3,7 @@ import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../modals/account_multi_select_filter.dart';
+import '../widgets/ai_assistant_drawer.dart';
 import '../widgets/csv_export.dart';
 
 class DueBillsView extends StatefulWidget {
@@ -77,6 +78,40 @@ class _DueBillsViewState extends State<DueBillsView> {
                       ],
                     ),
                   ),
+                  if (store.isAiAssistantEnabled)
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: Icon(
+                        Icons.auto_awesome,
+                        size: 15,
+                        color: colors.accent,
+                      ),
+                      label: Text(
+                        isMobile ? 'Recorrências IA' : 'Detectar Recorrências',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.accent,
+                        ),
+                      ),
+                      onPressed: () {
+                        const prompt =
+                            'Identifique assinaturas e recorrências na minha base';
+                        final isDesktop =
+                            MediaQuery.of(context).size.width >= 860;
+                        if (isDesktop) {
+                          store.openAiAssistant(initialPrompt: prompt);
+                        } else {
+                          showAiAssistantModal(
+                            context,
+                            store,
+                            initialPrompt: prompt,
+                          );
+                        }
+                      },
+                    ),
                 ],
               ),
               const SizedBox(height: 10),

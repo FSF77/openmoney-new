@@ -35,6 +35,7 @@ import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
 import 'views/reports_view.dart';
 import 'views/settings_view.dart';
+import 'widgets/ai_assistant_drawer.dart';
 import 'widgets/command_palette_modal.dart';
 import 'widgets/zoom_control_pill.dart';
 
@@ -84,7 +85,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
   void _maybeOpenPendingShortcutModal() {
     if (!mounted) return;
     final shortcutSvc = ShortcutUrlService.instance;
-    if (!shortcutSvc.hasPendingDraft || shortcutSvc.isModalOpen) return;
+    if (shortcutSvc.isModalOpen) return;
     if (widget.store.showWelcomeScreen ||
         widget.store.showMissingDatabasePrompt) {
       return;
@@ -97,6 +98,28 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     } else if (widget.store.db.accounts.isEmpty) {
       return;
     }
+
+    if (shortcutSvc.hasPendingAiPrompt) {
+      final aiPrompt = shortcutSvc.consumePendingAiPrompt();
+      if (aiPrompt != null && aiPrompt.trim().isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final isDesktop = MediaQuery.of(context).size.width >= 860;
+          if (isDesktop) {
+            widget.store.openAiAssistant(initialPrompt: aiPrompt);
+          } else {
+            showAiAssistantModal(
+              context,
+              widget.store,
+              initialPrompt: aiPrompt,
+            );
+          }
+        });
+      }
+      return;
+    }
+
+    if (!shortcutSvc.hasPendingDraft) return;
 
     final draft = shortcutSvc.consumePendingDraft();
     if (draft == null) return;
@@ -289,6 +312,23 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
             const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
               showCommandPaletteModal(context, widget.store);
             },
+            // Assistente Financeira IA (Cmd/Ctrl + J)
+            if (widget.store.isAiAssistantEnabled) ...{
+              const SingleActivator(LogicalKeyboardKey.keyJ, meta: true): () {
+                if (isDesktopOrTablet) {
+                  widget.store.toggleAiAssistantPanel();
+                } else {
+                  showAiAssistantModal(context, widget.store);
+                }
+              },
+              const SingleActivator(LogicalKeyboardKey.keyJ, control: true): () {
+                if (isDesktopOrTablet) {
+                  widget.store.toggleAiAssistantPanel();
+                } else {
+                  showAiAssistantModal(context, widget.store);
+                }
+              },
+            },
             // Ajustes & Personalização (Cmd/Ctrl + ,)
             const SingleActivator(LogicalKeyboardKey.comma, meta: true): () {
               widget.store.navigateTo(NavModule.settings);
@@ -360,6 +400,16 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ),
                       ),
                       actions: [
+                        if (widget.store.isAiAssistantEnabled)
+                          IconButton(
+                            tooltip: 'Assistente Financeira IA (Cmd/Ctrl+J)',
+                            icon: Icon(
+                              Icons.auto_awesome,
+                              color: colors.accent,
+                            ),
+                            onPressed: () =>
+                                showAiAssistantModal(context, widget.store),
+                          ),
                         ListenableBuilder(
                           listenable: CloudSyncService.instance,
                           builder: (context, _) {
@@ -497,6 +547,14 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         ],
                       ),
                     ),
+                    if (isDesktopOrTablet &&
+                        widget.store.isAiAssistantEnabled &&
+                        widget.store.isAiAssistantPanelOpen)
+                      RepaintBoundary(
+                        child: AiAssistantSidePanel(
+                          store: widget.store,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -760,7 +818,52 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          if (widget.store.isAiAssistantEnabled) ...[
+            const SizedBox(width: 8),
+
+            // Botão Assistente Financeira IA (Cmd/Ctrl+J)
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: widget.store.toggleAiAssistantPanel,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: widget.store.isAiAssistantPanelOpen
+                      ? colors.accent
+                      : colors.accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: colors.accent.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 14,
+                      color: widget.store.isAiAssistantPanelOpen
+                          ? Colors.white
+                          : colors.accent,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Assistente IA',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: widget.store.isAiAssistantPanelOpen
+                            ? Colors.white
+                            : colors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 4),
 
           // Botão Ajustes e Personalização
           IconButton(
