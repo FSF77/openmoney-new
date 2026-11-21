@@ -149,3 +149,20 @@ No painel **OpenMoney Cloud & Sincronização**:
    - Permite alternar com 1 clique entre múltiplas contas salvas (ex.: Pessoal e Consultoria/Empresa), exibindo o **nome** na linha principal e o **e-mail** e revisão nas linhas seguintes para leitura clara mesmo em telas pequenas.
    - Os controles de topo utilizam **ícones compactos com tooltip de ajuda**: **Ordenar A-Z / Z-A**, **Desconectar Todas as Contas Salvas**, **Conectar Outra Conta Existente** e **+ Criar Nova Conta / Base na Nuvem**.
 3. **Acesso Rápido na Tela de Login:** Ao desconectar de uma conta, você também pode removê-la definitivamente do dispositivo clicando no ícone de fechar/lixeira.
+
+---
+
+## 🤖 11. Infraestrutura da Assistente de IA na Nuvem (Cloudflare Pages & D1)
+
+A sincronização em nuvem também alimenta a **Assistente Financeira com IA** no modo **Nuvem Cloud (Gerenciado)**. Usuários autenticados no OpenMoney Cloud podem utilizar consultas assistidas sem precisar configurar chaves pessoais externas:
+
+- **Endpoints da API:**
+  - `GET /api/ai/capabilities`: Valida se o servidor possui chaves gerenciadas ativas e informa a cota diária do usuário.
+  - `POST /api/ai/chat`: Processa requisições de linguagem natural e extração com proxy seguro anti-CORS e injeção do modelo de IA.
+- **Variáveis de Ambiente no Cloudflare Pages:**
+  - `AI_MANAGED_GEMINI_KEY`: Chave de API do Google Gemini (definida como *Secret/Encrypted* no painel do Pages em **Settings › Environment variables**).
+  - `AI_MANAGED_ANTHROPIC_KEY`: Chave de API do Claude (opcional, para instâncias que oferecem Claude gerenciado).
+  - `AI_MANAGED_OPENAI_KEY`: Chave de API do ChatGPT (opcional, para instâncias que oferecem OpenAI gerenciado).
+  - `AI_DAILY_LIMIT`: Cota diária padrão por usuário (padrão: `25` consultas/dia).
+- **Controle de Cotas Atômico no D1:**
+  - O servidor gerencia o consumo diário na tabela `user_ai_usage` (`user_id`, `usage_date`, `request_count`), que é provisionada automaticamente via D1 sem necessidade de migrações manuais.

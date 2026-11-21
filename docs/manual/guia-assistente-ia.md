@@ -42,6 +42,23 @@ O OpenMoney oferece três formas flexíveis e transparentes para atender a todos
 > [!NOTE]
 > No macOS e iOS, você também pode selecionar **Apple Intelligence Local** como provedor, processando os comandos no próprio hardware Apple Silicon sem qualquer envio de dados para a internet.
 
+### 3.1. Configuração do Modo Nuvem Cloud na Cloudflare (Administração / Backend)
+
+Para que a opção **Nuvem Cloud** fique ativa e disponível para os usuários autenticados da sua instância, basta configurar as **Variáveis de Ambiente / Secrets** no projeto do **Cloudflare Pages**:
+
+1. **Acesse o Cloudflare Dashboard:**
+   - Acesse [dash.cloudflare.com](https://dash.cloudflare.com) › **Workers & Pages** › selecione seu projeto do OpenMoney (`openmoney-new` / `openmoney.app.br`).
+   - Vá na aba **Settings** › **Environment variables**.
+2. **Adicione os Secrets em Production (e Preview):**
+   - **`AI_MANAGED_GEMINI_KEY`** *(Recomendado / Principal)*: Chave de API do **Google Gemini Flash** (gerada gratuitamente em [aistudio.google.com](https://aistudio.google.com/)). Marque o tipo como **Encrypt** (Secret).
+   - **`AI_MANAGED_ANTHROPIC_KEY`** *(Opcional)*: Chave de API da Anthropic caso queira fornecer o Claude via nuvem gerenciada.
+   - **`AI_MANAGED_OPENAI_KEY`** *(Opcional)*: Chave de API da OpenAI caso queira fornecer o ChatGPT via nuvem gerenciada.
+   - **`AI_DAILY_LIMIT`** *(Opcional)*: Limite diário de consultas gratuitas por usuário (ex: `25` ou `50`). Se omitido, o sistema adota automaticamente `25` requisições diárias.
+3. **Auto-Inicialização no Banco D1 (Zero Migração Manual):**
+   - Não é necessário rodar scripts SQL manuais no D1. A tabela de controle de cota `user_ai_usage` (`user_id`, `usage_date`, `request_count`) é criada automaticamente pela função de inicialização do schema no primeiro acesso à rota de IA.
+4. **Comportamento quando não configurado:**
+   - Se nenhuma chave `AI_MANAGED_*` estiver cadastrada nas variáveis de ambiente da Cloudflare, o endpoint `/api/ai/capabilities` retorna `managedAvailable: false`, e o aplicativo orienta automaticamente o usuário a optar por **Minha Chave (BYOK)** ou **Modo Sem Chave (Prompt Bridge)**.
+
 ---
 
 ## 4. Barra de Ações Rápidas (Ícones com Tooltip)

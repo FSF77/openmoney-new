@@ -794,7 +794,7 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 ### 23. Autopreenchimento Inteligente, Sugestões Preditivas e Ações Rápidas de Extrato
 - **Botões Rápidos no Cabeçalho do Extrato**: Quando a barra rápida de inserção estiver oculta, três botões de ação rápida (**− Despesa**, **+ Receita** e **⇄ Transferência**) são exibidos no cabeçalho ao lado do ícone de edição da conta, abrindo o modal com o tipo correto já pré-selecionado.
 - **Autopreenchimento Imediato em Transferências**: Ao selecionar a opção de transferência, o campo de favorecido recebe automaticamente a descrição `"Transferência"`, suprimindo o histórico de compras e autocompletar irrelevante.
-- **Sugestões Preditivas Filtradas por Tipo**: Ao digitar a descrição, despesas buscam e sugerem exclusivamente lançamentos de despesas anteriores, enquanto receitas buscam exclusivamente lançamentos de receitas anteriores.
+- **Sugestões Preditivas Filtradas por Tipo e Sem Previsões**: Ao digitar a descrição, despesas buscam e sugerem exclusivamente lançamentos de despesas anteriores, enquanto receitas buscam exclusivamente lançamentos de receitas anteriores. Lançamentos de previsões orçamentárias (`"Previsão..."`) são estritamente excluídos da lista de sugestões e do autopreenchimento.
 - **Parâmetros Configuráveis em Ajustes (`SettingsView`)**:
   - **Janela de Histórico**: Definição do intervalo de busca de sugestões (*Últimos 30 dias*, *60 dias*, *90 dias (padrão)*, *3 meses*, *6 meses*, *1 ano* ou *Todo o histórico*).
   - **Escopo de Sugestão**: Opção de preencher apenas *Favorecido e Categoria (padrão)* ou preencher *Favorecido, Categoria e Conta*.
@@ -825,6 +825,11 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 - **Tela Sobre Enxuta**: Layout responsivo sem estouro lateral de textos e sem exibição da linha técnica de Base de Dados.
 - **Contas a Pagar/Receber e Compras Parceladas Organizadas**: Cabeçalhos sem corte de texto e relação de itens no mobile estruturada em 3 linhas limpas (1. Badge de status/parcela + Conta; 2. Descrição completa; 3. Vencimento e Categoria).
 - **Tela Relatório Otimizada**: Cabeçalho limpo (exibindo apenas a moeda) e filtros de Conta, Tag e Status de Conciliação recolhíveis sob o botão de filtro (`Icons.tune`) no mobile, liberando espaço vertical imediato para os indicadores e categorias.
+
+### 27. Validação Estrita de Datas, Alertas de Janela Temporal e Teclado Numérico Mobile (ADR 034)
+- **Bloqueio de Datas Inválidas**: O formatador automático (`DateInputFormatter`) impede a digitação de dias superiores a `31`, meses superiores a `12` e dias inválidos de fevereiro durante a digitação, enquanto o validador de calendário (`validateTransactionDate`) bloqueia o salvamento de qualquer data inexistente (ex.: `31/02/2026`, `31/04/2026`, `29/02/2025`).
+- **Alerta Preventivo de Janela Temporal**: Caso a data informada seja **anterior a mais de 30 dias** ou **posterior a mais de 12 meses** da data atual, o aplicativo exibe um aviso visual abaixo do campo e abre um diálogo de confirmação (*"Corrigir Data"* / *"Salvar Mesmo Assim"*) antes de persistir o lançamento, evitando inclusões acidentais em datas erradas.
+- **Teclado Numérico Direto em Dispositivos Móveis**: Em smartphones, iPads e tablets (nativo e Web PWA), tocar nos campos de **Data** (`TextInputType.number`) ou **Valor** (`TextInputType.numberWithOptions(decimal: true)`) abre diretamente o teclado numérico do sistema em vez do teclado alfanumérico.
 
 ---
 
@@ -866,7 +871,7 @@ OpenMoneyFlutter/
 ├── functions/api/[[route]].js       # Backend Cloudflare Pages Functions (API REST, Auth, D1, Anti-Wipe Guard)
 ├── cloudflare/sync-worker/          # Cloudflare Worker & Durable Object (UserSyncRoom WebSocket realtime)
 ├── coletor/                         # OpenMoney Coletor Mobile PWA (entrada rápida offline + scanner OCR)
-├── docs/                            # Documentação oficial (ADRs 001-029, Arquitetura, Dicionário de Dados e Manuais)
+├── docs/                            # Documentação oficial (ADRs 001-034, Arquitetura, Dicionário de Dados e Manuais)
 ├── scripts/                         # Scripts automatizados de build e publicação (macOS, Windows e Web)
 └── test/                            # Suíte de testes automatizados de regras contábeis e sincronização
 ```
