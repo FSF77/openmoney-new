@@ -454,6 +454,9 @@ class AIAssistantService {
 
   bool? _cachedAppleIntelligenceAvailable;
   bool _nativeListenersRegistered = false;
+  String? _lastProviderError;
+
+  String? get lastProviderError => _lastProviderError;
 
   void initNativeListeners() {
     if (_nativeListenersRegistered || kIsWeb) return;
@@ -557,6 +560,7 @@ class AIAssistantService {
       );
     }
 
+    _lastProviderError = null;
     final stopwatch = Stopwatch()..start();
     try {
       final testRes = await _callProviderRaw(
@@ -574,10 +578,12 @@ class AIAssistantService {
               'Conexão com ${provider.label} validada com sucesso (${stopwatch.elapsedMilliseconds} ms)!'
         );
       }
+      final specific = _lastProviderError;
       return (
         ok: false,
-        message:
-            'Não foi possível autenticar em ${provider.label}. Verifique se a chave está correta e ativa.'
+        message: specific != null && specific.isNotEmpty
+            ? 'Erro retornado pela API: $specific'
+            : 'Não foi possível autenticar em ${provider.label}. Verifique se a chave está correta e ativa.'
       );
     } catch (e) {
       return (
@@ -712,9 +718,13 @@ REGRAS OBRIGATÓRIAS DE RESPOSTA:
 
     if (rawReply == null || rawReply.trim().isEmpty) {
       if (localFastResponse != null) return localFastResponse;
+      final errorSnippet = _lastProviderError != null && _lastProviderError!.isNotEmpty
+          ? '\n\n> ⚠️ **Aviso da API / Nuvem:** `$_lastProviderError`\n'
+          : '';
       return AIAssistantResponse(
         reply:
-            'Não foi possível obter resposta do provedor **${provider.label}** no momento. Confira abaixo o diagnóstico calculado localmente:\n\n'
+            'Não foi possível obter resposta do provedor **${provider.label}** no momento.$errorSnippet\n\n'
+            'Confira abaixo o diagnóstico calculado localmente:\n\n'
             '${FinancialInsightsEngine.generateOfflineDiagnosticMarkdown(store, topic: 'overview')}',
         providerUsed: 'Fallback Local OpenMoney',
         isOffline: true,
@@ -1244,8 +1254,21 @@ INSTRUÇÕES:
         if (decoded is Map && decoded['text'] is String) {
           return decoded['text'] as String;
         }
+      } else {
+        try {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map && decoded['error'] is String) {
+            _lastProviderError = decoded['error'] as String;
+          } else {
+            _lastProviderError = 'HTTP ${res.statusCode}: ${res.body}';
+          }
+        } catch (_) {
+          _lastProviderError = 'HTTP ${res.statusCode}';
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      _lastProviderError = 'Falha na conexão: $e';
+    }
     return null;
   }
 
@@ -1262,9 +1285,9 @@ INSTRUÇÕES:
 
     final models = <String>[
       if (preferredModel.trim().isNotEmpty) preferredModel.trim(),
-      'gemini-3.8-flash',
-      'gemini-2.5-flash',
       'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
       'gemini-flash-latest',
     ];
 
@@ -1302,7 +1325,22 @@ INSTRUÇÕES:
           body: jsonEncode(payload),
           timeout: const Duration(seconds: 35),
         );
-        if (res.statusCode != 200) continue;
+        if (res.statusCode != 200) {
+          try {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map &&
+                decoded['error'] is Map &&
+                decoded['error']['message'] is String) {
+              _lastProviderError =
+                  '${decoded['error']['message']} (HTTP ${res.statusCode})';
+            } else {
+              _lastProviderError = 'HTTP ${res.statusCode}: ${res.body}';
+            }
+          } catch (_) {
+            _lastProviderError = 'HTTP ${res.statusCode}';
+          }
+          continue;
+        }
         final decoded = jsonDecode(res.body);
         final candidates = decoded['candidates'] as List?;
         if (candidates == null || candidates.isEmpty) continue;
@@ -1311,7 +1349,8 @@ INSTRUÇÕES:
         if (text != null && text.trim().isNotEmpty) {
           return text.trim();
         }
-      } catch (_) {
+      } catch (e) {
+        _lastProviderError = 'Falha de requisição: $e';
         continue;
       }
     }
@@ -1390,7 +1429,22 @@ INSTRUÇÕES:
           body: jsonEncode(payload),
           timeout: const Duration(seconds: 35),
         );
-        if (res.statusCode != 200) continue;
+        if (res.statusCode != 200) {
+          try {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map &&
+                decoded['error'] is Map &&
+                decoded['error']['message'] is String) {
+              _lastProviderError =
+                  '${decoded['error']['message']} (HTTP ${res.statusCode})';
+            } else {
+              _lastProviderError = 'HTTP ${res.statusCode}: ${res.body}';
+            }
+          } catch (_) {
+            _lastProviderError = 'HTTP ${res.statusCode}';
+          }
+          continue;
+        }
         final decoded = jsonDecode(res.body);
         final content = decoded['content'] as List?;
         if (content == null || content.isEmpty) continue;
@@ -1399,7 +1453,8 @@ INSTRUÇÕES:
             return (block['text'] as String).trim();
           }
         }
-      } catch (_) {
+      } catch (e) {
+        _lastProviderError = 'Falha de requisição: $e';
         continue;
       }
     }
@@ -1459,7 +1514,22 @@ INSTRUÇÕES:
           body: jsonEncode(payload),
           timeout: const Duration(seconds: 35),
         );
-        if (res.statusCode != 200) continue;
+        if (res.statusCode != 200) {
+          try {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map &&
+                decoded['error'] is Map &&
+                decoded['error']['message'] is String) {
+              _lastProviderError =
+                  '${decoded['error']['message']} (HTTP ${res.statusCode})';
+            } else {
+              _lastProviderError = 'HTTP ${res.statusCode}: ${res.body}';
+            }
+          } catch (_) {
+            _lastProviderError = 'HTTP ${res.statusCode}';
+          }
+          continue;
+        }
         final decoded = jsonDecode(res.body);
         final choices = decoded['choices'] as List?;
         if (choices == null || choices.isEmpty) continue;
@@ -1467,7 +1537,8 @@ INSTRUÇÕES:
         if (text != null && text.trim().isNotEmpty) {
           return text.trim();
         }
-      } catch (_) {
+      } catch (e) {
+        _lastProviderError = 'Falha de requisição: $e';
         continue;
       }
     }

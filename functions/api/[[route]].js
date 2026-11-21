@@ -4157,7 +4157,10 @@ export async function onRequest(context) {
           ? String(data.choices[0].message.content).trim()
           : null;
     } else {
-      const model = preferredModel || "gemini-2.5-flash";
+      const candidateModels = [];
+      if (preferredModel && preferredModel.trim()) candidateModels.push(preferredModel.trim());
+      candidateModels.push("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-flash-latest");
+
       const parts = [
         { text: `${systemPrompt}\n\nPEDIDO DO USUÁRIO:\n${userPrompt}` },
       ];
@@ -4169,40 +4172,67 @@ export async function onRequest(context) {
           },
         });
       }
-      const upstream = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          model
-        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              temperature: 0.15,
-              response_mime_type: "application/json",
-            },
-          }),
+
+      let lastError = null;
+      let lastStatus = 502;
+
+      for (const m of candidateModels) {
+        try {
+          const upstream = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+              m
+            )}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({
+                contents: [{ parts }],
+                generationConfig: {
+                  temperature: 0.15,
+                  response_mime_type: "application/json",
+                },
+              }),
+            }
+          );
+          if (!upstream.ok) {
+            let errText = `HTTP ${upstream.status}`;
+            try {
+              const errJson = await upstream.json();
+              if (errJson && errJson.error && errJson.error.message) {
+                errText = errJson.error.message;
+              }
+            } catch (_) {}
+            lastError = `Erro no provedor Gemini (${m}): ${errText}`;
+            lastStatus = upstream.status;
+            continue;
+          }
+          const data = await upstream.json();
+          replyText =
+            data &&
+            Array.isArray(data.candidates) &&
+            data.candidates[0] &&
+            data.candidates[0].content &&
+            Array.isArray(data.candidates[0].content.parts) &&
+            data.candidates[0].content.parts[0] &&
+            data.candidates[0].content.parts[0].text
+              ? String(data.candidates[0].content.parts[0].text).trim()
+              : null;
+          if (replyText) {
+            break;
+          }
+        } catch (e) {
+          lastError = `Falha na requisição Gemini (${m}): ${e && e.message ? e.message : String(e)}`;
+          continue;
         }
-      );
-      if (!upstream.ok) {
+      }
+
+      if (!replyText && lastError) {
         return jsonResponse(
-          { error: `Erro no provedor Gemini (HTTP ${upstream.status}).` },
-          upstream.status,
+          { error: lastError },
+          lastStatus,
           origin
         );
       }
-      const data = await upstream.json();
-      replyText =
-        data &&
-        Array.isArray(data.candidates) &&
-        data.candidates[0] &&
-        data.candidates[0].content &&
-        Array.isArray(data.candidates[0].content.parts) &&
-        data.candidates[0].content.parts[0] &&
-        data.candidates[0].content.parts[0].text
-          ? String(data.candidates[0].content.parts[0].text).trim()
-          : null;
     }
 
     if (!replyText) {
