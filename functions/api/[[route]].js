@@ -3950,8 +3950,8 @@ export async function onRequest(context) {
   // ==========================================================================
   if (path === "/api/ai/capabilities" && request.method === "GET") {
     const managedProviders = [];
-    if (env.AI_MANAGED_GEMINI_KEY) managedProviders.push("gemini");
     if (env.AI_MANAGED_OPENROUTER_KEY) managedProviders.push("openrouter");
+    if (env.AI_MANAGED_GEMINI_KEY) managedProviders.push("gemini");
     if (env.AI_MANAGED_ANTHROPIC_KEY) managedProviders.push("claude");
     if (env.AI_MANAGED_OPENAI_KEY) managedProviders.push("openai");
 
@@ -3985,7 +3985,7 @@ export async function onRequest(context) {
     }
 
     const provider = String(
-      body.provider || request.headers.get("X-OpenMoney-AI-Provider") || "gemini"
+      body.provider || request.headers.get("X-OpenMoney-AI-Provider") || "openrouter"
     )
       .trim()
       .toLowerCase();
@@ -4008,8 +4008,8 @@ export async function onRequest(context) {
 
     let apiKey = "";
     if (useManaged) {
-      if (provider === "gemini") apiKey = String(env.AI_MANAGED_GEMINI_KEY || "").trim();
-      else if (provider === "openrouter") apiKey = String(env.AI_MANAGED_OPENROUTER_KEY || "").trim();
+      if (provider === "openrouter") apiKey = String(env.AI_MANAGED_OPENROUTER_KEY || "").trim();
+      else if (provider === "gemini") apiKey = String(env.AI_MANAGED_GEMINI_KEY || "").trim();
       else if (provider === "claude") apiKey = String(env.AI_MANAGED_ANTHROPIC_KEY || "").trim();
       else if (provider === "openai") apiKey = String(env.AI_MANAGED_OPENAI_KEY || "").trim();
 

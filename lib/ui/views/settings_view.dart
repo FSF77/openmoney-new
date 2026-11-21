@@ -964,7 +964,7 @@ class _SettingsViewState extends State<SettingsView> {
                             ? AIProviderType.bridge.id
                             : (widget.store.aiProvider ==
                                     AIProviderType.bridge.id
-                                ? AIProviderType.gemini.id
+                                ? AIProviderType.openrouter.id
                                 : widget.store.aiProvider),
                       );
                     },

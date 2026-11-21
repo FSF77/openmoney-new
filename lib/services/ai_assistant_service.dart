@@ -42,7 +42,7 @@ enum AIProviderType {
     for (final p in AIProviderType.values) {
       if (p.id == clean) return p;
     }
-    return AIProviderType.gemini;
+    return AIProviderType.openrouter;
   }
 }
 

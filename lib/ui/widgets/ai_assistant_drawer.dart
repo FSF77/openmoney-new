@@ -564,7 +564,7 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
                             selectedProvider = AIProviderType.bridge.id;
                           } else if (selectedProvider ==
                               AIProviderType.bridge.id) {
-                            selectedProvider = AIProviderType.gemini.id;
+                            selectedProvider = AIProviderType.openrouter.id;
                           }
                         });
                       },

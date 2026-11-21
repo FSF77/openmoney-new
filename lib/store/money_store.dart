@@ -587,8 +587,8 @@ class MoneyStore extends ChangeNotifier {
   String openrouterApiKey = '';
   String claudeApiKey = '';
   String openaiApiKey = '';
-  String aiProvider = 'gemini'; // 'gemini' | 'openrouter' | 'claude' | 'openai' | 'apple' | 'bridge'
-  String aiConsumptionMode = 'byok'; // 'byok' | 'cloudManaged' | 'promptBridge'
+  String aiProvider = 'openrouter'; // 'openrouter' | 'gemini' | 'claude' | 'openai' | 'apple' | 'bridge'
+  String aiConsumptionMode = 'cloudManaged'; // 'byok' | 'cloudManaged' | 'promptBridge'
   String aiPreferredModel = '';
   bool isAiAssistantPanelOpen = false;
   String? pendingAiInitialPrompt;
