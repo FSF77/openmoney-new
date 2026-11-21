@@ -42,6 +42,7 @@ Durante a inserção e edição de lançamentos financeiros no ecossistema OpenM
      - **Posterior a 12 meses:** gera aviso `"A data informada (DD/MM/AAAA) é posterior a 12 meses da data atual."`
    - O aviso é exibido visualmente em tempo real logo abaixo do campo de data nos modais de formulário.
    - Ao clicar em Salvar, o aplicativo abre um diálogo modal (`confirmDateWarningDialog`) com as opções **"Corrigir Data"** e **"Salvar Mesmo Assim"**, prevenindo gravações acidentais.
+   - Na edição de um lançamento existente (`_TransactionEditDialogState`), o aviso visual e o diálogo de confirmação de data só são exibidos caso a data tenha sido efetivamente alterada pelo usuário (`res.isoDate != widget.tx.date`), evitando alertas redundantes ao editar lançamentos antigos/conciliados cuja data não foi modificada.
    - O mesmo fluxo de validação e confirmação protege a barra de inserção rápida do extrato (`_submitQuickEntry`) e as datas de término de recorrências (`_endDateCtrl`).
 
 ### 2. Exclusão de Previsões e Limpeza de Números de Parcela no Autocompletar (`MoneyStore`)

@@ -286,9 +286,10 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final clean = _dateCtrl.text.trim();
     if (clean.length == 10 || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(clean)) {
       final res = validateTransactionDate(clean);
+      final dateChanged = res.isoDate != widget.tx.date;
       setState(() {
         _dateError = res.isValid ? null : res.error;
-        _dateWarning = res.isWarning ? res.warningMessage : null;
+        _dateWarning = (res.isWarning && dateChanged) ? res.warningMessage : null;
       });
     } else {
       if (_dateError != null || _dateWarning != null) {
@@ -483,7 +484,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       );
       return;
     }
-    if (dateVal.isWarning) {
+    final dateChanged = dateVal.isoDate != widget.tx.date;
+    if (dateVal.isWarning && dateChanged) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final ok = await confirmDateWarningDialog(
         context,
