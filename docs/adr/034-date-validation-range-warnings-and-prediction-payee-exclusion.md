@@ -22,9 +22,12 @@ Durante a inserção e edição de lançamentos financeiros no ecossistema OpenM
 
 ## Decisão e Arquitetura
 
-### 1. Validação Estrita de Datas (`date_validator.dart` e `DateInputFormatter`)
+### 1. Validação Estrita de Datas e Teclado Numérico Mobile (`date_validator.dart` e `DateInputFormatter`)
 
-1. **Clamping Ativo durante a Digitação (`DateInputFormatter`):**
+1. **Teclado Numérico Direto em Dispositivos Móveis (Smartphone, iPad e Tablets):**
+   - Todos os campos de **Data** utilizam `keyboardType: TextInputType.number` (visto que o `DateInputFormatter` insere as barras `/` automaticamente), abrindo diretamente o teclado numérico nos sistemas iOS, iPadOS e Android (nativo e Web PWA) em vez do teclado alfanumérico padrão de `TextInputType.datetime`.
+   - Todos os campos de **Valor** utilizam `keyboardType: const TextInputType.numberWithOptions(decimal: true)`, abrindo diretamente o teclado numérico com separador decimal em dispositivos móveis, enquanto mantêm suporte ao botão da Mini Calculadora integrada e expressões matemáticas via teclado físico no Desktop.
+2. **Clamping Ativo durante a Digitação (`DateInputFormatter`):**
    - No preenchimento automático das barras (`DD/MM/AAAA`), o formatador intercepta e ajusta imediatamente valores inviáveis:
      - Dia inicial limitado a no máximo `31`.
      - Mês limitado a no máximo `12`.

@@ -782,7 +782,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
             flex: 2,
             child: TextField(
               controller: _dateCtrl,
-              keyboardType: TextInputType.datetime,
+              keyboardType: TextInputType.number,
               inputFormatters: [DateInputFormatter()],
               style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
@@ -985,7 +985,9 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                           child: TextField(
                             controller: _amtCtrl,
                             focusNode: _amtFocus,
-                            keyboardType: TextInputType.text,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             style: const TextStyle(fontSize: 13),
                             onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
@@ -2002,7 +2004,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     flex: 2,
                     child: TextField(
                       controller: _dateCtrl,
-                      keyboardType: TextInputType.datetime,
+                      keyboardType: TextInputType.number,
                       inputFormatters: [DateInputFormatter()],
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
@@ -2219,7 +2221,9 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                           child: TextField(
                             controller: _amtCtrl,
                             focusNode: _amtFocus,
-                            keyboardType: TextInputType.text,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             style: const TextStyle(fontSize: 13),
                             onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
@@ -2435,7 +2439,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   const SizedBox(height: 4),
                   TextField(
                     controller: _endDateCtrl,
-                    keyboardType: TextInputType.datetime,
+                    keyboardType: TextInputType.number,
                     inputFormatters: [DateInputFormatter()],
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
@@ -3081,7 +3085,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   Expanded(
                     child: TextField(
                       controller: _dateCtrl,
-                      keyboardType: TextInputType.datetime,
+                      keyboardType: TextInputType.number,
                       inputFormatters: [DateInputFormatter()],
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
@@ -3292,7 +3296,9 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                           child: TextField(
                             controller: _amtCtrl,
                             focusNode: _amtFocus,
-                            keyboardType: TextInputType.text,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             style: const TextStyle(fontSize: 13),
                             onSubmitted: (_) => _evaluateAmount(),
                             onChanged: (_) {
@@ -3508,7 +3514,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                   const SizedBox(height: 4),
                   TextField(
                     controller: _endDateCtrl,
-                    keyboardType: TextInputType.datetime,
+                    keyboardType: TextInputType.number,
                     inputFormatters: [DateInputFormatter()],
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
@@ -3735,6 +3741,8 @@ Future<void> showInvoicePaymentModal(
                     Expanded(
                       child: TextField(
                         controller: dateCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [DateInputFormatter()],
                         decoration: const InputDecoration(
                           labelText: 'Data do Pagamento',
                           border: OutlineInputBorder(),

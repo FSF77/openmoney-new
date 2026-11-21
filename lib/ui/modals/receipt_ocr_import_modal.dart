@@ -681,7 +681,7 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _dateCtrl,
-                  keyboardType: TextInputType.datetime,
+                  keyboardType: TextInputType.number,
                   inputFormatters: [DateInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Data (DD/MM/AAAA)',
@@ -712,7 +712,9 @@ class _ReceiptOcrReviewDialogState extends State<_ReceiptOcrReviewDialog> {
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.attach_money),
                   ),
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   onChanged: (v) {
                     final normalized = v.replaceAll('.', '').replaceAll(',', '.').trim();
                     final parsed = double.tryParse(normalized);

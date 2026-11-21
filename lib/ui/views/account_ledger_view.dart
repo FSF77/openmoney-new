@@ -1645,7 +1645,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                         width: 118,
                         child: TextField(
                           controller: _dateCtrl,
-                          keyboardType: TextInputType.datetime,
+                          keyboardType: TextInputType.number,
                           inputFormatters: [DateInputFormatter()],
                           style: const TextStyle(fontSize: 13),
                           onChanged: (val) {
@@ -1803,7 +1803,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           controller: _amtCtrl,
                           focusNode: _amtFocus,
                           style: const TextStyle(fontSize: 13),
-                          keyboardType: TextInputType.text,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: InputDecoration(
                             labelText:
                                 'Valor (${currencyMetaFor(acc.effectiveCurrency).symbol})',

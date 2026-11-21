@@ -754,7 +754,7 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
               Expanded(
                 child: TextField(
                   controller: _dateCtrl,
-                  keyboardType: TextInputType.datetime,
+                  keyboardType: TextInputType.number,
                   inputFormatters: [DateInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Data (DD/MM/AAAA)',
@@ -782,7 +782,9 @@ class _WalletImportReviewDialogState extends State<_WalletImportReviewDialog> {
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.attach_money),
                   ),
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   onChanged: (v) {
                     final parsedCents = parseAmountCents(v);
                     if (parsedCents != null) {
