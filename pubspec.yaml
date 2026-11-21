@@ -2,7 +2,7 @@ name: openmoney
 description: "OpenMoney - Gestão Financeira Pessoal Multiplataforma (macOS, Windows, iOS, iPadOS)."
 publish_to: 'none'
 
-version: 2.5.3+156
+version: 2.5.4+157
 
 environment:
   sdk: ^3.13.7
