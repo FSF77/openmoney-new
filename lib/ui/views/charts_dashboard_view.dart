@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/analytics_engine.dart';
+import '../../services/cash_flow_engine.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
 import '../theme/liquid_glass.dart';
@@ -12,7 +13,8 @@ enum _Period {
   m6('6M'),
   m12('12M'),
   ytd('Ano atual'),
-  lastYear('Ano anterior');
+  lastYear('Ano anterior'),
+  all('Todo período');
 
   final String label;
   const _Period(this.label);
@@ -30,10 +32,11 @@ class ChartsDashboardView extends StatefulWidget {
 class _ChartsDashboardViewState extends State<ChartsDashboardView> {
   _Period _period = _Period.m6;
   Set<String> _accountIds = {};
-  bool _includeTransfers = false;
+  CashFlowStatusFilter _statusFilter = CashFlowStatusFilter.all;
   double _savingsGoal = 0.20;
   double _reserveMonths = 6;
   String? _categoryTop;
+  String? _selectedMonth;
 
   AnalyticsSnapshot? _snap;
   AnalyticsSnapshot? _trend;
@@ -42,6 +45,7 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
   void initState() {
     super.initState();
     _loadPrefs();
+    _selectedMonth = widget.store.month;
     widget.store.addListener(_onStore);
   }
 
@@ -67,7 +71,11 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
     if (p['accounts'] is List) {
       _accountIds = (p['accounts'] as List).map((e) => e.toString()).toSet();
     }
-    if (p['includeTransfers'] is bool) _includeTransfers = p['includeTransfers'] as bool;
+    final statusName = p['statusFilter'];
+    _statusFilter = CashFlowStatusFilter.values.firstWhere(
+      (e) => e.name == statusName,
+      orElse: () => CashFlowStatusFilter.all,
+    );
     if (p['savingsGoal'] is num) _savingsGoal = (p['savingsGoal'] as num).toDouble();
     if (p['reserveMonths'] is num) _reserveMonths = (p['reserveMonths'] as num).toDouble();
   }
@@ -76,7 +84,7 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
     widget.store.chartsPrefs = {
       'period': _period.name,
       'accounts': _accountIds.toList(),
-      'includeTransfers': _includeTransfers,
+      'statusFilter': _statusFilter.name,
       'savingsGoal': _savingsGoal,
       'reserveMonths': _reserveMonths,
     };
@@ -95,42 +103,74 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
     _savePrefs();
   }
 
-  String get _currentYM {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2, '0')}';
-  }
+  String get _refYM => _selectedMonth ?? widget.store.month;
 
   AnalyticsFilter _filter({bool trend = false}) {
-    final cur = _currentYM;
-    String from = cur;
-    String to = cur;
+    final ref = _refYM;
+    String from = ref;
+    String to = ref;
+    bool isAll = false;
+
     switch (_period) {
       case _Period.m1:
+        from = ref;
+        to = ref;
         break;
       case _Period.m3:
-        from = AnalyticsEngine.addMonths(cur, -2);
+        from = AnalyticsEngine.addMonths(ref, -2);
+        to = ref;
+        break;
       case _Period.m6:
-        from = AnalyticsEngine.addMonths(cur, -5);
+        from = AnalyticsEngine.addMonths(ref, -5);
+        to = ref;
+        break;
       case _Period.m12:
-        from = AnalyticsEngine.addMonths(cur, -11);
+        from = AnalyticsEngine.addMonths(ref, -11);
+        to = ref;
+        break;
       case _Period.ytd:
-        from = '${cur.substring(0, 4)}-01';
+        from = '${ref.substring(0, 4)}-01';
+        to = ref;
+        break;
       case _Period.lastYear:
-        final y = int.parse(cur.substring(0, 4)) - 1;
+        final y = int.parse(ref.substring(0, 4)) - 1;
         from = '$y-01';
         to = '$y-12';
+        break;
+      case _Period.all:
+        isAll = true;
+        String minM = ref;
+        String maxM = ref;
+        for (final t in widget.store.db.txs) {
+          if (t.date.length >= 7) {
+            final ym = t.date.substring(0, 7);
+            if (ym.compareTo(minM) < 0) minM = ym;
+            if (ym.compareTo(maxM) > 0) maxM = ym;
+          }
+        }
+        from = minM;
+        to = maxM;
+        break;
     }
+
     if (trend) {
-      from = AnalyticsEngine.addMonths(to, -11);
+      if (_period == _Period.all) {
+        from = from;
+        to = to;
+      } else {
+        from = AnalyticsEngine.addMonths(to, -11);
+      }
     }
+
     return AnalyticsFilter(
       fromYM: from,
       toYM: to,
       accountIds: _accountIds,
-      includeTransfers: _includeTransfers,
+      statusFilter: _statusFilter,
       categoryTop: trend ? null : _categoryTop,
       savingsGoal: _savingsGoal,
       reserveGoalMonths: _reserveMonths,
+      isAllTime: isAll,
     );
   }
 
@@ -185,8 +225,8 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
           icon: Icons.south_west_rounded,
           color: colors.income,
           colors: colors,
-          deltaPct: _delta(s.income, s.prevIncome),
-          hint: 'vs. período anterior',
+          deltaPct: f.isAllTime ? null : _delta(s.income, s.prevIncome),
+          hint: f.isAllTime ? 'Total histórico' : 'vs. período anterior',
         )),
         tile(KpiCard(
           label: 'Despesas',
@@ -194,9 +234,9 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
           icon: Icons.north_east_rounded,
           color: colors.expense,
           colors: colors,
-          deltaPct: _delta(s.expense, s.prevExpense),
+          deltaPct: f.isAllTime ? null : _delta(s.expense, s.prevExpense),
           higherIsBetter: false,
-          hint: 'vs. período anterior',
+          hint: f.isAllTime ? 'Total histórico' : 'vs. período anterior',
         )),
         tile(KpiCard(
           label: 'Resultado do período',
@@ -204,7 +244,7 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
           icon: Icons.balance_rounded,
           color: s.net >= 0 ? colors.income : colors.expense,
           colors: colors,
-          deltaPct: _delta(s.net, s.prevNet),
+          deltaPct: f.isAllTime ? null : _delta(s.net, s.prevNet),
           hint: 'Receitas − Despesas',
         )),
         tile(KpiCard(
@@ -253,7 +293,7 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
         )),
         tile(ChartCard(
           title: 'Reserva de emergência',
-          subtitle: 'Meta: ${_reserveMonths.toStringAsFixed(0)} meses de despesas',
+          subtitle: 'Meta: ${_reserveMonths.toStringAsFixed(0)} meses (todo patrimônio)',
           colors: colors,
           child: GaugeChart(
             ratio: _reserveMonths > 0 ? s.runwayMonths / _reserveMonths : 0,
@@ -270,7 +310,9 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
         tile(
           ChartCard(
             title: 'Fluxo de caixa mensal',
-            subtitle: 'Receitas × despesas (12 meses)',
+            subtitle: _period == _Period.all
+                ? 'Receitas × despesas (Histórico completo · ${t.monthly.length} meses)'
+                : 'Receitas × despesas (12 meses)',
             colors: colors,
             child: CashflowBarChart(
               data: t.monthly,
@@ -393,9 +435,9 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
       last[p.date.substring(0, 7)] = p.balance;
     }
     final months = last.keys.toList()..sort();
-    final cur = _currentYM;
-    // Só projeta quando o filtro termina no mês atual (série contínua).
-    if (_filter(trend: true).toYM != cur) return const [];
+    final cur = _refYM;
+    // Só projeta quando o filtro termina no mês atual/referência (série contínua).
+    if (_filter(trend: true).toYM.compareTo(cur) < 0) return const [];
     return [
       for (final m in months)
         if (m.compareTo(cur) > 0) last[m]!.toDouble()
@@ -416,6 +458,56 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
               selected: _period == p,
               onSelected: (_) => _update(() => _period = p),
             ),
+          if (_period == _Period.m1)
+            Container(
+              decoration: BoxDecoration(
+                color: colors.surfaceCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.borderGlass, width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, size: 18),
+                    padding: const EdgeInsets.all(4),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Mês anterior',
+                    onPressed: () => _update(() {
+                      _selectedMonth =
+                          AnalyticsEngine.addMonths(_refYM, -1);
+                    }),
+                  ),
+                  InkWell(
+                    onTap: () => _update(() {
+                      _selectedMonth = widget.store.month;
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        fmtMonth(_refYM),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, size: 18),
+                    padding: const EdgeInsets.all(4),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Próximo mês',
+                    onPressed: () => _update(() {
+                      _selectedMonth = AnalyticsEngine.addMonths(_refYM, 1);
+                    }),
+                  ),
+                ],
+              ),
+            ),
           AccountMultiSelectFilter(
             store: widget.store,
             selectedAccountIds: _accountIds,
@@ -423,11 +515,56 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
             width: 200,
             onSelectionChanged: (set) => _update(() => _accountIds = set),
           ),
-          FilterChip(
-            label: const Text('Incluir transferências',
-                style: TextStyle(fontSize: 12)),
-            selected: _includeTransfers,
-            onSelected: (v) => _update(() => _includeTransfers = v),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colors.surfaceCard,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: colors.borderGlass, width: 0.8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<CashFlowStatusFilter>(
+                value: _statusFilter,
+                icon: Icon(Icons.arrow_drop_down,
+                    size: 18, color: colors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+                dropdownColor: colors.surfaceCard,
+                borderRadius: BorderRadius.circular(8),
+                items: CashFlowStatusFilter.values
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                s == CashFlowStatusFilter.all
+                                    ? Icons.filter_alt_outlined
+                                    : (s == CashFlowStatusFilter.reconciledOnly
+                                        ? Icons.check_circle_outline
+                                        : Icons.pending_outlined),
+                                size: 14,
+                                color: s == CashFlowStatusFilter.reconciledOnly
+                                    ? colors.income
+                                    : (s == CashFlowStatusFilter.pendingOnly
+                                        ? colors.warning
+                                        : colors.textMuted),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(s.shortLabel),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) _update(() => _statusFilter = v);
+                },
+              ),
+            ),
           ),
           if (_categoryTop != null)
             InputChip(
@@ -466,10 +603,10 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
                 alignment: Alignment.centerLeft,
                 child: Text('Reserva: ${rm.toStringAsFixed(0)} meses')),
             Slider(
-                value: rm,
+                value: rm.clamp(1, 60),
                 min: 1,
-                max: 24,
-                divisions: 23,
+                max: 60,
+                divisions: 59,
                 onChanged: (v) => setS(() => rm = v)),
           ]),
           actions: [

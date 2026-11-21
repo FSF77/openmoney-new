@@ -1,30 +1,23 @@
 # ADR 035 — Dashboard de Gráficos (Analytics) com `fl_chart`
 
 ## Contexto
-O app tinha tabelas (Fluxo de Caixa, Relatórios) e o Dashboard Geral (saldos), mas nenhuma visão analítica interativa com KPIs de gestão financeira pessoal.
+O app possuía tabelas contábeis (Fluxo de Caixa, Relatórios) e o Dashboard Geral (saldos imediatos), mas carecia de uma visão analítica interativa com KPIs modernos e dinâmica visual de gestão financeira pessoal.
 
 ## Decisão
-- Novo módulo de menu **Gráficos** (`NavModule.charts`, logo após Relatórios; também na paleta de comandos).
-- Biblioteca **`fl_chart`** (multiplataforma: macOS, Windows, Web, iOS, Android).
-- Cálculo isolado e puro em `lib/services/analytics_engine.dart` (somente leitura, centavos inteiros, conversão via `convertToBase`). Não grava no `openmoney.json` nem interfere no Sync v2/Anti-Wipe.
-- UI em `lib/ui/views/charts_dashboard_view.dart` e `lib/ui/views/charts/chart_widgets.dart`.
-- Preferências (período, contas, transferências, metas) em `chartsPrefs` na config local (`setChartsPrefs`).
-
-## KPIs e fórmulas
-| KPI | Fórmula |
-|---|---|
-| Patrimônio líquido | saldo de contas ativas (+ cartões negativos) em moeda base; série mensal acumulada |
-| Receitas / Despesas / Resultado | competência efetiva (fatura para cartão), sem transferências por padrão, comparação com período anterior de mesmo tamanho |
-| Taxa de poupança | (receita − despesa) / receita; meta padrão 20% |
-| Gasto médio diário e projeção | despesa do mês final / dias decorridos × dias do mês |
-| Reserva (runway) | saldo líquido (exceto cartão e investimento) / média de despesas dos últimos 3 meses; meta padrão 6 meses |
-| Comprometimento fixo | despesas recorrentes e parceladas / receita |
-| Orçado × realizado | `db.budgets` vs. gasto da categoria no mês final |
-| Previsão 90 dias | patrimônio de hoje + lançamentos futuros já cadastrados |
-| Score de saúde (0–100) | poupança 30 + reserva 25 + comprometimento 15 + orçamento 15 + tendência 15 |
-
-## Interatividade
-Filtros de período (Mês, 3M, 6M, 12M, ano atual, ano anterior), contas, transferências; toque numa categoria do donut filtra o painel inteiro; tooltips; metas configuráveis.
-
-## Consequências
-Nova dependência (`fl_chart`). Uso de cartão vs. limite não foi incluído porque `CardConfig` não possui limite de crédito.
+- Novo módulo de menu **Gráficos** (`NavModule.charts`, posicionado logo após Relatórios; acessível também na paleta de comandos `Ctrl/Cmd + K`).
+- Biblioteca **`fl_chart`** (compatível e testada em macOS, Windows, Web PWA, iOS e Android).
+- Motor contábil puro e isolado em `lib/services/analytics_engine.dart` (somente leitura, centavos inteiros, conversão via `convertToBase`).
+  - **Paridade 100% rigorosa com `buildMonthlyReport`**:
+    - Alinhamento rigoroso com a competência contábil de `t.date` utilizada nos relatórios oficiais do OpenMoney.
+    - Exclusão estrita de transferências entre contas (`t.xfer != null || t.peer != null`).
+    - Exclusão estrita de categorias desmarcadas de relatórios (`!store.isCategoryIncludedInReports(t.cat)`).
+    - Divisão de categorias de despesa via `kCategorySep` idêntica ao relatório.
+  - **Filtro de Status de Conciliação**:
+    - Suporte a `CashFlowStatusFilter`: **Todos os status**, **Apenas Conciliados** (`t.rec == true`) e **Apenas Não Conciliados** (`t.rec == false`), idêntico à tela de Relatórios e Fluxo de Caixa.
+- **Reserva de Emergência (Runway):**
+  - Considera **todo o patrimônio líquido consolidado do usuário** (`netWorthNow`), contemplando saldo de contas correntes, poupanças e investimentos, dividido pela despesa média mensal. Exemplo: R$ 200.000,00 de patrimônio e R$ 10.000,00 de despesa média mensal = 20 meses de reserva.
+- **Filtros de Período Flexíveis:**
+  - Opções: Mês (com seletor rápido `<` `>` para navegar entre qualquer mês), 3M, 6M, 12M, Ano atual, Ano anterior e **Todo período**.
+  - No modo "Todo período", os gráficos de barras de fluxo de caixa ativam rolagem horizontal suave para permitir a visualização de dezenas de meses históricos sem perda de legibilidade.
+- UI responsiva em `lib/ui/views/charts_dashboard_view.dart` e `lib/ui/views/charts/chart_widgets.dart`.
+- Preferências de filtros persistidas no `config.json` via `setChartsPrefs`.

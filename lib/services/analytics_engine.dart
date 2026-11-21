@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import '../models/openmoney_models.dart';
 import '../store/money_store.dart';
 import 'cash_flow_engine.dart';
@@ -8,39 +9,43 @@ class AnalyticsFilter {
   final String fromYM;
   final String toYM;
   final Set<String> accountIds; // vazio = todas
-  final bool includeTransfers;
+  final CashFlowStatusFilter statusFilter;
   final String? categoryTop; // filtro cruzado por categoria-pai
   final double savingsGoal; // 0..1 (ex.: 0.20)
   final double reserveGoalMonths;
+  final bool isAllTime;
 
   const AnalyticsFilter({
     required this.fromYM,
     required this.toYM,
     this.accountIds = const <String>{},
-    this.includeTransfers = false,
+    this.statusFilter = CashFlowStatusFilter.all,
     this.categoryTop,
     this.savingsGoal = 0.20,
     this.reserveGoalMonths = 6,
+    this.isAllTime = false,
   });
 
   AnalyticsFilter copyWith({
     String? fromYM,
     String? toYM,
     Set<String>? accountIds,
-    bool? includeTransfers,
+    CashFlowStatusFilter? statusFilter,
     Object? categoryTop = _keep,
     double? savingsGoal,
     double? reserveGoalMonths,
+    bool? isAllTime,
   }) {
     return AnalyticsFilter(
       fromYM: fromYM ?? this.fromYM,
       toYM: toYM ?? this.toYM,
       accountIds: accountIds ?? this.accountIds,
-      includeTransfers: includeTransfers ?? this.includeTransfers,
+      statusFilter: statusFilter ?? this.statusFilter,
       categoryTop:
           identical(categoryTop, _keep) ? this.categoryTop : categoryTop as String?,
       savingsGoal: savingsGoal ?? this.savingsGoal,
       reserveGoalMonths: reserveGoalMonths ?? this.reserveGoalMonths,
+      isAllTime: isAllTime ?? this.isAllTime,
     );
   }
 
@@ -166,7 +171,7 @@ class AnalyticsEngine {
       return store.convertToBase(cents, cur, txRateToBrl: t.rate);
     }
 
-    final len = monthsBetween(f.fromYM, f.toYM) + 1;
+    final len = math.max(1, monthsBetween(f.fromYM, f.toYM) + 1);
     final prevFrom = addMonths(f.fromYM, -len);
     final prevTo = addMonths(f.fromYM, -1);
 
@@ -185,49 +190,76 @@ class AnalyticsEngine {
 
     for (final t in store.db.txs) {
       if (!accFilterOk(t.acc)) continue;
-      if (isPredictionPayee(t.payee)) continue;
-      final isXfer = isTransferTransaction(t);
-      if (isXfer && !f.includeTransfers) continue;
-      if (!isXfer && !store.isCategoryIncludedInReports(t.cat)) continue;
-      final ym = FinancialInsightsEngine.effectiveMonthForTx(t, store);
-      if (ym.compareTo(prevFrom) < 0 || ym.compareTo(f.toYM) > 0) continue;
-      final parsed = CashFlowEngine.parseCategory(t, accounts);
-      if (f.categoryTop != null && !isXfer && parsed.top != f.categoryTop) {
+
+      // Transferências entre contas: rigorosamente igual ao relatório contábil (buildMonthlyReport)
+      if (t.xfer != null || t.peer != null) continue;
+
+      // Categorias incluídas em relatórios: rigorosamente igual ao relatório contábil
+      if (!store.isCategoryIncludedInReports(t.cat)) continue;
+
+      // Status de conciliação (Conciliados vs Não conciliados)
+      switch (f.statusFilter) {
+        case CashFlowStatusFilter.all:
+          break;
+        case CashFlowStatusFilter.reconciledOnly:
+          if (!t.rec) continue;
+          break;
+        case CashFlowStatusFilter.pendingOnly:
+          if (t.rec) continue;
+          break;
+      }
+
+      // Competência contábil: alinhada 100% à data do lançamento contábil
+      if (t.date.length < 7) continue;
+      final ym = t.date.substring(0, 7);
+      if (!f.isAllTime) {
+        if (ym.compareTo(prevFrom) < 0 || ym.compareTo(f.toYM) > 0) continue;
+      } else {
+        if (ym.compareTo(f.fromYM) < 0 || ym.compareTo(f.toYM) > 0) continue;
+      }
+
+      final parts =
+          t.cat.isEmpty ? ['Sem categoria'] : t.cat.split(kCategorySep);
+      final topCat = parts[0];
+      final subCat = parts.length > 1 ? parts[1] : null;
+
+      if (f.categoryTop != null && topCat != f.categoryTop) {
         continue;
       }
+
       final v = conv(t, t.amt);
       if (v > 0) {
         inc[ym] = (inc[ym] ?? 0) + v;
       } else if (v < 0) {
         final a = -v;
         exp[ym] = (exp[ym] ?? 0) + a;
-        final inCurrent = ym.compareTo(f.fromYM) >= 0;
-        if (!isXfer) {
-          if (inCurrent) {
-            catTotals[parsed.top] = (catTotals[parsed.top] ?? 0) + a;
-            if (parsed.sub != null) {
-              final m = catSubs.putIfAbsent(parsed.top, () => <String, int>{});
-              m[parsed.sub!] = (m[parsed.sub!] ?? 0) + a;
-            }
-            final key = FinancialInsightsEngine.normalizePayeeForGrouping(t.payee);
-            if (key.isNotEmpty) {
-              payeeTotals[key] = (payeeTotals[key] ?? 0) + a;
-              payeeCounts[key] = (payeeCounts[key] ?? 0) + 1;
-              payeeNames.putIfAbsent(key, () => t.payee.trim());
-            }
-            if (t.recId != null || t.pn != null) fixedExpense += a;
-          } else {
-            prevCatTotals[parsed.top] = (prevCatTotals[parsed.top] ?? 0) + a;
+        final inCurrent =
+            ym.compareTo(f.fromYM) >= 0 && ym.compareTo(f.toYM) <= 0;
+        if (inCurrent) {
+          catTotals[topCat] = (catTotals[topCat] ?? 0) + a;
+          if (subCat != null) {
+            final m = catSubs.putIfAbsent(topCat, () => <String, int>{});
+            m[subCat] = (m[subCat] ?? 0) + a;
           }
-          if (ym == f.toYM) {
-            budgetSpent[parsed.top] = (budgetSpent[parsed.top] ?? 0) + a;
-            if (parsed.sub != null) {
-              final k = '${parsed.top}$kCategorySep${parsed.sub}';
-              budgetSpent[k] = (budgetSpent[k] ?? 0) + a;
-            }
-            if (t.date.length >= 10) {
-              daily[t.date] = (daily[t.date] ?? 0) + a;
-            }
+          final key =
+              FinancialInsightsEngine.normalizePayeeForGrouping(t.payee);
+          if (key.isNotEmpty) {
+            payeeTotals[key] = (payeeTotals[key] ?? 0) + a;
+            payeeCounts[key] = (payeeCounts[key] ?? 0) + 1;
+            payeeNames.putIfAbsent(key, () => t.payee.trim());
+          }
+          if (t.recId != null || t.pn != null) fixedExpense += a;
+        } else {
+          prevCatTotals[topCat] = (prevCatTotals[topCat] ?? 0) + a;
+        }
+        if (ym == f.toYM) {
+          budgetSpent[topCat] = (budgetSpent[topCat] ?? 0) + a;
+          if (subCat != null) {
+            final k = '$topCat$kCategorySep$subCat';
+            budgetSpent[k] = (budgetSpent[k] ?? 0) + a;
+          }
+          if (t.date.length >= 10) {
+            daily[t.date] = (daily[t.date] ?? 0) + a;
           }
         }
       }
@@ -243,12 +275,23 @@ class AnalyticsEngine {
 
     final income = sumRange(inc, f.fromYM, f.toYM);
     final expense = sumRange(exp, f.fromYM, f.toYM);
-    final prevIncome = sumRange(inc, prevFrom, prevTo);
-    final prevExpense = sumRange(exp, prevFrom, prevTo);
+    final prevIncome = f.isAllTime ? 0 : sumRange(inc, prevFrom, prevTo);
+    final prevExpense = f.isAllTime ? 0 : sumRange(exp, prevFrom, prevTo);
 
-    // ---------- Patrimônio mês a mês ----------
+    // ---------- Patrimônio Líquido Consolidado Atual ----------
     final nwAccounts =
         accounts.where((a) => a.isActive && accFilterOk(a.id)).toList();
+    int currentConsolidatedNetWorth = 0;
+    if (f.accountIds.isEmpty) {
+      currentConsolidatedNetWorth = store.totalBalance(predicted: false);
+    } else {
+      for (final a in nwAccounts) {
+        currentConsolidatedNetWorth += store.convertToBase(
+            store.balance(a, predicted: false), a.effectiveCurrency);
+      }
+    }
+
+    // ---------- Patrimônio mês a mês (Histórico) ----------
     int opening = 0;
     for (final a in nwAccounts) {
       opening += store.convertToBase(a.opening, a.effectiveCurrency);
@@ -276,8 +319,16 @@ class AnalyticsEngine {
     final monthly = <MonthPoint>[];
     for (int i = 0; i < len; i++) {
       final ym = addMonths(f.fromYM, i);
-      monthly.add(MonthPoint(ym, inc[ym] ?? 0, exp[ym] ?? 0, nwAt(ym)));
+      final isCurrentOrFuture = ym.compareTo(currentYM) >= 0;
+      final nwVal = (isCurrentOrFuture && ym == currentYM)
+          ? currentConsolidatedNetWorth
+          : nwAt(ym);
+      monthly.add(MonthPoint(ym, inc[ym] ?? 0, exp[ym] ?? 0, nwVal));
     }
+
+    final netWorthNow = f.toYM.compareTo(currentYM) >= 0
+        ? currentConsolidatedNetWorth
+        : nwAt(f.toYM);
 
     // ---------- Categorias ----------
     final byCategory = catTotals.entries
@@ -307,34 +358,35 @@ class AnalyticsEngine {
     final burn = elapsed > 0 ? (lastMonthExpense / elapsed).round() : 0;
     final projected = isCurrentMonth ? burn * daysInMonth : lastMonthExpense;
 
-    // Runway: saldo líquido / despesa média dos últimos 3 meses fechados
-    int liquid = 0;
-    for (final a in nwAccounts) {
-      if (a.type == kCardType || a.type == 'Investimento') continue;
-      liquid += store.convertToBase(store.balance(a), a.effectiveCurrency);
-    }
+    // ---------- Reserva de Emergência (Runway) ----------
+    // Considera TODO o patrimônio líquido total do usuário (contas, investimentos, etc.)
+    final totalReserve = math.max(0, netWorthNow);
     int sum3 = 0;
     int n3 = 0;
     final refEnd = isCurrentMonth ? addMonths(currentYM, -1) : f.toYM;
     for (int i = 0; i < 3; i++) {
       final ym = addMonths(refEnd, -i);
       final e = exp[ym];
-      if (e != null) {
+      if (e != null && e > 0) {
         sum3 += e;
         n3++;
       }
     }
-    final avgExp = n3 > 0 ? sum3 / n3 : (expense / len);
-    final runway = avgExp > 0 ? (liquid / avgExp).clamp(0, 999).toDouble() : 0.0;
+    double avgExp = 0;
+    if (n3 > 0 && sum3 > 0) {
+      avgExp = sum3 / n3;
+    } else if (expense > 0 && len > 0) {
+      avgExp = expense / len;
+    } else if ((exp[f.toYM] ?? 0) > 0) {
+      avgExp = (exp[f.toYM]!).toDouble();
+    }
+    final runway = avgExp > 0 ? (totalReserve / avgExp).clamp(0, 999).toDouble() : 0.0;
 
     final fixedCommit = income > 0 ? fixedExpense / income : 0.0;
 
     // ---------- Previsão 90 dias ----------
     final forecast = <ForecastPoint>[];
-    final startBal = nwAt(currentYM) -
-        _futureFlow(flowByMonth, store, nwIds, todayStr, conv);
-    final netWorthNow =
-        f.toYM.compareTo(currentYM) >= 0 ? startBal : nwAt(f.toYM);
+    final startBal = currentConsolidatedNetWorth;
     final future = <String, int>{};
     final horizon = today.add(const Duration(days: 90));
     final horizonStr =
@@ -377,7 +429,7 @@ class AnalyticsEngine {
     // ---------- Insights ----------
     final insights = <String>[];
     String c(int v) => formatCurrency(v, base);
-    if (prevExpense > 0 && expense > 0) {
+    if (!f.isAllTime && prevExpense > 0 && expense > 0) {
       final d = (expense - prevExpense) / prevExpense;
       if (d.abs() >= 0.1) {
         insights.add(d > 0
@@ -437,26 +489,5 @@ class AnalyticsEngine {
       dailySpend: daily,
       insights: insights,
     );
-  }
-
-  /// Soma dos lançamentos do mês corrente com data posterior a hoje
-  /// (para obter o saldo real de hoje a partir do saldo de fim de mês).
-  static int _futureFlow(
-    Map<String, int> flowByMonth,
-    MoneyStore store,
-    Set<String> ids,
-    String todayStr,
-    int Function(Transaction, int) conv,
-  ) {
-    int s = 0;
-    final ym = todayStr.substring(0, 7);
-    for (final t in store.db.txs) {
-      if (!ids.contains(t.acc) || isPredictionPayee(t.payee)) continue;
-      if (t.date.length < 10) continue;
-      if (t.date.substring(0, 7) == ym && t.date.compareTo(todayStr) > 0) {
-        s += conv(t, t.amt);
-      }
-    }
-    return s;
   }
 }

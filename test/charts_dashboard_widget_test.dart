@@ -23,7 +23,7 @@ void main() {
     expect(tester(t), isNull);
   });
 
-  testWidgets('troca de período não quebra', (t) async {
+  testWidgets('troca de período não quebra e suporta Todo período', (t) async {
     final store = MoneyStore(autoBoot: false);
     store.saveAccount(
       name: 'CC',
@@ -38,7 +38,15 @@ void main() {
     await t.pump();
     await t.tap(find.text('Ano anterior'));
     await t.pump();
+    await t.tap(find.text('Todo período'));
+    await t.pump();
     expect(find.text('Receitas'), findsOneWidget);
+    await t.tap(find.text('Mês'));
+    await t.pump();
+    expect(find.byTooltip('Mês anterior'), findsOneWidget);
+    expect(find.byTooltip('Próximo mês'), findsOneWidget);
+    await t.tap(find.byTooltip('Mês anterior'));
+    await t.pump();
   });
 }
 

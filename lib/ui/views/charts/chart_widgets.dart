@@ -284,92 +284,118 @@ class CashflowBarChart extends StatelessWidget {
         .map((e) => math.max(e.income, e.expense))
         .fold<int>(1, math.max)
         .toDouble();
+
     return SizedBox(
       height: 240,
-      child: BarChart(BarChartData(
-        maxY: maxV * 1.15,
-        alignment: BarChartAlignment.spaceAround,
-        gridData: FlGridData(
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (_) =>
-              FlLine(color: colors.borderGlass, strokeWidth: 0.6),
-        ),
-        borderData: FlBorderData(show: false),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(),
-          rightTitles: const AxisTitles(),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 40,
-              getTitlesWidget: (v, m) => v == m.max
-                  ? const SizedBox()
-                  : Text(_compact(v.toInt()),
-                      style: TextStyle(fontSize: 9.5, color: colors.textMuted)),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (v, m) {
-                final i = v.toInt();
-                if (i < 0 || i >= data.length) return const SizedBox();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(_mShort(data[i].ym),
-                      style: TextStyle(fontSize: 10, color: colors.textMuted)),
-                );
-              },
-            ),
-          ),
-        ),
-        barTouchData: BarTouchData(
-          touchCallback: (e, r) {
-            if (e is FlTapUpEvent && r?.spot != null && onMonthTap != null) {
-              onMonthTap!(data[r!.spot!.touchedBarGroupIndex].ym);
-            }
-          },
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => colors.surfaceCard.withValues(alpha: 0.97),
-            getTooltipItem: (g, gi, rod, ri) {
-              final d = data[gi];
-              return BarTooltipItem(
-                '${fmtMonth(d.ym)}\n',
-                TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                    color: colors.textPrimary),
-                children: [
-                  TextSpan(
-                      text: 'Receita ${_cur(d.income, currency)}\n',
-                      style: TextStyle(color: colors.income, fontSize: 11)),
-                  TextSpan(
-                      text: 'Despesa ${_cur(d.expense, currency)}\n',
-                      style: TextStyle(color: colors.expense, fontSize: 11)),
-                  TextSpan(
-                      text: 'Resultado ${_cur(d.net, currency)}',
-                      style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-                ],
-              );
-            },
-          ),
-        ),
-        barGroups: [
-          for (int i = 0; i < data.length; i++)
-            BarChartGroupData(x: i, barsSpace: 3, barRods: [
-              BarChartRodData(
-                  toY: data[i].income.toDouble(),
-                  color: colors.income,
-                  width: data.length > 8 ? 7 : 12,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-              BarChartRodData(
-                  toY: data[i].expense.toDouble(),
-                  color: colors.expense,
-                  width: data.length > 8 ? 7 : 12,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-            ]),
-        ],
-      )),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isScrollable = data.length > 14;
+          final totalWidth = isScrollable
+              ? math.max(constraints.maxWidth, data.length * 36.0)
+              : constraints.maxWidth;
+
+          Widget chart = SizedBox(
+            width: totalWidth,
+            child: BarChart(BarChartData(
+              maxY: maxV * 1.15,
+              alignment: BarChartAlignment.spaceAround,
+              gridData: FlGridData(
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) =>
+                    FlLine(color: colors.borderGlass, strokeWidth: 0.6),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(),
+                rightTitles: const AxisTitles(),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 40,
+                    getTitlesWidget: (v, m) => v == m.max
+                        ? const SizedBox()
+                        : Text(_compact(v.toInt()),
+                            style: TextStyle(fontSize: 9.5, color: colors.textMuted)),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (v, m) {
+                      final i = v.toInt();
+                      if (i < 0 || i >= data.length) return const SizedBox();
+                      final ym = data[i].ym;
+                      final label = isScrollable
+                          ? '${_mShort(ym)}\n${ym.substring(2, 4)}'
+                          : _mShort(ym);
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(label,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 9.5, color: colors.textMuted)),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              barTouchData: BarTouchData(
+                touchCallback: (e, r) {
+                  if (e is FlTapUpEvent && r?.spot != null && onMonthTap != null) {
+                    onMonthTap!(data[r!.spot!.touchedBarGroupIndex].ym);
+                  }
+                },
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipColor: (_) => colors.surfaceCard.withValues(alpha: 0.97),
+                  getTooltipItem: (g, gi, rod, ri) {
+                    final d = data[gi];
+                    return BarTooltipItem(
+                      '${fmtMonth(d.ym)}\n',
+                      TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                          color: colors.textPrimary),
+                      children: [
+                        TextSpan(
+                            text: 'Receita ${_cur(d.income, currency)}\n',
+                            style: TextStyle(color: colors.income, fontSize: 11)),
+                        TextSpan(
+                            text: 'Despesa ${_cur(d.expense, currency)}\n',
+                            style: TextStyle(color: colors.expense, fontSize: 11)),
+                        TextSpan(
+                            text: 'Resultado ${_cur(d.net, currency)}',
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              barGroups: [
+                for (int i = 0; i < data.length; i++)
+                  BarChartGroupData(x: i, barsSpace: 3, barRods: [
+                    BarChartRodData(
+                        toY: data[i].income.toDouble(),
+                        color: colors.income,
+                        width: isScrollable ? 8 : (data.length > 8 ? 7 : 12),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
+                    BarChartRodData(
+                        toY: data[i].expense.toDouble(),
+                        color: colors.expense,
+                        width: isScrollable ? 8 : (data.length > 8 ? 7 : 12),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
+                  ]),
+              ],
+            )),
+          );
+
+          if (isScrollable) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: chart,
+            );
+          }
+          return chart;
+        },
+      ),
     );
   }
 }
