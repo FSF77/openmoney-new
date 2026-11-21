@@ -1178,7 +1178,7 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                     ),
                     PopupMenuButton<String>(
                       tooltip:
-                          'Modo de abatimento das previsões: por mês ou por fatura do cartão (mês atual + 2 seguintes)',
+                          'Modo de abatimento das previsões: por mês ou por fatura do cartão (${widget.store.db.predMonths} ${widget.store.db.predMonths == 1 ? "mês" : "meses"})',
                       icon: const Icon(Icons.tune, size: 18),
                       padding: EdgeInsets.zero,
                       constraints:

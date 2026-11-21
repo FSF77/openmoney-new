@@ -177,6 +177,71 @@ class _SettingsViewState extends State<SettingsView> {
                         widget.store.toggleHidePatrimonyBalance(),
                   ),
                 ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Meses no Ajuste de Previsões',
+                  subtitle:
+                      'Quantidade de meses consecutivos avaliados ao rodar o abatimento automático de previsões orçamentárias.',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceGlass,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: [1, 2, 3, 6, 12].contains(widget.store.db.predMonths)
+                            ? widget.store.db.predMonths
+                            : 3,
+                        dropdownColor: colors.surfaceCard,
+                        style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                        items: const [
+                          DropdownMenuItem(value: 1, child: Text('1 mês')),
+                          DropdownMenuItem(value: 2, child: Text('2 meses')),
+                          DropdownMenuItem(value: 3, child: Text('3 meses (Padrão)')),
+                          DropdownMenuItem(value: 6, child: Text('6 meses')),
+                          DropdownMenuItem(value: 12, child: Text('12 meses')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() {
+                              widget.store.setPredMonths(v);
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Modo de Abatimento de Previsões',
+                  subtitle:
+                      'Define se o abatimento considera o mês civil do lançamento ou a competência de vencimento das faturas de cartão.',
+                  trailing: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'month',
+                        label: Text('Por Mês'),
+                        icon: Icon(Icons.calendar_today, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: 'invoice',
+                        label: Text('Por Fatura'),
+                        icon: Icon(Icons.credit_card, size: 16),
+                      ),
+                    ],
+                    selected: {widget.store.db.predMode},
+                    onSelectionChanged: (set) {
+                      setState(() {
+                        widget.store.setPredMode(set.first);
+                      });
+                    },
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),

@@ -796,6 +796,9 @@ class Database {
   /// Modo de abatimento de previsões: 'month' (padrão) ou 'invoice' (por fatura)
   String predMode;
 
+  /// Quantidade de meses para abatimento de previsões (padrão 3: 1, 2, 3, 6 ou 12)
+  int predMonths;
+
   /// Moeda base do sistema (padrão 'BRL')
   String baseCurrency;
 
@@ -815,6 +818,7 @@ class Database {
     Map<String, String>? comments,
     this.v = 7,
     this.predMode = 'month',
+    this.predMonths = 3,
     String? baseCurrency,
     Map<String, CurrencyRateInfo>? rates,
     List<String>? tags,
@@ -929,6 +933,7 @@ class Database {
       comments: parsedComments,
       v: (json['v'] as num?)?.toInt() ?? 7,
       predMode: json['predMode'] == 'invoice' ? 'invoice' : 'month',
+      predMonths: (json['predMonths'] as num?)?.toInt() ?? 3,
       baseCurrency: rawBase,
       rates: parsedRates,
       tags: parsedTags,
@@ -944,6 +949,7 @@ class Database {
         if (comments.isNotEmpty) 'comments': comments,
         'v': v,
         if (predMode != 'month') 'predMode': predMode,
+        if (predMonths != 3) 'predMonths': predMonths,
         if (baseCurrency != 'BRL') 'baseCurrency': baseCurrency,
         if (rates.isNotEmpty)
           'rates': rates.map((k, v) => MapEntry(k, v.toJson())),

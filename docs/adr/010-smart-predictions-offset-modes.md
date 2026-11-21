@@ -52,13 +52,16 @@ Estabeleceu-se a inclusão do parâmetro de persistência `predMode` no banco de
           • Gastos Cartão: Data do mês                   • Gastos Cartão: Vencimento da fatura no mês
 ```
 
-### 2.1. Persistência do Parâmetro (`predMode`) no Schema `v: 7`
+### 2.1. Persistência dos Parâmetros (`predMode` e `predMonths`) no Schema `v: 7`
 - **Chave no JSON:** `"predMode"` (tipo `string`).
-- **Valores suportados:**
-  - `"month"`: Abatimento por mês civil (comportamento clássico, padrão default).
-  - `"invoice"`: Abatimento por desembolso real (regime de caixa / fatura de cartão e ciclo estendido).
-- **Retrocompatibilidade estrita:** Se a chave for omitida na base de dados legada, assume-se `"month"`. Na gravação, caso o valor seja `"month"`, o campo pode ser suprimido da serialização, garantindo que bases `v: 7` antigas permaneçam idênticas byte a byte.
-- **Controle de Interface:** Um menu discreto com ícone de ajustes (`slider.horizontal.3` no macOS/iOS e `tune` no Flutter) posicionado imediatamente antes do botão *"Ajustar Previsões"* no cabeçalho do extrato de lançamentos, persistindo a preferência diretamente no banco de dados.
+  - `"month"`: Abatimento por mês civil (comportamento clássico).
+  - `"invoice"`: Abatimento por desembolso real (regime de caixa / fatura de cartão).
+- **Chave no JSON:** `"predMonths"` (tipo `int`, padrão `3`).
+  - Define o horizonte de meses consecutivos avaliados ao rodar a rotina (`1`, `2`, `3`, `6` ou `12` meses), aplicável a ambos os modos (`month` e `invoice`).
+- **Retrocompatibilidade estrita:** Se as chaves forem omitidas, assumem-se `"month"` e `3`. Na gravação, se os valores forem os padrões, os campos são suprimidos da serialização, garantindo bases limpas e retrocompatíveis.
+- **Controle de Interface:**
+  - Tela de **Ajustes & Personalização**: seletor visual de horizonte (`1 mês`, `2 meses`, `3 meses (Padrão)`, `6 meses`, `12 meses`) e modo de abatimento (`Por Mês` vs `Por Fatura`).
+  - Cabeçalho do extrato de lançamentos: menu discreto (`tune`) para alternância rápida de modo e botão de disparo com tooltip dinâmico indicando o horizonte configurado.
 
 ---
 

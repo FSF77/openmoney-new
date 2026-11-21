@@ -60,4 +60,57 @@ void main() {
     expect(res.totalDeductedCents, 35000); // R$ 200 + R$ 150 = R$ 350
     expect(store.db.txs.firstWhere((t) => t.payee.startsWith('Previs')).amt, -65000); // R$ 1000 - R$ 350 = R$ 650
   });
+
+  test('parametro predMonths define horizonte de meses avaliados para ambos os modos', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db = Database(
+      accounts: [
+        Account(id: 'bank', name: 'Banco', type: 'Corrente', opening: 0),
+      ],
+      txs: [
+        // Previsões em 3 meses distintos
+        Transaction(acc: 'bank', date: '2026-11-01', payee: 'Previsão Mercado Nov', cat: 'Mercado', amt: -50000),
+        Transaction(acc: 'bank', date: '2026-12-01', payee: 'Previsão Mercado Dez', cat: 'Mercado', amt: -50000),
+        Transaction(acc: 'bank', date: '2027-01-01', payee: 'Previsão Mercado Jan', cat: 'Mercado', amt: -50000),
+        // Despesas reais em cada mês
+        Transaction(acc: 'bank', date: '2026-11-10', payee: 'Supermercado 1', cat: 'Mercado', amt: -20000),
+        Transaction(acc: 'bank', date: '2026-12-10', payee: 'Supermercado 2', cat: 'Mercado', amt: -30000),
+        Transaction(acc: 'bank', date: '2027-01-10', payee: 'Supermercado 3', cat: 'Mercado', amt: -40000),
+      ],
+      predMode: 'month',
+      predMonths: 3,
+    );
+
+    expect(store.db.predMonths, 3);
+
+    // Com predMonths = 1, só abate Novembro
+    store.setPredMonths(1);
+    expect(store.db.predMonths, 1);
+    var res = store.adjustPredictions('2026-11');
+    expect(res.totalDeductedCents, 20000); // Somente Nov (20000)
+    expect(store.db.txs.firstWhere((t) => t.payee == 'Previsão Mercado Nov').amt, -30000);
+    expect(store.db.txs.firstWhere((t) => t.payee == 'Previsão Mercado Dez').amt, -50000); // Intacto
+    expect(store.db.txs.firstWhere((t) => t.payee == 'Previsão Mercado Jan').amt, -50000); // Intacto
+
+    // Agora com predMonths = 3, avalia Nov + Dez + Jan
+    store.setPredMonths(3);
+    res = store.adjustPredictions('2026-11');
+    // Nov já estava abatido em 20000 (resta 0 a abater nele), Dez abate 30000 e Jan abate 40000
+    expect(store.db.txs.firstWhere((t) => t.payee == 'Previsão Mercado Dez').amt, -20000); // 50000 - 30000
+    expect(store.db.txs.firstWhere((t) => t.payee == 'Previsão Mercado Jan').amt, -10000); // 50000 - 40000
+  });
+
+  test('Database JSON serialization preserves predMonths', () {
+    final dbDefault = Database();
+    expect(dbDefault.predMonths, 3);
+    expect(dbDefault.toJson().containsKey('predMonths'), isFalse); // Omitido quando padrão
+
+    final dbCustom = Database(predMonths: 6);
+    expect(dbCustom.predMonths, 6);
+    final json = dbCustom.toJson();
+    expect(json['predMonths'], 6);
+
+    final restored = Database.fromJson(json);
+    expect(restored.predMonths, 6);
+  });
 }

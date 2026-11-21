@@ -4749,11 +4749,17 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setPredMonths(int months) {
+    if (db.predMonths == months) return;
+    db.predMonths = months;
+    save();
+    notifyListeners();
+  }
+
   PredictionsAdjustResult adjustPredictions(String targetMonth) {
     final invoiceMode = db.predMode == 'invoice';
-    final months = invoiceMode
-        ? [targetMonth, addMonthsYM(targetMonth, 1), addMonthsYM(targetMonth, 2)]
-        : [targetMonth];
+    final count = db.predMonths > 0 ? db.predMonths : 3;
+    final months = List.generate(count, (i) => addMonthsYM(targetMonth, i));
 
     // Grupos de abatimento: previsões + lançamentos que as abatem
     final groups = <({String cat, List<Transaction> preds, List<Transaction> spent, String label})>[];
