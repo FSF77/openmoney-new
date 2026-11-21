@@ -26,11 +26,11 @@ class PayeeSpikeDriver {
     required this.transactionIds,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({String currency = 'BRL'}) => {
         'payee': payee,
-        'currentMonthCents': currentMonthCents,
-        'averagePrev3MonthsCents': averagePrev3MonthsCents,
-        'deltaCents': deltaCents,
+        'currentMonth': formatCurrency(currentMonthCents, currency),
+        'averagePrev3Months': formatCurrency(averagePrev3MonthsCents, currency),
+        'delta': formatCurrency(deltaCents, currency),
         'txCount': txCount,
       };
 }
@@ -86,16 +86,20 @@ class CategorySpikeInsight {
 
   Map<String, dynamic> toJson() => {
         'categoryPath': categoryPath,
-        'currentCents': currentCents,
-        'previousMonthCents': previousMonthCents,
-        'average3MonthsCents': average3MonthsCents,
-        'deltaVsAverageCents': deltaVsAverageCents,
+        'current': formatCurrency(currentCents, currency),
+        'previousMonth': formatCurrency(previousMonthCents, currency),
+        'average3Months': formatCurrency(average3MonthsCents, currency),
+        'deltaVsAverage': formatCurrency(deltaVsAverageCents, currency),
         'percentVsAverage': double.parse(percentVsAverage.toStringAsFixed(1)),
-        if (budgetLimitCents != null) 'budgetLimitCents': budgetLimitCents,
+        if (budgetLimitCents != null)
+          'budgetLimit': formatCurrency(budgetLimitCents!, currency),
         if (predictionBaseCents != null)
-          'predictionBaseCents': predictionBaseCents,
+          'predictionBase': formatCurrency(predictionBaseCents!, currency),
         if (isPredictionExhausted) 'isPredictionExhausted': true,
-        'topDrivers': topDrivers.take(4).map((d) => d.toJson()).toList(),
+        'topDrivers': topDrivers
+            .take(4)
+            .map((d) => d.toJson(currency: currency))
+            .toList(),
       };
 }
 
@@ -147,16 +151,22 @@ class CardInvoiceAnalysis {
         'cardName': cardName,
         'invoiceKey': invoiceKey,
         'currency': currency,
-        'totalInvoiceCents': totalInvoiceCents,
-        'spotPurchasesCents': spotPurchasesCents,
-        'installmentPurchasesCents': installmentPurchasesCents,
-        'recurringPurchasesCents': recurringPurchasesCents,
+        'totalInvoice': formatCurrency(totalInvoiceCents, currency),
+        'spotPurchases': formatCurrency(spotPurchasesCents, currency),
+        'installmentPurchases':
+            formatCurrency(installmentPurchasesCents, currency),
+        'recurringPurchases':
+            formatCurrency(recurringPurchasesCents, currency),
         'installmentSharePercent':
             double.parse(installmentSharePercent.toStringAsFixed(1)),
-        'previous3InvoicesAverageCents': previous3InvoicesAverageCents,
-        'deltaVsAverageCents': deltaVsAverageCents,
+        'previous3InvoicesAverage':
+            formatCurrency(previous3InvoicesAverageCents, currency),
+        'deltaVsAverage': formatCurrency(deltaVsAverageCents, currency),
         'percentVsAverage': double.parse(percentVsAverage.toStringAsFixed(1)),
-        'next3InvoicesCommittedCents': next3InvoicesCommittedCents,
+        'next3InvoicesCommitted': {
+          for (final entry in next3InvoicesCommittedCents.entries)
+            entry.key: formatCurrency(entry.value, currency),
+        },
         'closeDateIso': closeDateIso,
         'dueDateIso': dueDateIso,
         'isSettled': isSettled,
@@ -164,13 +174,16 @@ class CardInvoiceAnalysis {
             .take(5)
             .map((e) => {
                   'payee': e.payee,
-                  'amountCents': e.amountCents,
+                  'amount': formatCurrency(e.amountCents, currency),
                   'count': e.count
                 })
             .toList(),
         'topCategories': topCategories
             .take(5)
-            .map((e) => {'category': e.category, 'amountCents': e.amountCents})
+            .map((e) => {
+                  'category': e.category,
+                  'amount': formatCurrency(e.amountCents, currency),
+                })
             .toList(),
       };
 }
@@ -221,9 +234,10 @@ class RecurringCandidate {
         'category': category,
         'currency': currency,
         'freq': detectedFrequency,
-        'latestAmountCents': latestAmountCents,
-        'previousAverageAmountCents': previousAverageAmountCents,
-        'priceChangeCents': priceChangeCents,
+        'latestAmount': formatCurrency(latestAmountCents.abs(), currency),
+        'previousAverageAmount':
+            formatCurrency(previousAverageAmountCents.abs(), currency),
+        'priceChange': formatCurrency(priceChangeCents, currency),
         'priceChangePercent':
             double.parse(priceChangePercent.toStringAsFixed(1)),
         'occurrencesCount': occurrencesCount,
@@ -254,7 +268,7 @@ class OrganizationOpportunity {
     this.suggestedBudgetCents,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({String currency = 'BRL'}) => {
         'kind': kind,
         'title': title,
         'subtitle': subtitle,
@@ -264,7 +278,7 @@ class OrganizationOpportunity {
         if (suggestedPayee != null) 'suggestedPayee': suggestedPayee,
         if (suggestedTags != null) 'suggestedTags': suggestedTags,
         if (suggestedBudgetCents != null)
-          'suggestedBudgetCents': suggestedBudgetCents,
+          'suggestedBudget': formatCurrency(suggestedBudgetCents!, currency),
       };
 }
 
@@ -1208,16 +1222,20 @@ class FinancialInsightsEngine {
 
     final activeAccs = store.db.accounts
         .where((a) => !a.isInactive)
-        .map((a) => {
-              'id': a.id,
-              'name': a.name,
-              'type': a.type,
-              'currency': a.effectiveCurrency,
-              'realBalanceCents': store.balance(a, predicted: false),
-              'predictedBalanceCents': store.balance(a, predicted: true),
-              if (a.type == kCardType && a.card != null)
-                'currentInvoiceKey': invKeyFor(a.card!, todayISO()),
-            })
+        .map((a) {
+          final cur = a.effectiveCurrency;
+          return {
+            'id': a.id,
+            'name': a.name,
+            'type': a.type,
+            'currency': cur,
+            'realBalance': formatCurrency(store.balance(a, predicted: false), cur),
+            'predictedBalance':
+                formatCurrency(store.balance(a, predicted: true), cur),
+            if (a.type == kCardType && a.card != null)
+              'currentInvoiceKey': invKeyFor(a.card!, todayISO()),
+          };
+        })
         .toList();
 
     final cardAnalyses = <Map<String, dynamic>>[];
@@ -1233,16 +1251,56 @@ class FinancialInsightsEngine {
       }
     }
 
+    // Resumo dos últimos 7 dias (para perguntas sobre "esta semana" / "últimos dias")
+    final nowDt = DateTime.now();
+    final weekStartDt = nowDt.subtract(const Duration(days: 7));
+    final todayIso = todayISO();
+    final weekStartIso =
+        '${weekStartDt.year.toString().padLeft(4, '0')}-${weekStartDt.month.toString().padLeft(2, '0')}-${weekStartDt.day.toString().padLeft(2, '0')}';
+    int weekIncomeCents = 0;
+    int weekExpenseCents = 0;
+    final weekCatExpenseCents = <String, int>{};
+    for (final tx in store.db.txs) {
+      if (tx.auto == true ||
+          tx.xfer != null ||
+          tx.peer != null ||
+          isPredictionPayee(tx.payee)) {
+        continue;
+      }
+      if (tx.date.compareTo(weekStartIso) < 0 ||
+          tx.date.compareTo(todayIso) > 0) {
+        continue;
+      }
+      if (!store.isCategoryIncludedInReports(tx.cat)) continue;
+      final valBase = store.convertTxToCurrency(tx, baseCur);
+      if (valBase >= 0) {
+        weekIncomeCents += valBase;
+      } else {
+        final absVal = valBase.abs();
+        weekExpenseCents += absVal;
+        final topCat = tx.cat.trim().isEmpty
+            ? 'Sem Categoria'
+            : tx.cat.split(kCategorySep).first.trim();
+        weekCatExpenseCents[topCat] =
+            (weekCatExpenseCents[topCat] ?? 0) + absVal;
+      }
+    }
+    final weekTopCats = weekCatExpenseCents.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return {
-      'todayIso': todayISO(),
+      'todayIso': todayIso,
       'referenceMonth': ym,
       'baseCurrency': baseCur,
       'focusAccountId': ?focusAccountId,
       'focusCategory': ?focusCategory,
       'patrimony': {
-        'totalRealCents': store.totalBalance(predicted: false),
-        'totalPredictedMonthCents': store.totalBalance(predicted: true),
-        'totalPredictedYearCents': store.totalBalancePredictedYear(),
+        'totalReal':
+            formatCurrency(store.totalBalance(predicted: false), baseCur),
+        'totalPredictedMonth':
+            formatCurrency(store.totalBalance(predicted: true), baseCur),
+        'totalPredictedYear':
+            formatCurrency(store.totalBalancePredictedYear(), baseCur),
       },
       'accounts': activeAccs,
       'availableCategories': {
@@ -1251,16 +1309,34 @@ class FinancialInsightsEngine {
       },
       'availableTags': store.db.tags,
       'monthlySummary': {
-        'incomeCents': report.totalIncome,
-        'expenseCents': report.totalExpense,
-        'netCents': report.netTotal,
+        'month': ym,
+        'income': formatCurrency(report.totalIncome, baseCur),
+        'expense': formatCurrency(report.totalExpense, baseCur),
+        'net': formatCurrency(report.netTotal, baseCur),
         'savingsRatePercent': report.savingsRate,
         'topExpenseCategories': report.expenseGroups
             .take(8)
             .map((c) => {
                   'category': c.name,
-                  'amountCents': c.total,
+                  'amount': formatCurrency(c.total, baseCur),
                   'sharePercent': c.percentage,
+                })
+            .toList(),
+      },
+      'last7DaysSummary': {
+        'startDate': weekStartIso,
+        'endDate': todayIso,
+        'income': formatCurrency(weekIncomeCents, baseCur),
+        'expense': formatCurrency(weekExpenseCents, baseCur),
+        'net': formatCurrency(weekIncomeCents - weekExpenseCents, baseCur),
+        'topExpenseCategories': weekTopCats
+            .take(6)
+            .map((e) => {
+                  'category': e.key,
+                  'amount': formatCurrency(e.value, baseCur),
+                  'sharePercent': weekExpenseCents > 0
+                      ? ((e.value / weekExpenseCents) * 100).round()
+                      : 0,
                 })
             .toList(),
       },
@@ -1271,11 +1347,13 @@ class FinancialInsightsEngine {
       'organizationOpportunities': findOrganizationOpportunities(
         store,
         targetMonth: ym,
-      ).take(8).map((o) => o.toJson()).toList(),
+      ).take(8).map((o) => o.toJson(currency: baseCur)).toList(),
       'predictionsSummary': {
-        'totalPlannedBaseCents': predReport.totalPlannedBaseCents,
-        'totalSpentCents': predReport.totalSpentCents,
-        'totalRemainingCents': predReport.totalRemainingCents,
+        'totalPlannedBase':
+            formatCurrency(predReport.totalPlannedBaseCents, baseCur),
+        'totalSpent': formatCurrency(predReport.totalSpentCents, baseCur),
+        'totalRemaining':
+            formatCurrency(predReport.totalRemainingCents, baseCur),
         'exhaustedCategories': predReport.groups
             .where((g) => g.predictions.any((p) => p.isExhausted))
             .map((g) => g.category)
@@ -1284,8 +1362,8 @@ class FinancialInsightsEngine {
       'dueBillsNext14Days': {
         'overdueCount': dueSummary.overdueCount,
         'dueSoonCount': dueSummary.totalCount,
-        'totalPayableCents': dueSummary.payTotal,
-        'totalReceivableCents': dueSummary.receiveTotal,
+        'totalPayable': formatCurrency(dueSummary.payTotal, baseCur),
+        'totalReceivable': formatCurrency(dueSummary.receiveTotal, baseCur),
       },
     };
   }
@@ -1342,6 +1420,7 @@ class FinancialInsightsEngine {
 
     return results.take(filter.limit).map((t) {
       final acc = store.accById(t.acc);
+      final cur = acc?.effectiveCurrency ?? store.baseCurrency;
       return {
         'id': t.id,
         'date': t.date,
@@ -1349,8 +1428,9 @@ class FinancialInsightsEngine {
         'accountId': t.acc,
         'payee': t.payee,
         'category': t.cat,
-        'amountCents': t.amt,
-        'currency': acc?.effectiveCurrency ?? store.baseCurrency,
+        'amount': formatCurrency(t.amt, cur),
+        'type': t.amt < 0 ? 'Despesa' : 'Receita',
+        'currency': cur,
         'reconciled': t.rec,
         if (isInstallmentOrAnticipated(t)) 'isInstallment': true,
         if (t.pn != null) 'installmentCurrent': t.pn,

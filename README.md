@@ -15,9 +15,10 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.3** (Build 151) | [⬇️ Baixar OpenMoney-macOS-2.5.3.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.3.zip) | ~12 MB | 21/11/2026 |
+| 🍏 **macOS** | **v2.5.3** (Build 152) | [⬇️ Baixar OpenMoney-macOS-2.5.3.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.3.zip) | ~12 MB | 21/11/2026 |
 | 🪟 **Windows** | **v2.5.3** (Build 151) | [⬇️ Baixar OpenMoney-Windows-2.5.3.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.3.zip) | ~13 MB | 21/11/2026 |
 | 🌐 **Web** | **v2.5.3** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 21/11/2026 |
+
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -793,7 +794,7 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 ### 23. Autopreenchimento Inteligente, Sugestões Preditivas e Ações Rápidas de Extrato
 - **Botões Rápidos no Cabeçalho do Extrato**: Quando a barra rápida de inserção estiver oculta, três botões de ação rápida (**− Despesa**, **+ Receita** e **⇄ Transferência**) são exibidos no cabeçalho ao lado do ícone de edição da conta, abrindo o modal com o tipo correto já pré-selecionado.
 - **Autopreenchimento Imediato em Transferências**: Ao selecionar a opção de transferência, o campo de favorecido recebe automaticamente a descrição `"Transferência"`, suprimindo o histórico de compras e autocompletar irrelevante.
-- **Sugestões Preditivas Filtradas por Tipo e Sem Previsões**: Ao digitar a descrição, despesas buscam e sugerem exclusivamente lançamentos de despesas anteriores, enquanto receitas buscam exclusivamente lançamentos de receitas anteriores. Lançamentos de previsões orçamentárias (`"Previsão..."`) são estritamente excluídos da lista de sugestões e do autopreenchimento.
+- **Sugestões Preditivas Filtradas por Tipo, Sem Previsões e Sem Números de Parcela**: Ao digitar a descrição, despesas buscam e sugerem exclusivamente lançamentos de despesas anteriores, enquanto receitas buscam exclusivamente lançamentos de receitas anteriores. Lançamentos de previsões orçamentárias (`"Previsão..."`) são estritamente excluídos, e numerações de parcelas em históricos antigos (ex.: `"Amazon 1/3"`, `"Logitech Mouse Bluetooth 8/12"`, `"Mercado Livre 7/24"`, `"(1/12)"`) são removidas automaticamente para sugerir apenas o nome limpo.
 - **Parâmetros Configuráveis em Ajustes (`SettingsView`)**:
   - **Janela de Histórico**: Definição do intervalo de busca de sugestões (*Últimos 30 dias*, *60 dias*, *90 dias (padrão)*, *3 meses*, *6 meses*, *1 ano* ou *Todo o histórico*).
   - **Escopo de Sugestão**: Opção de preencher apenas *Favorecido e Categoria (padrão)* ou preencher *Favorecido, Categoria e Conta*.

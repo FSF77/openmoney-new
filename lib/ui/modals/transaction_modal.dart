@@ -2725,9 +2725,8 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     final todayStr = todayISO();
     _dateCtrl = TextEditingController(text: fmtDate(todayStr));
 
-    // Regra: Limpar sufixos de parcelas anteriores como (1/12)
-    final cleanPayee =
-        t.payee.replaceAll(RegExp(r'\s*\(\d+\/\d+\)$'), '').trim();
+    // Regra: Limpar sufixos de parcelas anteriores como (1/12) ou 1/3
+    final cleanPayee = stripInstallmentFromPayee(t.payee);
     _payeeCtrl = TextEditingController(text: cleanPayee);
     _memoCtrl = TextEditingController(text: t.memo);
     _amtCtrl = TextEditingController(text: formatInputCents(t.amt.abs()));

@@ -444,6 +444,33 @@ void main() {
       expect(dups.first.transactionIds, containsAll(['real_dup_1', 'real_dup_2']));
     });
 
+    test('buildCompactContextSnapshot e executeLocalQuery entregam valores monetários formatados em moeda (sem centavos brutos)', () {
+      final store = buildTestStore();
+      final snapshot = FinancialInsightsEngine.buildCompactContextSnapshot(
+        store,
+        focusMonth: '2026-11',
+      );
+      final monthly = snapshot['monthlySummary'] as Map<String, dynamic>;
+      expect(monthly['expense'], 'R\$ 1.450,00');
+      expect(monthly.containsKey('expenseCents'), isFalse);
+
+      final rows = FinancialInsightsEngine.executeLocalQuery(
+        store,
+        const AIQueryFilter(searchText: 'Outback'),
+      );
+      expect(rows, isNotEmpty);
+      expect(rows.first['amount'], '-R\$ 550,00');
+      expect(rows.first.containsKey('amountCents'), isFalse);
+
+      final parsed = AIAssistantService.parseStructuredAIResponse(
+        '{"reply": "Você gastou R\$ 14.947,90 (1.494.790 centavos) com saldo de R\$ 18,33 (1.833 centavos).", "actions": []}',
+      );
+      expect(
+        parsed.reply,
+        'Você gastou R\$ 14.947,90 com saldo de R\$ 18,33.',
+      );
+    });
+
     testWidgets('AiAssistantSidePanel renderiza sem erros de compilação ou estouro de layout', (tester) async {
       final store = buildTestStore();
       store.setAiAssistantEnabled(true);

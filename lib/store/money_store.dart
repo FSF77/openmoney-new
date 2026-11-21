@@ -2014,38 +2014,29 @@ class MoneyStore extends ChangeNotifier {
       }
 
       if (tx.auto != true && tx.xfer == null && !isPredictionPayee(tx.payee)) {
-        final raw = tx.payee.trim();
-        if (raw.isNotEmpty) {
-          String clean = raw;
-          final parenIdx = raw.lastIndexOf('(');
-          if (parenIdx != -1 && raw.endsWith(')')) {
-            final inner = raw.substring(parenIdx + 1, raw.length - 1);
-            if (inner.contains('/')) {
-              clean = raw.substring(0, parenIdx).trim();
+        final clean = stripInstallmentFromPayee(tx.payee);
+        if (clean.isNotEmpty && !isPredictionPayee(clean)) {
+          final isExp = tx.amt < 0;
+          final key = '${isExp ? "exp" : "inc"}:${clean.toLowerCase()}';
+          final entry = payeeMap[key];
+          if (entry != null) {
+            entry.count += 1;
+            if (tx.date.compareTo(entry.lastDate) >= 0) {
+              entry.name = clean;
+              entry.lastDate = tx.date;
+              entry.cat = tx.cat;
+              entry.isExpense = isExp;
+              entry.accId = tx.acc;
             }
-          }
-          if (clean.isNotEmpty) {
-            final isExp = tx.amt < 0;
-            final key = '${isExp ? "exp" : "inc"}:${clean.toLowerCase()}';
-            final entry = payeeMap[key];
-            if (entry != null) {
-              entry.count += 1;
-              if (tx.date.compareTo(entry.lastDate) > 0) {
-                entry.lastDate = tx.date;
-                entry.cat = tx.cat;
-                entry.isExpense = isExp;
-                entry.accId = tx.acc;
-              }
-            } else {
-              payeeMap[key] = _PayeeCacheEntry(
-                name: clean,
-                cat: tx.cat,
-                isExpense: isExp,
-                count: 1,
-                lastDate: tx.date,
-                accId: tx.acc,
-              );
-            }
+          } else {
+            payeeMap[key] = _PayeeCacheEntry(
+              name: clean,
+              cat: tx.cat,
+              isExpense: isExp,
+              count: 1,
+              lastDate: tx.date,
+              accId: tx.acc,
+            );
           }
         }
       }
@@ -3979,7 +3970,7 @@ class MoneyStore extends ChangeNotifier {
     String payee, {
     bool? isExpense,
   }) {
-    final cleanQ = payee.trim().toLowerCase();
+    final cleanQ = stripInstallmentFromPayee(payee).toLowerCase();
     if (cleanQ.isEmpty || isPredictionPayee(cleanQ)) return null;
     rebuildIndexesIfNeeded();
     final cutoff = payeeSuggestionCutoffDate;

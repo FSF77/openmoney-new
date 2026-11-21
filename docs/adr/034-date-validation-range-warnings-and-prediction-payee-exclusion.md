@@ -44,11 +44,13 @@ Durante a inserção e edição de lançamentos financeiros no ecossistema OpenM
    - Ao clicar em Salvar, o aplicativo abre um diálogo modal (`confirmDateWarningDialog`) com as opções **"Corrigir Data"** e **"Salvar Mesmo Assim"**, prevenindo gravações acidentais.
    - O mesmo fluxo de validação e confirmação protege a barra de inserção rápida do extrato (`_submitQuickEntry`) e as datas de término de recorrências (`_endDateCtrl`).
 
-### 2. Exclusão de Previsões no Autocompletar (`MoneyStore`)
+### 2. Exclusão de Previsões e Limpeza de Números de Parcela no Autocompletar (`MoneyStore`)
 
-1. **Filtro de Cache e Indexação:**
+1. **Remoção Automática de Números de Parcela (`stripInstallmentFromPayee`):**
+   - Lançamentos históricos ou parcelados com marcações de parcela (ex.: `"Amazon 1/3"`, `"Logitech Mouse Bluetooth 8/12"`, `"Mercado Livre 7/24"`, `"Amazon (2/3)"`, `"Loja - Parcela 01/10"`) têm o sufixo/token de parcela removido automaticamente antes da indexação no cache (`_cachedPayeeSuggestions`), consolidando todas as parcelas sob o nome limpo (`"Amazon"`, `"Logitech Mouse Bluetooth"`, `"Mercado Livre"`).
+2. **Filtro de Cache e Indexação de Previsões:**
    - Em `MoneyStore.rebuildIndexes()`, transações onde `isPredictionPayee(tx.payee)` retorna `true` são estritamente excluídas do cache de sugestões (`_cachedPayeeSuggestions`).
-2. **Filtro em Tempo Real:**
+3. **Filtro em Tempo Real:**
    - No método `payeeSuggestions(query, isExpense: ...)`:
      - Se a consulta do usuário for ela própria um termo de previsão (`isPredictionPayee(cleanQ)`), retorna lista vazia.
      - As sugestões filtradas descartam qualquer item cujo nome atenda a `isPredictionPayee(v.name)`.

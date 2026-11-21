@@ -146,9 +146,25 @@ class AIActionProposal {
   }
 
   static int _extractSignedCents(Map<String, dynamic> p) {
-    final rawAmt = (p['amountCents'] ?? p['amount_cents'] ?? 0);
-    final intVal =
-        rawAmt is num ? rawAmt.toInt() : (int.tryParse(rawAmt.toString()) ?? 0);
+    int intVal = 0;
+    if (p.containsKey('amountCents') || p.containsKey('amount_cents')) {
+      final rawAmt = p['amountCents'] ?? p['amount_cents'] ?? 0;
+      if (rawAmt is int) {
+        intVal = rawAmt;
+      } else if (rawAmt is double) {
+        intVal = (rawAmt % 1) != 0 ? (rawAmt * 100).round() : rawAmt.toInt();
+      } else {
+        final str = rawAmt.toString().trim();
+        intVal = int.tryParse(str) ?? (parseCents(str) ?? 0);
+      }
+    } else if (p.containsKey('amount') || p.containsKey('limit')) {
+      final rawAmt = p['amount'] ?? p['limit'] ?? 0;
+      if (rawAmt is num) {
+        intVal = (rawAmt * 100).round();
+      } else {
+        intVal = parseCents(rawAmt.toString()) ?? 0;
+      }
+    }
     if (p.containsKey('isExpense') || p.containsKey('is_expense')) {
       final isExp = (p['isExpense'] ?? p['is_expense']) == true;
       return isExp ? -intVal.abs() : intVal.abs();
@@ -318,10 +334,18 @@ class AIActionProposal {
         final cat = (payload['categoryPath'] ?? payload['category'] ?? '')
             .toString()
             .trim();
-        final limitCents =
-            ((payload['limitCents'] ?? payload['amountCents'] ?? 0) as num)
-                .toInt()
-                .abs();
+        final int limitCents;
+        if (payload.containsKey('limitCents') ||
+            payload.containsKey('amountCents')) {
+          final rawLim = payload['limitCents'] ?? payload['amountCents'] ?? 0;
+          limitCents = (rawLim is num
+                  ? rawLim.toInt()
+                  : (int.tryParse(rawLim.toString()) ??
+                      (parseCents(rawLim.toString()) ?? 0)))
+              .abs();
+        } else {
+          limitCents = _extractSignedCents(payload).abs();
+        }
         if (cat.isNotEmpty && limitCents >= 0) {
           store.setBudget(cat, limitCents);
           isApplied = true;
@@ -599,21 +623,24 @@ class AIAssistantService {
     return '''
 Você é a Assistente Financeira Oficial do OpenMoney (especialista em contabilidade pessoal e empresarial, cartões de crédito por competência de vencimento, fluxo de caixa, previsões e conciliação).
 
-DADOS REAIS DO USUÁRIO (SNAPSHOT COMPACTO):
+DADOS REAIS DO USUÁRIO (SNAPSHOT COMPACTO — TODOS OS VALORES JÁ ESTÃO FORMATADOS NA MOEDA DO USUÁRIO, ex: "R\$ 14.947,90"):
 $contextJson
 
 REGRAS OBRIGATÓRIAS DE RESPOSTA:
 1. Responda SEMPRE com um objeto JSON válido (sem texto fora do JSON) contendo exatamente estas chaves:
 {
-  "reply": "Sua explicação em Markdown claro, amigável e objetivo em português brasileiro, citando os números reais, favorecidos e percentuais da base.",
+  "reply": "Sua explicação em Markdown claro, amigável e objetivo em português brasileiro, citando os valores monetários exatamente como estão formatados no snapshot (ex: R\$ 14.947,90), favorecidos e percentuais da base.",
   "query": null,
   "actions": []
 }
-2. Se precisar consultar transações específicas que não estão detalhadas no resumo, preencha "query": {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "accountId": "...", "category": "...", "tag": "...", "searchText": "...", "limit": 35}. Caso contrário, deixe "query": null.
-3. Quando o usuário pedir para LANÇAR uma despesa/receita, TRANSFERIR, CRIAR RECORRÊNCIA, CRIAR PREVISÃO, DEFINIR LIMITE (budget) ou ORGANIZAR/RECATEGORIZAR, inclua objetos dentro de "actions" para confirmação em 1 clique:
+2. FORMATAÇÃO MONETÁRIA E PERÍODOS:
+   - Todos os valores do snapshot ("income", "expense", "net", "amount", "realBalance", etc.) JÁ ESTÃO em unidades monetárias reais formatadas (ex: "R\$ 14.947,90"). Cite-os diretamente como estão formatados.
+   - NUNCA mencione, exiba ou converta valores para "centavos" no texto de "reply".
+   - Use "monthlySummary" para análises do mês de referência ("referenceMonth") e "last7DaysSummary" quando o usuário perguntar sobre "esta semana" ou "últimos 7 dias".
+3. Se precisar consultar transações específicas que não estão detalhadas no resumo, preencha "query": {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "accountId": "...", "category": "...", "tag": "...", "searchText": "...", "limit": 35}. Caso contrário, deixe "query": null.
+4. Quando o usuário pedir para LANÇAR uma despesa/receita, TRANSFERIR, CRIAR RECORRÊNCIA, CRIAR PREVISÃO, DEFINIR LIMITE (budget) ou ORGANIZAR/RECATEGORIZAR, inclua objetos dentro de "actions" para confirmação em 1 clique:
    - Lançamento:
      {"type": "create_transaction", "summary": "Lançar R\$ 45,90 em Uber (Nubank)", "confidence": 0.95, "payload": {"date": "YYYY-MM-DD", "accountId": "ID_OU_NOME_DA_CONTA", "payee": "Nome Limpo", "category": "Categoria › Subcategoria", "amountCents": -4590, "memo": "", "installments": 1, "tags": ["TagOpcional"]}}
-     (ATENÇÃO: amountCents é INTEIRO EM CENTAVOS: negativo para despesa ex: -4590, positivo para receita ex: 350000).
    - Transferência entre contas:
      {"type": "create_transfer", "summary": "Transferir R\$ 500,00 de Conta Corrente para Poupança", "payload": {"date": "YYYY-MM-DD", "fromAccountId": "ID_ORIGEM", "toAccountId": "ID_DESTINO", "amountCents": 50000, "memo": ""}}
    - Recorrência / Assinatura:
@@ -624,8 +651,8 @@ REGRAS OBRIGATÓRIAS DE RESPOSTA:
      {"type": "create_prediction", "summary": "Criar Previsão de Alimentação (R\$ 1.500,00)", "payload": {"date": "YYYY-MM-28", "accountId": "ID_CONTA", "payee": "Previsão Alimentação", "category": "Alimentação", "amountCents": -150000}}
    - Limite de Gastos Mensal:
      {"type": "set_budget", "summary": "Definir limite mensal para Alimentação", "payload": {"categoryPath": "Alimentação", "limitCents": 150000}}
-4. Use SEMPRE os IDs de contas ("id") e nomes de categorias existentes em "accounts" e "availableCategories" do snapshot quando disponíveis.
-5. REGRA DE AUDITORIA E DUPLICIDADES: NUNCA aponte como duplicidade lançamentos já conciliados ("reconciled": true), nem compras parceladas ("isInstallment": true, sufixo "(X/Y)") ou antecipações de parcelas. Para organização da base e busca de duplicidades ou lançamentos sem categoria, confie exclusivamente na lista determinística "organizationOpportunities" fornecida no snapshot.
+5. Use SEMPRE os IDs de contas ("id") e nomes de categorias existentes em "accounts" e "availableCategories" do snapshot quando disponíveis.
+6. REGRA DE AUDITORIA E DUPLICIDADES: NUNCA aponte como duplicidade lançamentos já conciliados ("reconciled": true), nem compras parceladas ("isInstallment": true, sufixo "(X/Y)") ou antecipações de parcelas. Para organização da base e busca de duplicidades ou lançamentos sem categoria, confie exclusivamente na lista determinística "organizationOpportunities" fornecida no snapshot.
 ''';
   }
 
@@ -1014,13 +1041,13 @@ Você é minha Assistente Financeira do OpenMoney. Analise meu resumo financeiro
 MEU PEDIDO:
 "$question"
 
-DADOS FINANCEIROS COMPACTOS (OPENMONEY SCHEMA V7 - VALORES EM CENTAVOS INTEIROS, ex: 10000 = R\$ 100,00):
+DADOS FINANCEIROS COMPACTOS (VALORES JÁ FORMATADOS NA MOEDA DO USUÁRIO):
 ```json
 $prettyContext
 ```
 
 INSTRUÇÕES:
-1. Responda em português de forma clara, analítica e direta, citando os estabelecimentos, categorias e valores formatados.
+1. Responda em português de forma clara, analítica e direta, citando os estabelecimentos, categorias e valores monetários formatados (nunca mencione valores em centavos no texto).
 2. Se sugerir lançamentos, recategorizações, limites de gastos ou criação de recorrências, inclua ao final um bloco ```json com a estrutura:
 ```json
 {
@@ -1045,6 +1072,19 @@ INSTRUÇÕES:
 ''';
   }
 
+  static String _sanitizeReplyText(String text) {
+    // Remove anotações parentéticas redundantes em centavos caso algum modelo on-device as inclua
+    return text
+        .replaceAll(
+          RegExp(
+            r'\s*\(\s*[-+]?(?:R\$\s*)?\d[\d.,\s]*\s*centavos?\s*\)',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+  }
+
   /// Interpreta o texto ou JSON colado pelo usuário no Modo "Sem Chave" (Prompt Bridge).
   static AIAssistantResponse parseStructuredAIResponse(
     String rawText, {
@@ -1053,9 +1093,11 @@ INSTRUÇÕES:
     final trimmed = rawText.trim();
     final map = _tryDecodeJsonMap(trimmed);
     if (map != null) {
-      final reply = (map['reply'] ?? map['message'] ?? map['summary'] ?? '')
-          .toString()
-          .trim();
+      final reply = _sanitizeReplyText(
+        (map['reply'] ?? map['message'] ?? map['summary'] ?? '')
+            .toString()
+            .trim(),
+      );
       final actions = <AIActionProposal>[];
       if (map['actions'] is List) {
         for (final a in (map['actions'] as List)) {
@@ -1081,7 +1123,7 @@ INSTRUÇÕES:
     }
 
     return AIAssistantResponse(
-      reply: trimmed,
+      reply: _sanitizeReplyText(trimmed),
       actions: const [],
       providerUsed: providerLabel,
     );

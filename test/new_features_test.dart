@@ -412,5 +412,79 @@ void main() {
       expect(lastCatNormal, isNotNull);
       expect(lastCatNormal?.category, equals('Alimentação'));
     });
+
+    test('payeeSuggestions strips installment numbers like 1/3, 8/12, 7/24 from historical descriptions', () {
+      expect(stripInstallmentFromPayee('Amazon 1/3'), equals('Amazon'));
+      expect(stripInstallmentFromPayee('Logitech Mouse Bluetooth 8/12'), equals('Logitech Mouse Bluetooth'));
+      expect(stripInstallmentFromPayee('Mercado Livre 7/24'), equals('Mercado Livre'));
+      expect(stripInstallmentFromPayee('Amazon (2/3)'), equals('Amazon'));
+      expect(stripInstallmentFromPayee('Amazon - 01/10'), equals('Amazon'));
+      expect(stripInstallmentFromPayee('Loja 24/7'), equals('Loja 24/7'));
+
+      final store = MoneyStore();
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      store.loadFromJsonString(jsonEncode({
+        'v': 7,
+        'accounts': [
+          {'id': 'a1', 'name': 'Cartão', 'type': 'Cartão de crédito', 'opening': 0, 'cur': 'BRL'},
+        ],
+        'categories': {
+          'Despesa': ['Compras', 'Informática'],
+        },
+        'txs': [
+          {
+            'id': 't1',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Amazon 1/3',
+            'cat': 'Compras',
+            'amt': -10000,
+            'rec': true,
+          },
+          {
+            'id': 't2',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Amazon 2/3',
+            'cat': 'Compras',
+            'amt': -10000,
+            'rec': true,
+          },
+          {
+            'id': 't3',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Logitech Mouse Bluetooth 8/12',
+            'cat': 'Informática',
+            'amt': -4500,
+            'rec': true,
+          },
+          {
+            'id': 't4',
+            'acc': 'a1',
+            'date': todayStr,
+            'payee': 'Mercado Livre 7/24',
+            'cat': 'Compras',
+            'amt': -8900,
+            'rec': true,
+          },
+        ],
+      }));
+
+      final amazonSug = store.payeeSuggestions('Ama', isExpense: true);
+      expect(amazonSug.length, equals(1));
+      expect(amazonSug.first.name, equals('Amazon'));
+      expect(amazonSug.first.count, equals(2));
+
+      final logiSug = store.payeeSuggestions('Logi', isExpense: true);
+      expect(logiSug.length, equals(1));
+      expect(logiSug.first.name, equals('Logitech Mouse Bluetooth'));
+
+      final mlSug = store.payeeSuggestions('Merc', isExpense: true);
+      expect(mlSug.length, equals(1));
+      expect(mlSug.first.name, equals('Mercado Livre'));
+    });
   });
 }

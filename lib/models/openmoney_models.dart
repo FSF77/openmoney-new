@@ -1570,6 +1570,34 @@ bool isPredictionPayee(String payee) {
   return norm.startsWith('previsao');
 }
 
+/// Remove marcações de número de parcela da descrição/favorecido
+/// (ex: "Amazon 1/3", "Logitech Mouse Bluetooth 8/12", "Mercado Livre 7/24", "Loja (1/12)").
+String stripInstallmentFromPayee(String payee) {
+  final raw = payee.trim();
+  if (raw.isEmpty) return '';
+
+  final pattern = RegExp(
+    r'(?:\s*[-–—•:]\s*)?(?:\(\s*(?:parc(?:ela)?\.?\s*)?(\d{1,3})\s*\/\s*(\d{1,3})\s*\)|\[\s*(?:parc(?:ela)?\.?\s*)?(\d{1,3})\s*\/\s*(\d{1,3})\s*\]|(?:parc(?:ela)?\.?\s*)?\b(\d{1,3})\s*\/\s*(\d{1,3})\b)',
+    caseSensitive: false,
+  );
+
+  var cleaned = raw.replaceAllMapped(pattern, (match) {
+    final g1 = match.group(1) ?? match.group(3) ?? match.group(5);
+    final g2 = match.group(2) ?? match.group(4) ?? match.group(6);
+    final n = int.tryParse(g1 ?? '');
+    final m = int.tryParse(g2 ?? '');
+    if (n != null && m != null && n >= 1 && m >= 1 && n <= m && m <= 360) {
+      return '';
+    }
+    return match.group(0) ?? '';
+  });
+
+  cleaned = cleaned.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  cleaned =
+      cleaned.replaceAll(RegExp(r'^[-–—•:]+\s*|\s*[-–—•:]+$'), '').trim();
+  return cleaned;
+}
+
 int? parseBaseFromMemo(String memo) {
   final regex = RegExp(
     r'\[(?:Previsão base|Previsao base|Base):\s*(?:R\$\s*)?([0-9.,]+)\]',
