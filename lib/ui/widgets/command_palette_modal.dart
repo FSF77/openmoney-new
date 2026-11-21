@@ -254,6 +254,16 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
       },
     ));
     list.add(_CommandItem(
+      title: 'Dashboard de Gráficos',
+      subtitle: 'KPIs interativos: poupança, reserva, fluxo e patrimônio',
+      icon: Icons.insights_rounded,
+      category: 'MÓDULOS DO SISTEMA',
+      onSelect: () {
+        Navigator.of(context).pop();
+        widget.store.navigateTo(NavModule.charts);
+      },
+    ));
+    list.add(_CommandItem(
       title: 'Limite de Gastos',
       subtitle: 'Metas e tetos orçamentários por categoria',
       icon: Icons.track_changes,

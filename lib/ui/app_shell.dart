@@ -29,6 +29,7 @@ import 'views/predictions_management_view.dart';
 import 'views/cash_flow_view.dart';
 import 'views/categories_view.dart';
 import 'views/tags_view.dart';
+import 'views/charts_dashboard_view.dart';
 import 'views/dashboard_overview_view.dart';
 import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
@@ -590,6 +591,9 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
       case NavModule.reports:
         moduleTitle = 'Relatórios';
         break;
+      case NavModule.charts:
+        moduleTitle = 'Gráficos';
+        break;
       case NavModule.budget:
         moduleTitle = 'Limite de Gastos';
         break;
@@ -1088,6 +1092,19 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               Tooltip(
+                message: 'Gráficos',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.insights_rounded,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.charts
+                        ? colors.income
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.charts),
+                ),
+              ),
+              Tooltip(
                 message: 'Previsões',
                 child: IconButton(
                   icon: Icon(
@@ -1280,6 +1297,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
     switch (widget.store.activeModule) {
       case NavModule.dashboard:
         return DashboardOverviewView(store: widget.store);
+      case NavModule.charts:
+        return ChartsDashboardView(store: widget.store);
       case NavModule.settings:
         return SettingsView(store: widget.store);
       case NavModule.account:
@@ -1749,6 +1768,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Relatório',
                   selected: widget.store.activeModule == NavModule.reports,
                   onTap: () => selectModule(NavModule.reports),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.insights_rounded,
+                  label: 'Gráficos',
+                  selected: widget.store.activeModule == NavModule.charts,
+                  onTap: () => selectModule(NavModule.charts),
                 ),
                 _SidebarNavTile(
                   icon: Icons.auto_fix_high,

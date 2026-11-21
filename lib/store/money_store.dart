@@ -22,6 +22,7 @@ enum NavModule {
   transactions,
   cashFlow,
   reports,
+  charts,
   budget,
   categories,
   tags,
@@ -554,6 +555,8 @@ class MoneyStore extends ChangeNotifier {
   String sidebarMode = 'expanded'; // 'expanded' | 'miniRail' | 'hidden'
   String startupView = 'lastAccount'; // 'dashboard' | 'lastAccount'
   String ledgerViewMode = 'list'; // 'list' | 'table'
+  /// Preferências do Dashboard de Gráficos (período, contas, metas).
+  Map<String, dynamic> chartsPrefs = <String, dynamic>{};
   bool sortAscendingDate = true;
   bool dashboardAccountsShowActive = true;
   bool dashboardAccountsShowZeroBalance = true;
@@ -799,6 +802,7 @@ class MoneyStore extends ChangeNotifier {
       'sidebarMode': sidebarMode,
       'startupView': startupView,
       'ledgerViewMode': ledgerViewMode,
+      'chartsPrefs': Map<String, dynamic>.from(chartsPrefs),
       'sortAscendingDate': sortAscendingDate,
       'dashboardAccountsShowActive': dashboardAccountsShowActive,
       'dashboardAccountsShowZeroBalance': dashboardAccountsShowZeroBalance,
@@ -842,6 +846,9 @@ class MoneyStore extends ChangeNotifier {
       isFlatClean = cfg['isFlatClean'] as bool;
     }
     OpenMoneyColors.activeIsFlatClean = isFlatClean;
+    if (cfg['chartsPrefs'] is Map) {
+      chartsPrefs = Map<String, dynamic>.from(cfg['chartsPrefs'] as Map);
+    }
     if (cfg['uiDensityMode'] is String) {
       uiDensityMode = cfg['uiDensityMode'] as String;
     }
@@ -1282,6 +1289,15 @@ class MoneyStore extends ChangeNotifier {
     startupView = view;
     final cfg = _readConfig();
     cfg['startupView'] = view;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setChartsPrefs(Map<String, dynamic> prefs) {
+    chartsPrefs = Map<String, dynamic>.from(prefs);
+    final cfg = _readConfig();
+    cfg['chartsPrefs'] = chartsPrefs;
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();
