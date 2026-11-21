@@ -471,6 +471,22 @@ void main() {
       );
     });
 
+    test('AIProviderType.openrouter e MoneyStore persistem chaves do OpenRouter com sucesso', () {
+      final store = buildTestStore();
+      expect(AIProviderType.fromId('openrouter'), AIProviderType.openrouter);
+      expect(AIProviderType.openrouter.id, 'openrouter');
+      expect(AIProviderType.openrouter.label, 'OpenRouter.ai');
+
+      store.setAiAssistantConfig(
+        enabled: true,
+        provider: 'openrouter',
+        openrouterKey: 'sk-or-v1-test-key-123',
+      );
+
+      expect(store.aiProvider, 'openrouter');
+      expect(store.openrouterApiKey, 'sk-or-v1-test-key-123');
+    });
+
     testWidgets('AiAssistantSidePanel renderiza sem erros de compilação ou estouro de layout', (tester) async {
       final store = buildTestStore();
       store.setAiAssistantEnabled(true);

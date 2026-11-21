@@ -161,6 +161,7 @@ A sincronização em nuvem também alimenta a **Assistente Financeira com IA** n
   - `POST /api/ai/chat`: Processa requisições de linguagem natural e extração com proxy seguro anti-CORS e injeção do modelo de IA.
 - **Variáveis de Ambiente no Cloudflare Pages:**
   - `AI_MANAGED_GEMINI_KEY`: Chave de API do Google Gemini (definida como *Secret/Encrypted* no painel do Pages em **Settings › Environment variables**).
+  - `AI_MANAGED_OPENROUTER_KEY`: Chave de API do OpenRouter.ai (acesso unificado a dezenas de provedores e modelos).
   - `AI_MANAGED_ANTHROPIC_KEY`: Chave de API do Claude (opcional, para instâncias que oferecem Claude gerenciado).
   - `AI_MANAGED_OPENAI_KEY`: Chave de API do ChatGPT (opcional, para instâncias que oferecem OpenAI gerenciado).
   - `AI_DAILY_LIMIT`: Cota diária padrão por usuário (padrão: `25` consultas/dia).

@@ -1,4 +1,4 @@
-# ADR 030: Assistente Financeira Multi-Provedor com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri) na Stack Única Flutter
+# ADR 030: Assistente Financeira Multi-Provedor com IA (Gemini, OpenRouter, Claude, ChatGPT, Apple Intelligence e Siri) na Stack Única Flutter
 
 **Status:** ✅ Aceito e Implementado  
 **Data:** 20/11/2026  
@@ -27,8 +27,8 @@ Para garantir velocidade instantânea ($O(N)$ em memória), funcionamento 100% o
 
 ### 2.2. Modelo Híbrido de Consumo em 3 Níveis + Apple Intelligence (`AIAssistantService`)
 Pensando na facilidade para o usuário final, o consumo de IA opera em 3 modos complementares:
-1. **Nível 1 — BYOK Guiado Simples (`byok`):** suporte nativo a **Google Gemini**, **Anthropic Claude** e **OpenAI ChatGPT**, com teste de conexão em 1 clique e armazenamento estritamente local das chaves (`config.json` / `localStorage`, jamais sincronizadas no `openmoney.json`). Na Web, chamadas para Claude/OpenAI utilizam automaticamente o proxy anti-CORS no Cloudflare (`/api/ai/chat`).
-2. **Nível 2 — Nuvem Gerenciada (`cloudManaged`):** usuários autenticados no OpenMoney Cloud podem utilizar chaves gerenciadas no Cloudflare Pages Functions (`AI_MANAGED_GEMINI_KEY`, `AI_MANAGED_ANTHROPIC_KEY`, `AI_MANAGED_OPENAI_KEY`) com controle atômico de cota diária por usuário (`AI_DAILY_LIMIT`, padrão de 25 consultas/dia) na tabela D1 `user_ai_usage` auto-provisionada pelo schema. O handshake é realizado via `GET /api/ai/capabilities`, informando ao cliente se o servidor possui capacidade gerenciada disponível (`managedAvailable: true`).
+1. **Nível 1 — BYOK Guiado Simples (`byok`):** suporte nativo a **Google Gemini**, **OpenRouter.ai** (acesso unificado a dezenas de provedores e modelos `:free`), **Anthropic Claude** e **OpenAI ChatGPT**, com teste de conexão em 1 clique e armazenamento estritamente local das chaves (`config.json` / `localStorage`, jamais sincronizadas no `openmoney.json`). Na Web, chamadas para Claude/OpenAI utilizam automaticamente o proxy anti-CORS no Cloudflare (`/api/ai/chat`).
+2. **Nível 2 — Nuvem Gerenciada (`cloudManaged`):** usuários autenticados no OpenMoney Cloud podem utilizar chaves gerenciadas no Cloudflare Pages Functions (`AI_MANAGED_GEMINI_KEY`, `AI_MANAGED_OPENROUTER_KEY`, `AI_MANAGED_ANTHROPIC_KEY`, `AI_MANAGED_OPENAI_KEY`) com controle atômico de cota diária por usuário (`AI_DAILY_LIMIT`, padrão de 25 consultas/dia) na tabela D1 `user_ai_usage` auto-provisionada pelo schema. O handshake é realizado via `GET /api/ai/capabilities`, informando ao cliente se o servidor possui capacidade gerenciada disponível (`managedAvailable: true`).
 3. **Nível 3 — Modo "Sem Chave / Assinatura Externa" (`promptBridge`):** gera com 1 clique o pacote de contexto compacto + pergunta para ser colado diretamente no ChatGPT, Claude ou Gemini Web que o usuário já assina, e interpreta a resposta/JSON colado de volta em cartões de ação.
 4. **Apple Intelligence On-Device (`FoundationModels`) & Siri (`AppIntents`):** nos Runners nativos do Flutter (`macos/Runner/MainFlutterWindow.swift` e `ios/Runner/AppDelegate.swift`), o canal `openmoney/apple_intelligence` conecta o app ao modelo local da Apple (`SystemLanguageModel` / `LanguageModelSession` no macOS 26+ / iOS 26+) e expõe `OpenMoneyAskAssistantIntent` para a Siri e Spotlight, além do URL Scheme `openmoney://?prompt=...` no `ShortcutUrlService`.
 

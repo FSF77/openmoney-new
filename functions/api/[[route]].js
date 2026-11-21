@@ -3951,6 +3951,7 @@ export async function onRequest(context) {
   if (path === "/api/ai/capabilities" && request.method === "GET") {
     const managedProviders = [];
     if (env.AI_MANAGED_GEMINI_KEY) managedProviders.push("gemini");
+    if (env.AI_MANAGED_OPENROUTER_KEY) managedProviders.push("openrouter");
     if (env.AI_MANAGED_ANTHROPIC_KEY) managedProviders.push("claude");
     if (env.AI_MANAGED_OPENAI_KEY) managedProviders.push("openai");
 
@@ -4008,6 +4009,7 @@ export async function onRequest(context) {
     let apiKey = "";
     if (useManaged) {
       if (provider === "gemini") apiKey = String(env.AI_MANAGED_GEMINI_KEY || "").trim();
+      else if (provider === "openrouter") apiKey = String(env.AI_MANAGED_OPENROUTER_KEY || "").trim();
       else if (provider === "claude") apiKey = String(env.AI_MANAGED_ANTHROPIC_KEY || "").trim();
       else if (provider === "openai") apiKey = String(env.AI_MANAGED_OPENAI_KEY || "").trim();
 
@@ -4105,6 +4107,92 @@ export async function onRequest(context) {
         Array.isArray(data.content) &&
         data.content.find((b) => b && b.type === "text" && b.text);
       replyText = firstBlock ? String(firstBlock.text).trim() : null;
+    } else if (provider === "openrouter") {
+      const candidateModels = [];
+      if (preferredModel && preferredModel.trim()) candidateModels.push(preferredModel.trim());
+      candidateModels.push(
+        "google/gemini-2.0-flash-001",
+        "google/gemini-2.0-flash-exp:free",
+        "deepseek/deepseek-chat",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "mistralai/mistral-small-24b-instruct-2501:free"
+      );
+
+      const userContent = [{ type: "text", text: userPrompt }];
+      if (
+        attachment &&
+        attachment.data &&
+        String(attachment.mimeType || "").startsWith("image/")
+      ) {
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${attachment.mimeType};base64,${attachment.data}`,
+          },
+        });
+      }
+
+      let lastError = null;
+      let lastStatus = 502;
+
+      for (const m of candidateModels) {
+        try {
+          const upstream = await fetch(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": `Bearer ${apiKey}`,
+                "HTTP-Referer": "https://openmoney.app.br",
+                "X-Title": "OpenMoney",
+              },
+              body: JSON.stringify({
+                model: m,
+                temperature: 0.15,
+                response_format: { type: "json_object" },
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: userContent },
+                ],
+              }),
+            }
+          );
+          if (!upstream.ok) {
+            let errText = `HTTP ${upstream.status}`;
+            try {
+              const errJson = await upstream.json();
+              if (errJson && errJson.error && errJson.error.message) {
+                errText = errJson.error.message;
+              }
+            } catch (_) {}
+            lastError = `Erro no provedor OpenRouter (${m}): ${errText}`;
+            lastStatus = upstream.status;
+            continue;
+          }
+          const data = await upstream.json();
+          replyText =
+            data &&
+            Array.isArray(data.choices) &&
+            data.choices[0] &&
+            data.choices[0].message &&
+            data.choices[0].message.content
+              ? String(data.choices[0].message.content).trim()
+              : null;
+          if (replyText) break;
+        } catch (e) {
+          lastError = `Falha na requisição OpenRouter (${m}): ${e && e.message ? e.message : String(e)}`;
+          continue;
+        }
+      }
+
+      if (!replyText && lastError) {
+        return jsonResponse(
+          { error: lastError },
+          lastStatus,
+          origin
+        );
+      }
     } else if (provider === "openai") {
       const model = preferredModel || "gpt-4o-mini";
       const userContent = [{ type: "text", text: userPrompt }];

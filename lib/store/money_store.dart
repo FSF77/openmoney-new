@@ -584,9 +584,10 @@ class MoneyStore extends ChangeNotifier {
   bool isGeminiAiEnabled = false;
   bool get isAiAssistantEnabled => isGeminiAiEnabled;
   String geminiApiKey = '';
+  String openrouterApiKey = '';
   String claudeApiKey = '';
   String openaiApiKey = '';
-  String aiProvider = 'gemini'; // 'gemini' | 'claude' | 'openai' | 'apple' | 'bridge'
+  String aiProvider = 'gemini'; // 'gemini' | 'openrouter' | 'claude' | 'openai' | 'apple' | 'bridge'
   String aiConsumptionMode = 'byok'; // 'byok' | 'cloudManaged' | 'promptBridge'
   String aiPreferredModel = '';
   bool isAiAssistantPanelOpen = false;
@@ -939,6 +940,9 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['geminiApiKey'] is String) {
       geminiApiKey = cfg['geminiApiKey'] as String;
+    }
+    if (cfg['openrouterApiKey'] is String) {
+      openrouterApiKey = cfg['openrouterApiKey'] as String;
     }
     if (cfg['claudeApiKey'] is String) {
       claudeApiKey = cfg['claudeApiKey'] as String;
@@ -1493,6 +1497,7 @@ class MoneyStore extends ChangeNotifier {
     String? provider,
     String? consumptionMode,
     String? geminiKey,
+    String? openrouterKey,
     String? claudeKey,
     String? openaiKey,
     String? preferredModel,
@@ -1510,6 +1515,7 @@ class MoneyStore extends ChangeNotifier {
       aiConsumptionMode = consumptionMode.trim();
     }
     if (geminiKey != null) geminiApiKey = geminiKey.trim();
+    if (openrouterKey != null) openrouterApiKey = openrouterKey.trim();
     if (claudeKey != null) claudeApiKey = claudeKey.trim();
     if (openaiKey != null) openaiApiKey = openaiKey.trim();
     if (preferredModel != null) aiPreferredModel = preferredModel.trim();
@@ -1520,6 +1526,7 @@ class MoneyStore extends ChangeNotifier {
     cfg['aiConsumptionMode'] = aiConsumptionMode;
     cfg['aiPreferredModel'] = aiPreferredModel;
     cfg['geminiApiKey'] = geminiApiKey;
+    cfg['openrouterApiKey'] = openrouterApiKey;
     cfg['claudeApiKey'] = claudeApiKey;
     cfg['openaiApiKey'] = openaiApiKey;
     _writeConfig(cfg);

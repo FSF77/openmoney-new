@@ -17,9 +17,11 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   late TextEditingController _geminiKeyCtrl;
+  late TextEditingController _openrouterKeyCtrl;
   late TextEditingController _claudeKeyCtrl;
   late TextEditingController _openaiKeyCtrl;
   bool _obscureGeminiKey = true;
+  bool _obscureOpenrouterKey = true;
   bool _obscureClaudeKey = true;
   bool _obscureOpenaiKey = true;
   bool _isTestingAi = false;
@@ -30,6 +32,8 @@ class _SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     _geminiKeyCtrl = TextEditingController(text: widget.store.geminiApiKey);
+    _openrouterKeyCtrl =
+        TextEditingController(text: widget.store.openrouterApiKey);
     _claudeKeyCtrl = TextEditingController(text: widget.store.claudeApiKey);
     _openaiKeyCtrl = TextEditingController(text: widget.store.openaiApiKey);
   }
@@ -37,6 +41,7 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     _geminiKeyCtrl.dispose();
+    _openrouterKeyCtrl.dispose();
     _claudeKeyCtrl.dispose();
     _openaiKeyCtrl.dispose();
     super.dispose();
@@ -998,6 +1003,38 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
                 const SizedBox(height: 10),
+                // Chave OpenRouter.ai
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _openrouterKeyCtrl,
+                        obscureText: _obscureOpenrouterKey,
+                        decoration: InputDecoration(
+                          labelText:
+                              'Chave OpenRouter.ai API (Centenas de Modelos com 1 Chave — openrouter.ai)',
+                          hintText: 'sk-or-v1-...',
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureOpenrouterKey
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureOpenrouterKey = !_obscureOpenrouterKey;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 // Chave Anthropic Claude
                 Row(
                   children: [
@@ -1074,6 +1111,7 @@ class _SettingsViewState extends State<SettingsView> {
                         widget.store.setAiAssistantConfig(
                           enabled: true,
                           geminiKey: _geminiKeyCtrl.text.trim(),
+                          openrouterKey: _openrouterKeyCtrl.text.trim(),
                           claudeKey: _claudeKeyCtrl.text.trim(),
                           openaiKey: _openaiKeyCtrl.text.trim(),
                         );
@@ -1095,7 +1133,7 @@ class _SettingsViewState extends State<SettingsView> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.bolt_outlined, size: 16),
-                      label: const Text('Testar Conexão'),
+                       label: const Text('Testar Conexão'),
                       onPressed: _isTestingAi
                           ? null
                           : () async {
@@ -1106,11 +1144,13 @@ class _SettingsViewState extends State<SettingsView> {
                               });
                               final prov =
                                   AIProviderType.fromId(widget.store.aiProvider);
-                              final key = prov == AIProviderType.claude
-                                  ? _claudeKeyCtrl.text.trim()
-                                  : prov == AIProviderType.openai
-                                      ? _openaiKeyCtrl.text.trim()
-                                      : _geminiKeyCtrl.text.trim();
+                              final key = prov == AIProviderType.openrouter
+                                  ? _openrouterKeyCtrl.text.trim()
+                                  : prov == AIProviderType.claude
+                                      ? _claudeKeyCtrl.text.trim()
+                                      : prov == AIProviderType.openai
+                                          ? _openaiKeyCtrl.text.trim()
+                                          : _geminiKeyCtrl.text.trim();
                               final res = await AIAssistantService.instance
                                   .testProviderConnection(
                                 provider: prov,

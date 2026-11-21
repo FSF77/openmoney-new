@@ -1,4 +1,4 @@
-# Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)
+# Guia do Usuário: Assistente Financeira com IA (Gemini, OpenRouter, Claude, ChatGPT, Apple Intelligence e Siri)
 
 A **Assistente Financeira do OpenMoney** combina a inteligência de modelos de linguagem de ponta com um motor financeiro local determinístico e seguro para ajudar você a **lançar gastos por texto ou voz**, **ler comprovantes e faturas em PDF/foto**, **organizar lançamentos sem categoria** e **entender detalhadamente seus hábitos financeiros** com base nos dados reais do seu arquivo `openmoney.json`.
 
@@ -35,7 +35,7 @@ O OpenMoney oferece três formas flexíveis e transparentes para atender a todos
 
 | Forma de Consumo | Descrição Operacional | Privacidade & Requisitos |
 | :--- | :--- | :--- |
-| **Minha Chave (BYOK)** | Usa sua própria chave de API configurada no aplicativo (Google Gemini Flash, Anthropic Claude ou OpenAI ChatGPT). | **Gratuito / Baixo Custo:** O Google Gemini possui camada gratuita no Google AI Studio. A chave fica gravada exclusivamente no seu aparelho (`config.json` ou `localStorage`). |
+| **Minha Chave (BYOK)** | Usa sua própria chave de API configurada no aplicativo (Google Gemini Flash, OpenRouter.ai, Anthropic Claude ou OpenAI ChatGPT). | **Gratuito / Baixo Custo:** O Google Gemini possui camada gratuita no Google AI Studio. O OpenRouter.ai permite acessar centenas de modelos com 1 única chave (incluindo modelos `:free` como DeepSeek, Llama e Gemini sem cartão). A chave fica gravada exclusivamente no seu aparelho (`config.json` ou `localStorage`). |
 | **Nuvem Cloud** | Utiliza a infraestrutura de IA gerenciada do OpenMoney Cloud através do Cloudflare Workers & D1. | **Zero Configuração:** Requer apenas estar conectado à sua conta OpenMoney Cloud. Cota diária inclusa na conta sem necessidade de obter chaves de terceiros. |
 | **Modo Sem Chave (Prompt Bridge)** | Gera um resumo compacto e seguro dos seus dados para você copiar e colar na versão web do ChatGPT, Claude ou Gemini no navegador. | **Zero Custo e Sem Chaves:** A barra de **Copiar Contexto** e **Colar Resposta** fica visível no rodapé do painel da Assistente com botões compactos e tooltips. Se a IA externa responder com ações em JSON, o OpenMoney as interpreta automaticamente em cartões de confirmação! |
 
@@ -51,6 +51,7 @@ Para que a opção **Nuvem Cloud** fique ativa e disponível para os usuários a
    - Vá na aba **Settings** › **Environment variables**.
 2. **Adicione os Secrets em Production (e Preview):**
    - **`AI_MANAGED_GEMINI_KEY`** *(Recomendado / Principal)*: Chave de API do **Google Gemini Flash** (gerada gratuitamente em [aistudio.google.com](https://aistudio.google.com/)). Marque o tipo como **Encrypt** (Secret).
+   - **`AI_MANAGED_OPENROUTER_KEY`** *(Excelente alternativa unificada)*: Chave de API do **OpenRouter.ai** ([openrouter.ai](https://openrouter.ai/)), fornecendo acesso a Gemini, DeepSeek, Claude, Llama e OpenAI em um só lugar.
    - **`AI_MANAGED_ANTHROPIC_KEY`** *(Opcional)*: Chave de API da Anthropic caso queira fornecer o Claude via nuvem gerenciada.
    - **`AI_MANAGED_OPENAI_KEY`** *(Opcional)*: Chave de API da OpenAI caso queira fornecer o ChatGPT via nuvem gerenciada.
    - **`AI_DAILY_LIMIT`** *(Opcional)*: Limite diário de consultas gratuitas por usuário (ex: `25` ou `50`). Se omitido, o sistema adota automaticamente `25` requisições diárias.

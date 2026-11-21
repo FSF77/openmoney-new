@@ -430,6 +430,8 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
     String selectedMode = widget.store.aiConsumptionMode;
     final geminiCtrl =
         TextEditingController(text: widget.store.geminiApiKey);
+    final openrouterCtrl =
+        TextEditingController(text: widget.store.openrouterApiKey);
     final claudeCtrl =
         TextEditingController(text: widget.store.claudeApiKey);
     final openaiCtrl =
@@ -449,7 +451,11 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
           TextEditingController activeCtrl = geminiCtrl;
           String keyLabel = 'Chave API Google Gemini (Google AI Studio - Gratuita)';
           String keyHint = 'AIzaSy...';
-          if (prov == AIProviderType.claude) {
+          if (prov == AIProviderType.openrouter) {
+            activeCtrl = openrouterCtrl;
+            keyLabel = 'Chave API OpenRouter.ai (Centenas de Modelos com 1 Chave)';
+            keyHint = 'sk-or-v1-...';
+          } else if (prov == AIProviderType.claude) {
             activeCtrl = claudeCtrl;
             keyLabel = 'Chave API Anthropic Claude (Console Anthropic)';
             keyHint = 'sk-ant-...';
@@ -619,11 +625,13 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
                           testStatus = 'Testando conexão...';
                         });
                         final p = AIProviderType.fromId(selectedProvider);
-                        final key = p == AIProviderType.claude
-                            ? claudeCtrl.text.trim()
-                            : p == AIProviderType.openai
-                                ? openaiCtrl.text.trim()
-                                : geminiCtrl.text.trim();
+                        final key = p == AIProviderType.openrouter
+                            ? openrouterCtrl.text.trim()
+                            : p == AIProviderType.claude
+                                ? claudeCtrl.text.trim()
+                                : p == AIProviderType.openai
+                                    ? openaiCtrl.text.trim()
+                                    : geminiCtrl.text.trim();
                         final res = await AIAssistantService.instance
                             .testProviderConnection(
                           provider: p,
@@ -647,6 +655,7 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
                     provider: selectedProvider,
                     consumptionMode: selectedMode,
                     geminiKey: geminiCtrl.text.trim(),
+                    openrouterKey: openrouterCtrl.text.trim(),
                     claudeKey: claudeCtrl.text.trim(),
                     openaiKey: openaiCtrl.text.trim(),
                   );

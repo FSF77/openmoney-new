@@ -14,6 +14,11 @@ import 'wallet_import_service.dart';
 
 enum AIProviderType {
   gemini('gemini', 'Google Gemini', 'Gemini Flash (Rápido & Multimodal)'),
+  openrouter(
+    'openrouter',
+    'OpenRouter.ai',
+    'Centenas de Modelos com 1 Chave (Gemini, Claude, DeepSeek, Llama)',
+  ),
   claude('claude', 'Anthropic Claude', 'Claude Sonnet / Haiku'),
   openai('openai', 'OpenAI ChatGPT', 'GPT-4o / GPT-4o-mini'),
   appleIntelligence(
@@ -1163,6 +1168,8 @@ INSTRUÇÕES:
     switch (provider) {
       case AIProviderType.gemini:
         return store.geminiApiKey.trim();
+      case AIProviderType.openrouter:
+        return store.openrouterApiKey.trim();
       case AIProviderType.claude:
         return store.claudeApiKey.trim();
       case AIProviderType.openai:
@@ -1222,6 +1229,15 @@ INSTRUÇÕES:
     switch (provider) {
       case AIProviderType.gemini:
         return _callGeminiDirect(
+          apiKey: apiKey,
+          preferredModel: preferredModel,
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+          attachmentBase64: attachmentBase64,
+          attachmentMimeType: attachmentMimeType,
+        );
+      case AIProviderType.openrouter:
+        return _callOpenRouterDirect(
           apiKey: apiKey,
           preferredModel: preferredModel,
           systemPrompt: systemPrompt,
@@ -1388,6 +1404,95 @@ INSTRUÇÕES:
         if (candidates == null || candidates.isEmpty) continue;
         final text =
             candidates.first['content']?['parts']?[0]?['text'] as String?;
+        if (text != null && text.trim().isNotEmpty) {
+          return text.trim();
+        }
+      } catch (e) {
+        _lastProviderError = 'Falha de requisição: $e';
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _callOpenRouterDirect({
+    required String apiKey,
+    String preferredModel = '',
+    required String systemPrompt,
+    required String userPrompt,
+    String? attachmentBase64,
+    String? attachmentMimeType,
+  }) async {
+    final cleanKey = apiKey.trim();
+    if (cleanKey.isEmpty) return null;
+
+    final models = <String>[
+      if (preferredModel.trim().isNotEmpty) preferredModel.trim(),
+      'google/gemini-2.0-flash-001',
+      'google/gemini-2.0-flash-exp:free',
+      'deepseek/deepseek-chat',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'mistralai/mistral-small-24b-instruct-2501:free',
+    ];
+
+    for (final model in models) {
+      final userContent = <Map<String, dynamic>>[
+        {'type': 'text', 'text': userPrompt},
+      ];
+      if (attachmentBase64 != null &&
+          attachmentBase64.isNotEmpty &&
+          (attachmentMimeType ?? '').startsWith('image/')) {
+        userContent.add({
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:$attachmentMimeType;base64,$attachmentBase64',
+          },
+        });
+      }
+
+      final payload = {
+        'model': model,
+        'temperature': 0.15,
+        'response_format': {'type': 'json_object'},
+        'messages': [
+          {'role': 'system', 'content': systemPrompt},
+          {'role': 'user', 'content': userContent},
+        ],
+      };
+
+      try {
+        final res = await platformHttpRequest(
+          method: 'POST',
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': 'Bearer $cleanKey',
+            'HTTP-Referer': 'https://openmoney.app.br',
+            'X-Title': 'OpenMoney',
+          },
+          body: jsonEncode(payload),
+          timeout: const Duration(seconds: 40),
+        );
+        if (res.statusCode != 200) {
+          try {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map &&
+                decoded['error'] is Map &&
+                decoded['error']['message'] is String) {
+              _lastProviderError =
+                  '${decoded['error']['message']} (HTTP ${res.statusCode})';
+            } else {
+              _lastProviderError = 'HTTP ${res.statusCode}: ${res.body}';
+            }
+          } catch (_) {
+            _lastProviderError = 'HTTP ${res.statusCode}';
+          }
+          continue;
+        }
+        final decoded = jsonDecode(res.body);
+        final choices = decoded['choices'] as List?;
+        if (choices == null || choices.isEmpty) continue;
+        final text = choices.first['message']?['content'] as String?;
         if (text != null && text.trim().isNotEmpty) {
           return text.trim();
         }
