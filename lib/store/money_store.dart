@@ -4141,6 +4141,7 @@ class MoneyStore extends ChangeNotifier {
     int? peerSignedAmt,
     double? txRate,
     List<String>? tags,
+    bool isFromAi = false,
   }) {
     setLastUsedAccount(accId);
     final normalizedTags = normalizeTagList(tags ?? const []);
@@ -4314,14 +4315,16 @@ class MoneyStore extends ChangeNotifier {
     final accName = curAcc?.name ?? accId;
     final typeLabel = isXfer ? 'Transferência' : (signedAmt < 0 ? 'Despesa' : 'Receita');
     final formattedAmt = formatCurrency(signedAmt, curCurrency);
+    final prefix = isFromAi ? '[Assistente IA] ' : '';
     final desc = mode == 'installment'
-        ? '$typeLabel parcelado ($count x): "$payee" em $accName, total: $formattedAmt'
-        : '$typeLabel: "$payee" em $accName, $formattedAmt ($catLabel)';
+        ? '$prefix$typeLabel parcelado ($count x): "$payee" em $accName, total: $formattedAmt'
+        : '$prefix$typeLabel: "$payee" em $accName, $formattedAmt ($catLabel)';
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.create,
       entity: AuditEntity.transaction,
       summary: desc,
+      details: isFromAi ? {'source': 'ai_assistant'} : null,
     );
   }
 
@@ -4406,7 +4409,7 @@ class MoneyStore extends ChangeNotifier {
     save();
   }
 
-  void toggleReconciled(String txId) {
+  void toggleReconciled(String txId, {bool isFromAi = false}) {
     final idx = db.txs.indexWhere((t) => t.id == txId);
     if (idx == -1) return;
     db.txs[idx].rec = !db.txs[idx].rec;
@@ -4421,6 +4424,18 @@ class MoneyStore extends ChangeNotifier {
     }
     markIndexesDirty();
     save();
+
+    final tx = db.txs[idx];
+    final prefix = isFromAi ? '[Assistente IA] ' : '';
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.update,
+      entity: AuditEntity.transaction,
+      id: txId,
+      summary:
+          '$prefix${newRec ? "Conciliação marcada" : "Conciliação desmarcada"}: "${tx.payee}" (${formatCurrency(tx.amt, accById(tx.acc)?.effectiveCurrency ?? baseCurrency)})',
+      details: isFromAi ? {'source': 'ai_assistant'} : null,
+    );
   }
 
   void updateTransaction({
@@ -4436,6 +4451,7 @@ class MoneyStore extends ChangeNotifier {
     int? peerSignedAmt,
     double? txRate,
     List<String>? newTags,
+    bool isFromAi = false,
   }) {
     final idx = db.txs.indexWhere((t) => t.id == txId);
     if (idx == -1) return;
@@ -4675,16 +4691,23 @@ class MoneyStore extends ChangeNotifier {
     final acc = accById(newAccId ?? t.acc);
     final accName = acc?.name ?? t.acc;
     final accCur = acc?.effectiveCurrency ?? baseCurrency;
+    final prefix = isFromAi ? '[Assistente IA] ' : '';
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.update,
       entity: AuditEntity.transaction,
       id: txId,
-      summary: 'Lançamento alterado: "$newPayee" em $accName, ${formatCurrency(newSignedAmt, accCur)} ($newCatSelection)',
+      summary:
+          '${prefix}Lançamento alterado: "$newPayee" em $accName, ${formatCurrency(newSignedAmt, accCur)} ($newCatSelection)',
+      details: isFromAi ? {'source': 'ai_assistant'} : null,
     );
   }
 
-  void deleteTransaction(String txId, ScopeChoice scope) {
+  void deleteTransaction(
+    String txId,
+    ScopeChoice scope, {
+    bool isFromAi = false,
+  }) {
     final idx = db.txs.indexWhere((t) => t.id == txId);
     if (idx == -1) return;
     final t = db.txs[idx];
@@ -4741,12 +4764,15 @@ class MoneyStore extends ChangeNotifier {
     final scopeLabel = scope == ScopeChoice.all
         ? ' (todos do plano/recorrência)'
         : (scope == ScopeChoice.forward ? ' (este e futuros)' : '');
+    final prefix = isFromAi ? '[Assistente IA] ' : '';
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.delete,
       entity: AuditEntity.transaction,
       id: txId,
-      summary: 'Lançamento excluído: "${t.payee}" em $accName, ${formatCurrency(t.amt, accCur)}$scopeLabel',
+      summary:
+          '${prefix}Lançamento excluído: "${t.payee}" em $accName, ${formatCurrency(t.amt, accCur)}$scopeLabel',
+      details: isFromAi ? {'source': 'ai_assistant'} : null,
     );
   }
 
@@ -6660,6 +6686,7 @@ class MoneyStore extends ChangeNotifier {
   int batchUpdateTransactions({
     required Set<String> ids,
     required BatchTransactionEditPayload payload,
+    bool isFromAi = false,
   }) {
     if (ids.isEmpty || !payload.hasAnyChange) return 0;
 
@@ -6768,19 +6795,24 @@ class MoneyStore extends ChangeNotifier {
         if (payload.applyAccount) 'Conta',
         if (payload.applyReconciled) 'Conciliação',
       ];
+      final prefix = isFromAi ? '[Assistente IA] ' : '';
       AuditLogManager.instance.logAsync(
         dbPath: dbPath,
         action: AuditAction.batchEdit,
         entity: AuditEntity.transaction,
         summary:
-            'Edição em lote: $updatedCount lançamento(s) atualizado(s) (${fields.join(", ")})',
+            '${prefix}Edição em lote: $updatedCount lançamento(s) atualizado(s) (${fields.join(", ")})',
+        details: isFromAi ? {'source': 'ai_assistant'} : null,
       );
     }
 
     return updatedCount;
   }
 
-  int batchDeleteTransactionsByIds(Set<String> ids) {
+  int batchDeleteTransactionsByIds(
+    Set<String> ids, {
+    bool isFromAi = false,
+  }) {
     if (ids.isEmpty) return 0;
 
     final toDelete = <String>{};
@@ -6824,12 +6856,14 @@ class MoneyStore extends ChangeNotifier {
     rebuildIndexes();
     save(immediate: true);
 
+    final prefix = isFromAi ? '[Assistente IA] ' : '';
     AuditLogManager.instance.logAsync(
       dbPath: dbPath,
       action: AuditAction.batchDelete,
       entity: AuditEntity.transaction,
       summary:
-          'Exclusão em lote: $deletedCount lançamento(s) excluído(s) via seleção múltipla',
+          '${prefix}Exclusão em lote: $deletedCount lançamento(s) excluído(s) via seleção múltipla',
+      details: isFromAi ? {'source': 'ai_assistant'} : null,
     );
 
     return deletedCount;

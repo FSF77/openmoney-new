@@ -1363,6 +1363,52 @@ class _AiAssistantSidePanelState extends State<AiAssistantSidePanel> {
                 (p['tags'] as List).map((t) => '#$t').join(' '),
               ),
           ],
+          if (proposal.type == 'update_transaction' ||
+              proposal.type == 'edit_transaction') ...[
+            if (p['payee'] != null || p['newPayee'] != null)
+              _buildKeyValRow(
+                colors,
+                'Favorecido',
+                (p['payee'] ?? p['newPayee']).toString(),
+              ),
+            if (p['category'] != null || p['newCategory'] != null)
+              _buildKeyValRow(
+                colors,
+                'Categoria',
+                (p['category'] ?? p['newCategory']).toString(),
+              ),
+            if (p['date'] != null || p['newDate'] != null)
+              _buildKeyValRow(
+                colors,
+                'Data',
+                fmtDate((p['date'] ?? p['newDate']).toString()),
+              ),
+          ],
+          if (proposal.type == 'delete_transaction') ...[
+            if (p['payee'] != null)
+              _buildKeyValRow(
+                colors,
+                'Lançamento',
+                p['payee'].toString(),
+              ),
+            _buildKeyValRow(
+              colors,
+              'Ação',
+              'Exclusão permanente (com registro em log)',
+            ),
+          ],
+          if (proposal.type == 'batch_delete_transactions') ...[
+            _buildKeyValRow(
+              colors,
+              'Quantidade',
+              '${(p['transactionIds'] as List?)?.length ?? (p['txIds'] as List?)?.length ?? 0} lançamentos',
+            ),
+            _buildKeyValRow(
+              colors,
+              'Ação',
+              'Exclusão em lote (com registro em log)',
+            ),
+          ],
           if (budgetWarn != null) ...[
             const SizedBox(height: 6),
             Container(

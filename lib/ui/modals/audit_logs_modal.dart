@@ -55,6 +55,11 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
   List<AuditLogEntry> get _filteredEntries {
     return _allEntries.where((entry) {
       // Filtro de Categoria/Tipo
+      if (_selectedFilter == 'ai') {
+        final isAi = entry.summary.contains('[Assistente IA]') ||
+            entry.details?['source'] == 'ai_assistant';
+        if (!isAi) return false;
+      }
       if (_selectedFilter == 'transaction' && entry.entity != AuditEntity.transaction) return false;
       if (_selectedFilter == 'account' && entry.entity != AuditEntity.account) return false;
       if (_selectedFilter == 'category' && entry.entity != AuditEntity.category) return false;
@@ -259,6 +264,8 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                             children: [
                               _buildFilterChip('all', 'Todos', colors),
                               const SizedBox(width: 4),
+                              _buildFilterChip('ai', 'Assistente IA ✨', colors),
+                              const SizedBox(width: 4),
                               _buildFilterChip('transaction', 'Lançamentos', colors),
                               const SizedBox(width: 4),
                               _buildFilterChip('account', 'Contas', colors),
@@ -311,6 +318,7 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                           spacing: 6,
                           children: [
                             _buildFilterChip('all', 'Todos', colors),
+                            _buildFilterChip('ai', 'Assistente IA ✨', colors),
                             _buildFilterChip('transaction', 'Lançamentos', colors),
                             _buildFilterChip('account', 'Contas', colors),
                             _buildFilterChip('category', 'Categorias', colors),
@@ -369,6 +377,8 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                             final entry = filtered[idx];
                             final badgeColor = _badgeColorForAction(entry.action);
                             final icon = _iconForAction(entry.action);
+                            final isAi = entry.summary.contains('[Assistente IA]') ||
+                                entry.details?['source'] == 'ai_assistant';
 
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -434,6 +444,42 @@ class _AuditLogsDialogState extends State<_AuditLogsDialog> {
                                                 color: colors.textSecondary,
                                               ),
                                             ),
+                                            if (isAi) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 1.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: Colors.amber.withValues(alpha: 0.5),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.auto_awesome,
+                                                      size: 10,
+                                                      color: Colors.amber,
+                                                    ),
+                                                    SizedBox(width: 3),
+                                                    Text(
+                                                      'Assistente IA',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.amber,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ],

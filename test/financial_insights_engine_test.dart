@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/ai_assistant_service.dart';
+import 'package:openmoney/services/audit_log_manager.dart';
 import 'package:openmoney/services/financial_insights_engine.dart';
 import 'package:openmoney/services/shortcut_url_service.dart';
 import 'package:openmoney/store/money_store.dart';
@@ -506,6 +508,79 @@ void main() {
 
       expect(find.text('Assistente OpenMoney'), findsOneWidget);
       expect(find.text('Privado'), findsOneWidget);
+    });
+
+    test('Ações de IA (criação, edição e exclusão) gravam logs de auditoria identificados com [Assistente IA]', () async {
+      final tempDir = Directory.systemTemp.createTempSync('openmoney_audit_test_');
+      final store = buildTestStore();
+      store.dbPath = '${tempDir.path}/openmoney.json';
+
+      // 1. Criação via IA
+      final createProposal = AIActionProposal(
+        id: 'p1',
+        type: 'create_transaction',
+        summary: 'Lançar Almoço',
+        payload: {
+          'accountId': 'acc_corrente',
+          'date': '2026-11-21',
+          'payee': 'Restaurante Teste IA',
+          'category': 'Alimentação',
+          'amountCents': -4500,
+        },
+      );
+      createProposal.executeOnStore(store);
+
+      final createdTx =
+          store.db.txs.firstWhere((t) => t.payee == 'Restaurante Teste IA');
+      expect(createdTx.amt, -4500);
+
+      // 2. Edição via IA
+      final editProposal = AIActionProposal(
+        id: 'p2',
+        type: 'update_transaction',
+        summary: 'Alterar Restaurante Teste IA',
+        payload: {
+          'transactionId': createdTx.id,
+          'payee': 'Restaurante Atualizado IA',
+          'category': 'Alimentação › Restaurante',
+          'amountCents': -5000,
+        },
+      );
+      editProposal.executeOnStore(store);
+
+      final updatedTx = store.db.txs.firstWhere((t) => t.id == createdTx.id);
+      expect(updatedTx.payee, 'Restaurante Atualizado IA');
+      expect(updatedTx.amt, -5000);
+
+      // 3. Exclusão via IA
+      final deleteProposal = AIActionProposal(
+        id: 'p3',
+        type: 'delete_transaction',
+        summary: 'Excluir Restaurante Atualizado IA',
+        payload: {
+          'transactionId': createdTx.id,
+        },
+      );
+      deleteProposal.executeOnStore(store);
+
+      expect(store.db.txs.any((t) => t.id == createdTx.id), isFalse);
+
+      // Aguarda gravação microtask/file I/O
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // 4. Verifica logs de auditoria
+      final logs = await store.readRecentAuditLogs(limit: 50);
+      final aiLogs =
+          logs.where((l) => l.summary.contains('[Assistente IA]')).toList();
+
+      expect(aiLogs.length, greaterThanOrEqualTo(3));
+      for (final log in aiLogs) {
+        expect(log.details?['source'], 'ai_assistant');
+      }
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
   });
 }

@@ -216,6 +216,7 @@ class AIActionProposal {
           installments: installments,
           customIk: (customIk != null && customIk.isNotEmpty) ? customIk : null,
           tags: tags.isEmpty ? null : tags,
+          isFromAi: true,
         );
         isApplied = true;
         final accName = store.accById(accId)?.name ?? accId;
@@ -244,6 +245,7 @@ class AIActionProposal {
           memo: memo,
           signedAmt: -absCents,
           txRate: rate,
+          isFromAi: true,
         );
         isApplied = true;
         final fromName = store.accById(fromId)?.name ?? fromId;
@@ -276,6 +278,7 @@ class AIActionProposal {
           signedAmt: signedAmt,
           mode: 'recurring',
           freq: freq,
+          isFromAi: true,
         );
         isApplied = true;
         return 'Recorrência "$payee" (${recurrenceFrequencyLabel(freq)}) criada com sucesso.';
@@ -305,6 +308,7 @@ class AIActionProposal {
             tagMode: BatchTagMode.add,
             tags: tags,
           ),
+          isFromAi: true,
         );
         isApplied = true;
         return '$count lançamento(s) organizados em lote.';
@@ -331,6 +335,7 @@ class AIActionProposal {
           catSelection: cat,
           memo: memo,
           signedAmt: -absCents,
+          isFromAi: true,
         );
         isApplied = true;
         return 'Previsão "$payee" criada para $cat.';
@@ -358,6 +363,69 @@ class AIActionProposal {
         }
         return 'Categoria inválida para limite de gastos.';
 
+      case 'update_transaction':
+      case 'edit_transaction':
+        final txId = (payload['transactionId'] ?? payload['txId'] ?? payload['id'])?.toString();
+        if (txId == null || txId.isEmpty) return 'ID do lançamento não informado.';
+        final idx = store.db.txs.indexWhere((t) => t.id == txId);
+        if (idx == -1) return 'Lançamento não encontrado para edição.';
+        final oldTx = store.db.txs[idx];
+
+        final newPayee = (payload['payee'] ?? payload['newPayee'] ?? oldTx.payee).toString().trim();
+        final newDate = (payload['date'] ?? payload['newDate'] ?? oldTx.date).toString().trim();
+        final newMemo = (payload['memo'] ?? payload['newMemo'] ?? oldTx.memo).toString();
+        final newCat = (payload['category'] ?? payload['newCategory'] ?? oldTx.cat).toString().trim();
+        final signedAmt = (payload.containsKey('amount') ||
+                payload.containsKey('amountCents') ||
+                payload.containsKey('signedAmt'))
+            ? _extractSignedCents(payload)
+            : oldTx.amt;
+        final newAccId = payload['accountId'] != null
+            ? _resolveAccountId(store, payload['accountId'].toString())
+            : oldTx.acc;
+        final rawTags = payload['tags'];
+        final newTags = rawTags is List
+            ? rawTags
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toList()
+            : oldTx.tags;
+
+        store.updateTransaction(
+          txId: txId,
+          newAccId: newAccId,
+          newDate: newDate,
+          newPayee: newPayee,
+          newCatSelection: newCat,
+          newMemo: newMemo,
+          newSignedAmt: signedAmt,
+          newTags: newTags,
+          isFromAi: true,
+        );
+        isApplied = true;
+        return 'Lançamento "$newPayee" atualizado com sucesso via Assistente IA.';
+
+      case 'delete_transaction':
+        final txId = (payload['transactionId'] ?? payload['txId'] ?? payload['id'])?.toString();
+        if (txId == null || txId.isEmpty) return 'ID do lançamento não informado.';
+        final idx = store.db.txs.indexWhere((t) => t.id == txId);
+        if (idx == -1) return 'Lançamento não encontrado para exclusão.';
+        final payee = store.db.txs[idx].payee;
+        store.deleteTransaction(txId, ScopeChoice.only, isFromAi: true);
+        isApplied = true;
+        return 'Lançamento "$payee" excluído com sucesso via Assistente IA.';
+
+      case 'batch_delete_transactions':
+        final rawIds = payload['transactionIds'] ?? payload['txIds'] ?? payload['ids'];
+        final ids = <String>{
+          if (rawIds is List)
+            ...rawIds.map((e) => e.toString().trim()).where((e) => e.isNotEmpty),
+        };
+        if (ids.isEmpty) return 'Nenhum lançamento selecionado para exclusão.';
+        final count = store.batchDeleteTransactionsByIds(ids, isFromAi: true);
+        isApplied = true;
+        return '$count lançamento(s) excluído(s) via Assistente IA.';
+
       case 'reconcile_document_items':
         final rawItems = payload['items'];
         if (rawItems is! List) return 'Nenhum item para importar.';
@@ -372,7 +440,7 @@ class AIActionProposal {
           if (matchedId != null && matchedId.isNotEmpty) {
             final idx = store.db.txs.indexWhere((t) => t.id == matchedId);
             if (idx != -1 && !store.db.txs[idx].rec) {
-              store.toggleReconciled(matchedId);
+              store.toggleReconciled(matchedId, isFromAi: true);
               reconciledCount++;
             }
           } else {
@@ -395,6 +463,7 @@ class AIActionProposal {
               memo: memo,
               signedAmt: signedAmt,
               tags: tags.isEmpty ? null : tags,
+              isFromAi: true,
             );
             createdCount++;
           }
@@ -656,6 +725,12 @@ REGRAS OBRIGATÓRIAS DE RESPOSTA:
      {"type": "create_prediction", "summary": "Criar Previsão de Alimentação (R\$ 1.500,00)", "payload": {"date": "YYYY-MM-28", "accountId": "ID_CONTA", "payee": "Previsão Alimentação", "category": "Alimentação", "amountCents": -150000}}
    - Limite de Gastos Mensal:
      {"type": "set_budget", "summary": "Definir limite mensal para Alimentação", "payload": {"categoryPath": "Alimentação", "limitCents": 150000}}
+   - Edição / Correção de lançamento existente:
+     {"type": "update_transaction", "summary": "Alterar lançamento para Farmácia (R\$ 80,00)", "payload": {"transactionId": "ID_LANCAMENTO", "payee": "Farmácia", "category": "Saúde", "amountCents": -8000}}
+   - Exclusão de lançamento:
+     {"type": "delete_transaction", "summary": "Excluir lançamento duplicado", "payload": {"transactionId": "ID_LANCAMENTO"}}
+   - Exclusão em lote:
+     {"type": "batch_delete_transactions", "summary": "Excluir lançamentos duplicados selecionados", "payload": {"transactionIds": ["ID_1", "ID_2"]}}
 5. Use SEMPRE os IDs de contas ("id") e nomes de categorias existentes em "accounts" e "availableCategories" do snapshot quando disponíveis.
 6. REGRA DE AUDITORIA E DUPLICIDADES: NUNCA aponte como duplicidade lançamentos já conciliados ("reconciled": true), nem compras parceladas ("isInstallment": true, sufixo "(X/Y)") ou antecipações de parcelas. Para organização da base e busca de duplicidades ou lançamentos sem categoria, confie exclusivamente na lista determinística "organizationOpportunities" fornecida no snapshot.
 ''';

@@ -129,6 +129,7 @@ class AuditLogManager {
   String? defaultAppSupportDirPath;
   final List<AuditLogEntry> _pendingCloudLogs = [];
   Timer? _cloudFlushTimer;
+  Future<void> _fileWriteLock = Future.value();
 
   /// Resolve o arquivo de log a partir do caminho da base (local ou nuvem no desktop)
   String logFilePathForDatabase(String dbPath, {String? appSupportDirPath}) {
@@ -204,7 +205,7 @@ class AuditLogManager {
 
     // 2. Se não estiver na Web, grava também no arquivo local .log (incluindo base cloud no desktop)
     if (!kIsWeb) {
-      Future.microtask(() async {
+      _fileWriteLock = _fileWriteLock.then((_) async {
         try {
           final logPath = logFilePathForDatabase(
             dbPath,
@@ -216,8 +217,11 @@ class AuditLogManager {
             file.createSync(recursive: true);
           }
           final line = '${jsonEncode(entry.toJson())}\n';
-          await file.writeAsString(line,
-              mode: FileMode.writeOnlyAppend, flush: false);
+          await file.writeAsString(
+            line,
+            mode: FileMode.writeOnlyAppend,
+            flush: true,
+          );
         } catch (e) {
           debugPrint('[AuditLogManager] Erro ao gravar log: $e');
         }
@@ -248,6 +252,7 @@ class AuditLogManager {
 
     // 2. Fallback offline ou base estritamente local
     if (kIsWeb) return [];
+    await _fileWriteLock;
     try {
       final logPath = logFilePathForDatabase(
         dbPath,
