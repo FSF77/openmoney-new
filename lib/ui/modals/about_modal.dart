@@ -175,6 +175,76 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
               ),
               const SizedBox(height: 14),
 
+              if (kIsWeb) ...[
+                // Botões de download dos apps Desktop (macOS e Windows)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Tooltip(
+                        message:
+                            'Baixar aplicativo nativo para macOS (v${OpenMoneyVersion.version})',
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: const Icon(Icons.apple, size: 16),
+                          label: const Text(
+                            'App macOS',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () =>
+                              _openUrl(OpenMoneyVersion.macosDownloadUrl),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Tooltip(
+                        message:
+                            'Baixar aplicativo nativo para Windows (v${OpenMoneyVersion.version})',
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.window_rounded,
+                            size: 15,
+                            color: Color(0xFF00ADEF),
+                          ),
+                          label: const Text(
+                            'App Windows',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () =>
+                              _openUrl(OpenMoneyVersion.windowsDownloadUrl),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
               Text(
                 '© 2026 OpenMoney • FSF Consultoria',
                 style: TextStyle(
@@ -205,19 +275,21 @@ class _AboutOpenMoneyDialog extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        if (!kIsWeb) ...[
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            icon: const Icon(Icons.system_update_alt, size: 15),
+                            label: const Text('Atualizações', style: TextStyle(fontSize: 12.5)),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              UpdateService.showUpdateDialog(context, manual: true);
+                            },
                           ),
-                          icon: const Icon(Icons.system_update_alt, size: 15),
-                          label: const Text('Atualizações', style: TextStyle(fontSize: 12.5)),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            UpdateService.showUpdateDialog(context, manual: true);
-                          },
-                        ),
-                        const SizedBox(width: 8),
+                          const SizedBox(width: 8),
+                        ],
                         FilledButton(
                           style: FilledButton.styleFrom(
                             visualDensity: VisualDensity.compact,

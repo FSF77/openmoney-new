@@ -8,7 +8,7 @@ import 'platform_io.dart';
 
 class OpenMoneyVersion {
   static const String fallbackVersion = '2.5.3';
-  static const int fallbackBuild = 155;
+  static const int fallbackBuild = 156;
   static const String releasesRepoUrl = 'https://github.com/FSF77/openmoney-new';
   static const String feedUrl =
       'https://raw.githubusercontent.com/FSF77/openmoney-new/main/version.json';
@@ -16,9 +16,19 @@ class OpenMoneyVersion {
   static String _version = fallbackVersion;
   static int _build = fallbackBuild;
   static bool _initialized = false;
+  static String _macosDownloadUrl = '';
+  static String _windowsDownloadUrl = '';
 
   static String get version => _version;
   static int get build => _build;
+
+  static String get macosDownloadUrl => _macosDownloadUrl.isNotEmpty
+      ? _macosDownloadUrl
+      : 'https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-$version.zip';
+
+  static String get windowsDownloadUrl => _windowsDownloadUrl.isNotEmpty
+      ? _windowsDownloadUrl
+      : 'https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-$version.zip';
 
   static Future<void> init() async {
     if (_initialized) return;
@@ -45,7 +55,35 @@ class OpenMoneyVersion {
         }
       }
     } catch (_) {}
+    if (kIsWeb) {
+      _fetchRemoteDownloadUrlsSilently();
+    }
     _initialized = true;
+  }
+
+  static void _fetchRemoteDownloadUrlsSilently() {
+    () async {
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 4);
+        final req = await client.getUrl(Uri.parse(
+          '$feedUrl?t=${DateTime.now().millisecondsSinceEpoch}',
+        ));
+        final res = await req.close();
+        if (res.statusCode == 200) {
+          final body = await res.transform(utf8.decoder).join();
+          final decoded = jsonDecode(body) as Map<String, dynamic>;
+          final mac = decoded['macos'] as Map<String, dynamic>?;
+          final win = decoded['windows'] as Map<String, dynamic>?;
+          if (mac != null && mac['downloadUrl'] != null) {
+            _macosDownloadUrl = mac['downloadUrl'].toString();
+          }
+          if (win != null && win['downloadUrl'] != null) {
+            _windowsDownloadUrl = win['downloadUrl'].toString();
+          }
+        }
+      } catch (_) {}
+    }();
   }
 
   static void _cleanupOldWindowsUpdateFiles() {

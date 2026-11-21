@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../services/sync_engine.dart';
+import '../../services/update_service.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import 'cloud_account_modal.dart';
@@ -431,95 +433,192 @@ class _WelcomeDatabaseSelectionScreenState
   }
 
   Widget _buildFooter(OpenMoneyColors colors) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 8,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Botão Apoiar o Projeto (Link na Bio)
-        Tooltip(
-          message: 'Apoie o desenvolvimento contínuo do OpenMoney',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => webOpenExternalUrl(
-              'https://linknabio.gg/fabianodesouzafernandes',
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: colors.bgSecondary.withValues(alpha: 0.88),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            // Botão Apoiar o Projeto (Link na Bio)
+            Tooltip(
+              message: 'Apoie o desenvolvimento contínuo do OpenMoney',
+              child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
-                  width: 1.1,
+                onTap: () => webOpenExternalUrl(
+                  'https://linknabio.gg/fabianodesouzafernandes',
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.local_cafe_rounded,
-                    size: 15,
-                    color: Color(0xFFF59E0B),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Apoiar o Projeto',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: colors.bgSecondary.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                      width: 1.1,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.local_cafe_rounded,
+                        size: 15,
+                        color: Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Apoiar o Projeto',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
 
-        // E-mail de Contato
-        Tooltip(
-          message: 'Enviar mensagem para contato@openmoney.app.br',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => webOpenExternalUrl('mailto:contato@openmoney.app.br'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: colors.bgSecondary.withValues(alpha: 0.72),
+            // E-mail de Contato
+            Tooltip(
+              message: 'Enviar mensagem para contato@openmoney.app.br',
+              child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: colors.borderGlass),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.mail_outline,
-                    size: 14,
-                    color: colors.textSecondary,
+                onTap: () => webOpenExternalUrl('mailto:contato@openmoney.app.br'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: colors.bgSecondary.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: colors.borderGlass),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'contato@openmoney.app.br',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textSecondary,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.mail_outline,
+                        size: 14,
+                        color: colors.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'contato@openmoney.app.br',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
+        if (kIsWeb) ...[
+          const SizedBox(height: 10),
+          // Links de download dos aplicativos Desktop
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              Tooltip(
+                message: 'Baixar aplicativo nativo para macOS (v${OpenMoneyVersion.version})',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => webOpenExternalUrl(OpenMoneyVersion.macosDownloadUrl),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6.5),
+                    decoration: BoxDecoration(
+                      color: colors.bgSecondary.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.apple,
+                          size: 15,
+                          color: colors.textPrimary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Baixar para macOS',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.download_rounded,
+                          size: 13,
+                          color: colors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Baixar aplicativo nativo para Windows (v${OpenMoneyVersion.version})',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => webOpenExternalUrl(OpenMoneyVersion.windowsDownloadUrl),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6.5),
+                    decoration: BoxDecoration(
+                      color: colors.bgSecondary.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.window_rounded,
+                          size: 14,
+                          color: Color(0xFF00ADEF),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Baixar para Windows',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.download_rounded,
+                          size: 13,
+                          color: colors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
