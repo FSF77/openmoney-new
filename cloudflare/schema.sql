@@ -139,3 +139,17 @@ CREATE TABLE IF NOT EXISTS user_api_tokens (
 CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON user_api_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON user_api_tokens(user_id);
 
+-- 11. Códigos Temporários de Autorização OAuth 2.0 (ChatGPT, Gemini e Conectores Externos)
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'read_write',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires ON oauth_codes(expires_at);
+
+

@@ -163,6 +163,21 @@ async function ensureSchema(db) {
       CREATE INDEX IF NOT EXISTS idx_api_tokens_user
       ON user_api_tokens (user_id)
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS oauth_codes (
+        code TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_id TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT 'read_write',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires
+      ON oauth_codes (expires_at)
+    `),
   ]);
   try {
     await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
@@ -198,25 +213,30 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
-function corsHeaders(origin) {
-  const allowed = isAllowedOrigin(origin) ? origin : "https://openmoney.app.br";
+function corsHeaders(origin, allowAll = false) {
+  let allowed = "https://openmoney.app.br";
+  if (allowAll) {
+    allowed = origin || "*";
+  } else if (isAllowedOrigin(origin)) {
+    allowed = origin;
+  }
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset, X-OpenMoney-AI-Key, X-OpenMoney-AI-Provider",
+      "Content-Type, Authorization, MCP-Protocol-Version, Accept, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset, X-OpenMoney-AI-Key, X-OpenMoney-AI-Provider",
     "Access-Control-Expose-Headers":
-      "X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
+      "Content-Type, MCP-Protocol-Version, X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Vary": "Origin",
   };
 }
 
-function jsonResponse(data, status = 200, origin = "*") {
+function jsonResponse(data, status = 200, origin = "*", allowAll = false) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: corsHeaders(origin),
+    headers: corsHeaders(origin, allowAll),
   });
 }
 
@@ -2417,6 +2437,15 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
 }
 
 async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
+  if (Array.isArray(body)) {
+    const results = [];
+    for (const item of body) {
+      const res = await handleJsonRpcRequest(item, auth, env, origin, sessionId);
+      if (res) results.push(res);
+    }
+    return results.length > 0 ? results : null;
+  }
+
   if (!body || typeof body !== "object") {
     return {
       jsonrpc: "2.0",
@@ -2568,12 +2597,582 @@ async function authenticateRequest(request, env) {
   return verifyJwt(token, env);
 }
 
+function getOpenApiSpec() {
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: "OpenMoney API & AI Actions",
+      version: "2.5.3",
+      description: "API e Ações de Inteligência Artificial do OpenMoney para ChatGPT Actions, Gemini Extensions, MCP e conectores externos.",
+      contact: {
+        name: "OpenMoney",
+        url: "https://openmoney.app.br",
+      },
+    },
+    servers: [
+      {
+        url: "https://openmoney.app.br",
+        description: "Servidor Oficial de Produção OpenMoney",
+      },
+    ],
+    paths: {
+      "/api/v1/tools/get_financial_overview": {
+        get: {
+          summary: "Obter visão geral e saldos financeiros",
+          description: "Retorna o patrimônio líquido total, saldos detalhados de todas as contas e cartões de crédito e o resumo de receitas/despesas do mês.",
+          operationId: "getFinancialOverview",
+          parameters: [
+            {
+              name: "month",
+              in: "query",
+              required: false,
+              description: "Mês de referência no formato YYYY-MM (ex: '2026-11'). Se omitido, utiliza o mês atual.",
+              schema: { type: "string", example: "2026-11" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Visão financeira detalhada com saldos e resumo",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/list_accounts": {
+        get: {
+          summary: "Listar contas bancárias e cartões",
+          description: "Lista todas as contas financeiras (corrente, poupança, investimento, carteira) e cartões de crédito cadastrados com seus respectivos IDs.",
+          operationId: "listAccounts",
+          responses: {
+            "200": {
+              description: "Lista de contas e cartões",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/list_categories": {
+        get: {
+          summary: "Listar categorias financeiras",
+          description: "Lista todas as categorias e subcategorias de despesas e receitas cadastradas.",
+          operationId: "listCategories",
+          responses: {
+            "200": {
+              description: "Lista de categorias disponíveis",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/query_transactions": {
+        post: {
+          summary: "Consultar lançamentos com filtros",
+          description: "Pesquisa transações financeiras filtrando por intervalo de datas, conta, categoria ou busca textual na descrição.",
+          operationId: "queryTransactions",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    start_date: { type: "string", description: "Data inicial no formato YYYY-MM-DD", example: "2026-11-01" },
+                    end_date: { type: "string", description: "Data final no formato YYYY-MM-DD", example: "2026-11-30" },
+                    search: { type: "string", description: "Termo de busca textual na descrição do lançamento" },
+                    account_id: { type: "string", description: "ID da conta para filtrar lançamentos" },
+                    category_id: { type: "string", description: "ID da categoria para filtrar lançamentos" },
+                    limit: { type: "integer", description: "Limite de registros retornados (padrão 50)", default: 50 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Lançamentos encontrados",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/create_transaction": {
+        post: {
+          summary: "Criar novo lançamento financeiro",
+          description: "Registra uma nova despesa ou receita no OpenMoney com registro automático no log de auditoria.",
+          operationId: "createTransaction",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["description", "amount", "account_id"],
+                  properties: {
+                    description: { type: "string", description: "Descrição do lançamento", example: "Almoço Restaurante" },
+                    amount: { type: "number", description: "Valor monetário positivo (ex: 45.50)", example: 45.5 },
+                    type: { type: "string", enum: ["expense", "income"], default: "expense", description: "Tipo: 'expense' (despesa) ou 'income' (receita)" },
+                    account_id: { type: "string", description: "ID da conta ou cartão onde ocorreu o lançamento" },
+                    category_id: { type: "string", description: "ID da categoria ou subcategoria (opcional)" },
+                    date: { type: "string", description: "Data no formato YYYY-MM-DD. Se omitido, usa a data atual.", example: "2026-11-22" },
+                    notes: { type: "string", description: "Observações adicionais (opcional)" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Transação criada com sucesso",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/update_transaction": {
+        post: {
+          summary: "Editar lançamento existente",
+          description: "Atualiza os campos de um lançamento existente com registro no log de auditoria.",
+          operationId: "updateTransaction",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["transaction_id"],
+                  properties: {
+                    transaction_id: { type: "string", description: "ID único da transação a ser modificada" },
+                    description: { type: "string", description: "Nova descrição" },
+                    amount: { type: "number", description: "Novo valor monetário positivo" },
+                    category_id: { type: "string", description: "Novo ID da categoria" },
+                    date: { type: "string", description: "Nova data no formato YYYY-MM-DD" },
+                    notes: { type: "string", description: "Novas observações" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Transação atualizada com sucesso",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/delete_transaction": {
+        post: {
+          summary: "Excluir lançamento financeiro",
+          description: "Exclui uma transação existente com registro no log de auditoria.",
+          operationId: "deleteTransaction",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["transaction_id"],
+                  properties: {
+                    transaction_id: { type: "string", description: "ID único da transação a ser excluída" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Transação excluída com sucesso",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+      "/api/v1/tools/get_credit_card_invoices": {
+        get: {
+          summary: "Consultar faturas de cartões de crédito",
+          description: "Retorna faturas abertas e fechadas de todos os cartões de crédito, com datas de vencimento, fechamento e lançamentos vinculados.",
+          operationId: "getCreditCardInvoices",
+          parameters: [
+            {
+              name: "account_id",
+              in: "query",
+              required: false,
+              description: "ID específico do cartão de crédito (opcional)",
+              schema: { type: "string" },
+            },
+            {
+              name: "month",
+              in: "query",
+              required: false,
+              description: "Mês da fatura no formato YYYY-MM (opcional)",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Informações das faturas",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      result: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          security: [{ OAuth2: ["read_write"] }, { BearerAuth: [] }],
+        },
+      },
+    },
+    components: {
+      securitySchemes: {
+        OAuth2: {
+          type: "oauth2",
+          description: "Fluxo de Autorização OAuth 2.0 padrão para ChatGPT Actions e Gemini",
+          flows: {
+            authorizationCode: {
+              authorizationUrl: "https://openmoney.app.br/api/oauth/authorize",
+              tokenUrl: "https://openmoney.app.br/api/oauth/token",
+              scopes: {
+                read_write: "Acesso de leitura e escrita às finanças no OpenMoney",
+              },
+            },
+          },
+        },
+        BearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "opm_live_token",
+          description: "Token de Acesso Pessoal gerado no OpenMoney (ex: opm_live_...)",
+        },
+      },
+    },
+  };
+}
+
+function renderOAuthConsentHtml({ clientId, redirectUri, state, scope, error = "", email = "" }) {
+  const safeClient = String(clientId || "ChatGPT / Assistente de IA")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeEmail = String(email || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeRedirect = String(redirectUri || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeState = String(state || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeScope = String(scope || "read_write")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const errorBanner = error
+    ? `<div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+        ⚠️ ${error}
+       </div>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autorizar Conexão — OpenMoney</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #f8fafc;
+    }
+    .desc {
+      font-size: 13.5px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .client-tag {
+      color: #34d399;
+      font-weight: 600;
+    }
+    .permissions {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 24px;
+    }
+    .permissions-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+    .perm-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+    }
+    .perm-item:last-child { margin-bottom: 0; }
+    .perm-icon { color: #10b981; font-weight: bold; }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+    }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="email"]:focus, input[type="password"]:focus {
+      border-color: #10b981;
+    }
+    .btn-submit {
+      width: 100%;
+      background: #10b981;
+      color: #064e3b;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+    .btn-submit:hover {
+      background: #34d399;
+    }
+    .btn-submit:active {
+      transform: scale(0.99);
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 11.5px;
+      color: #64748b;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="logo-badge">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+          <path d="M12 6v2m0 8v2"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">OpenMoney Cloud</div>
+        <div class="brand-sub">Conector Oficial de IA</div>
+      </div>
+    </div>
+
+    ${errorBanner}
+
+    <h2>Autorizar Conexão</h2>
+    <p class="desc">O assistente <span class="client-tag">${safeClient}</span> está solicitando acesso para interagir com suas finanças pessoais no OpenMoney.</p>
+
+    <div class="permissions">
+      <div class="permissions-title">Permissões Solicitadas:</div>
+      <div class="perm-item">
+        <span class="perm-icon">✓</span>
+        <span>Consultar saldos, faturas e lançamentos financeiros</span>
+      </div>
+      <div class="perm-item">
+        <span class="perm-icon">✓</span>
+        <span>Criar, editar ou excluir lançamentos autorizados</span>
+      </div>
+      <div class="perm-item">
+        <span class="perm-icon">✓</span>
+        <span>Todas as ações geram logs no Histórico de Auditoria</span>
+      </div>
+    </div>
+
+    <form method="POST" action="/api/oauth/authorize">
+      <input type="hidden" name="client_id" value="${safeClient}">
+      <input type="hidden" name="redirect_uri" value="${safeRedirect}">
+      <input type="hidden" name="state" value="${safeState}">
+      <input type="hidden" name="scope" value="${safeScope}">
+
+      <div class="form-group">
+        <label for="email">Seu E-mail no OpenMoney</label>
+        <input type="email" id="email" name="email" value="${safeEmail}" required placeholder="seu@email.com" autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Sua Senha</label>
+        <input type="password" id="password" name="password" required placeholder="••••••••" autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn-submit">Autorizar e Conectar</button>
+    </form>
+
+    <div class="footer-note">
+      🔒 Criptografia ponta a ponta. Você pode revogar o acesso a qualquer momento nas Configurações do OpenMoney.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get("Origin") || "*";
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/\/+$/, "");
+
+  const isPublicOrAi =
+    path.startsWith("/api/mcp") ||
+    path.startsWith("/api/oauth") ||
+    path.startsWith("/api/openapi") ||
+    path.startsWith("/api/v1/tools");
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    return new Response(null, { status: 204, headers: corsHeaders(origin, isPublicOrAi) });
   }
 
   try {
@@ -2608,8 +3207,188 @@ export async function onRequest(context) {
       );
     }
 
-  const url = new URL(request.url);
-  const path = url.pathname.replace(/\/+$/, "");
+  // ==========================================================================
+  // 0.1 GET /api/openapi.json (OpenAPI 3.0 para ChatGPT Custom Actions / Gemini)
+  // ==========================================================================
+  if (path === "/api/openapi.json" && request.method === "GET") {
+    return jsonResponse(getOpenApiSpec(), 200, origin, true);
+  }
+
+  // ==========================================================================
+  // 0.2 GET & POST /api/oauth/authorize (Consentimento OAuth 2.0)
+  // ==========================================================================
+  if (path === "/api/oauth/authorize") {
+    if (request.method === "GET") {
+      const clientId = url.searchParams.get("client_id") || "ChatGPT / Assistente de IA";
+      const redirectUri = url.searchParams.get("redirect_uri") || "";
+      const state = url.searchParams.get("state") || "";
+      const scope = url.searchParams.get("scope") || "read_write";
+      return new Response(
+        renderOAuthConsentHtml({ clientId, redirectUri, state, scope }),
+        { headers: { "Content-Type": "text/html; charset=utf-8" } }
+      );
+    }
+
+    if (request.method === "POST") {
+      let formData;
+      try {
+        formData = await request.formData();
+      } catch (_) {
+        const text = await request.text();
+        formData = new URLSearchParams(text);
+      }
+
+      const email = (formData.get("email") || "").trim().toLowerCase();
+      const password = formData.get("password") || "";
+      const clientId = formData.get("client_id") || "ChatGPT / Assistente de IA";
+      const redirectUri = formData.get("redirect_uri") || "";
+      const state = formData.get("state") || "";
+      const scope = formData.get("scope") || "read_write";
+
+      if (!redirectUri) {
+        return new Response("redirect_uri é obrigatório.", { status: 400 });
+      }
+
+      const user = await env.DB.prepare(
+        "SELECT id, email, name, password_hash, password_salt, failed_attempts, locked_until FROM users WHERE email = ?1"
+      ).bind(email).first();
+
+      let loginError = "";
+      if (!user) {
+        loginError = "E-mail ou senha incorretos.";
+      } else if (user.locked_until && new Date(user.locked_until) > new Date()) {
+        loginError = "Conta temporariamente bloqueada por segurança. Tente em 15 minutos.";
+      } else {
+        const computedHash = await hashPasswordPBKDF2(password, user.password_salt);
+        if (!timingSafeEqual(computedHash, user.password_hash)) {
+          loginError = "E-mail ou senha incorretos.";
+        }
+      }
+
+      if (loginError) {
+        return new Response(
+          renderOAuthConsentHtml({
+            clientId,
+            redirectUri,
+            state,
+            scope,
+            error: loginError,
+            email,
+          }),
+          { status: 401, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+
+      const code = "opm_code_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await env.DB.prepare(
+        "INSERT INTO oauth_codes (code, user_id, client_id, redirect_uri, scope, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+      ).bind(code, user.id, clientId, redirectUri, scope, new Date().toISOString(), expiresAt).run();
+
+      const targetUrl = new URL(redirectUri);
+      targetUrl.searchParams.set("code", code);
+      if (state) targetUrl.searchParams.set("state", state);
+
+      return Response.redirect(targetUrl.toString(), 302);
+    }
+  }
+
+  // ==========================================================================
+  // 0.3 POST /api/oauth/token (Troca de Código por Access Token)
+  // ==========================================================================
+  if (path === "/api/oauth/token" && request.method === "POST") {
+    let params;
+    const contentType = request.headers.get("Content-Type") || "";
+    if (contentType.includes("application/json")) {
+      params = await request.json().catch(() => ({}));
+    } else {
+      const text = await request.text();
+      params = Object.fromEntries(new URLSearchParams(text).entries());
+    }
+
+    const code = (params.code || "").trim();
+    const grantType = params.grant_type;
+    const clientId = params.client_id || "";
+
+    if (grantType !== "authorization_code" || !code) {
+      return jsonResponse(
+        { error: "unsupported_grant_type", error_description: "grant_type deve ser 'authorization_code' e 'code' é obrigatório." },
+        400,
+        origin,
+        true
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const codeRow = await env.DB.prepare(
+      "SELECT code, user_id, client_id, redirect_uri, scope, expires_at FROM oauth_codes WHERE code = ?1 AND expires_at > ?2"
+    ).bind(code, nowIso).first();
+
+    if (!codeRow) {
+      return jsonResponse(
+        { error: "invalid_grant", error_description: "Código de autorização inválido ou expirado." },
+        400,
+        origin,
+        true
+      );
+    }
+
+    await env.DB.prepare("DELETE FROM oauth_codes WHERE code = ?1").bind(code).run().catch(() => {});
+
+    const rawToken = "opm_live_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+    const tokenHash = await sha256Hex(rawToken);
+    const tokenPrefix = rawToken.slice(0, 15) + "...";
+    const tokenId = crypto.randomUUID();
+    const clientName = "OAuth: " + (clientId || "ChatGPT/Gemini AI");
+
+    await env.DB.prepare(
+      "INSERT INTO user_api_tokens (id, user_id, name, token_hash, token_prefix, permissions, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+    ).bind(
+      tokenId,
+      codeRow.user_id,
+      clientName,
+      tokenHash,
+      tokenPrefix,
+      codeRow.scope || "read_write",
+      new Date().toISOString()
+    ).run();
+
+    return jsonResponse(
+      {
+        access_token: rawToken,
+        token_type: "Bearer",
+        expires_in: 31536000,
+        scope: codeRow.scope || "read_write",
+      },
+      200,
+      origin,
+      true
+    );
+  }
+
+  // ==========================================================================
+  // 0.4 GET /api/oauth/userinfo (Informações do Usuário Autenticado)
+  // ==========================================================================
+  if (path === "/api/oauth/userinfo" && request.method === "GET") {
+    const claims = await authenticateRequest(request, env);
+    if (!claims || !claims.sub) {
+      return jsonResponse({ error: "Não autenticado." }, 401, origin, true);
+    }
+    const user = await env.DB.prepare("SELECT id, email, name FROM users WHERE id = ?1").bind(claims.sub).first();
+    if (!user) {
+      return jsonResponse({ error: "Usuário não encontrado." }, 404, origin, true);
+    }
+    return jsonResponse(
+      {
+        sub: user.id,
+        email: user.email,
+        name: user.name || user.email.split("@")[0],
+      },
+      200,
+      origin,
+      true
+    );
+  }
 
   // ==========================================================================
   // 1.0. POST /api/auth/register-request (Envia código de 6 dígitos para o e-mail)
@@ -5387,26 +6166,121 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 11.3 POST /api/mcp (Endpoint MCP stateless via HTTP direto)
+  // 11.3 POST & GET /api/mcp (Transporte MCP Streamable HTTP Oficial)
   // ==========================================================================
-  if (path === "/api/mcp" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    const rpcResponse = await handleJsonRpcRequest(
-      body,
-      {
+  if (path === "/api/mcp") {
+    const mcpProtocol = request.headers.get("MCP-Protocol-Version") || "2024-11-05";
+    const baseHeaders = {
+      ...corsHeaders(origin, true),
+      "MCP-Protocol-Version": mcpProtocol,
+    };
+
+    if (request.method === "GET") {
+      const accept = request.headers.get("Accept") || "";
+      if (accept.includes("text/event-stream") && env.SYNC) {
+        const doId = env.SYNC.idFromName(userId);
+        const stub = env.SYNC.get(doId);
+        return stub.fetch(request);
+      }
+      return new Response(
+        JSON.stringify({
+          name: "openmoney-cloud",
+          version: "2.5.3",
+          protocolVersion: "2024-11-05",
+          transport: "http",
+          status: "ready",
+          description: "OpenMoney Cloud MCP Server (Streamable HTTP)",
+        }),
+        {
+          status: 200,
+          headers: { ...baseHeaders, "Content-Type": "application/json; charset=utf-8" },
+        }
+      );
+    }
+
+    if (request.method === "POST") {
+      const accept = request.headers.get("Accept") || "";
+      const body = await request.json().catch(() => ({}));
+      const rpcResponse = await handleJsonRpcRequest(
+        body,
+        {
+          userId,
+          permissions: claims.permissions || "read_write",
+          tokenId: claims.tokenId || null,
+        },
+        env,
+        origin,
+        null
+      );
+
+      // Notificação (ex: notifications/initialized) -> 202 Accepted
+      if (!rpcResponse) {
+        return new Response(null, {
+          status: 202,
+          headers: baseHeaders,
+        });
+      }
+
+      // Se o cliente solicitou text/event-stream explicitamente
+      if (accept.includes("text/event-stream") && !accept.includes("application/json;q=1")) {
+        const sseData = `event: message\ndata: ${JSON.stringify(rpcResponse)}\n\n`;
+        return new Response(sseData, {
+          status: 200,
+          headers: {
+            ...baseHeaders,
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+          },
+        });
+      }
+
+      // Resposta padrão JSON-RPC sobre HTTP
+      return new Response(JSON.stringify(rpcResponse), {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 12. REST Tools Endpoints para ChatGPT Actions / OpenAPI / Gemini
+  // ==========================================================================
+  if (path.startsWith("/api/v1/tools/")) {
+    let toolName = path.replace("/api/v1/tools/", "").trim();
+    if (!toolName.startsWith("openmoney_")) {
+      toolName = "openmoney_" + toolName;
+    }
+
+    let toolArgs = {};
+    if (request.method === "GET") {
+      for (const [key, value] of url.searchParams.entries()) {
+        toolArgs[key] = value;
+      }
+    } else if (request.method === "POST") {
+      toolArgs = await request.json().catch(() => ({}));
+    }
+
+    try {
+      const result = await executeMcpTool(
+        toolName,
+        toolArgs,
         userId,
-        permissions: claims.permissions || "read_write",
-        tokenId: claims.tokenId || null,
-      },
-      env,
-      origin,
-      null
-    );
-    return jsonResponse(
-      rpcResponse || { jsonrpc: "2.0", id: body.id, result: {} },
-      200,
-      origin
-    );
+        claims.permissions || "read_write",
+        env,
+        claims.tokenId || null
+      );
+      return jsonResponse({ ok: true, result }, 200, origin, true);
+    } catch (e) {
+      return jsonResponse(
+        { ok: false, error: e && e.message ? e.message : String(e) },
+        400,
+        origin,
+        true
+      );
+    }
   }
 
     return jsonResponse({ error: "Rota não encontrada." }, 404, origin);

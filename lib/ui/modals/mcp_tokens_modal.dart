@@ -171,11 +171,13 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
 
   void _showTokenCreatedDialog(OpenMoneyColors colors, Map<String, dynamic> tokenData) {
     final fullToken = tokenData['token']?.toString() ?? '';
-    final mcpUrl = 'https://openmoney.app.br/api/mcp/sse';
+    const mcpUrl = 'https://openmoney.app.br/api/mcp';
+    const openApiUrl = 'https://openmoney.app.br/api/openapi.json';
 
-    final claudeConfigSnippet = jsonEncode({
+    final claudeConfigSnippet = const JsonEncoder.withIndent('  ').convert({
       'mcpServers': {
         'openmoney': {
+          'type': 'http',
           'url': mcpUrl,
           'headers': {
             'Authorization': 'Bearer $fullToken',
@@ -260,7 +262,7 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                 ),
               ),
               const SizedBox(height: 14),
-              Text('Configuração para o Claude Desktop (claude_desktop_config.json):',
+              Text('Configuração para o Claude Desktop (Streamable HTTP):',
                   style: TextStyle(fontSize: 11.5, color: colors.textSecondary)),
               const SizedBox(height: 4),
               Container(
@@ -280,11 +282,48 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                     const SizedBox(height: 6),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.copy, size: 14),
-                      label: const Text('Copiar Bloco JSON para o Claude Desktop', style: TextStyle(fontSize: 11)),
+                      label: const Text('Copiar JSON para o Claude Desktop', style: TextStyle(fontSize: 11)),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: claudeConfigSnippet));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Configuração JSON copiada!')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text('ChatGPT (Custom GPT Actions) & Gemini:',
+                  style: TextStyle(fontSize: 11.5, color: colors.textSecondary)),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: colors.bgPrimary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colors.borderGlass),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'No Custom GPT ou Gemini, importe a URL OpenAPI e conecte via Token Bearer ou OAuth 2.0:',
+                      style: TextStyle(fontSize: 10.5),
+                    ),
+                    const SizedBox(height: 6),
+                    const SelectableText(
+                      openApiUrl,
+                      style: TextStyle(fontFamily: 'monospace', fontSize: 10.5, color: Colors.blueAccent),
+                    ),
+                    const SizedBox(height: 6),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.copy, size: 14),
+                      label: const Text('Copiar URL OpenAPI (ChatGPT / Gemini)', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        Clipboard.setData(const ClipboardData(text: openApiUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL OpenAPI copiada!')),
                         );
                       },
                     ),
@@ -401,9 +440,9 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
               ),
             ),
 
-            // Banner explicativo do endpoint
+            // Banner explicativo dos endpoints
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -411,35 +450,72 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: colors.borderGlass),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    const Icon(Icons.link_rounded, color: Colors.blueAccent, size: 20),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Endpoint Oficial MCP (SSE):',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    Row(
+                      children: [
+                        const Icon(Icons.hub_rounded, color: Colors.blueAccent, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Endpoint MCP Oficial (Streamable HTTP):',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 2),
+                              SelectableText(
+                                'https://openmoney.app.br/api/mcp',
+                                style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.blueAccent),
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 2),
-                          SelectableText(
-                            'https://openmoney.app.br/api/mcp/sse',
-                            style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.blueAccent),
-                          ),
-                        ],
-                      ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, size: 16),
+                          tooltip: 'Copiar Endpoint MCP',
+                          onPressed: () {
+                            Clipboard.setData(const ClipboardData(text: 'https://openmoney.app.br/api/mcp'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Endpoint MCP copiado!')),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 16),
-                      tooltip: 'Copiar URL do MCP',
-                      onPressed: () {
-                        Clipboard.setData(const ClipboardData(text: 'https://openmoney.app.br/api/mcp/sse'));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('URL do MCP copiada!')),
-                        );
-                      },
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_awesome, color: Colors.green, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'OpenAPI Spec (ChatGPT Actions & Gemini):',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 2),
+                              SelectableText(
+                                'https://openmoney.app.br/api/openapi.json',
+                                style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.green),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, size: 16),
+                          tooltip: 'Copiar URL OpenAPI',
+                          onPressed: () {
+                            Clipboard.setData(const ClipboardData(text: 'https://openmoney.app.br/api/openapi.json'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('URL OpenAPI copiada!')),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -483,7 +559,7 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                           : ListView.separated(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               itemCount: _tokens.length,
-                              separatorBuilder: (_, __) => Divider(height: 1, color: colors.borderGlass),
+                              separatorBuilder: (_, _) => Divider(height: 1, color: colors.borderGlass),
                               itemBuilder: (ctx, idx) {
                                 final tok = _tokens[idx];
                                 final name = tok['name']?.toString() ?? 'Token';
