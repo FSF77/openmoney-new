@@ -65,6 +65,7 @@ Estrutura principal do arquivo `openmoney.json`.
 | `budgets` | `Map<String, Int>` | Sim | `{}` | Mapeamento de limite de gastos mensais planejados por categoria, onde a chave é o `path` da categoria e o valor é o teto em centavos. | Chave mapeia para `CategoryItem.path` |
 | `comments` | `Map<String, String>` | Não | `{}` | Dicionário de comentários e anotações do usuário na linha "Saldo Final Acumulado" do Fluxo de Caixa, indexado pela chave do período (`YYYY-MM`, `YYYY`, `YYYY-MM-DD`, etc.). Omitido do JSON quando vazio. | Chave mapeia para `CashFlowColumnDef.id` |
 | `predMode` | `String` | Não | `"month"` | Modo de abatimento de lançamentos de previsão contra gastos reais: `"month"` (por mês de calendário) ou `"invoice"` (por ciclo de fatura de cartão). | — |
+| `predMonths` | `Int` | Não | `3` | Quantidade de meses para abatimento de lançamentos de previsão contra gastos reais (valores aceitos: `1`, `2`, `3`, `6` ou `12`). | — |
 | `baseCurrency` | `String?` | Não | `"BRL"` | Moeda padrão/base de consolidação financeira do sistema (ex: `"BRL"`, `"USD"`, `"EUR"`). | Referencia catálogo `SUPPORTED_CURRENCIES` |
 | `rates` | `Map<String, CurrencyRateInfo>?` | Não | `{}` | Cotações correntes persistidas em relação ao `BRL`, indexadas pelo código ISO da moeda (`"USD"`, `"EUR"`, etc.). | Contém `rate`, `updatedAt`, `manual` (e `source` opcional) |
 | `tags` | `List<String>` | Não | `[]` | Catálogo global de tags personalizadas criadas pelo usuário (ou registradas ao salvar lançamentos). Omitido do JSON quando vazio. | Referenciado por `Transaction.tags` e Sync v2 (`tags/<nome>`) |
@@ -103,6 +104,7 @@ Representa qualquer custódia de valor monetário: conta corrente, carteira fís
 | `comments` | `String?` | Não | `null` | Anotações livres, instruções de uso ou observações do usuário sobre a conta. | Texto livre. |
 | `minBalance` | `Int?` | Não | `null` | Limite de saldo mínimo desejado em centavos inteiros para alerta de saldo baixo no painel. | Alerta visual de liquidez. |
 | `logo` | `String?` | Não | `null` | Identificador textual do ícone/logo da instituição bancária para estilização no Design System. | Renderização de assets visuais. |
+| `walletAliases` | `List<String>?` | Não | `null` | Lista de apelidos ou identificadores alternativos da conta utilizados para reconhecimento automático em importações de extratos e carteiras digitais (ex: Apple Wallet, Cartão Virtual). Omitido do JSON quando vazio. | Reconhecimento inteligente de conta durante importações. |
 | `currency` | `String?` | Não | `"BRL"` | Código ISO 4217 da moeda operacional da conta (ex: `"BRL"`, `"USD"`, `"EUR"`, `"PYG"`, `"CAD"`, `"AUD"`). | Define a moeda de `opening` e de todas as transações da conta. |
 
 ---
@@ -296,74 +298,158 @@ Quando um relatório mensal/anual ou fluxo de caixa é filtrado para uma única 
 
 ## ☁️ 13. Estruturas de Dados na Nuvem (Cloudflare D1 Multi-User Schema)
 
-Tabelas relacionais mantidas no banco de dados SQLite serverless (**Cloudflare D1**) para autenticação, sincronização em tempo real e auditoria:
+Tabelas relacionais mantidas no banco de dados SQLite serverless (**Cloudflare D1**) para autenticação, sincronização em tempo real (Sync v2), auditoria, integrações externas e conector MCP (Model Context Protocol):
 
 ### 1. `users` (Tabela de Usuários)
+Armazena as contas registradas de usuários no ecossistema OpenMoney Cloud.
 * `id` (`TEXT PRIMARY KEY`): Identificador único do usuário (`usr_...`).
-* `email` (`TEXT UNIQUE NOT NULL`): E-mail do titular em minúsculas.
+* `email` (`TEXT UNIQUE NOT NULL`): E-mail do titular em minúsculas (normalizado).
 * `name` (`TEXT NOT NULL`): Nome de exibição do usuário.
 * `password_hash` (`TEXT NOT NULL`): Hash da senha gerado com PBKDF2-HMAC-SHA256 (100.000 iterações).
 * `password_salt` (`TEXT NOT NULL`): Salt criptográfico aleatório em base64.
-* `failed_attempts` (`INTEGER NOT NULL DEFAULT 0`): Contador de tentativas de login falhas (bloqueio temporário anti-força bruta).
+* `failed_attempts` (`INTEGER NOT NULL DEFAULT 0`): Contador de tentativas de login falhas consecutivas (bloqueio temporário anti-força bruta).
 * `locked_until` (`TEXT`): Data ISO 8601 até quando a conta está bloqueada após tentativas excedidas.
 * `created_at` (`TEXT NOT NULL`): Data e hora de criação da conta (ISO 8601).
-* `last_login_at` (`TEXT`): Data e hora do último acesso autenticado.
+* `last_login_at` (`TEXT`): Data e hora do último acesso autenticado com sucesso.
 
 ### 2. `user_databases` (Snapshot Principal da Base)
-* `user_id` (`TEXT PRIMARY KEY`): Chave estrangeira referenciando `users(id)` com cascata de exclusão.
-* `schema_version` (`INTEGER NOT NULL DEFAULT 7`): Versão do schema (atualmente `7`).
+Armazena o snapshot consolidado da base `openmoney.json` criptografado em repouso por usuário.
+* `user_id` (`TEXT PRIMARY KEY`): Chave estrangeira referenciando `users(id)` com cascata de exclusão (`ON DELETE CASCADE`).
+* `schema_version` (`INTEGER NOT NULL DEFAULT 7`): Versão do schema dos dados (atualmente `7`).
 * `revision` (`INTEGER NOT NULL DEFAULT 1`): Número de revisão monotônico do snapshot.
-* `payload` (`TEXT NOT NULL`): JSON criptografado com AES-256-GCM contendo a base `openmoney.json`.
-* `preferences` (`TEXT NOT NULL DEFAULT '{}'`): Preferências de interface e filtros.
-* `updated_at` (`TEXT NOT NULL`): Timestamp da última atualização.
+* `payload` (`TEXT NOT NULL`): JSON criptografado com AES-256-GCM contendo a base `openmoney.json` (ou ponteiro `chunked:v3:...` caso exceda o limite monobloco).
+* `preferences` (`TEXT NOT NULL DEFAULT '{}'`): Preferências de interface, filtros e personalizações de visualização.
+* `updated_at` (`TEXT NOT NULL`): Timestamp ISO 8601 da última atualização.
 
-### 3. `user_database_chunks` (Suporte a Bases Grandes > 10MB)
-* `user_id` (`TEXT NOT NULL`): Identificador do usuário.
-* `chunk_index` (`INTEGER NOT NULL`): Índice do fragmento (base 0).
+### 3. `user_database_chunks` (Fragmentos de Bases Grandes > 10MB)
+Armazena pedaços de bases grandes que excedem os limites unitários de linha do SQLite/D1.
+* `user_id` (`TEXT NOT NULL`): Chave estrangeira referenciando `users(id)` com exclusão em cascata.
+* `chunk_index` (`INTEGER NOT NULL`): Índice sequencial do fragmento (base 0).
 * `chunk_data` (`TEXT NOT NULL`): Bloco de até 380 KB do payload criptografado.
-* `PRIMARY KEY (user_id, chunk_index)`.
+* **Chave Primária:** `PRIMARY KEY (user_id, chunk_index)`.
 
 ### 4. `user_database_backups` (Snapshots Automáticos na Nuvem — 3 a 4x ao Dia)
-* `id` (`TEXT PRIMARY KEY`): Identificador do backup (`<userId>_<YYYY-MM-DD>_<slot>`).
-* `user_id` (`TEXT NOT NULL`): Chave estrangeira referenciando `users(id)`.
+Histórico versionado de segurança da base do usuário mantido na nuvem com retenção de segurança.
+* `id` (`TEXT PRIMARY KEY`): Identificador único do backup (`<userId>_<YYYY-MM-DD>_<slot>`).
+* `user_id` (`TEXT NOT NULL`): Chave estrangeira referenciando `users(id)` com exclusão em cascata.
 * `backup_date` (`TEXT NOT NULL`): Data e hora local de referência (`YYYY-MM-DD HH:mm`, ou legado `YYYY-MM-DD`).
-* `revision` (`INTEGER NOT NULL`): Revisão da base no momento do snapshot.
-* `size_bytes` (`INTEGER NOT NULL`): Tamanho em bytes da base.
-* `payload` (`TEXT NOT NULL`): Cópia criptografada da base (ou marcador `chunked:v3:...`) no momento correspondente.
-* `created_at` (`TEXT NOT NULL`): Timestamp ISO-8601 UTC de geração.
-* `UNIQUE (user_id, backup_date)`.
+* `revision` (`INTEGER NOT NULL`): Revisão da base no momento em que o snapshot foi gravado.
+* `size_bytes` (`INTEGER NOT NULL`): Tamanho exato em bytes da base de dados.
+* `payload` (`TEXT NOT NULL`): Cópia criptografada da base no momento correspondente.
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO-8601 UTC de geração do backup.
+* **Restrição:** `UNIQUE (user_id, backup_date)`.
 
-### 5. `user_sync_meta`, `user_sync_records` e `user_sync_ops` (Sync v2 em Tempo Real)
-* `user_sync_meta`: Mantém a sequência monotônica global `seq` e os ponteiros de compactação.
-* `user_sync_records`: Registro granular por entidade (`coll` + `record_id`) contendo `encrypted_data` (AES-256-GCM), flag `deleted` e sequência `seq`.
-* `user_sync_ops`: Chaves de idempotência `op_id` com TTL para prevenção de duplicações.
+### 5. `password_reset_tokens` (Recuperação de Senha)
+Armazena tokens de validação de redefinição de senha com expiração rápida.
+* `id` (`TEXT PRIMARY KEY`): Identificador único do token de recuperação (`rst_...`).
+* `user_id` (`TEXT NOT NULL`): Identificador do usuário solicitante.
+* `email` (`TEXT NOT NULL`): E-mail do usuário de destino.
+* `code_hash` (`TEXT NOT NULL`): Hash SHA-256 HMAC do código de redefinição.
+* `created_at` (`TEXT NOT NULL`): Timestamp de emissão.
+* `expires_at` (`TEXT NOT NULL`): Timestamp de expiração (15 minutos).
+* `attempts` (`INTEGER NOT NULL DEFAULT 0`): Tentativas de validação incorretas.
+* `used` (`INTEGER NOT NULL DEFAULT 0`): Flag de consumo único (0 = ativo, 1 = utilizado).
 
-### 6. `user_audit_logs` (Histórico de Auditoria e Alterações)
-* `id` (`TEXT PRIMARY KEY`): Identificador do registro (`aud_...`).
+### 6. `email_verification_tokens` (Confirmação de Cadastro e Troca de E-mail)
+Tokens de uso único de 6 dígitos para validação de identidade por e-mail.
+* `id` (`TEXT PRIMARY KEY`): Identificador único do token (`reg_...`, `chg_...`).
+* `user_id` (`TEXT`): Identificador do usuário (presente em alteração de e-mail; nulo em cadastros novos).
+* `email` (`TEXT NOT NULL`): Endereço de e-mail alvo da confirmação.
+* `type` (`TEXT NOT NULL`): Tipo de fluxo operacional (`"register"`, `"change_email"`).
+* `code_hash` (`TEXT NOT NULL`): Hash SHA-256 HMAC do código de 6 dígitos gerado com segredo mestre.
+* `pending_payload` (`TEXT`): Dados temporários em espera (ex: senha criptografada durante cadastro).
+* `created_at` (`TEXT NOT NULL`): Timestamp de emissão.
+* `expires_at` (`TEXT NOT NULL`): Timestamp de expiração (15 minutos após emissão).
+* `attempts` (`INTEGER NOT NULL DEFAULT 0`): Contador de tentativas incorretas de digitação do código.
+* `used` (`INTEGER NOT NULL DEFAULT 0`): Flag de consumo (0 = ativo, 1 = utilizado).
+* **Índice:** `idx_email_verification_tokens ON email_verification_tokens (email, type, used)`.
+
+### 7. `user_sync_meta` (Metadados Monotônicos do Sync v2)
+Controla a sequência monotônica global `seq` e os marcadores de compactação por conta.
+* `user_id` (`TEXT PRIMARY KEY`): Chave do usuário proprietário da base.
+* `seq` (`INTEGER NOT NULL DEFAULT 1`): Último número de sequência monotônico incremental de mutação.
+* `base_seq` (`INTEGER NOT NULL DEFAULT 1`): Número de sequência base de compactação.
+* `snapshot_seq` (`INTEGER NOT NULL DEFAULT 1`): Sequência na qual o último snapshot integral foi compilado.
+* `updated_at` (`TEXT NOT NULL`): Timestamp ISO 8601 da última mutação registrada.
+
+### 8. `user_sync_records` (Registro Granular por Entidade — Deltas Reais)
+Tabela principal de deltas do Sync v2. Cada linha representa uma entidade específica (`tx`, `acc`, `cat`, etc.).
+* `user_id` (`TEXT NOT NULL`): Identificador do usuário proprietário.
+* `coll` (`TEXT NOT NULL`): Nome da coleção (`"tx"`, `"acc"`, `"cat"`, `"rec"`, `"budget"`, `"comment"`, `"tag"`, `"pref"`).
+* `record_id` (`TEXT NOT NULL`): Identificador único do registro dentro da coleção.
+* `encrypted_data` (`TEXT`): Payload JSON individual criptografado com AES-256-GCM. Nulo quando `deleted == 1`.
+* `deleted` (`INTEGER NOT NULL DEFAULT 0`): Indicador de exclusão lógica (tombstone: `1` se deletado, `0` se ativo).
+* `seq` (`INTEGER NOT NULL`): Sequência monotônica na qual esta mutação foi gravada.
+* `updated_at` (`TEXT NOT NULL`): Timestamp ISO 8601 da modificação.
+* **Chave Primária:** `PRIMARY KEY (user_id, coll, record_id)`.
+* **Índice:** `idx_user_sync_records_seq ON user_sync_records (user_id, seq)`.
+
+### 9. `user_sync_ops` (Idempotência e Prevenção de Duplicidades)
+Registra identificadores de operações (`op_id`) para prevenir que reconexões processem a mesma mutação repetida.
+* `user_id` (`TEXT NOT NULL`): Identificador do usuário proprietário.
+* `op_id` (`TEXT NOT NULL`): Identificador único da mutação gerado no cliente (`UUID`).
+* `seq` (`INTEGER NOT NULL`): Sequência atribuída à operação pelo servidor.
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO 8601 da operação.
+* **Chave Primária:** `PRIMARY KEY (user_id, op_id)`.
+
+### 10. `user_audit_logs` (Histórico de Auditoria e Alterações)
+Rastreabilidade detalhada de todas as mutações na base (feitas pelo app ou via agentes/MCP).
+* `id` (`TEXT PRIMARY KEY`): Identificador único do registro de auditoria (`aud_...`).
 * `user_id` (`TEXT NOT NULL`): Identificador do usuário proprietário.
 * `action` (`TEXT NOT NULL`): Tipo de ação realizada (`"create"`, `"update"`, `"delete"`, `"batchDelete"`, `"importBatch"`).
-* `entity` (`TEXT NOT NULL`): Entidade auditada (`"transaction"`, `"account"`, `"category"`).
+* `entity` (`TEXT NOT NULL`): Entidade auditada (`"transaction"`, `"account"`, `"category"`, `"mcp_access"`).
 * `target_id` (`TEXT`): Identificador da entidade afetada (ex: `txId`, `accId`).
-* `summary` (`TEXT NOT NULL`): Texto legível descritivo da alteração financeira.
-* `details` (`TEXT`): Objeto JSON stringificado com dados anteriores ou metadados da operação.
+* `summary` (`TEXT NOT NULL`): Descrição legível em texto da alteração financeira (ex: `"[MCP Remoto] Criou despesa..."`).
+* `details` (`TEXT`): Objeto JSON stringificado com dados anteriores ou metadados complementares da operação.
 * `created_at` (`TEXT NOT NULL`): Data e hora ISO 8601 do evento.
 * **Índice:** `idx_audit_user_created ON user_audit_logs (user_id, created_at DESC)`.
 * **Retenção:** Política de expurgo automático de registros com mais de 30 dias.
 
-### 7. `email_verification_tokens` (Tokens de Confirmação de 6 Dígitos)
-* `id` (`TEXT PRIMARY KEY`): Identificador do token (`reg_...`, `chg_...`).
-* `user_id` (`TEXT`): Identificador do usuário (se aplicável).
-* `email` (`TEXT NOT NULL`): Endereço de e-mail alvo da confirmação.
-* `type` (`TEXT NOT NULL`): Tipo de fluxo (`"register"`, `"change_email"`).
-* `code_hash` (`TEXT NOT NULL`): Hash SHA-256 HMAC do código de 6 dígitos com o segredo mestre.
-* `pending_payload` (`TEXT`): Dados temporários em espera (ex: senha criptografada durante cadastro).
-* `created_at` (`TEXT NOT NULL`): Data de emissão.
-* `expires_at` (`TEXT NOT NULL`): Data de expiração (15 minutos após a emissão).
-* `used` (`INTEGER NOT NULL DEFAULT 0`): Flag de consumo único (0 = ativo, 1 = utilizado).
+### 11. `user_ai_usage` (Controle de Quota de IA)
+Monitoramento do volume de requisições de IA e categorização automática por usuário/dia.
+* `user_id` (`TEXT NOT NULL`): Identificador do usuário proprietário.
+* `usage_date` (`TEXT NOT NULL`): Data de competência no formato `YYYY-MM-DD`.
+* `request_count` (`INTEGER NOT NULL DEFAULT 0`): Quantidade de requisições executadas no dia.
+* **Chave Primária:** `PRIMARY KEY (user_id, usage_date)`.
+
+### 12. `user_api_tokens` (Tokens de Acesso Externo & Servidor MCP)
+Gerencia as chaves de API e tokens Bearer criados para conectores MCP (Gemini, ChatGPT, Claude, LM Studio, Cursor, Agentes).
+* `id` (`TEXT PRIMARY KEY`): Identificador único do token (`tok_...`).
+* `user_id` (`TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE`): Usuário titular da chave.
+* `name` (`TEXT NOT NULL`): Nome amigável de identificação atribuído pelo usuário (ex: `"Claude Desktop"`, `"Gemini"`, `"ChatGPT Conector"`).
+* `token_hash` (`TEXT NOT NULL`): Hash criptográfico **SHA-256** do segredo `opm_live_...`. O segredo original nunca é persistido no banco.
+* `token_prefix` (`TEXT NOT NULL`): Prefixo de identificação visual da chave (ex: `opm_live_abcd...`).
+* `permissions` (`TEXT NOT NULL DEFAULT 'read_write'`): Escopo de permissão concedido (`'read_write'` para leitura e escrita, ou `'read_only'` para somente leitura).
+* `last_used_at` (`TEXT`): Timestamp ISO 8601 do último acesso registrado via MCP/API.
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO 8601 da criação do token.
+* **Índices:**
+  - `idx_api_tokens_hash ON user_api_tokens (token_hash)` (busca instantânea em O(1) na autenticação).
+  - `idx_api_tokens_user ON user_api_tokens (user_id)` (listagem rápida no painel de configurações).
+
+### 13. `oauth_codes` (Autorizações OAuth 2.1 PKCE)
+Tabela temporária de códigos de autorização OAuth 2.1 emitidos para assistentes externos que utilizam autenticação dinâmica (ChatGPT, Gemini).
+* `code` (`TEXT PRIMARY KEY`): Código de autorização seguro e criptograficamente forte gerado na tela de consentimento.
+* `user_id` (`TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE`): Usuário que autorizou a conexão.
+* `client_id` (`TEXT NOT NULL`): Identificador do cliente registrado (via RFC 7591 Dynamic Client Registration ou fixo).
+* `redirect_uri` (`TEXT NOT NULL`): URI de redirecionamento validada durante o handshake OAuth.
+* `scope` (`TEXT NOT NULL DEFAULT 'read_write'`): Escopo autorizado pelo usuário (`'read_write'` ou `'read_only'`).
+* `created_at` (`TEXT NOT NULL`): Data e hora ISO 8601 da emissão.
+* `expires_at` (`TEXT NOT NULL`): Timestamp ISO 8601 de expiração do código (tempo de vida estrito de 10 minutos).
+* **Índice:** `idx_oauth_codes_expires ON oauth_codes (expires_at)` (expurgo automático de códigos expirados).
+
+### 14. `mcp_debug_logs` (Diagnóstico de Protocolo e Conexões MCP)
+Logs temporários e anônimos mantidos na nuvem para diagnóstico de falhas de transporte (ex.: SSE vs Streamable HTTP) e sondagens de clientes de IA.
+* `id` (`INTEGER PRIMARY KEY AUTOINCREMENT`): Identificador sequencial do log.
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO 8601 do evento.
+* `method` (`TEXT NOT NULL`): Método HTTP recebido (`GET`, `POST`, `HEAD`, `OPTIONS`, `DELETE`).
+* `path` (`TEXT NOT NULL`): Caminho requisitado (`/api/mcp`, `/api/oauth/token`, etc.).
+* `status` (`INTEGER NOT NULL`): Código de resposta HTTP retornado (ex: `200`, `405`, `401`).
+* `user_agent` (`TEXT`): Cabeçalho User-Agent do cliente (ex: Google-Gemini, Claude, ChatGPT).
+* `note` (`TEXT`): Informações de diagnóstico resumidas (sem dados confidenciais do usuário).
 
 ---
 
-## Estrutura de Arquivos Locais e Estado de Sincronização (Cliente)
+## 💾 14. Estrutura de Arquivos Locais e Estado de Sincronização (Cliente)
 
 Além da base `openmoney.json`, os clientes mantêm artefatos locais para configurações e resiliência offline do Sync v2 (ver [ADR 025](../adr/025-sync-kv-store-local-persistence.md)):
 
