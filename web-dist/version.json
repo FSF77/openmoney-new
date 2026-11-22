@@ -3,26 +3,26 @@
   "version": "2.5.5",
   "web": {
     "version": "2.5.5",
-    "build": 161,
+    "build": 162,
     "releaseDate": "22/11/2026"
   },
-  "build": 161,
+  "build": 162,
   "notes": "Opção de configurar servidor MCP disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, Assistente IA, você pode usar sua IA para analise dos dados, Anteriores: Campo de valor com calculadora dinâmica. Importar extrato OFX para conciliação, Backup automático com 4 snapshots diários, classificar lançamentos por tags, tela de lançamentos gerais com edição em lotes, Acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
   "releaseDate": "22/11/2026",
   "windows": {
-    "build": 158,
-    "version": "2.5.4",
+    "build": 161,
+    "version": "2.5.5",
     "sizeMb": 14,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.4.zip",
-    "sha256": "b3a3e07ccb34578472f2736ac808a3fac775569a1ea72b68e2545db50d2171c6",
-    "releaseDate": "21/11/2026"
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.5.zip",
+    "sha256": "ce51864aa47d05cc01c1794ed68d497bc25e742abf182f961f63a615a7472f90",
+    "releaseDate": "22/11/2026"
   },
   "macos": {
     "version": "2.5.5",
-    "build": 161,
+    "build": 162,
     "releaseDate": "22/11/2026",
     "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.5.zip",
-    "sha256": "64f282f58b61d75db0fbda365de3ebe45f3e982b5deff9efd68fcdcc8c071e70",
+    "sha256": "e9693792f3a4e93d5372d09d3fcb4d4a9b5365f515f65711accebbcd4484d1d5",
     "sizeMb": 12
   },
   "title": "OpenMoney Flutter v2.5.5"

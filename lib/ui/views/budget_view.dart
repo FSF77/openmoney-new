@@ -49,6 +49,24 @@ class BudgetView extends StatelessWidget {
     );
   }
 
+  Widget _buildOverLimitBadge(OpenMoneyColors colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: colors.expense,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'ACIMA DO LIMITE',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -76,6 +94,30 @@ class BudgetView extends StatelessWidget {
 
     int totalPlanned = 0;
     int totalSpent = 0;
+    for (final top in topExpenseCats) {
+      final subs = store
+          .subCategories(top.name, type: 'Despesa')
+          .where((sub) => store.isCategoryIncludedInReports(sub.path))
+          .toList();
+      final topBudget = store.db.budgets[top.path] ?? 0;
+      final topSpent = spentByPath[top.path] ?? 0;
+
+      int childrenBudgetSum = 0;
+      int childrenSpentSum = 0;
+      for (final sub in subs) {
+        childrenBudgetSum += store.db.budgets[sub.path] ?? 0;
+        childrenSpentSum += spentByPath[sub.path] ?? 0;
+      }
+
+      final effectiveTopBudget =
+          topBudget > 0 ? topBudget : childrenBudgetSum;
+      final effectiveTopSpent = topSpent + childrenSpentSum;
+
+      totalPlanned += effectiveTopBudget;
+      totalSpent += effectiveTopSpent;
+    }
+
+    final totalRemaining = totalPlanned - totalSpent;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
@@ -124,6 +166,50 @@ class BudgetView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, c) {
+            final isWide = c.maxWidth >= 720;
+            final w = isWide ? (c.maxWidth - 24) / 3 : (c.maxWidth - 12) / 2;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: w,
+                  child: KpiMetricCard(
+                    label: 'Limite Previsto',
+                    value: formatCurrency(totalPlanned, baseCur),
+                    valueColor: colors.textPrimary,
+                    icon: Icons.track_changes,
+                  ),
+                ),
+                SizedBox(
+                  width: w,
+                  child: KpiMetricCard(
+                    label: 'Realizado',
+                    value: formatCurrency(totalSpent, baseCur),
+                    valueColor: (totalPlanned > 0 && totalSpent > totalPlanned)
+                        ? colors.expense
+                        : colors.warning,
+                    icon: Icons.call_made,
+                  ),
+                ),
+                SizedBox(
+                  width: isWide ? w : c.maxWidth,
+                  child: KpiMetricCard(
+                    label: 'Saldo',
+                    value: formatCurrency(totalRemaining, baseCur),
+                    valueColor: totalRemaining >= 0
+                        ? colors.income
+                        : colors.expense,
+                    icon: Icons.account_balance_wallet,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
         ...topExpenseCats.map((top) {
           final subs = store
               .subCategories(top.name, type: 'Despesa')
@@ -142,9 +228,6 @@ class BudgetView extends StatelessWidget {
           final effectiveTopBudget =
               topBudget > 0 ? topBudget : childrenBudgetSum;
           final effectiveTopSpent = topSpent + childrenSpentSum;
-
-          totalPlanned += effectiveTopBudget;
-          totalSpent += effectiveTopSpent;
 
           final isOver = effectiveTopBudget > 0 &&
               effectiveTopSpent > effectiveTopBudget;
@@ -180,11 +263,7 @@ class BudgetView extends StatelessWidget {
                                 fontSize: 14,
                               ),
                             ),
-                            if (isOver)
-                              StatusBadge(
-                                text: 'ACIMA DO LIMITE',
-                                color: colors.expense,
-                              ),
+                            if (isOver) _buildOverLimitBadge(colors),
                           ],
                         ),
                         Text(
@@ -253,11 +332,7 @@ class BudgetView extends StatelessWidget {
                                           color: colors.textSecondary,
                                         ),
                                       ),
-                                      if (subOver)
-                                        StatusBadge(
-                                          text: 'ACIMA DO LIMITE',
-                                          color: colors.expense,
-                                        ),
+                                      if (subOver) _buildOverLimitBadge(colors),
                                     ],
                                   ),
                                   Text(

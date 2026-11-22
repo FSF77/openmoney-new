@@ -4,12 +4,18 @@ O módulo de **Limite de Gastos** do OpenMoney permite planejar tetos mensais de
 
 ---
 
-## 1. Como Definir os Limites Mensais
+## 1. Como Definir e Acompanhar os Limites Mensais
 
 1. Acesse o menu **Limite de Gastos** na barra lateral.
 2. Selecione o mês de referência no seletor de competência.
-3. Clique sobre o valor da categoria ou subcategoria que deseja configurar.
-4. Digite o teto mensal desejado em reais (moeda padrão) e clique em **Salvar Limite**.
+3. **Painel Superior de Métricas (Cards de Fácil Visualização):**
+   - **Limite Previsto:** Soma total de todos os tetos de gastos configurados para o mês selecionado.
+   - **Realizado:** Total efetivamente despendido no mês nas categorias orçadas.
+   - **Saldo:** Diferença entre o limite previsto e o total realizado. Se o gasto exceder o teto, o saldo é apresentado em destaque vermelho.
+4. **Listagem e Status por Categoria:**
+   - Clique sobre o valor da categoria ou subcategoria que deseja configurar.
+   - Digite o teto mensal desejado em reais (moeda padrão) e clique em **Salvar Limite**.
+   - **Tag "ACIMA DO LIMITE":** Quando os gastos acumulados de uma categoria ou subcategoria ultrapassam o teto estabelecido, o sistema exibe uma tag compacta vermelha **`ACIMA DO LIMITE`** ao lado do nome da categoria (no mesmo padrão visual compacto e discreto da gestão de previsões), permitindo identificar imediatamente despesas que estouraram o orçamento.
    - **Categorias com subcategorias**: Você pode definir o limite individualmente em cada subcategoria ou no total da categoria pai. As categorias principais totalizam automaticamente as subcategorias.
 
 ---
