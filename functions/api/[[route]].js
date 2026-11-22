@@ -1985,42 +1985,111 @@ const MCP_TOOLS = [
   },
 ];
 
-async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
-  if (name === "openmoney_get_financial_overview") {
-    const { db } = await loadDecryptedUserDatabase(env, userId);
-    const targetMonth = (
-      args.month || new Date().toISOString().slice(0, 7)
-    ).trim();
+function addMonthsYMJs(ym, delta) {
+  const parts = String(ym || "").split("-");
+  const y = Number(parts[0]) || new Date().getUTCFullYear();
+  const m = Number(parts[1]) || 1;
+  const total = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}`;
+}
 
-    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
-    const txs = Array.isArray(db.txs) ? db.txs : [];
-    const balances = {};
-    for (const acc of accounts) {
-      balances[acc.id] = Number(acc.opening || 0);
+function invKeyForJs(card, dateStr) {
+  const parts = String(dateStr || "").split("-");
+  if (parts.length !== 3) {
+    return String(dateStr || "").slice(0, 7);
+  }
+  const y = Number(parts[0]) || new Date().getUTCFullYear();
+  const m = Number(parts[1]) || 1;
+  const d = Number(parts[2]) || 1;
+  const closeDay = Number(card?.closeDay || 1);
+  const dueDay = Number(card?.dueDay || 10);
+  const k = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}`;
+  const closeMonth = d > closeDay ? addMonthsYMJs(k, 1) : k;
+  return dueDay <= closeDay ? addMonthsYMJs(closeMonth, 1) : closeMonth;
+}
+
+function computeAccountBalancesJs(db, targetMonth) {
+  const allAccounts = Array.isArray(db.accounts) ? db.accounts : [];
+  const txs = Array.isArray(db.txs) ? db.txs : [];
+  const endOfMonth = `${targetMonth}-31`;
+
+  const realBalances = {};
+  const predBalances = {};
+  const cardAccounts = {};
+  for (const acc of allAccounts) {
+    const opening = Number(acc.opening || 0);
+    realBalances[acc.id] = opening;
+    predBalances[acc.id] = opening;
+    if ((acc.type === "Cartão" || acc.card) && acc.card) {
+      cardAccounts[acc.id] = acc;
     }
-    for (const tx of txs) {
-      if (tx.auto === true) continue;
-      if (balances[tx.acc] !== undefined) {
-        balances[tx.acc] += Number(tx.amt || 0);
+  }
+
+  for (const tx of txs) {
+    if (realBalances[tx.acc] === undefined) continue;
+    const amt = Number(tx.amt || 0);
+
+    // 1. Saldo Atual / Real (Conciliado): considera APENAS transações conciliadas (tx.rec === true)
+    if (tx.rec === true) {
+      realBalances[tx.acc] += amt;
+    }
+
+    // 2. Saldo Previsto no Mês: considera conciliadas + pendentes até o fim de targetMonth
+    const cardAcc = cardAccounts[tx.acc];
+    if (cardAcc) {
+      if (tx.auto !== true || tx.rec === true) {
+        const ik = tx.ik || tx.inv || invKeyForJs(cardAcc.card, tx.date);
+        if (ik && ik <= targetMonth) {
+          predBalances[tx.acc] += amt;
+        }
+      }
+    } else {
+      if (tx.rec === true || (tx.date && tx.date <= endOfMonth)) {
+        predBalances[tx.acc] += amt;
       }
     }
+  }
 
-    let totalNetWorth = 0;
+  return { realBalances, predBalances, allAccounts, txs };
+}
+
+async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
+  if (name === "openmoney_get_financial_overview" || name === "openmoney_list_accounts") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+    const defaultMonth = brNow.toISOString().slice(0, 7);
+    const targetMonth = (args.month || defaultMonth).trim();
+
+    const { realBalances, predBalances, allAccounts, txs } = computeAccountBalancesJs(
+      db,
+      targetMonth
+    );
+    const accounts = allAccounts.filter((a) => !a.inactive);
+
+    let totalRealNetWorth = 0;
+    let totalPredNetWorth = 0;
     const accountsSummary = accounts
       .map((a) => {
-        const bal = balances[a.id] || 0;
-        totalNetWorth += bal;
+        const realBal = realBalances[a.id] || 0;
+        const predBal = predBalances[a.id] || 0;
+        totalRealNetWorth += realBal;
+        totalPredNetWorth += predBal;
+        const cur = a.currency || db.baseCurrency || "BRL";
         const isCard = a.type === "Cartão" || Boolean(a.card);
         let cardInfo = "";
         if (isCard && a.card) {
           cardInfo = ` [Fechamento: dia ${a.card.closeDay || "?"}, Vencimento: dia ${a.card.dueDay || "?"}]`;
         }
-        return `- **${a.name}** (${a.type || "Conta"}): ${formatCurrencyCents(bal, a.currency || "BRL")}${cardInfo}`;
+        return `- **${a.name}** (ID: \`${a.id}\`, Tipo: ${a.type || "Conta"}): **Saldo Atual do Dia (Conciliado): ${formatCurrencyCents(realBal, cur)}** | Saldo Previsto no Mês (${targetMonth}, inclui não conciliadas): ${formatCurrencyCents(predBal, cur)}${cardInfo}`;
       })
       .join("\n");
 
     let monthIncome = 0;
     let monthExpense = 0;
+    let monthReconciledIncome = 0;
+    let monthReconciledExpense = 0;
     for (const tx of txs) {
       if (
         tx.auto === true ||
@@ -2031,23 +2100,31 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
         continue;
       }
       const amt = Number(tx.amt || 0);
-      if (amt > 0) monthIncome += amt;
-      if (amt < 0) monthExpense += amt;
+      if (amt > 0) {
+        monthIncome += amt;
+        if (tx.rec === true) monthReconciledIncome += amt;
+      }
+      if (amt < 0) {
+        monthExpense += amt;
+        if (tx.rec === true) monthReconciledExpense += amt;
+      }
     }
     const monthNet = monthIncome + monthExpense;
 
     return (
       `### Resumo Financeiro OpenMoney (${targetMonth})\n\n` +
-      `**Patrimônio Líquido Consolidado:** ${formatCurrencyCents(totalNetWorth, db.baseCurrency || "BRL")}\n\n` +
+      `> **Nota de Saldo:** Quando o usuário perguntar o **saldo atual / saldo do dia** de uma conta, utilize SEMPRE o **Saldo Atual do Dia (Conciliado)**, que soma apenas o saldo inicial e as transações já conciliadas (\`rec: true\`). O **Saldo Previsto no Mês** inclui também lançamentos pendentes (não conciliados) até o fim de ${targetMonth}.\n\n` +
+      `- **Patrimônio Líquido Atual (Conciliado):** ${formatCurrencyCents(totalRealNetWorth, db.baseCurrency || "BRL")}\n` +
+      `- **Patrimônio Líquido Previsto no Mês (com pendentes):** ${formatCurrencyCents(totalPredNetWorth, db.baseCurrency || "BRL")}\n\n` +
       `#### Movimentação do Mês (${targetMonth}):\n` +
-      `- **Receitas:** ${formatCurrencyCents(monthIncome, db.baseCurrency || "BRL")}\n` +
-      `- **Despesas:** ${formatCurrencyCents(monthExpense, db.baseCurrency || "BRL")}\n` +
+      `- **Receitas do Mês:** ${formatCurrencyCents(monthIncome, db.baseCurrency || "BRL")} (Conciliadas: ${formatCurrencyCents(monthReconciledIncome, db.baseCurrency || "BRL")})\n` +
+      `- **Despesas do Mês:** ${formatCurrencyCents(monthExpense, db.baseCurrency || "BRL")} (Conciliadas: ${formatCurrencyCents(monthReconciledExpense, db.baseCurrency || "BRL")})\n` +
       `- **Resultado do Mês:** ${formatCurrencyCents(monthNet, db.baseCurrency || "BRL")} (${monthNet >= 0 ? "Superávit" : "Déficit"})\n\n` +
-      `#### Contas & Cartões:\n${accountsSummary || "Nenhuma conta cadastrada."}`
+      `#### Contas & Cartões Ativos:\n${accountsSummary || "Nenhuma conta cadastrada."}`
     );
   }
 
-  if (name === "openmoney_list_transactions") {
+  if (name === "openmoney_list_transactions" || name === "openmoney_query_transactions") {
     const { db } = await loadDecryptedUserDatabase(env, userId);
     const txs = Array.isArray(db.txs) ? db.txs : [];
     const accounts = Array.isArray(db.accounts) ? db.accounts : [];
@@ -2458,10 +2535,10 @@ async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
 
   if (method === "initialize") {
     const requestedVersion = params?.protocolVersion;
-    const supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"];
-    const negotiatedVersion = supportedVersions.includes(requestedVersion)
-      ? requestedVersion
-      : "2025-03-26";
+    const negotiatedVersion =
+      typeof requestedVersion === "string" && /^202\d-\d{2}-\d{2}$/.test(requestedVersion)
+        ? requestedVersion
+        : "2025-03-26";
     return {
       jsonrpc: "2.0",
       id,
@@ -2480,8 +2557,24 @@ async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
     };
   }
 
-  if (method === "notifications/initialized") {
+  if ((typeof method === "string" && method.startsWith("notifications/")) || id === undefined) {
     return null;
+  }
+
+  if (method === "resources/list") {
+    return { jsonrpc: "2.0", id, result: { resources: [] } };
+  }
+
+  if (method === "resources/templates/list") {
+    return { jsonrpc: "2.0", id, result: { resourceTemplates: [] } };
+  }
+
+  if (method === "prompts/list") {
+    return { jsonrpc: "2.0", id, result: { prompts: [] } };
+  }
+
+  if (method === "logging/setLevel") {
+    return { jsonrpc: "2.0", id, result: {} };
   }
 
   if (method === "tools/list") {
@@ -2944,14 +3037,7 @@ export function getOAuthProtectedResourceMetadata(url, resourcePath = "/api/mcp"
     resource: `${url.origin}${cleanPath}`,
     authorization_servers: [url.origin],
     bearer_methods_supported: ["header"],
-    scopes_supported: [
-      "read_write",
-      "read_only",
-      "openid",
-      "profile",
-      "email",
-      "offline_access",
-    ],
+    scopes_supported: ["read_write", "read_only", "offline_access"],
     resource_documentation: `${url.origin}`,
   };
 }
@@ -2975,14 +3061,7 @@ export function getOAuthAuthorizationServerMetadata(url) {
       "client_secret_basic",
     ],
     code_challenge_methods_supported: ["S256"],
-    scopes_supported: [
-      "read_write",
-      "read_only",
-      "openid",
-      "profile",
-      "email",
-      "offline_access",
-    ],
+    scopes_supported: ["read_write", "read_only", "offline_access"],
     authorization_response_iss_parameter_supported: true,
     client_id_metadata_document_supported: true,
     service_documentation: `${url.origin}`,
@@ -3416,6 +3495,20 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
+  // 0.1d GET /api/oauth/debug-logs (Diagnóstico de conexões MCP / OAuth)
+  // ==========================================================================
+  if (path === "/api/oauth/debug-logs" && request.method === "GET") {
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT id, created_at, method, path, status, user_agent, note FROM mcp_debug_logs ORDER BY id DESC LIMIT 40"
+      ).all();
+      return jsonResponse({ ok: true, logs: rows.results || [] }, 200, origin, true);
+    } catch (e) {
+      return jsonResponse({ ok: false, error: e.message }, 200, origin, true);
+    }
+  }
+
+  // ==========================================================================
   // 0.2 GET & POST /api/oauth/authorize (Consentimento OAuth 2.1 + PKCE)
   // ==========================================================================
   if (path === "/api/oauth/authorize") {
@@ -3672,6 +3765,14 @@ export async function onRequest(context) {
       dbPermissions,
       new Date().toISOString()
     ).run();
+
+    logMcpDiagnostic(
+      env,
+      request,
+      path,
+      200,
+      `token issued client=${displayClient} scope=${actualScope}`
+    );
 
     return jsonResponse(
       {
@@ -6507,6 +6608,7 @@ export async function onRequest(context) {
   // 11.3 POST, GET & DELETE /api/mcp (Transporte MCP Streamable HTTP Oficial)
   // ==========================================================================
   if (path === "/api/mcp") {
+    const originalPath = request.headers.get("X-OpenMoney-Original-Path") || path;
     const mcpProtocol = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
     const sessionId =
       request.headers.get("Mcp-Session-Id") || `opm-sess-${userId.slice(0, 12)}`;
@@ -6517,6 +6619,7 @@ export async function onRequest(context) {
     };
 
     if (request.method === "DELETE") {
+      logMcpDiagnostic(env, request, originalPath, 200, "MCP DELETE session");
       return new Response(null, {
         status: 200,
         headers: baseHeaders,
@@ -6525,6 +6628,7 @@ export async function onRequest(context) {
 
     if (request.method === "GET") {
       const accept = request.headers.get("Accept") || "";
+      logMcpDiagnostic(env, request, originalPath, 405, `MCP GET accept=${accept}`);
       // Pela especificação MCP Streamable HTTP (2025-03-26), servidores que respondem
       // diretamente no POST devem retornar 405 Method Not Allowed ao receber GET SSE.
       if (accept.includes("text/event-stream") || !accept.includes("text/html")) {
@@ -6555,6 +6659,9 @@ export async function onRequest(context) {
     if (request.method === "POST") {
       const accept = request.headers.get("Accept") || "";
       const body = await request.json().catch(() => ({}));
+      const rpcMethod = Array.isArray(body)
+        ? body.map((b) => b?.method).join(",")
+        : body?.method || "unknown";
       const rpcResponse = await handleJsonRpcRequest(
         body,
         {
@@ -6567,13 +6674,32 @@ export async function onRequest(context) {
         null
       );
 
+      if (rpcResponse?.result?.protocolVersion) {
+        baseHeaders["MCP-Protocol-Version"] = rpcResponse.result.protocolVersion;
+      }
+
       // Notificação (ex: notifications/initialized) -> 202 Accepted
       if (!rpcResponse) {
+        logMcpDiagnostic(
+          env,
+          request,
+          originalPath,
+          202,
+          `MCP POST notif=${rpcMethod} accept=${accept}`
+        );
         return new Response(null, {
           status: 202,
           headers: baseHeaders,
         });
       }
+
+      logMcpDiagnostic(
+        env,
+        request,
+        originalPath,
+        200,
+        `MCP POST method=${rpcMethod} ver=${body?.params?.protocolVersion || mcpProtocol} accept=${accept}`
+      );
 
       // Se o cliente aceitar apenas text/event-stream e não application/json
       if (accept.includes("text/event-stream") && !accept.includes("application/json")) {
