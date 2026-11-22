@@ -33,6 +33,13 @@ Este documento registra as diretrizes, repositório oficial, versionamento e flu
    - **Versão Semântica (`Version`):** Controlada em `pubspec.yaml` (ex: `2.5.0`).
    - **Build Number:** Incrementado automaticamente (`+1`) a cada compilação de release no `pubspec.yaml` e sincronizado em `lib/services/update_service.dart` e `version.json`.
 
+4. **Diretriz de Documentação e Manuais (User-First Always):**
+   - Todo manual e guia de uso (`docs/manual/`) deve seguir estritamente a ordem centrada no usuário:
+     1. Passo a passo prático de configuração e uso na perspectiva do usuário final (telas, botões, fluxo de 1 clique, interfaces suportadas).
+     2. Exemplos práticos de comandos, prompts e casos reais de uso do dia a dia.
+     3. Gestão prática de acessos, segurança na visão do usuário e FAQ de dúvidas comuns.
+     4. Detalhamento técnico, arquitetura, fluxos RFCs, APIs e especificações internas apenas nas seções finais, servindo como complemento para desenvolvedores e administradores.
+
 ---
 
 ## Fluxo Automatizado de Releases (OpenMoney Flutter)
