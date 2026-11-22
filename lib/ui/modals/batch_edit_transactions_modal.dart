@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/date_validator.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/date_input_formatter.dart';
 import '../widgets/tag_input_field.dart';
 
 class BatchEditTransactionsModal extends StatefulWidget {
@@ -40,12 +42,36 @@ class _BatchEditTransactionsModalState
 
   bool _applyDate = false;
   String _selectedDate = todayISO();
+  late final TextEditingController _dateCtrl;
+  String? _dateError;
+  String? _dateWarning;
 
   bool _applyAccount = false;
   String _selectedAccountId = '';
 
   bool _applyReconciled = false;
   bool _reconciledValue = true;
+
+  void _checkDateWarning() {
+    final clean = _dateCtrl.text.trim();
+    if (clean.length == 10 || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(clean)) {
+      final res = validateTransactionDate(clean);
+      setState(() {
+        _dateError = res.isValid ? null : res.error;
+        _dateWarning = res.isWarning ? res.warningMessage : null;
+        if (res.isValid && res.isoDate != null) {
+          _selectedDate = res.isoDate!;
+        }
+      });
+    } else {
+      if (_dateError != null || _dateWarning != null) {
+        setState(() {
+          _dateError = null;
+          _dateWarning = null;
+        });
+      }
+    }
+  }
 
   ({bool hasExpenses, bool hasIncomes}) _selectedTxTypes() {
     bool hasExp = false;
@@ -92,6 +118,7 @@ class _BatchEditTransactionsModalState
     } else if (store.db.accounts.isNotEmpty) {
       _selectedAccountId = store.db.accounts.first.id;
     }
+    _dateCtrl = TextEditingController(text: fmtDate(_selectedDate));
   }
 
   @override
@@ -99,6 +126,7 @@ class _BatchEditTransactionsModalState
     _payeeCtrl.dispose();
     _memoCtrl.dispose();
     _amtCtrl.dispose();
+    _dateCtrl.dispose();
     super.dispose();
   }
 
@@ -113,23 +141,59 @@ class _BatchEditTransactionsModalState
       _applyReconciled;
 
   Future<void> _pickDate(BuildContext context) async {
-    final parsed = DateTime.tryParse(_selectedDate) ?? DateTime.now();
+    final val = validateTransactionDate(_dateCtrl.text);
+    final curIso =
+        val.isValid && val.isoDate != null ? val.isoDate! : _selectedDate;
+    final parsed = dateFromISO(curIso);
     final picked = await showDatePicker(
       context: context,
       initialDate: parsed,
       firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      locale: const Locale('pt', 'BR'),
+      lastDate: DateTime(2099, 12, 31),
     );
     if (picked != null) {
+      final iso = isoFromDate(picked);
       setState(() {
-        _selectedDate =
-            '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+        _selectedDate = iso;
+        _dateCtrl.text = fmtDate(iso);
+        _checkDateWarning();
       });
     }
   }
 
-  void _submit(MoneyStore store) {
+  Future<void> _submit(MoneyStore store) async {
+    String effectiveDate = _selectedDate;
+    if (_applyDate) {
+      final dateVal = validateTransactionDate(_dateCtrl.text);
+      if (!dateVal.isValid) {
+        setState(() => _dateError = dateVal.error);
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Data Inválida'),
+            content: Text(dateVal.error ?? 'A data informada é inválida.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      if (dateVal.isWarning) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final ok = await confirmDateWarningDialog(
+          context,
+          dateVal.warningMessage!,
+          colors: OpenMoneyColors(isDark),
+        );
+        if (!ok) return;
+      }
+      effectiveDate = dateVal.isoDate!;
+    }
+
     final absCents = _applyAmount ? (parseCents(_amtCtrl.text) ?? 0).abs() : 0;
     final payload = BatchTransactionEditPayload(
       applyPayee: _applyPayee,
@@ -145,7 +209,7 @@ class _BatchEditTransactionsModalState
       absAmountCents: absCents,
       amountSignMode: _amountSignMode,
       applyDate: _applyDate,
-      date: _selectedDate,
+      date: effectiveDate,
       applyAccount: _applyAccount,
       accountId: _selectedAccountId,
       applyReconciled: _applyReconciled,
@@ -156,7 +220,9 @@ class _BatchEditTransactionsModalState
       ids: widget.selectedIds,
       payload: payload,
     );
-    Navigator.of(context).pop(count);
+    if (mounted) {
+      Navigator.of(context).pop(count);
+    }
   }
 
   Widget _buildFieldSection({
@@ -533,10 +599,57 @@ class _BatchEditTransactionsModalState
                       enabled: _applyDate,
                       onToggle: (v) => setState(() => _applyDate = v),
                       title: 'Data',
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickDate(context),
-                        icon: const Icon(Icons.calendar_today, size: 16),
-                        label: Text(fmtDate(_selectedDate)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            controller: _dateCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [DateInputFormatter()],
+                            style:
+                                TextStyle(fontSize: 13, color: c.textPrimary),
+                            onChanged: (_) => _checkDateWarning(),
+                            decoration: InputDecoration(
+                              hintText: 'DD/MM/AAAA',
+                              errorText: _dateError,
+                              isDense: true,
+                              filled: true,
+                              fillColor: c.surfaceCard,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              suffixIcon: IconButton(
+                                icon:
+                                    const Icon(Icons.calendar_month, size: 18),
+                                tooltip: 'Escolher data no calendário',
+                                onPressed: () => _pickDate(context),
+                              ),
+                            ),
+                          ),
+                          if (_dateWarning != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 14,
+                                  color: Colors.amber,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    _dateWarning!,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.amber,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
 

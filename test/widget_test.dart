@@ -1987,6 +1987,21 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     await tester.tap(find.textContaining('↳ Restaurante').last);
     await tester.pumpAndSettle();
 
+    // Habilita a seção de Data na Edição em Lote, verifica campo digitável e abre o calendário sem erro
+    await tester.ensureVisible(find.text('Data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Data'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Escolher data no calendário'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Escolher data no calendário'), findsOneWidget);
+    await tester.tap(find.byTooltip('Escolher data no calendário'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CalendarDatePicker), findsOneWidget);
+    // Fecha o DatePicker
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
     // 2. Extrato: quando showInlineTransactionEntry = false, exibe os 3 botões de ação rápida após Editar Conta
     store.showInlineTransactionEntry = false;
     await tester.pumpWidget(MaterialApp(

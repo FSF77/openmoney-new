@@ -45,7 +45,7 @@ No modal **Edição em Lote**, cada campo possui uma caixa de seleção individu
   - **Manter sinal original:** preserva se cada lançamento era receita ou despesa.
   - **Forçar Despesa (-):** aplica o valor como negativo.
   - **Forçar Receita (+):** aplica o valor como positivo.
-- **Data:** altera a data dos lançamentos e recalcula a competência da fatura (`ik`) caso a conta seja cartão de crédito.
+- **Data:** permite digitar a data diretamente com máscara automática (`DD/MM/AAAA`) e validação de calendário ou escolher pelo ícone de calendário, recalculando automaticamente a competência da fatura (`ik`) caso a conta seja cartão de crédito.
 - **Conta:** move os lançamentos para outra conta *(não altera transferências entre contas)*.
 - **Status de Conciliação:** define em lote como **Conciliado** ou **Pendente**.
 

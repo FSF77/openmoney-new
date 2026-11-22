@@ -1589,4 +1589,81 @@ class CloudSyncService extends ChangeNotifier {
     } catch (_) {}
     return null;
   }
+
+  /// Busca os tokens de acesso pessoal (MCP & API) cadastrados
+  Future<List<Map<String, dynamic>>> fetchApiTokens() async {
+    if (!isAuthenticated) return const [];
+    try {
+      final res = await platformHttpRequest(
+        method: 'GET',
+        url: _endpoint('/api/tokens'),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['tokens'] is List) {
+        return (decoded['tokens'] as List)
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Cria um novo token de acesso pessoal (MCP & API)
+  Future<({bool ok, Map<String, dynamic>? tokenData, String? error})>
+      createApiToken({
+    required String name,
+    String permissions = 'read_write',
+  }) async {
+    if (!isAuthenticated) {
+      return (ok: false, tokenData: null, error: 'Sessão não autenticada.');
+    }
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint('/api/tokens'),
+        headers: _headers(),
+        body: jsonEncode({
+          'name': name.trim().isEmpty ? 'Token MCP' : name.trim(),
+          'permissions': permissions,
+        }),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
+        return (ok: true, tokenData: decoded, error: null);
+      }
+      return (
+        ok: false,
+        tokenData: null,
+        error: (decoded?['error'] ??
+                'Falha ao gerar token (HTTP ${res.statusCode}).')
+            .toString(),
+      );
+    } catch (_) {
+      return (
+        ok: false,
+        tokenData: null,
+        error: 'Erro de conexão com o servidor.',
+      );
+    }
+  }
+
+  /// Exclui/revoga um token de acesso pessoal (MCP & API)
+  Future<bool> deleteApiToken(String tokenId) async {
+    if (!isAuthenticated || tokenId.isEmpty) return false;
+    try {
+      final res = await platformHttpRequest(
+        method: 'DELETE',
+        url: _endpoint('/api/tokens/$tokenId'),
+        headers: _headers(),
+      );
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
 }

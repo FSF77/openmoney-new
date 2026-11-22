@@ -143,6 +143,26 @@ async function ensureSchema(db) {
         PRIMARY KEY (user_id, usage_date)
       )
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_api_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        token_prefix TEXT NOT NULL,
+        permissions TEXT NOT NULL DEFAULT 'read_write',
+        last_used_at TEXT,
+        created_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_api_tokens_hash
+      ON user_api_tokens (token_hash)
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_api_tokens_user
+      ON user_api_tokens (user_id)
+    `),
   ]);
   try {
     await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
@@ -272,6 +292,13 @@ function timingSafeEqual(a, b) {
     diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;
+}
+
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest("SHA-256", encoder.encode(str));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function hashPasswordPBKDF2(password, saltB64) {
@@ -1652,20 +1679,893 @@ async function notifyDurableObjectSync(env, userId, payload) {
   } catch (_) {}
 }
 
+function formatCurrencyCents(cents, currency = "BRL") {
+  const val = Number(cents || 0) / 100;
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: currency || "BRL",
+  }).format(val);
+}
+
+function addMonthsIso(dateIso, months) {
+  if (!months) return dateIso;
+  const parts = String(dateIso || "").split("-");
+  if (parts.length < 3) return dateIso;
+  let y = parseInt(parts[0], 10);
+  let m = parseInt(parts[1], 10);
+  let d = parseInt(parts[2], 10);
+  m += months;
+  while (m > 12) {
+    m -= 12;
+    y++;
+  }
+  while (m < 1) {
+    m += 12;
+    y--;
+  }
+  const mm = String(m).padStart(2, "0");
+  const dd = String(Math.min(d, 28)).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+async function loadDecryptedUserDatabase(env, userId) {
+  const row = await env.DB.prepare(
+    "SELECT schema_version, revision, payload, preferences, updated_at FROM user_databases WHERE user_id = ?1"
+  )
+    .bind(userId)
+    .first();
+
+  if (!row || !row.payload) {
+    return {
+      db: defaultOpenMoneyV7Payload(),
+      revision: 1,
+      preferences: {},
+      isNew: true,
+    };
+  }
+
+  const fullEncrypted = await loadEncryptedPayloadFromD1(
+    env.DB,
+    userId,
+    row.payload
+  );
+  const plainStr = await decryptUserPayload(fullEncrypted, userId, env);
+  let parsed;
+  try {
+    parsed = JSON.parse(plainStr);
+  } catch (_) {
+    parsed = defaultOpenMoneyV7Payload();
+  }
+  let prefs = {};
+  try {
+    prefs = JSON.parse(row.preferences || "{}");
+  } catch (_) {}
+
+  return {
+    db: parsed,
+    revision: Number(row.revision || 1),
+    preferences: prefs,
+    isNew: false,
+  };
+}
+
+async function saveDecryptedUserDatabase(env, userId, dbObj, prefsObj = {}) {
+  const meta = await ensureUserSyncMeta(env.DB, userId);
+  const nextSeq = (meta.seq || 1) + 1;
+  const nowIso = new Date().toISOString();
+  const plainJsonStr = JSON.stringify(dbObj);
+  const sizeBytes = encoder.encode(plainJsonStr).byteLength;
+  const encryptedPayload = await encryptUserPayload(plainJsonStr, userId, env);
+  const prefsStr = JSON.stringify(prefsObj || {});
+
+  await saveEncryptedPayloadToD1(
+    env.DB,
+    userId,
+    nextSeq,
+    encryptedPayload,
+    prefsStr,
+    nowIso,
+    0,
+    sizeBytes,
+    false
+  );
+
+  await env.DB.prepare(
+    "UPDATE user_sync_meta SET seq = ?1, updated_at = ?2 WHERE user_id = ?3"
+  )
+    .bind(nextSeq, nowIso, userId)
+    .run();
+
+  await notifyDurableObjectSync(env, userId, {
+    seq: nextSeq,
+    reset: true,
+    changes: [],
+  });
+
+  return nextSeq;
+}
+
+const MCP_TOOLS = [
+  {
+    name: "openmoney_get_financial_overview",
+    description:
+      "Obtém resumo financeiro consolidado: patrimônio líquido, saldo em contas bancárias e carteiras, status das faturas de cartões de crédito (fechamento, vencimento e total) e totais de receitas, despesas e resultado do mês.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        month: {
+          type: "string",
+          description:
+            "Mês no formato YYYY-MM (ex: 2026-11). Se omitido, usa o mês atual.",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_list_transactions",
+    description:
+      "Lista e pesquisa transações no OpenMoney com filtros flexíveis por período, conta, categoria, texto livre ou status de conciliação.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        startDate: {
+          type: "string",
+          description: "Data inicial no formato YYYY-MM-DD",
+        },
+        endDate: {
+          type: "string",
+          description: "Data final no formato YYYY-MM-DD",
+        },
+        accountId: {
+          type: "string",
+          description: "ID ou nome da conta para filtrar",
+        },
+        category: {
+          type: "string",
+          description: "Nome ou caminho da categoria",
+        },
+        search: {
+          type: "string",
+          description: "Termo de busca no favorecido (payee) ou notas (memo)",
+        },
+        onlyUnreconciled: {
+          type: "boolean",
+          description: "Se true, filtra apenas transações não conciliadas",
+        },
+        limit: {
+          type: "number",
+          description:
+            "Limite máximo de registros a retornar (padrão: 35, máx: 100)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_get_cashflow_projection",
+    description:
+      "Calcula a projeção futura de fluxo de caixa mês a mês (contas a pagar e receber, parcelamentos, despesas recorrentes e saldo projetado).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        monthsAhead: {
+          type: "number",
+          description:
+            "Quantidade de meses futuros para projetar (1 a 12, padrão: 3)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_create_transaction",
+    description:
+      "Cria uma nova despesa, receita ou transferência no OpenMoney. Registrado com auditoria [MCP Remoto] nos logs do sistema.",
+    inputSchema: {
+      type: "object",
+      required: ["date", "accountId", "payee", "amountCents"],
+      properties: {
+        date: {
+          type: "string",
+          description: "Data da transação no formato YYYY-MM-DD",
+        },
+        accountId: {
+          type: "string",
+          description: "ID ou nome da conta de origem/débito",
+        },
+        payee: {
+          type: "string",
+          description: "Nome do estabelecimento, favorecido ou descrição",
+        },
+        category: {
+          type: "string",
+          description:
+            "Categoria da transação (ex: Alimentação › Restaurante)",
+        },
+        amountCents: {
+          type: "number",
+          description:
+            "Valor em centavos inteiros (negativo para despesa, positivo para receita, ex: -4590 para R$ 45,90)",
+        },
+        memo: {
+          type: "string",
+          description: "Observação opcional da transação",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Lista de tags (sem #, ex: ["Viagem", "Trabalho"])',
+        },
+        toAccountId: {
+          type: "string",
+          description: "Se for transferência, ID ou nome da conta de destino",
+        },
+        installments: {
+          type: "number",
+          description: "Número total de parcelas (padrão 1)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_update_transaction",
+    description:
+      "Atualiza um lançamento existente pelo ID (alteração de valor, categoria, favorecido, data ou nota). Registrado nos logs de auditoria.",
+    inputSchema: {
+      type: "object",
+      required: ["transactionId"],
+      properties: {
+        transactionId: {
+          type: "string",
+          description: "ID da transação a ser editada",
+        },
+        payee: {
+          type: "string",
+          description: "Novo favorecido/estabelecimento",
+        },
+        category: { type: "string", description: "Nova categoria" },
+        amountCents: { type: "number", description: "Novo valor em centavos" },
+        date: { type: "string", description: "Nova data YYYY-MM-DD" },
+        memo: { type: "string", description: "Nova observação" },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Novas tags",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_delete_transaction",
+    description:
+      "Exclui permanentemente um lançamento no OpenMoney pelo ID com registro no log de auditoria.",
+    inputSchema: {
+      type: "object",
+      required: ["transactionId"],
+      properties: {
+        transactionId: {
+          type: "string",
+          description: "ID da transação a ser excluída",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_get_budget_status",
+    description:
+      "Avalia os limites/tetos mensais de gastos configurados por categoria e o quanto já foi consumido no mês.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        month: {
+          type: "string",
+          description: "Mês YYYY-MM (opcional, padrão mês atual)",
+        },
+      },
+    },
+  },
+];
+
+async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
+  if (name === "openmoney_get_financial_overview") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const targetMonth = (
+      args.month || new Date().toISOString().slice(0, 7)
+    ).trim();
+
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const txs = Array.isArray(db.txs) ? db.txs : [];
+    const balances = {};
+    for (const acc of accounts) {
+      balances[acc.id] = Number(acc.opening || 0);
+    }
+    for (const tx of txs) {
+      if (tx.auto === true) continue;
+      if (balances[tx.acc] !== undefined) {
+        balances[tx.acc] += Number(tx.amt || 0);
+      }
+    }
+
+    let totalNetWorth = 0;
+    const accountsSummary = accounts
+      .map((a) => {
+        const bal = balances[a.id] || 0;
+        totalNetWorth += bal;
+        const isCard = a.type === "Cartão" || Boolean(a.card);
+        let cardInfo = "";
+        if (isCard && a.card) {
+          cardInfo = ` [Fechamento: dia ${a.card.closeDay || "?"}, Vencimento: dia ${a.card.dueDay || "?"}]`;
+        }
+        return `- **${a.name}** (${a.type || "Conta"}): ${formatCurrencyCents(bal, a.currency || "BRL")}${cardInfo}`;
+      })
+      .join("\n");
+
+    let monthIncome = 0;
+    let monthExpense = 0;
+    for (const tx of txs) {
+      if (
+        tx.auto === true ||
+        tx.xfer ||
+        !tx.date ||
+        !tx.date.startsWith(targetMonth)
+      ) {
+        continue;
+      }
+      const amt = Number(tx.amt || 0);
+      if (amt > 0) monthIncome += amt;
+      if (amt < 0) monthExpense += amt;
+    }
+    const monthNet = monthIncome + monthExpense;
+
+    return (
+      `### Resumo Financeiro OpenMoney (${targetMonth})\n\n` +
+      `**Patrimônio Líquido Consolidado:** ${formatCurrencyCents(totalNetWorth, db.baseCurrency || "BRL")}\n\n` +
+      `#### Movimentação do Mês (${targetMonth}):\n` +
+      `- **Receitas:** ${formatCurrencyCents(monthIncome, db.baseCurrency || "BRL")}\n` +
+      `- **Despesas:** ${formatCurrencyCents(monthExpense, db.baseCurrency || "BRL")}\n` +
+      `- **Resultado do Mês:** ${formatCurrencyCents(monthNet, db.baseCurrency || "BRL")} (${monthNet >= 0 ? "Superávit" : "Déficit"})\n\n` +
+      `#### Contas & Cartões:\n${accountsSummary || "Nenhuma conta cadastrada."}`
+    );
+  }
+
+  if (name === "openmoney_list_transactions") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const txs = Array.isArray(db.txs) ? db.txs : [];
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const accMap = new Map(accounts.map((a) => [a.id, a]));
+
+    let filtered = txs.filter((t) => t.auto !== true);
+
+    if (args.startDate) {
+      filtered = filtered.filter((t) => t.date && t.date >= args.startDate);
+    }
+    if (args.endDate) {
+      filtered = filtered.filter((t) => t.date && t.date <= args.endDate);
+    }
+    if (args.accountId) {
+      const targetId = String(args.accountId).toLowerCase();
+      filtered = filtered.filter((t) => {
+        if (t.acc === args.accountId) return true;
+        const a = accMap.get(t.acc);
+        return a && a.name.toLowerCase().includes(targetId);
+      });
+    }
+    if (args.category) {
+      const cat = String(args.category).toLowerCase();
+      filtered = filtered.filter(
+        (t) => t.cat && t.cat.toLowerCase().includes(cat)
+      );
+    }
+    if (args.search) {
+      const q = String(args.search).toLowerCase();
+      filtered = filtered.filter(
+        (t) =>
+          (t.payee && t.payee.toLowerCase().includes(q)) ||
+          (t.memo && t.memo.toLowerCase().includes(q)) ||
+          (t.cat && t.cat.toLowerCase().includes(q))
+      );
+    }
+    if (args.onlyUnreconciled) {
+      filtered = filtered.filter((t) => !t.rec);
+    }
+
+    filtered.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    const limit = Math.min(Math.max(1, Number(args.limit || 35)), 100);
+    const sliced = filtered.slice(0, limit);
+
+    if (sliced.length === 0) {
+      return "Nenhuma transação encontrada com os filtros informados.";
+    }
+
+    const lines = sliced.map((t) => {
+      const acc = accMap.get(t.acc);
+      const accName = acc ? acc.name : t.acc;
+      const cur = acc?.currency || db.baseCurrency || "BRL";
+      const tagsStr =
+        Array.isArray(t.tags) && t.tags.length > 0
+          ? ` [${t.tags.map((tag) => "#" + tag).join(" ")}]`
+          : "";
+      const recStr = t.rec ? "✓ Conciliado" : "Pendente";
+      const memoStr = t.memo ? ` — "${t.memo}"` : "";
+      return `- **${t.date}** | \`${t.id}\` | **${t.payee}** | ${formatCurrencyCents(t.amt, cur)} | ${t.cat} | ${accName}${memoStr}${tagsStr} (${recStr})`;
+    });
+
+    return (
+      `### Transações Encontradas (${sliced.length} de ${filtered.length}):\n\n` +
+      lines.join("\n")
+    );
+  }
+
+  if (name === "openmoney_get_cashflow_projection") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const monthsCount = Math.min(Math.max(1, Number(args.monthsAhead || 3)), 12);
+    const now = new Date();
+    const currentY = now.getFullYear();
+    const currentM = now.getMonth() + 1;
+
+    const targetMonths = [];
+    for (let i = 0; i < monthsCount; i++) {
+      const d = new Date(Date.UTC(currentY, currentM - 1 + i, 1));
+      targetMonths.push(d.toISOString().slice(0, 7));
+    }
+
+    const projection = targetMonths.map((m) => {
+      let income = 0;
+      let expense = 0;
+      for (const t of db.txs || []) {
+        if (t.auto === true || t.xfer || !t.date || !t.date.startsWith(m)) {
+          continue;
+        }
+        const amt = Number(t.amt || 0);
+        if (amt > 0) income += amt;
+        if (amt < 0) expense += amt;
+      }
+      return {
+        month: m,
+        income,
+        expense,
+        net: income + expense,
+      };
+    });
+
+    let report = `### Projeção de Fluxo de Caixa (${monthsCount} meses)\n\n| Mês | Entradas Previstas | Saídas Previstas | Resultado Líquido |\n| :--- | :--- | :--- | :--- |\n`;
+    for (const p of projection) {
+      report += `| **${p.month}** | ${formatCurrencyCents(p.income, db.baseCurrency || "BRL")} | ${formatCurrencyCents(p.expense, db.baseCurrency || "BRL")} | ${formatCurrencyCents(p.net, db.baseCurrency || "BRL")} |\n`;
+    }
+    return report;
+  }
+
+  if (name === "openmoney_create_transaction") {
+    if (permissions === "read_only") {
+      throw new Error(
+        "Token de acesso possui permissão apenas de leitura (read_only)."
+      );
+    }
+    const { db, preferences } = await loadDecryptedUserDatabase(env, userId);
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const targetAcc =
+      accounts.find(
+        (a) =>
+          a.id === args.accountId ||
+          a.name.toLowerCase() === String(args.accountId).toLowerCase()
+      ) || accounts[0];
+    if (!targetAcc) throw new Error("Conta não encontrada.");
+
+    const isXfer = Boolean(args.toAccountId);
+    const toAcc = isXfer
+      ? accounts.find(
+          (a) =>
+            a.id === args.toAccountId ||
+            a.name.toLowerCase() === String(args.toAccountId).toLowerCase()
+        )
+      : null;
+    if (isXfer && !toAcc) {
+      throw new Error("Conta de destino para transferência não encontrada.");
+    }
+
+    const txId =
+      "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const date = (args.date || new Date().toISOString().slice(0, 10)).trim();
+    const payee = String(args.payee || "Lançamento").trim();
+    const amt = Number(args.amountCents || 0);
+    const cat = isXfer
+      ? `Transferência: ${toAcc.name}`
+      : String(args.category || "Outros").trim();
+    const memo = String(args.memo || "").trim();
+    const tags = Array.isArray(args.tags)
+      ? args.tags.map((t) => String(t).trim()).filter(Boolean)
+      : null;
+    const installments = Math.max(1, Number(args.installments || 1));
+
+    if (!Array.isArray(db.txs)) db.txs = [];
+
+    if (isXfer) {
+      const xid = "xfer_" + Date.now();
+      const absAmt = Math.abs(amt);
+      db.txs.push({
+        id: txId,
+        acc: targetAcc.id,
+        date,
+        payee: "Transferência",
+        cat: `Transferência: ${toAcc.name}`,
+        memo,
+        amt: -absAmt,
+        rec: false,
+        xfer: xid,
+        peer: toAcc.id,
+      });
+      db.txs.push({
+        id: "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        acc: toAcc.id,
+        date,
+        payee: "Transferência",
+        cat: `Transferência: ${targetAcc.name}`,
+        memo,
+        amt: absAmt,
+        rec: false,
+        xfer: xid,
+        peer: targetAcc.id,
+      });
+    } else if (installments > 1) {
+      const planId = "plan_" + Date.now();
+      const instAmt = Math.round(amt / installments);
+      for (let i = 0; i < installments; i++) {
+        const instDate = addMonthsIso(date, i);
+        db.txs.push({
+          id:
+            i === 0
+              ? txId
+              : "tx_" +
+                Date.now() +
+                "_" +
+                i +
+                "_" +
+                Math.random().toString(36).slice(2, 6),
+          acc: targetAcc.id,
+          date: instDate,
+          payee: `${payee} (${i + 1}/${installments})`,
+          cat,
+          memo,
+          amt: instAmt,
+          rec: false,
+          plan: planId,
+          pn: i + 1,
+          pt: installments,
+          tags: tags ? [...tags] : null,
+        });
+      }
+    } else {
+      db.txs.push({
+        id: txId,
+        acc: targetAcc.id,
+        date,
+        payee,
+        cat,
+        memo,
+        amt,
+        rec: false,
+        tags,
+      });
+    }
+
+    await saveDecryptedUserDatabase(env, userId, db, preferences);
+
+    const typeLabel = isXfer
+      ? "Transferência"
+      : amt < 0
+      ? "Despesa"
+      : "Receita";
+    const formattedAmt = formatCurrencyCents(
+      amt,
+      targetAcc.currency || db.baseCurrency || "BRL"
+    );
+    const logDesc =
+      installments > 1
+        ? `[MCP Remoto] ${typeLabel} parcelado (${installments}x): "${payee}" em ${targetAcc.name}, total: ${formattedAmt}`
+        : `[MCP Remoto] ${typeLabel}: "${payee}" em ${targetAcc.name}, ${formattedAmt} (${cat})`;
+
+    await env.DB.prepare(
+      `INSERT INTO user_audit_logs (id, user_id, action, entity, target_id, summary, details, created_at)
+       VALUES (?1, ?2, 'create', 'transaction', ?3, ?4, ?5, ?6)`
+    )
+      .bind(
+        "log_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        userId,
+        txId,
+        logDesc,
+        JSON.stringify({ source: "mcp_remote", tokenId }),
+        new Date().toISOString()
+      )
+      .run()
+      .catch(() => {});
+
+    return `Lançamento criado com sucesso!\n- **ID**: \`${txId}\`\n- **Favorecido**: ${payee}\n- **Valor**: ${formattedAmt}\n- **Conta**: ${targetAcc.name}\n- **Data**: ${date}`;
+  }
+
+  if (name === "openmoney_update_transaction") {
+    if (permissions === "read_only") {
+      throw new Error(
+        "Token de acesso possui permissão apenas de leitura (read_only)."
+      );
+    }
+    const { db, preferences } = await loadDecryptedUserDatabase(env, userId);
+    const txs = Array.isArray(db.txs) ? db.txs : [];
+    const idx = txs.findIndex((t) => t.id === args.transactionId);
+    if (idx === -1) {
+      throw new Error(
+        `Lançamento com ID ${args.transactionId} não encontrado.`
+      );
+    }
+
+    const t = txs[idx];
+    if (args.payee !== undefined) t.payee = String(args.payee).trim();
+    if (args.category !== undefined) t.cat = String(args.category).trim();
+    if (args.amountCents !== undefined) t.amt = Number(args.amountCents);
+    if (args.date !== undefined) t.date = String(args.date).trim();
+    if (args.memo !== undefined) t.memo = String(args.memo).trim();
+    if (Array.isArray(args.tags)) {
+      t.tags = args.tags.map((tag) => String(tag).trim()).filter(Boolean);
+    }
+
+    await saveDecryptedUserDatabase(env, userId, db, preferences);
+
+    const cur = db.baseCurrency || "BRL";
+    const logDesc = `[MCP Remoto] Lançamento alterado: "${t.payee}", ${formatCurrencyCents(t.amt, cur)} (${t.cat})`;
+    await env.DB.prepare(
+      `INSERT INTO user_audit_logs (id, user_id, action, entity, target_id, summary, details, created_at)
+       VALUES (?1, ?2, 'update', 'transaction', ?3, ?4, ?5, ?6)`
+    )
+      .bind(
+        "log_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        userId,
+        t.id,
+        logDesc,
+        JSON.stringify({ source: "mcp_remote", tokenId }),
+        new Date().toISOString()
+      )
+      .run()
+      .catch(() => {});
+
+    return `Lançamento atualizado com sucesso!\n- **ID**: \`${t.id}\`\n- **Favorecido**: ${t.payee}\n- **Valor**: ${formatCurrencyCents(t.amt, cur)}\n- **Categoria**: ${t.cat}\n- **Data**: ${t.date}`;
+  }
+
+  if (name === "openmoney_delete_transaction") {
+    if (permissions === "read_only") {
+      throw new Error(
+        "Token de acesso possui permissão apenas de leitura (read_only)."
+      );
+    }
+    const { db, preferences } = await loadDecryptedUserDatabase(env, userId);
+    const txs = Array.isArray(db.txs) ? db.txs : [];
+    const idx = txs.findIndex((t) => t.id === args.transactionId);
+    if (idx === -1) {
+      throw new Error(
+        `Lançamento com ID ${args.transactionId} não encontrado.`
+      );
+    }
+
+    const t = txs[idx];
+    txs.splice(idx, 1);
+    if (t.xfer) {
+      const peerIdx = txs.findIndex((x) => x.xfer === t.xfer);
+      if (peerIdx !== -1) txs.splice(peerIdx, 1);
+    }
+
+    await saveDecryptedUserDatabase(env, userId, db, preferences);
+
+    const cur = db.baseCurrency || "BRL";
+    const logDesc = `[MCP Remoto] Lançamento excluído: "${t.payee}", ${formatCurrencyCents(t.amt, cur)}`;
+    await env.DB.prepare(
+      `INSERT INTO user_audit_logs (id, user_id, action, entity, target_id, summary, details, created_at)
+       VALUES (?1, ?2, 'delete', 'transaction', ?3, ?4, ?5, ?6)`
+    )
+      .bind(
+        "log_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        userId,
+        t.id,
+        logDesc,
+        JSON.stringify({ source: "mcp_remote", tokenId }),
+        new Date().toISOString()
+      )
+      .run()
+      .catch(() => {});
+
+    return `Lançamento \`${t.id}\` ("${t.payee}") excluído com sucesso.`;
+  }
+
+  if (name === "openmoney_get_budget_status") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const targetMonth = (
+      args.month || new Date().toISOString().slice(0, 7)
+    ).trim();
+    const categories = Array.isArray(db.cats) ? db.cats : [];
+    const txs = Array.isArray(db.txs) ? db.txs : [];
+
+    const spentByCat = {};
+    for (const t of txs) {
+      if (
+        t.auto === true ||
+        t.xfer ||
+        !t.date ||
+        !t.date.startsWith(targetMonth) ||
+        Number(t.amt || 0) >= 0
+      ) {
+        continue;
+      }
+      const c = t.cat || "Outros";
+      spentByCat[c] = (spentByCat[c] || 0) + Math.abs(Number(t.amt || 0));
+    }
+
+    const budgetItems = categories.filter((c) => Number(c.budget || 0) > 0);
+    if (budgetItems.length === 0) {
+      return `Nenhum orçamento configurado nas categorias para o mês de ${targetMonth}.`;
+    }
+
+    let report = `### Status dos Orçamentos (${targetMonth})\n\n| Categoria | Teto Mensal | Gasto Atual | % Consumido | Saldo Restante |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+    for (const b of budgetItems) {
+      const budget = Number(b.budget || 0);
+      const spent = spentByCat[b.name] || 0;
+      const pct = Math.round((spent / budget) * 100);
+      const remaining = budget - spent;
+      const alert = pct > 100 ? " ⚠️ (Estourado)" : "";
+      report += `| **${b.name}** | ${formatCurrencyCents(budget)} | ${formatCurrencyCents(spent)} | ${pct}%${alert} | ${formatCurrencyCents(remaining)} |\n`;
+    }
+    return report;
+  }
+
+  throw new Error(`Ferramenta desconhecida: ${name}`);
+}
+
+async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
+  if (!body || typeof body !== "object") {
+    return {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Parse error" },
+    };
+  }
+
+  const { id, method, params } = body;
+
+  if (method === "initialize") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: "2024-11-05",
+        serverInfo: {
+          name: "openmoney-cloud",
+          version: "2.5.3",
+        },
+        capabilities: {
+          tools: {},
+        },
+      },
+    };
+  }
+
+  if (method === "notifications/initialized") {
+    return null;
+  }
+
+  if (method === "tools/list") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        tools: MCP_TOOLS,
+      },
+    };
+  }
+
+  if (method === "tools/call") {
+    const toolName = params?.name;
+    const toolArgs = params?.arguments || {};
+    try {
+      const textResult = await executeMcpTool(
+        toolName,
+        toolArgs,
+        auth.userId,
+        auth.permissions,
+        env,
+        auth.tokenId
+      );
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: String(textResult),
+            },
+          ],
+          isError: false,
+        },
+      };
+    } catch (e) {
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: `Erro ao executar ${toolName}: ${e && e.message ? e.message : String(e)}`,
+            },
+          ],
+          isError: true,
+        },
+      };
+    }
+  }
+
+  if (method === "ping") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {},
+    };
+  }
+
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: -32601,
+      message: `Método não suportado: ${method}`,
+    },
+  };
+}
+
 async function authenticateRequest(request, env) {
+  let token = "";
   const auth = request.headers.get("Authorization") || "";
   if (auth.startsWith("Bearer ")) {
-    const token = auth.slice(7).trim();
-    if (token) return verifyJwt(token, env);
+    token = auth.slice(7).trim();
+  } else {
+    try {
+      const url = new URL(request.url);
+      token = (url.searchParams.get("token") || "").trim();
+    } catch (_) {}
   }
-  try {
-    const url = new URL(request.url);
-    const queryToken = (url.searchParams.get("token") || "").trim();
-    if (queryToken) {
-      return verifyJwt(queryToken, env);
+  if (!token) return null;
+
+  // 1. Personal Access Token para MCP / APIs Externas (opm_live_...)
+  if (token.startsWith("opm_live_")) {
+    try {
+      const tokenHash = await sha256Hex(token);
+      const row = await env.DB.prepare(
+        `SELECT id, user_id, name, permissions FROM user_api_tokens WHERE token_hash = ?1`
+      )
+        .bind(tokenHash)
+        .first();
+
+      if (row) {
+        // Atualiza last_used_at sem bloquear
+        env.DB.prepare(
+          `UPDATE user_api_tokens SET last_used_at = ?1 WHERE id = ?2`
+        )
+          .bind(new Date().toISOString(), row.id)
+          .run()
+          .catch(() => {});
+
+        return {
+          sub: String(row.user_id),
+          isApiToken: true,
+          tokenId: row.id,
+          tokenName: row.name,
+          permissions: row.permissions || "read_write",
+        };
+      }
+    } catch (e) {
+      console.error("[authenticateRequest] Erro ao validar token MCP:", e);
     }
-  } catch (_) {}
-  return null;
+    return null;
+  }
+
+  // 2. JWT padrão de sessão do usuário no app
+  return verifyJwt(token, env);
 }
 
 export async function onRequest(context) {
@@ -4337,6 +5237,173 @@ export async function onRequest(context) {
         provider,
         text: replyText,
       },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 10.1 GET /api/tokens (Lista os Personal Access Tokens do usuário)
+  // ==========================================================================
+  if (path === "/api/tokens" && request.method === "GET") {
+    const rows = await env.DB.prepare(
+      `SELECT id, name, token_prefix, permissions, last_used_at, created_at
+       FROM user_api_tokens
+       WHERE user_id = ?1
+       ORDER BY created_at DESC`
+    )
+      .bind(userId)
+      .all();
+    return jsonResponse(
+      { ok: true, tokens: (rows && rows.results) || [] },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 10.2 POST /api/tokens (Cria um novo Personal Access Token para MCP / API)
+  // ==========================================================================
+  if (path === "/api/tokens" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const name = String(body.name || "Token MCP").trim();
+    const permissions =
+      body.permissions === "read_only" ? "read_only" : "read_write";
+
+    const rawBytes = new Uint8Array(24);
+    crypto.getRandomValues(rawBytes);
+    const tokenStr =
+      "opm_live_" +
+      Array.from(rawBytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    const tokenPrefix = tokenStr.slice(0, 14) + "..." + tokenStr.slice(-4);
+    const tokenHash = await sha256Hex(tokenStr);
+    const tokenId =
+      "tok_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const nowIso = new Date().toISOString();
+
+    await env.DB.prepare(
+      `INSERT INTO user_api_tokens (id, user_id, name, token_hash, token_prefix, permissions, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+    )
+      .bind(tokenId, userId, name, tokenHash, tokenPrefix, permissions, nowIso)
+      .run();
+
+    return jsonResponse(
+      {
+        ok: true,
+        id: tokenId,
+        name,
+        token: tokenStr,
+        token_prefix: tokenPrefix,
+        permissions,
+        created_at: nowIso,
+      },
+      201,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 10.3 DELETE /api/tokens/:id ou POST /api/tokens/delete (Revoga token)
+  // ==========================================================================
+  if (
+    (path.startsWith("/api/tokens/") && request.method === "DELETE") ||
+    (path === "/api/tokens/delete" && request.method === "POST")
+  ) {
+    let tokenId = "";
+    if (path.startsWith("/api/tokens/")) {
+      tokenId = path.replace("/api/tokens/", "").trim();
+    } else {
+      const body = await request.json().catch(() => ({}));
+      tokenId = String(body.id || body.tokenId || "").trim();
+    }
+    if (!tokenId) {
+      return jsonResponse({ error: "ID do token não informado." }, 400, origin);
+    }
+
+    await env.DB.prepare(
+      `DELETE FROM user_api_tokens WHERE id = ?1 AND user_id = ?2`
+    )
+      .bind(tokenId, userId)
+      .run();
+
+    return jsonResponse({ ok: true, deleted: tokenId }, 200, origin);
+  }
+
+  // ==========================================================================
+  // 11.1 GET /api/mcp/sse (Transporte MCP Server-Sent Events)
+  // ==========================================================================
+  if (path === "/api/mcp/sse" && request.method === "GET") {
+    if (!env.SYNC) {
+      return jsonResponse(
+        { error: "Durable Object de sincronização não vinculado." },
+        503,
+        origin
+      );
+    }
+    const doId = env.SYNC.idFromName(userId);
+    const stub = env.SYNC.get(doId);
+    return stub.fetch(request);
+  }
+
+  // ==========================================================================
+  // 11.2 POST /api/mcp/messages (Mensagens JSON-RPC para sessão SSE ativa)
+  // ==========================================================================
+  if (path === "/api/mcp/messages" && request.method === "POST") {
+    const sessionId = url.searchParams.get("sessionId");
+    const body = await request.json().catch(() => ({}));
+    const rpcResponse = await handleJsonRpcRequest(
+      body,
+      {
+        userId,
+        permissions: claims.permissions || "read_write",
+        tokenId: claims.tokenId || null,
+      },
+      env,
+      origin,
+      sessionId
+    );
+
+    if (sessionId && env.SYNC) {
+      if (rpcResponse) {
+        const doId = env.SYNC.idFromName(userId);
+        const stub = env.SYNC.get(doId);
+        await stub.fetch("https://sync.internal/mcp/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, message: rpcResponse }),
+        });
+      }
+      return new Response(null, { status: 202, headers: corsHeaders(origin) });
+    }
+
+    return jsonResponse(
+      rpcResponse || { jsonrpc: "2.0", id: body.id, result: {} },
+      200,
+      origin
+    );
+  }
+
+  // ==========================================================================
+  // 11.3 POST /api/mcp (Endpoint MCP stateless via HTTP direto)
+  // ==========================================================================
+  if (path === "/api/mcp" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const rpcResponse = await handleJsonRpcRequest(
+      body,
+      {
+        userId,
+        permissions: claims.permissions || "read_write",
+        tokenId: claims.tokenId || null,
+      },
+      env,
+      origin,
+      null
+    );
+    return jsonResponse(
+      rpcResponse || { jsonrpc: "2.0", id: body.id, result: {} },
       200,
       origin
     );

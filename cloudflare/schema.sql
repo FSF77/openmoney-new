@@ -123,3 +123,19 @@ CREATE TABLE IF NOT EXISTS user_audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_user_created ON user_audit_logs (user_id, created_at DESC);
+
+-- 10. Tokens de Acesso Pessoal para MCP (Model Context Protocol) e APIs Externas
+CREATE TABLE IF NOT EXISTS user_api_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  token_prefix TEXT NOT NULL,
+  permissions TEXT NOT NULL DEFAULT 'read_write',
+  last_used_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON user_api_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON user_api_tokens(user_id);
+

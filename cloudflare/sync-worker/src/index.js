@@ -8,6 +8,7 @@ export class UserSyncRoom {
     this.state = state;
     this.env = env;
     this.sql = state.storage.sql;
+    this.mcpSessions = new Map();
     this._initSchema();
   }
 
@@ -90,6 +91,75 @@ export class UserSyncRoom {
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), {
           status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // 3. MCP SSE Stream (/mcp/sse)
+    if (url.pathname.endsWith("/mcp/sse")) {
+      const sessionId = crypto.randomUUID();
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+      this.mcpSessions.set(sessionId, writer);
+
+      // Envia o endpoint para mensagens POST conforme especificação MCP SSE
+      writer.write(
+        encoder.encode(
+          `event: endpoint\ndata: /api/mcp/messages?sessionId=${sessionId}\n\n`
+        )
+      );
+
+      // Tratamento de desconexão do cliente
+      request.signal?.addEventListener("abort", () => {
+        try {
+          writer.close();
+        } catch (_) {}
+        this.mcpSessions.delete(sessionId);
+      });
+
+      return new Response(readable, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // 4. Envio de mensagem MCP para sessão SSE ativa (/mcp/send)
+    if (url.pathname.endsWith("/mcp/send") && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const sessionId = String(body.sessionId || "");
+        const message = body.message;
+        const writer = this.mcpSessions.get(sessionId);
+
+        if (!writer) {
+          return new Response(
+            JSON.stringify({ error: "Sessão MCP não encontrada ou desconectada." }),
+            {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        const encoder = new TextEncoder();
+        await writer.write(
+          encoder.encode(`event: message\ndata: ${JSON.stringify(message)}\n\n`)
+        );
+
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
           headers: { "Content-Type": "application/json" },
         });
       }

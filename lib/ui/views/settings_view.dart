@@ -5,6 +5,7 @@ import '../../services/ai_assistant_service.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
+import '../modals/mcp_tokens_modal.dart';
 import '../theme/liquid_glass.dart';
 
 class SettingsView extends StatefulWidget {
@@ -1190,6 +1191,19 @@ class _SettingsViewState extends State<SettingsView> {
                     Icons.mic_none_rounded,
                     color: colors.accent,
                     size: 20,
+                  ),
+                ),
+                const Divider(height: 22),
+                _buildSettingRow(
+                  colors: colors,
+                  title:
+                      'Servidor MCP & Acesso Externo (Claude Desktop, Cursor, Agentes)',
+                  subtitle:
+                      'Permite que ferramentas externas de IA consultem seus saldos, transações e fluxo de caixa ou criem lançamentos via Model Context Protocol.',
+                  trailing: OutlinedButton.icon(
+                    icon: const Icon(Icons.hub_outlined, size: 16),
+                    label: const Text('Configurar MCP'),
+                    onPressed: () => showMcpTokensModal(context, widget.store),
                   ),
                 ),
               ],

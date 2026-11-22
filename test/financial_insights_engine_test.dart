@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/ai_assistant_service.dart';
 import 'package:openmoney/services/audit_log_manager.dart';
+import 'package:openmoney/services/cloud_sync_service.dart';
 import 'package:openmoney/services/financial_insights_engine.dart';
 import 'package:openmoney/services/shortcut_url_service.dart';
 import 'package:openmoney/store/money_store.dart';
@@ -581,6 +582,20 @@ void main() {
       try {
         tempDir.deleteSync(recursive: true);
       } catch (_) {}
+    });
+
+    test('CloudSyncService métodos de MCP / API tokens respondem com segurança', () async {
+      final sync = CloudSyncService.instance;
+      // Quando não autenticado:
+      final tokens = await sync.fetchApiTokens();
+      expect(tokens, isEmpty);
+
+      final createRes = await sync.createApiToken(name: 'Teste Token');
+      expect(createRes.ok, isFalse);
+      expect(createRes.error, contains('não autenticada'));
+
+      final deleteRes = await sync.deleteApiToken('tok_123');
+      expect(deleteRes, isFalse);
     });
   });
 }
