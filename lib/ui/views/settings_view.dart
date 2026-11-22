@@ -1196,8 +1196,7 @@ class _SettingsViewState extends State<SettingsView> {
                 const Divider(height: 22),
                 _buildSettingRow(
                   colors: colors,
-                  title:
-                      'Servidor MCP & Acesso Externo (Claude Desktop, Cursor, Agentes)',
+                  title: 'Servidor MCP & Acesso Externo',
                   subtitle:
                       'Permite que ferramentas externas de IA consultem seus saldos, transações e fluxo de caixa ou criem lançamentos via Model Context Protocol.',
                   trailing: OutlinedButton.icon(

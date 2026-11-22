@@ -418,7 +418,7 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Model Context Protocol para Claude Desktop, Cursor e agentes',
+                          'Model Context Protocol para ChatGPT, Claude, Gemini e agentes',
                           style: TextStyle(fontSize: 11.5, color: colors.textSecondary),
                         ),
                       ],

@@ -132280,7 +132280,7 @@ return A.A($async$Eq,r)},
 M(a0){var s,r=this,q=null,p=A.P(a0).ax.a===B.a5,o=A.ci(p),n=A.aT(a0,B.bK,t.w).w.a.a<680,m=o.a,l=m?B.aa:B.q,k=n?12:24,j=n?16:24,i=A.D(16),h=o.gV(),g=n?300:500,f=n?14:20,e=n?12:16,d=p?B.fl:B.ie,c=o.gV(),b=A.Y(q,B.a_j,B.l,q,q,new A.a_(B.dc.G(0.15),q,q,q,q,q,B.bX),q,38,q,q,q,q,q,38),a=n?14:16
 a=A.c("Servidor MCP & Acesso Externo",q,q,q,q,A.i(q,q,m?B.o:B.n,q,q,q,q,q,q,q,q,a,q,q,B.v,q,q,!0,q,q,q,q,q,q,q,q),q,q,q)
 s=t.p
-e=A.Y(q,A.x(A.a([b,B.bk,A.a2(A.U(A.a([a,B.bq,A.c("Model Context Protocol para Claude Desktop, Cursor e agentes",q,q,q,q,A.i(q,q,m?B.i:B.m,q,q,q,q,q,q,q,q,11.5,q,q,q,q,q,!0,q,q,q,q,q,q,q,q),q,q,q)],s),B.w,B.e,B.h),1),A.aj(q,q,q,B.zj,q,q,r.gazG(),q,q,q,"Recarregar",B.B),A.aj(q,q,q,B.ky,q,q,new A.b5e(a0),q,q,q,"Fechar",B.B)],s),B.j,B.e,B.h,0),B.l,q,q,new A.a_(d,q,new A.c1(B.t,B.t,new A.ab(c,1,B.u,-1),B.t),B.jD,q,q,B.r),q,q,q,q,new A.V(f,e,f,e),q,q,q)
+e=A.Y(q,A.x(A.a([b,B.bk,A.a2(A.U(A.a([a,B.bq,A.c("Model Context Protocol para ChatGPT, Claude, Gemini e agentes",q,q,q,q,A.i(q,q,m?B.i:B.m,q,q,q,q,q,q,q,q,11.5,q,q,q,q,q,!0,q,q,q,q,q,q,q,q),q,q,q)],s),B.w,B.e,B.h),1),A.aj(q,q,q,B.zj,q,q,r.gazG(),q,q,q,"Recarregar",B.B),A.aj(q,q,q,B.ky,q,q,new A.b5e(a0),q,q,q,"Fechar",B.B)],s),B.j,B.e,B.h,0),B.l,q,q,new A.a_(d,q,new A.c1(B.t,B.t,new A.ab(c,1,B.u,-1),B.t),B.jD,q,q,B.r),q,q,q,q,new A.V(f,e,f,e),q,q,q)
 f=m?B.ao:B.ap
 d=A.D(10)
 c=A.aw(o.gV(),1)
@@ -142007,7 +142007,7 @@ if(l.length!==0)B.c.u(m,A.a([B.ab,A.c(l,a1,a1,a1,a1,A.i(a1,a1,a9?B.o:B.n,a1,a1,a
 m.push(B.xf)
 m.push(a0.fA(a5,'Voc\xea pode acionar a Assistente por voz via Siri/Atalhos da Apple abrindo a URL "openmoney://?prompt=Seu+Comando" ou "https://openmoney.app.br/?prompt=Seu+Comando".',"Siri IA, Spotlight & Atalhos (macOS / iOS / Web)",A.E(B.Zj,a5.gB(),a1,20)))
 m.push(B.xf)
-m.push(a0.fA(a5,"Permite que ferramentas externas de IA consultem seus saldos, transa\xe7\xf5es e fluxo de caixa ou criem lan\xe7amentos via Model Context Protocol.","Servidor MCP & Acesso Externo (Claude Desktop, Cursor, Agentes)",A.cR(B.a_x,B.app,new A.be0(a0,b2),a1)))
+m.push(a0.fA(a5,"Permite que ferramentas externas de IA consultem seus saldos, transa\xe7\xf5es e fluxo de caixa ou criem lan\xe7amentos via Model Context Protocol.","Servidor MCP & Acesso Externo",A.cR(B.a_x,B.app,new A.be0(a0,b2),a1)))
 B.c.u(o,m)}a9=a0.pn(o,a5,B.Yt,"Assistente Financeira & Intelig\xeancia Artificial (Gemini, Claude, ChatGPT e Siri)")
 o=B.c.aZ(B.fB,new A.be1(a0))?a0.a.c.a.gaR():"BRL"
 m=t.Zf

@@ -2939,11 +2939,19 @@ function getOpenApiSpec() {
 }
 
 export function getOAuthProtectedResourceMetadata(url, resourcePath = "/api/mcp") {
+  const cleanPath = resourcePath.startsWith("/") ? resourcePath : `/${resourcePath}`;
   return {
-    resource: `${url.origin}${resourcePath}`,
+    resource: `${url.origin}${cleanPath}`,
     authorization_servers: [url.origin],
-    bearer_methods_supported: ["header", "query"],
-    scopes_supported: ["read_write", "read_only"],
+    bearer_methods_supported: ["header"],
+    scopes_supported: [
+      "read_write",
+      "read_only",
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+    ],
     resource_documentation: `${url.origin}`,
   };
 }
@@ -2955,18 +2963,53 @@ export function getOAuthAuthorizationServerMetadata(url) {
     token_endpoint: `${url.origin}/api/oauth/token`,
     registration_endpoint: `${url.origin}/api/oauth/register`,
     userinfo_endpoint: `${url.origin}/api/oauth/userinfo`,
+    jwks_uri: `${url.origin}/api/oauth/jwks`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
     grant_types_supported: ["authorization_code", "refresh_token"],
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256", "HS256"],
     token_endpoint_auth_methods_supported: [
       "none",
       "client_secret_post",
       "client_secret_basic",
     ],
-    code_challenge_methods_supported: ["S256", "plain"],
-    scopes_supported: ["read_write", "read_only", "openid", "profile", "email"],
+    code_challenge_methods_supported: ["S256"],
+    scopes_supported: [
+      "read_write",
+      "read_only",
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+    ],
+    authorization_response_iss_parameter_supported: true,
+    client_id_metadata_document_supported: true,
     service_documentation: `${url.origin}`,
   };
+}
+
+export async function logMcpDiagnostic(env, request, path, status, note = "") {
+  if (!env || !env.DB) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS mcp_debug_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        user_agent TEXT,
+        note TEXT
+      )
+    `).run();
+    const ua = (request.headers.get("User-Agent") || "").slice(0, 180);
+    await env.DB.prepare(
+      `INSERT INTO mcp_debug_logs (created_at, method, path, status, user_agent, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+    )
+      .bind(new Date().toISOString(), request.method, path, status, ua, String(note || "").slice(0, 400))
+      .run();
+  } catch (_) {}
 }
 
 function formatOAuthClientDisplayName(clientId) {
@@ -2986,6 +3029,15 @@ function formatOAuthClientDisplayName(clientId) {
         const decoded = new TextDecoder().decode(bytes).trim();
         if (decoded) return decoded;
       }
+    } catch (_) {}
+  }
+  if (str.startsWith("https://") || str.startsWith("http://")) {
+    try {
+      const u = new URL(str);
+      if (u.hostname.includes("chatgpt") || u.hostname.includes("openai")) return "ChatGPT";
+      if (u.hostname.includes("claude") || u.hostname.includes("anthropic")) return "Claude";
+      if (u.hostname.includes("google") || u.hostname.includes("gemini")) return "Gemini";
+      return u.hostname;
     } catch (_) {}
   }
   return str;
@@ -3328,25 +3380,39 @@ export async function onRequest(context) {
     const responseTypes = Array.isArray(body.response_types)
       ? body.response_types
       : ["code"];
-    const authMethod = body.token_endpoint_auth_method || "none";
+    const authMethod = body.token_endpoint_auth_method || "client_secret_post";
 
-    return jsonResponse(
-      {
-        client_id: clientId,
-        client_secret: clientSecret,
-        client_id_issued_at: Math.floor(Date.now() / 1000),
-        client_secret_expires_at: 0,
-        client_name: clientName,
-        redirect_uris: redirectUris,
-        grant_types: grantTypes,
-        response_types: responseTypes,
-        token_endpoint_auth_method: authMethod,
-        scope: body.scope || "read_write",
-      },
+    const registrationResponse = {
+      client_id: clientId,
+      client_name: clientName,
+      redirect_uris: redirectUris,
+      grant_types: grantTypes,
+      response_types: responseTypes,
+      token_endpoint_auth_method: authMethod,
+      scope: body.scope || "read_write offline_access",
+    };
+
+    if (authMethod !== "none") {
+      registrationResponse.client_secret = clientSecret;
+      registrationResponse.client_secret_expires_at = 0;
+    }
+
+    logMcpDiagnostic(
+      env,
+      request,
+      path,
       201,
-      origin,
-      true
+      `DCR client_name=${clientName} auth=${authMethod} uris=${JSON.stringify(redirectUris)}`
     );
+
+    return jsonResponse(registrationResponse, 201, origin, true);
+  }
+
+  // ==========================================================================
+  // 0.1c GET /api/oauth/jwks (JSON Web Key Set para descoberta OIDC)
+  // ==========================================================================
+  if (path === "/api/oauth/jwks" && (request.method === "GET" || request.method === "HEAD")) {
+    return jsonResponse({ keys: [] }, 200, origin, true);
   }
 
   // ==========================================================================
@@ -3360,6 +3426,13 @@ export async function onRequest(context) {
       const scope = url.searchParams.get("scope") || "read_write";
       const codeChallenge = url.searchParams.get("code_challenge") || "";
       const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
+      logMcpDiagnostic(
+        env,
+        request,
+        path,
+        200,
+        `authorize GET client=${clientId} redirect=${redirectUri}`
+      );
       return new Response(
         renderOAuthConsentHtml({
           clientId,
@@ -3441,6 +3514,7 @@ export async function onRequest(context) {
       const targetUrl = new URL(redirectUri);
       targetUrl.searchParams.set("code", code);
       if (state) targetUrl.searchParams.set("state", state);
+      targetUrl.searchParams.set("iss", url.origin);
 
       return Response.redirect(targetUrl.toString(), 302);
     }
@@ -4452,6 +4526,8 @@ export async function onRequest(context) {
   const claims = await authenticateRequest(request, env);
   if (!claims || !claims.sub) {
     if (isPublicOrAi) {
+      const originalPath = request.headers.get("X-OpenMoney-Original-Path") || path;
+      logMcpDiagnostic(env, request, originalPath, 401, "MCP 401 challenge");
       return new Response(
         JSON.stringify({
           error: "invalid_token",
@@ -4461,7 +4537,7 @@ export async function onRequest(context) {
           status: 401,
           headers: {
             ...corsHeaders(origin, true),
-            "WWW-Authenticate": `Bearer realm="OpenMoney MCP", resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
+            "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource${originalPath}", scope="read_write"`,
           },
         }
       );
