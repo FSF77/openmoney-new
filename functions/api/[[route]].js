@@ -2056,15 +2056,29 @@ const MCP_TOOLS = [
     },
   },
   {
-    name: "openmoney_get_budget_status",
+    name: "openmoney_get_predictions_and_budgets",
     description:
-      "Avalia os limites/tetos mensais de gastos configurados por categoria e o quanto já foi consumido no mês.",
+      "Avalia os limites de gastos (orçamento mensal configurado por categoria em Limite de Gastos) e o status das previsões de gastos para o mês especificado, mostrando o teto planejado, gastos realizados, % consumido e saldo restante.",
     inputSchema: {
       type: "object",
       properties: {
         month: {
           type: "string",
-          description: "Mês YYYY-MM (opcional, padrão mês atual)",
+          description: "Mês no formato YYYY-MM (opcional, padrão: mês atual)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_get_budget_status",
+    description:
+      "Alias para openmoney_get_predictions_and_budgets. Avalia os limites/tetos mensais de gastos configurados por categoria e o quanto já foi consumido no mês.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        month: {
+          type: "string",
+          description: "Mês YYYY-MM (opcional, padrão: mês atual)",
         },
       },
     },
@@ -2629,43 +2643,153 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     return `Lançamento \`${t.id}\` ("${t.payee}") excluído com sucesso.`;
   }
 
-  if (name === "openmoney_get_budget_status") {
+  if (
+    name === "openmoney_get_predictions_and_budgets" ||
+    name === "openmoney_get_budget_status"
+  ) {
     const { db } = await loadDecryptedUserDatabase(env, userId);
     const targetMonth = (
       args.month || new Date().toISOString().slice(0, 7)
     ).trim();
-    const categories = Array.isArray(db.cats) ? db.cats : [];
     const txs = Array.isArray(db.txs) ? db.txs : [];
+    const budgetsMap = (db.budgets && typeof db.budgets === "object") ? db.budgets : {};
+    const baseCur = db.baseCurrency || "BRL";
 
-    const spentByCat = {};
+    const spentByExactCat = {};
+    const predTxs = [];
+
     for (const t of txs) {
       if (
-        t.auto === true ||
-        t.xfer ||
         !t.date ||
         !t.date.startsWith(targetMonth) ||
-        Number(t.amt || 0) >= 0
+        t.auto === true ||
+        t.xfer ||
+        t.peer
       ) {
         continue;
       }
-      const c = t.cat || "Outros";
-      spentByCat[c] = (spentByCat[c] || 0) + Math.abs(Number(t.amt || 0));
+      const payee = String(t.payee || "").trim();
+      const isPred =
+        payee.startsWith("[Prev]") ||
+        (t.memo && String(t.memo).includes("[Previsão base:"));
+      if (isPred) {
+        predTxs.push(t);
+        continue;
+      }
+      const amt = Number(t.amt || 0);
+      if (amt >= 0) continue; // Somente despesas incidem sobre limites de gastos
+
+      const c = (t.cat || "Outros").trim();
+      spentByExactCat[c] = (spentByExactCat[c] || 0) + Math.abs(amt);
     }
 
-    const budgetItems = categories.filter((c) => Number(c.budget || 0) > 0);
-    if (budgetItems.length === 0) {
-      return `Nenhum orçamento configurado nas categorias para o mês de ${targetMonth}.`;
+    function computeSpentForPath(bPath) {
+      let sum = 0;
+      const isTop = !bPath.includes(" › ") && !bPath.includes(" > ");
+      for (const [cName, spent] of Object.entries(spentByExactCat)) {
+        if (cName === bPath) {
+          sum += spent;
+        } else if (
+          isTop &&
+          (cName.startsWith(`${bPath} › `) || cName.startsWith(`${bPath} > `))
+        ) {
+          sum += spent;
+        }
+      }
+      return sum;
     }
 
-    let report = `### Status dos Orçamentos (${targetMonth})\n\n| Categoria | Teto Mensal | Gasto Atual | % Consumido | Saldo Restante |\n| :--- | :--- | :--- | :--- | :--- |\n`;
-    for (const b of budgetItems) {
-      const budget = Number(b.budget || 0);
-      const spent = spentByCat[b.name] || 0;
-      const pct = Math.round((spent / budget) * 100);
-      const remaining = budget - spent;
-      const alert = pct > 100 ? " ⚠️ (Estourado)" : "";
-      report += `| **${b.name}** | ${formatCurrencyCents(budget)} | ${formatCurrencyCents(spent)} | ${pct}%${alert} | ${formatCurrencyCents(remaining)} |\n`;
+    const budgetPaths = Object.keys(budgetsMap).filter(
+      (k) => Number(budgetsMap[k] || 0) > 0
+    );
+
+    if (budgetPaths.length === 0 && predTxs.length === 0) {
+      return `Nenhum limite de gastos (orçamento) ou previsão configurado para o mês de ${targetMonth}.\n\nPara definir limites mensais, acesse o menu "Limite de Gastos" no OpenMoney e configure os tetos das categorias desejadas.`;
     }
+
+    let report = "";
+
+    if (budgetPaths.length > 0) {
+      report += `### Limite de Gastos / Orçamento (${targetMonth})\n\n`;
+      report += `| Categoria | Teto Mensal | Gasto Atual | % Consumido | Saldo Restante | Status |\n`;
+      report += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+
+      budgetPaths.sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+      let totalPlanned = 0;
+      let totalSpent = 0;
+
+      // Consolidar totais no nível das categorias raiz para evitar dupla contagem
+      const topNames = new Set(
+        budgetPaths.map((bp) =>
+          bp.includes(" › ")
+            ? bp.split(" › ")[0].trim()
+            : bp.includes(" > ")
+            ? bp.split(" > ")[0].trim()
+            : bp.trim()
+        )
+      );
+
+      for (const top of topNames) {
+        const directTopBudget = Number(budgetsMap[top] || 0);
+        const subPaths = budgetPaths.filter(
+          (bp) =>
+            bp !== top &&
+            (bp.startsWith(`${top} › `) || bp.startsWith(`${top} > `))
+        );
+        let effBudget = directTopBudget;
+        if (effBudget === 0) {
+          for (const sp of subPaths) effBudget += Number(budgetsMap[sp] || 0);
+        }
+        totalPlanned += effBudget;
+        totalSpent += computeSpentForPath(top);
+      }
+
+      for (const bPath of budgetPaths) {
+        const budget = Number(budgetsMap[bPath] || 0);
+        const spent = computeSpentForPath(bPath);
+        const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0;
+        const remaining = budget - spent;
+        let status = "✅ No limite";
+        if (pct > 100) {
+          status = "⚠️ **Acima do Limite**";
+        } else if (pct >= 80) {
+          status = "⚡ Atenção (80%+)";
+        }
+        report += `| **${bPath}** | ${formatCurrencyCents(budget, baseCur)} | ${formatCurrencyCents(spent, baseCur)} | ${pct}% | ${formatCurrencyCents(remaining, baseCur)} | ${status} |\n`;
+      }
+
+      const grandRemaining = totalPlanned - totalSpent;
+      const grandPct =
+        totalPlanned > 0 ? Math.round((totalSpent / totalPlanned) * 100) : 0;
+      report += `\n**Resumo Consolidado do Orçamento:**\n`;
+      report += `- **Teto Total Planejado:** ${formatCurrencyCents(totalPlanned, baseCur)}\n`;
+      report += `- **Total Gasto no Mês:** ${formatCurrencyCents(totalSpent, baseCur)} (${grandPct}% consumido)\n`;
+      report += `- **Saldo Restante Geral:** ${formatCurrencyCents(grandRemaining, baseCur)}\n`;
+    }
+
+    if (predTxs.length > 0) {
+      report += `\n### Previsões de Gastos (${targetMonth})\n\n`;
+      report += `| Favorecido / Descrição | Categoria | Valor Previsto | Saldo Atual | Valor Abatido |\n`;
+      report += `| :--- | :--- | :--- | :--- | :--- |\n`;
+      for (const pt of predTxs) {
+        const currentVal = Math.abs(Number(pt.amt || 0));
+        let baseVal = currentVal;
+        if (pt.memo && pt.memo.includes("[Previsão base:")) {
+          const match = pt.memo.match(
+            /\[Previsão base:\s*R?\$?\s*([0-9.,]+)\]/i
+          );
+          if (match && match[1]) {
+            const raw = match[1].replace(/\./g, "").replace(",", ".");
+            const parsed = Math.round(parseFloat(raw) * 100);
+            if (!isNaN(parsed) && parsed > 0) baseVal = parsed;
+          }
+        }
+        const deducted = Math.max(0, baseVal - currentVal);
+        report += `| ${pt.payee || "Previsão"} | ${pt.cat || "—"} | ${formatCurrencyCents(baseVal, baseCur)} | ${formatCurrencyCents(currentVal, baseCur)} | ${formatCurrencyCents(deducted, baseCur)} |\n`;
+      }
+    }
+
     return report;
   }
 

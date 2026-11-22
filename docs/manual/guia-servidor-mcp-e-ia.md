@@ -221,4 +221,4 @@ Esta seção documenta a arquitetura técnica, padrões de segurança e especifi
 | `openmoney_add_transaction` | Escrita | `read_write` | Criação de despesas, receitas, compras parceladas e transferências com gravação no Sync v2. |
 | `openmoney_update_transaction` | Escrita | `read_write` | Edição de campos de lançamentos existentes por ID. |
 | `openmoney_delete_transaction` | Escrita | `read_write` | Remoção unitária e segura de transação por ID (e de contraparte em transferências). |
-| `openmoney_get_predictions_and_budgets` | Leitura | `read_only` | Situação das previsões orçamentárias e limites de gastos do mês. |
+| `openmoney_get_predictions_and_budgets` | Leitura | `read_only` | Avaliação completa dos limites de gastos (orçamento mensal configurado em Limite de Gastos) e previsões de gastos do mês, com teto planejado, gastos realizados, % consumido e saldo restante. Suporta alias `openmoney_get_budget_status`. |
