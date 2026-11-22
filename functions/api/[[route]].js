@@ -224,9 +224,9 @@ function corsHeaders(origin, allowAll = false) {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, MCP-Protocol-Version, Accept, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset, X-OpenMoney-AI-Key, X-OpenMoney-AI-Provider",
+      "Content-Type, Authorization, MCP-Protocol-Version, Mcp-Session-Id, Accept, X-OpenMoney-Compression, X-OpenMoney-Raw-Size, X-OpenMoney-Prefs, X-OpenMoney-Base-Revision, X-OpenMoney-Force, X-OpenMoney-Compact-Seq, X-OpenMoney-Tz-Offset, X-OpenMoney-AI-Key, X-OpenMoney-AI-Provider",
     "Access-Control-Expose-Headers":
-      "Content-Type, MCP-Protocol-Version, X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
+      "Content-Type, WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, X-OpenMoney-Compression, X-OpenMoney-Revision, X-OpenMoney-Sync-Seq, X-OpenMoney-Snapshot-Seq, X-OpenMoney-Updated-At, X-OpenMoney-Prefs, X-OpenMoney-Self-Healed",
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Vary": "Origin",
@@ -2457,17 +2457,24 @@ async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
   const { id, method, params } = body;
 
   if (method === "initialize") {
+    const requestedVersion = params?.protocolVersion;
+    const supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"];
+    const negotiatedVersion = supportedVersions.includes(requestedVersion)
+      ? requestedVersion
+      : "2025-03-26";
     return {
       jsonrpc: "2.0",
       id,
       result: {
-        protocolVersion: "2024-11-05",
+        protocolVersion: negotiatedVersion,
         serverInfo: {
           name: "openmoney-cloud",
-          version: "2.5.3",
+          version: "2.5.4",
         },
         capabilities: {
-          tools: {},
+          tools: {
+            listChanged: false,
+          },
         },
       },
     };
@@ -2931,8 +2938,74 @@ function getOpenApiSpec() {
   };
 }
 
-function renderOAuthConsentHtml({ clientId, redirectUri, state, scope, error = "", email = "" }) {
-  const safeClient = String(clientId || "ChatGPT / Assistente de IA")
+export function getOAuthProtectedResourceMetadata(url, resourcePath = "/api/mcp") {
+  return {
+    resource: `${url.origin}${resourcePath}`,
+    authorization_servers: [url.origin],
+    bearer_methods_supported: ["header", "query"],
+    scopes_supported: ["read_write", "read_only"],
+    resource_documentation: `${url.origin}`,
+  };
+}
+
+export function getOAuthAuthorizationServerMetadata(url) {
+  return {
+    issuer: url.origin,
+    authorization_endpoint: `${url.origin}/api/oauth/authorize`,
+    token_endpoint: `${url.origin}/api/oauth/token`,
+    registration_endpoint: `${url.origin}/api/oauth/register`,
+    userinfo_endpoint: `${url.origin}/api/oauth/userinfo`,
+    response_types_supported: ["code"],
+    response_modes_supported: ["query"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    token_endpoint_auth_methods_supported: [
+      "none",
+      "client_secret_post",
+      "client_secret_basic",
+    ],
+    code_challenge_methods_supported: ["S256", "plain"],
+    scopes_supported: ["read_write", "read_only", "openid", "profile", "email"],
+    service_documentation: `${url.origin}`,
+  };
+}
+
+function formatOAuthClientDisplayName(clientId) {
+  if (!clientId) return "Assistente de IA";
+  const str = String(clientId).trim();
+  if (str.startsWith("opm_c_")) {
+    try {
+      const parts = str.split("_");
+      if (parts.length >= 4) {
+        const b64 = parts
+          .slice(2, parts.length - 1)
+          .join("_")
+          .replace(/-/g, "+")
+          .replace(/_/g, "/");
+        const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+        const bytes = Uint8Array.from(atob(b64 + pad), (c) => c.charCodeAt(0));
+        const decoded = new TextDecoder().decode(bytes).trim();
+        if (decoded) return decoded;
+      }
+    } catch (_) {}
+  }
+  return str;
+}
+
+function renderOAuthConsentHtml({
+  clientId,
+  redirectUri,
+  state,
+  scope,
+  codeChallenge = "",
+  codeChallengeMethod = "S256",
+  error = "",
+  email = "",
+}) {
+  const rawClient = String(clientId || "ChatGPT / Claude / Gemini");
+  const displayClient = formatOAuthClientDisplayName(rawClient);
+  const safeClientDisplay = displayClient
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeClientId = rawClient
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const safeEmail = String(email || "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -2941,6 +3014,10 @@ function renderOAuthConsentHtml({ clientId, redirectUri, state, scope, error = "
   const safeState = String(state || "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const safeScope = String(scope || "read_write")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeCodeChallenge = String(codeChallenge || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeCodeChallengeMethod = String(codeChallengeMethod || "S256")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   const errorBanner = error
@@ -3107,14 +3184,14 @@ function renderOAuthConsentHtml({ clientId, redirectUri, state, scope, error = "
       </div>
       <div>
         <div class="brand-title">OpenMoney Cloud</div>
-        <div class="brand-sub">Conector Oficial de IA</div>
+        <div class="brand-sub">Conector Oficial de IA (MCP / OAuth 2.1)</div>
       </div>
     </div>
 
     ${errorBanner}
 
     <h2>Autorizar Conexão</h2>
-    <p class="desc">O assistente <span class="client-tag">${safeClient}</span> está solicitando acesso para interagir com suas finanças pessoais no OpenMoney.</p>
+    <p class="desc">O assistente <span class="client-tag">${safeClientDisplay}</span> está solicitando acesso para interagir com suas finanças pessoais no OpenMoney.</p>
 
     <div class="permissions">
       <div class="permissions-title">Permissões Solicitadas:</div>
@@ -3133,10 +3210,12 @@ function renderOAuthConsentHtml({ clientId, redirectUri, state, scope, error = "
     </div>
 
     <form method="POST" action="/api/oauth/authorize">
-      <input type="hidden" name="client_id" value="${safeClient}">
+      <input type="hidden" name="client_id" value="${safeClientId}">
       <input type="hidden" name="redirect_uri" value="${safeRedirect}">
       <input type="hidden" name="state" value="${safeState}">
       <input type="hidden" name="scope" value="${safeScope}">
+      <input type="hidden" name="code_challenge" value="${safeCodeChallenge}">
+      <input type="hidden" name="code_challenge_method" value="${safeCodeChallengeMethod}">
 
       <div class="form-group">
         <label for="email">Seu E-mail no OpenMoney</label>
@@ -3169,10 +3248,24 @@ export async function onRequest(context) {
     path.startsWith("/api/mcp") ||
     path.startsWith("/api/oauth") ||
     path.startsWith("/api/openapi") ||
-    path.startsWith("/api/v1/tools");
+    path.startsWith("/api/v1/tools") ||
+    path.includes("/.well-known/");
 
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(origin, isPublicOrAi) });
+  }
+
+  // ==========================================================================
+  // 0.0 Descoberta Automática OAuth 2.1 / MCP (RFC 8414 & RFC 9728)
+  // ==========================================================================
+  if (path.includes("/.well-known/oauth-protected-resource")) {
+    return jsonResponse(getOAuthProtectedResourceMetadata(url, "/api/mcp"), 200, origin, true);
+  }
+  if (
+    path.includes("/.well-known/oauth-authorization-server") ||
+    path.includes("/.well-known/openid-configuration")
+  ) {
+    return jsonResponse(getOAuthAuthorizationServerMetadata(url), 200, origin, true);
   }
 
   try {
@@ -3215,16 +3308,67 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 0.2 GET & POST /api/oauth/authorize (Consentimento OAuth 2.0)
+  // 0.1b POST /api/oauth/register (Dynamic Client Registration — RFC 7591)
+  //      Permite que Claude, ChatGPT e Gemini se registrem automaticamente
+  // ==========================================================================
+  if (path === "/api/oauth/register" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const clientName = String(body.client_name || "Assistente IA").trim().slice(0, 60);
+    const encodedName = bytesToBase64(new TextEncoder().encode(clientName))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const randomSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const clientId = `opm_c_${encodedName}_${randomSuffix}`;
+    const clientSecret = `opm_s_${crypto.randomUUID().replace(/-/g, "")}`;
+    const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
+    const grantTypes = Array.isArray(body.grant_types)
+      ? body.grant_types
+      : ["authorization_code", "refresh_token"];
+    const responseTypes = Array.isArray(body.response_types)
+      ? body.response_types
+      : ["code"];
+    const authMethod = body.token_endpoint_auth_method || "none";
+
+    return jsonResponse(
+      {
+        client_id: clientId,
+        client_secret: clientSecret,
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+        client_secret_expires_at: 0,
+        client_name: clientName,
+        redirect_uris: redirectUris,
+        grant_types: grantTypes,
+        response_types: responseTypes,
+        token_endpoint_auth_method: authMethod,
+        scope: body.scope || "read_write",
+      },
+      201,
+      origin,
+      true
+    );
+  }
+
+  // ==========================================================================
+  // 0.2 GET & POST /api/oauth/authorize (Consentimento OAuth 2.1 + PKCE)
   // ==========================================================================
   if (path === "/api/oauth/authorize") {
     if (request.method === "GET" || request.method === "HEAD") {
-      const clientId = url.searchParams.get("client_id") || "ChatGPT / Assistente de IA";
+      const clientId = url.searchParams.get("client_id") || "ChatGPT / Claude / Gemini";
       const redirectUri = url.searchParams.get("redirect_uri") || "";
       const state = url.searchParams.get("state") || "";
       const scope = url.searchParams.get("scope") || "read_write";
+      const codeChallenge = url.searchParams.get("code_challenge") || "";
+      const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
       return new Response(
-        renderOAuthConsentHtml({ clientId, redirectUri, state, scope }),
+        renderOAuthConsentHtml({
+          clientId,
+          redirectUri,
+          state,
+          scope,
+          codeChallenge,
+          codeChallengeMethod,
+        }),
         { headers: { "Content-Type": "text/html; charset=utf-8" } }
       );
     }
@@ -3240,10 +3384,12 @@ export async function onRequest(context) {
 
       const email = (formData.get("email") || "").trim().toLowerCase();
       const password = formData.get("password") || "";
-      const clientId = formData.get("client_id") || "ChatGPT / Assistente de IA";
+      const clientId = formData.get("client_id") || "ChatGPT / Claude / Gemini";
       const redirectUri = formData.get("redirect_uri") || "";
       const state = formData.get("state") || "";
       const scope = formData.get("scope") || "read_write";
+      const codeChallenge = formData.get("code_challenge") || "";
+      const codeChallengeMethod = formData.get("code_challenge_method") || "S256";
 
       if (!redirectUri) {
         return new Response("redirect_uri é obrigatório.", { status: 400 });
@@ -3272,6 +3418,8 @@ export async function onRequest(context) {
             redirectUri,
             state,
             scope,
+            codeChallenge,
+            codeChallengeMethod,
             error: loginError,
             email,
           }),
@@ -3281,9 +3429,14 @@ export async function onRequest(context) {
 
       const code = "opm_code_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const packedScope = JSON.stringify({
+        scope: scope || "read_write",
+        cc: codeChallenge || "",
+        ccm: codeChallengeMethod || "S256",
+      });
       await env.DB.prepare(
         "INSERT INTO oauth_codes (code, user_id, client_id, redirect_uri, scope, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
-      ).bind(code, user.id, clientId, redirectUri, scope, new Date().toISOString(), expiresAt).run();
+      ).bind(code, user.id, clientId, redirectUri, packedScope, new Date().toISOString(), expiresAt).run();
 
       const targetUrl = new URL(redirectUri);
       targetUrl.searchParams.set("code", code);
@@ -3294,7 +3447,7 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 0.3 POST /api/oauth/token (Troca de Código por Access Token)
+  // 0.3 POST /api/oauth/token (Troca de Código por Access Token + PKCE + Refresh)
   // ==========================================================================
   if (path === "/api/oauth/token" && request.method === "POST") {
     let params;
@@ -3306,13 +3459,56 @@ export async function onRequest(context) {
       params = Object.fromEntries(new URLSearchParams(text).entries());
     }
 
-    const code = (params.code || "").trim();
     const grantType = params.grant_type;
-    const clientId = params.client_id || "";
+    let clientId = params.client_id || "";
+    const authHeader = request.headers.get("Authorization") || "";
+    if (!clientId && authHeader.startsWith("Basic ")) {
+      try {
+        const decoded = atob(authHeader.slice(6).trim());
+        clientId = decoded.split(":")[0] || "";
+      } catch (_) {}
+    }
 
+    if (grantType === "refresh_token") {
+      const refreshToken = String(params.refresh_token || "").trim();
+      if (!refreshToken.startsWith("opm_live_")) {
+        return jsonResponse(
+          { error: "invalid_grant", error_description: "refresh_token inválido." },
+          400,
+          origin,
+          true
+        );
+      }
+      const tokenHash = await sha256Hex(refreshToken);
+      const tokRow = await env.DB.prepare(
+        "SELECT id, permissions FROM user_api_tokens WHERE token_hash = ?1"
+      ).bind(tokenHash).first();
+      if (!tokRow) {
+        return jsonResponse(
+          { error: "invalid_grant", error_description: "Token revogado ou inexistente." },
+          400,
+          origin,
+          true
+        );
+      }
+      return jsonResponse(
+        {
+          access_token: refreshToken,
+          token_type: "Bearer",
+          expires_in: 31536000,
+          refresh_token: refreshToken,
+          scope: tokRow.permissions || "read_write",
+        },
+        200,
+        origin,
+        true
+      );
+    }
+
+    const code = (params.code || "").trim();
     if (grantType !== "authorization_code" || !code) {
       return jsonResponse(
-        { error: "unsupported_grant_type", error_description: "grant_type deve ser 'authorization_code' e 'code' é obrigatório." },
+        { error: "unsupported_grant_type", error_description: "grant_type deve ser 'authorization_code' ou 'refresh_token'." },
         400,
         origin,
         true
@@ -3333,13 +3529,63 @@ export async function onRequest(context) {
       );
     }
 
+    let actualScope = "read_write";
+    let savedChallenge = "";
+    let savedMethod = "S256";
+    try {
+      if (codeRow.scope && codeRow.scope.startsWith("{")) {
+        const parsed = JSON.parse(codeRow.scope);
+        actualScope = parsed.scope || "read_write";
+        savedChallenge = parsed.cc || "";
+        savedMethod = parsed.ccm || "S256";
+      } else if (codeRow.scope) {
+        actualScope = codeRow.scope;
+      }
+    } catch (_) {}
+
+    if (savedChallenge) {
+      const verifier = String(params.code_verifier || "").trim();
+      if (!verifier) {
+        return jsonResponse(
+          { error: "invalid_grant", error_description: "code_verifier (PKCE) obrigatório." },
+          400,
+          origin,
+          true
+        );
+      }
+      if (savedMethod.toUpperCase() === "S256") {
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+        const computedChallenge = bytesToBase64(new Uint8Array(digest))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        if (computedChallenge !== savedChallenge) {
+          return jsonResponse(
+            { error: "invalid_grant", error_description: "Falha na verificação PKCE S256." },
+            400,
+            origin,
+            true
+          );
+        }
+      } else if (verifier !== savedChallenge) {
+        return jsonResponse(
+          { error: "invalid_grant", error_description: "Falha na verificação PKCE." },
+          400,
+          origin,
+          true
+        );
+      }
+    }
+
     await env.DB.prepare("DELETE FROM oauth_codes WHERE code = ?1").bind(code).run().catch(() => {});
 
     const rawToken = "opm_live_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
     const tokenHash = await sha256Hex(rawToken);
     const tokenPrefix = rawToken.slice(0, 15) + "...";
     const tokenId = crypto.randomUUID();
-    const clientName = "OAuth: " + (clientId || "ChatGPT/Gemini AI");
+    const displayClient = formatOAuthClientDisplayName(clientId || codeRow.client_id);
+    const clientName = "OAuth: " + displayClient;
+    const dbPermissions = actualScope === "read_only" ? "read_only" : "read_write";
 
     await env.DB.prepare(
       "INSERT INTO user_api_tokens (id, user_id, name, token_hash, token_prefix, permissions, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
@@ -3349,7 +3595,7 @@ export async function onRequest(context) {
       clientName,
       tokenHash,
       tokenPrefix,
-      codeRow.scope || "read_write",
+      dbPermissions,
       new Date().toISOString()
     ).run();
 
@@ -3358,7 +3604,8 @@ export async function onRequest(context) {
         access_token: rawToken,
         token_type: "Bearer",
         expires_in: 31536000,
-        scope: codeRow.scope || "read_write",
+        refresh_token: rawToken,
+        scope: actualScope || "read_write",
       },
       200,
       origin,
@@ -4200,10 +4447,25 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // Todas as rotas abaixo exigem Token JWT válido (Isolamento por user_id)
+  // Todas as rotas abaixo exigem Token JWT ou OAuth Bearer válido
   // ==========================================================================
   const claims = await authenticateRequest(request, env);
   if (!claims || !claims.sub) {
+    if (isPublicOrAi) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_token",
+          error_description: "Autenticação OAuth 2.1 necessária para acessar o servidor MCP do OpenMoney.",
+        }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders(origin, true),
+            "WWW-Authenticate": `Bearer realm="OpenMoney MCP", resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
+          },
+        }
+      );
+    }
     return jsonResponse(
       { error: "Sessão expirada ou não autenticada." },
       401,
@@ -6166,30 +6428,46 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 11.3 POST & GET /api/mcp (Transporte MCP Streamable HTTP Oficial)
+  // 11.3 POST, GET & DELETE /api/mcp (Transporte MCP Streamable HTTP Oficial)
   // ==========================================================================
   if (path === "/api/mcp") {
-    const mcpProtocol = request.headers.get("MCP-Protocol-Version") || "2024-11-05";
+    const mcpProtocol = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
+    const sessionId =
+      request.headers.get("Mcp-Session-Id") || `opm-sess-${userId.slice(0, 12)}`;
     const baseHeaders = {
       ...corsHeaders(origin, true),
       "MCP-Protocol-Version": mcpProtocol,
+      "Mcp-Session-Id": sessionId,
     };
+
+    if (request.method === "DELETE") {
+      return new Response(null, {
+        status: 200,
+        headers: baseHeaders,
+      });
+    }
 
     if (request.method === "GET") {
       const accept = request.headers.get("Accept") || "";
-      if (accept.includes("text/event-stream") && env.SYNC) {
-        const doId = env.SYNC.idFromName(userId);
-        const stub = env.SYNC.get(doId);
-        return stub.fetch(request);
+      // Pela especificação MCP Streamable HTTP (2025-03-26), servidores que respondem
+      // diretamente no POST devem retornar 405 Method Not Allowed ao receber GET SSE.
+      if (accept.includes("text/event-stream") || !accept.includes("text/html")) {
+        return new Response(null, {
+          status: 405,
+          headers: {
+            ...baseHeaders,
+            "Allow": "POST, DELETE, OPTIONS",
+          },
+        });
       }
       return new Response(
         JSON.stringify({
           name: "openmoney-cloud",
-          version: "2.5.3",
-          protocolVersion: "2024-11-05",
+          version: "2.5.4",
+          protocolVersion: "2025-03-26",
           transport: "http",
           status: "ready",
-          description: "OpenMoney Cloud MCP Server (Streamable HTTP)",
+          description: "OpenMoney Cloud MCP Server (Streamable HTTP + OAuth 2.1)",
         }),
         {
           status: 200,
@@ -6221,8 +6499,8 @@ export async function onRequest(context) {
         });
       }
 
-      // Se o cliente solicitou text/event-stream explicitamente
-      if (accept.includes("text/event-stream") && !accept.includes("application/json;q=1")) {
+      // Se o cliente aceitar apenas text/event-stream e não application/json
+      if (accept.includes("text/event-stream") && !accept.includes("application/json")) {
         const sseData = `event: message\ndata: ${JSON.stringify(rpcResponse)}\n\n`;
         return new Response(sseData, {
           status: 200,
@@ -6234,7 +6512,7 @@ export async function onRequest(context) {
         });
       }
 
-      // Resposta padrão JSON-RPC sobre HTTP
+      // Resposta padrão JSON-RPC sobre Streamable HTTP
       return new Response(JSON.stringify(rpcResponse), {
         status: 200,
         headers: {

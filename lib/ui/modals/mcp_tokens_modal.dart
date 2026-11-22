@@ -461,13 +461,18 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Endpoint MCP Oficial (Streamable HTTP):',
+                                'Endereço do Servidor MCP (Login Automático no Claude, ChatGPT e Gemini):',
                                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                               ),
                               SizedBox(height: 2),
+                              Text(
+                                'Basta colar esta URL na IA — a tela de login do OpenMoney abrirá automaticamente.',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey),
+                              ),
+                              SizedBox(height: 3),
                               SelectableText(
                                 'https://openmoney.app.br/api/mcp',
-                                style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.blueAccent),
+                                style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.blueAccent, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
