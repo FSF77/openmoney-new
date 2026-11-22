@@ -343,14 +343,67 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
     );
   }
 
-  Future<void> _deleteToken(String tokenId) async {
-    final ok = await CloudSyncService.instance.deleteApiToken(tokenId);
-    if (ok) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Token revogado com sucesso.')),
-        );
-        _loadTokens();
+  Future<void> _deleteToken(String tokenId, String tokenName) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSecondary,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.borderGlass),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: colors.expense, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Revogar Token de Acesso?',
+              style: TextStyle(fontSize: 16, color: colors.textPrimary, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tem certeza de que deseja revogar o token "$tokenName"?',
+              style: TextStyle(fontSize: 13, color: colors.textPrimary, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Qualquer assistente de IA ou aplicativo externo (ChatGPT, Claude, Gemini, Cursor) conectado com este token perderá o acesso aos seus dados imediatamente.',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar', style: TextStyle(color: colors.textSecondary)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: colors.expense),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Revogar Token'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final ok = await CloudSyncService.instance.deleteApiToken(tokenId);
+      if (ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Token revogado com sucesso.')),
+          );
+          _loadTokens();
+        }
       }
     }
   }
@@ -639,7 +692,10 @@ class _McpTokensDialogState extends State<_McpTokensDialog> {
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
                                         tooltip: 'Revogar Token',
-                                        onPressed: () => _deleteToken(tok['id']?.toString() ?? ''),
+                                        onPressed: () => _deleteToken(
+                                          tok['id']?.toString() ?? '',
+                                          name,
+                                        ),
                                       ),
                                     ],
                                   ),

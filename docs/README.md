@@ -831,6 +831,13 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 - **Alerta Preventivo de Janela Temporal**: Caso a data informada seja **anterior a mais de 30 dias** ou **posterior a mais de 12 meses** da data atual, o aplicativo exibe um aviso visual abaixo do campo e abre um diálogo de confirmação (*"Corrigir Data"* / *"Salvar Mesmo Assim"*) antes de persistir o lançamento, evitando inclusões acidentais em datas erradas.
 - **Teclado Numérico Direto em Dispositivos Móveis**: Em smartphones, iPads e tablets (nativo e Web PWA), tocar nos campos de **Data** (`TextInputType.number`) ou **Valor** (`TextInputType.numberWithOptions(decimal: true)`) abre diretamente o teclado numérico do sistema em vez do teclado alfanumérico.
 
+### 28. Servidor MCP Remoto, OAuth 2.1 e Integração com Agentes de IA Externos (ADR 036)
+- **Model Context Protocol (MCP) sobre Streamable HTTP**: Conexão padronizada para assistentes externos modernos (**ChatGPT**, **Claude Desktop**, **Claude Web**, **Google Gemini**, **Cursor**, **LM Studio**, **Claude Code** e agentes autônomos) hospedada na borda do Cloudflare Pages Functions (`/api/mcp`).
+- **Autodescoberta OAuth 2.1 (Conexão 1-Clique)**: Implementação das especificações RFC 9728 (`/.well-known/oauth-protected-resource`), RFC 8414 (`/.well-known/oauth-authorization-server`), RFC 7591 (Dynamic Client Registration) e PKCE `S256` com parâmetro `iss` (RFC 9207), permitindo vincular o ChatGPT sem inserção manual de chaves.
+- **Tokens de API Bearer com Hash SHA-256**: Geração de chaves `opm_live_...` salvas no Cloudflare D1 exclusivamente sob hash SHA-256, com confirmação obrigatória de revogação na UI e invalidação em tempo real.
+- **Trilha de Auditoria e Anti-Wipe**: Ações de inclusão ou edição via IA recebem o marcador `[MCP Remoto]` nos logs do sistema. Salvaguardas anti-wipe garantem operações unitárias por ID e impedem qualquer exclusão ou sobregravação indevida da base.
+- **Cálculo Determinístico de Saldos**: Separação clara entre **Saldo Atual do Dia (Conciliado)** (apenas lançamentos conciliados até a data de hoje, idêntico ao extrato do banco) e **Saldo Previsto no Mês** (projeção matemática incluindo pendências).
+
 ---
 
 ## 📁 Estrutura do Projeto
@@ -897,6 +904,7 @@ OpenMoneyFlutter/
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](manual/guia-assistente-ia.md)
+- [Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos (ChatGPT, Claude, Gemini, Cursor e LM Studio)](manual/guia-servidor-mcp-e-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](manual/guia-boas-vindas.md)
 - [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](manual/guia-conciliacao-bancaria-ofx.md)
 - [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](manual/guia-dashboard-e-personalizacao.md)
@@ -943,6 +951,8 @@ OpenMoneyFlutter/
 - [ADR 032: Filtros de Sugestão de Favorecido por Tipo e Escopo Configurável](adr/032-payee-suggestion-filters-and-configurable-scope.md)
 - [ADR 033: Saldo Inicial no CSV, Exportação/Importação de Contas, Máscara de Data e Calculadora Integrada](adr/033-csv-opening-balance-accounts-auto-date-calculator.md)
 - [ADR 034: Validação Estrita de Datas, Alertas de Janela Temporal e Exclusão de Previsões no Autocompletar](adr/034-date-validation-range-warnings-and-prediction-payee-exclusion.md)
+- [ADR 035: Dashboard de Gráficos (Analytics) com fl_chart](adr/035-charts-dashboard-analytics.md)
+- [ADR 036: Servidor MCP Remoto (Streamable HTTP), OAuth 2.1, PKCE S256 e Isolamento de Segurança](adr/036-mcp-remote-server-and-oauth2.md)
 
 ---
 

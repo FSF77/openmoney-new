@@ -41,6 +41,8 @@ O OpenMoney oferece três formas flexíveis e transparentes para atender a todos
 
 > [!NOTE]
 > No macOS e iOS, você também pode selecionar **Apple Intelligence Local** como provedor, processando os comandos no próprio hardware Apple Silicon sem qualquer envio de dados para a internet.
+>
+> Caso deseje que o **ChatGPT**, **Claude Desktop / Web**, **Gemini**, **Cursor** ou **LM Studio** acessem diretamente seus dados em tempo real através do protocolo MCP ou OAuth 2.1, consulte o [Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos](guia-servidor-mcp-e-ia.md).
 
 ### 3.1. Configuração do Modo Nuvem Cloud na Cloudflare (Administração / Backend)
 
