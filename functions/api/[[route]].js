@@ -1772,15 +1772,40 @@ async function loadDecryptedUserDatabase(env, userId) {
     prefs = JSON.parse(row.preferences || "{}");
   } catch (_) {}
 
+  // Aplica alterações incrementais em user_sync_records posteriores ao snapshot carregado
+  const meta = await ensureUserSyncMeta(env.DB, userId);
+  const snapSeq = Math.max(
+    Number(row.revision || 1),
+    Number(meta.snapshotSeq || 1)
+  );
+  if (meta.seq > snapSeq) {
+    const aesKey = await deriveUserAesKey(userId, env);
+    const uncompacted = await loadDecryptedSyncChangesSince(
+      env.DB,
+      userId,
+      snapSeq,
+      aesKey
+    );
+    if (uncompacted.length > 0) {
+      applySyncChangesToSnapshot(parsed, prefs, uncompacted);
+    }
+  }
+
   return {
     db: parsed,
-    revision: Number(row.revision || 1),
+    revision: Number(meta.seq || row.revision || 1),
     preferences: prefs,
     isNew: false,
   };
 }
 
-async function saveDecryptedUserDatabase(env, userId, dbObj, prefsObj = {}) {
+async function saveDecryptedUserDatabase(
+  env,
+  userId,
+  dbObj,
+  prefsObj = {},
+  syncChanges = null
+) {
   const meta = await ensureUserSyncMeta(env.DB, userId);
   const nextSeq = (meta.seq || 1) + 1;
   const nowIso = new Date().toISOString();
@@ -1788,7 +1813,9 @@ async function saveDecryptedUserDatabase(env, userId, dbObj, prefsObj = {}) {
   const sizeBytes = encoder.encode(plainJsonStr).byteLength;
   const encryptedPayload = await encryptUserPayload(plainJsonStr, userId, env);
   const prefsStr = JSON.stringify(prefsObj || {});
+  const aesKey = await deriveUserAesKey(userId, env);
 
+  // 1. Grava o snapshot completo criptografado em user_databases
   await saveEncryptedPayloadToD1(
     env.DB,
     userId,
@@ -1801,16 +1828,64 @@ async function saveDecryptedUserDatabase(env, userId, dbObj, prefsObj = {}) {
     false
   );
 
+  // 2. Grava cada delta em user_sync_records para que clientes conectados via Sync v2
+  // (WebSocket ou HTTP polling) recebam a alteração imediatamente e integrem em suas memórias locais!
+  if (Array.isArray(syncChanges) && syncChanges.length > 0) {
+    const stmts = [];
+    for (const ch of syncChanges) {
+      if (!ch || !ch.coll || ch.id === undefined || ch.id === null) continue;
+      const isDel =
+        Boolean(ch.deleted) || ch.data === null || ch.data === undefined;
+      let encData = null;
+      if (!isDel) {
+        encData = await encryptRecordWithKey(JSON.stringify(ch.data), aesKey);
+      }
+      stmts.push(
+        env.DB.prepare(
+          `INSERT INTO user_sync_records (user_id, coll, record_id, encrypted_data, deleted, seq, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(user_id, coll, record_id) DO UPDATE SET
+             encrypted_data = excluded.encrypted_data,
+             deleted = excluded.deleted,
+             seq = excluded.seq,
+             updated_at = excluded.updated_at`
+        ).bind(
+          userId,
+          String(ch.coll),
+          String(ch.id),
+          encData,
+          isDel ? 1 : 0,
+          nextSeq,
+          nowIso
+        )
+      );
+    }
+    if (stmts.length > 0) {
+      await env.DB.batch(stmts);
+    }
+  }
+
+  // 3. Atualiza user_sync_meta: seq = nextSeq, snapshot_seq = nextSeq
+  // Como acabamos de gravar o snapshot completo em user_databases, snapshot_seq avança junto!
   await env.DB.prepare(
-    "UPDATE user_sync_meta SET seq = ?1, updated_at = ?2 WHERE user_id = ?3"
+    "UPDATE user_sync_meta SET seq = ?1, snapshot_seq = ?1, updated_at = ?2 WHERE user_id = ?3"
   )
     .bind(nextSeq, nowIso, userId)
     .run();
 
+  // 4. Notifica o Durable Object com as alterações reais para broadcast instantâneo via WebSocket
+  const broadcastChanges = (syncChanges || []).map((ch) => ({
+    coll: String(ch.coll),
+    id: String(ch.id),
+    data: ch.deleted ? null : ch.data,
+    deleted: Boolean(ch.deleted),
+    seq: nextSeq,
+  }));
+
   await notifyDurableObjectSync(env, userId, {
     seq: nextSeq,
-    reset: true,
-    changes: [],
+    reset: false,
+    changes: broadcastChanges,
   });
 
   return nextSeq;
@@ -2243,7 +2318,10 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     return report;
   }
 
-  if (name === "openmoney_create_transaction") {
+  if (
+    name === "openmoney_create_transaction" ||
+    name === "openmoney_add_transaction"
+  ) {
     if (permissions === "read_only") {
       throw new Error(
         "Token de acesso possui permissão apenas de leitura (read_only)."
@@ -2275,7 +2353,22 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
       "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
     const date = (args.date || new Date().toISOString().slice(0, 10)).trim();
     const payee = String(args.payee || "Lançamento").trim();
-    const amt = Number(args.amountCents || 0);
+
+    // Tratamento robusto de valor: aceita amountCents (centavos) ou amount (em reais)
+    let amt = 0;
+    if (args.amountCents !== undefined && args.amountCents !== null) {
+      amt = Number(args.amountCents);
+    } else if (args.amount !== undefined && args.amount !== null) {
+      amt = Math.round(Number(args.amount) * 100);
+    }
+
+    const typeHint = String(args.type || "").toLowerCase();
+    if ((typeHint === "expense" || typeHint === "despesa") && amt > 0) {
+      amt = -amt;
+    } else if ((typeHint === "income" || typeHint === "receita") && amt < 0) {
+      amt = Math.abs(amt);
+    }
+
     const cat = isXfer
       ? `Transferência: ${toAcc.name}`
       : String(args.category || "Outros").trim();
@@ -2286,11 +2379,12 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     const installments = Math.max(1, Number(args.installments || 1));
 
     if (!Array.isArray(db.txs)) db.txs = [];
+    const syncChanges = [];
 
     if (isXfer) {
       const xid = "xfer_" + Date.now();
       const absAmt = Math.abs(amt);
-      db.txs.push({
+      const tx1 = {
         id: txId,
         acc: targetAcc.id,
         date,
@@ -2301,9 +2395,11 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
         rec: false,
         xfer: xid,
         peer: toAcc.id,
-      });
-      db.txs.push({
-        id: "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      };
+      const peerId =
+        "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+      const tx2 = {
+        id: peerId,
         acc: toAcc.id,
         date,
         payee: "Transferência",
@@ -2313,22 +2409,27 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
         rec: false,
         xfer: xid,
         peer: targetAcc.id,
-      });
+      };
+      db.txs.push(tx1);
+      db.txs.push(tx2);
+      syncChanges.push({ coll: "txs", id: tx1.id, data: tx1, deleted: false });
+      syncChanges.push({ coll: "txs", id: tx2.id, data: tx2, deleted: false });
     } else if (installments > 1) {
       const planId = "plan_" + Date.now();
       const instAmt = Math.round(amt / installments);
       for (let i = 0; i < installments; i++) {
         const instDate = addMonthsIso(date, i);
-        db.txs.push({
-          id:
-            i === 0
-              ? txId
-              : "tx_" +
-                Date.now() +
-                "_" +
-                i +
-                "_" +
-                Math.random().toString(36).slice(2, 6),
+        const thisId =
+          i === 0
+            ? txId
+            : "tx_" +
+              Date.now() +
+              "_" +
+              i +
+              "_" +
+              Math.random().toString(36).slice(2, 6);
+        const instTx = {
+          id: thisId,
           acc: targetAcc.id,
           date: instDate,
           payee: `${payee} (${i + 1}/${installments})`,
@@ -2340,10 +2441,17 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
           pn: i + 1,
           pt: installments,
           tags: tags ? [...tags] : null,
+        };
+        db.txs.push(instTx);
+        syncChanges.push({
+          coll: "txs",
+          id: instTx.id,
+          data: instTx,
+          deleted: false,
         });
       }
     } else {
-      db.txs.push({
+      const singleTx = {
         id: txId,
         acc: targetAcc.id,
         date,
@@ -2353,10 +2461,23 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
         amt,
         rec: false,
         tags,
+      };
+      db.txs.push(singleTx);
+      syncChanges.push({
+        coll: "txs",
+        id: singleTx.id,
+        data: singleTx,
+        deleted: false,
       });
     }
 
-    await saveDecryptedUserDatabase(env, userId, db, preferences);
+    await saveDecryptedUserDatabase(
+      env,
+      userId,
+      db,
+      preferences,
+      syncChanges
+    );
 
     const typeLabel = isXfer
       ? "Transferência"
@@ -2408,14 +2529,25 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     const t = txs[idx];
     if (args.payee !== undefined) t.payee = String(args.payee).trim();
     if (args.category !== undefined) t.cat = String(args.category).trim();
-    if (args.amountCents !== undefined) t.amt = Number(args.amountCents);
+    if (args.amountCents !== undefined && args.amountCents !== null) {
+      t.amt = Number(args.amountCents);
+    } else if (args.amount !== undefined && args.amount !== null) {
+      t.amt = Math.round(Number(args.amount) * 100);
+    }
     if (args.date !== undefined) t.date = String(args.date).trim();
     if (args.memo !== undefined) t.memo = String(args.memo).trim();
     if (Array.isArray(args.tags)) {
       t.tags = args.tags.map((tag) => String(tag).trim()).filter(Boolean);
     }
 
-    await saveDecryptedUserDatabase(env, userId, db, preferences);
+    const syncChanges = [{ coll: "txs", id: t.id, data: t, deleted: false }];
+    await saveDecryptedUserDatabase(
+      env,
+      userId,
+      db,
+      preferences,
+      syncChanges
+    );
 
     const cur = db.baseCurrency || "BRL";
     const logDesc = `[MCP Remoto] Lançamento alterado: "${t.payee}", ${formatCurrencyCents(t.amt, cur)} (${t.cat})`;
@@ -2454,12 +2586,28 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
 
     const t = txs[idx];
     txs.splice(idx, 1);
+    const syncChanges = [{ coll: "txs", id: t.id, data: null, deleted: true }];
     if (t.xfer) {
       const peerIdx = txs.findIndex((x) => x.xfer === t.xfer);
-      if (peerIdx !== -1) txs.splice(peerIdx, 1);
+      if (peerIdx !== -1) {
+        const peer = txs[peerIdx];
+        txs.splice(peerIdx, 1);
+        syncChanges.push({
+          coll: "txs",
+          id: peer.id,
+          data: null,
+          deleted: true,
+        });
+      }
     }
 
-    await saveDecryptedUserDatabase(env, userId, db, preferences);
+    await saveDecryptedUserDatabase(
+      env,
+      userId,
+      db,
+      preferences,
+      syncChanges
+    );
 
     const cur = db.baseCurrency || "BRL";
     const logDesc = `[MCP Remoto] Lançamento excluído: "${t.payee}", ${formatCurrencyCents(t.amt, cur)}`;
