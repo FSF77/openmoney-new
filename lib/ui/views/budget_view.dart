@@ -77,7 +77,8 @@ class BudgetView extends StatelessWidget {
           t.xfer == null &&
           t.peer == null &&
           t.auto != true &&
-          store.isCategoryIncludedInReports(t.cat);
+          store.isCategoryIncludedInReports(t.cat) &&
+          !store.isCategoryBlocked(t.cat);
     }).toList();
 
     final baseCur = store.baseCurrency;
@@ -89,7 +90,8 @@ class BudgetView extends StatelessWidget {
 
     final topExpenseCats = store
         .topCategories(type: 'Despesa')
-        .where((top) => store.isCategoryIncludedInReports(top.path))
+        .where((top) =>
+            store.isCategoryIncludedInReports(top.path) && !top.isBlocked)
         .toList();
 
     int totalPlanned = 0;
@@ -97,7 +99,8 @@ class BudgetView extends StatelessWidget {
     for (final top in topExpenseCats) {
       final subs = store
           .subCategories(top.name, type: 'Despesa')
-          .where((sub) => store.isCategoryIncludedInReports(sub.path))
+          .where((sub) =>
+              store.isCategoryIncludedInReports(sub.path) && !sub.isBlocked)
           .toList();
       final topBudget = store.db.budgets[top.path] ?? 0;
       final topSpent = spentByPath[top.path] ?? 0;
@@ -135,25 +138,27 @@ class BudgetView extends StatelessWidget {
                 children: [
                   Icon(Icons.track_changes, color: colors.accent, size: 22),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Planejamento Financeiro: Limite de Gastos',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: colors.textPrimary,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Planejamento Financeiro: Limite de Gastos',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Clique em qualquer categoria ou subcategoria para definir seu teto mensal',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
+                        Text(
+                          'Clique em qualquer categoria ou subcategoria para definir seu teto mensal',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -213,7 +218,8 @@ class BudgetView extends StatelessWidget {
         ...topExpenseCats.map((top) {
           final subs = store
               .subCategories(top.name, type: 'Despesa')
-              .where((sub) => store.isCategoryIncludedInReports(sub.path))
+              .where((sub) =>
+                  store.isCategoryIncludedInReports(sub.path) && !sub.isBlocked)
               .toList();
           int topBudget = store.db.budgets[top.path] ?? 0;
           int topSpent = spentByPath[top.path] ?? 0;

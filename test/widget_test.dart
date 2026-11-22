@@ -11,6 +11,7 @@ import 'package:openmoney/services/cash_flow_engine.dart';
 import 'package:openmoney/services/importers_exporters.dart';
 import 'package:openmoney/store/money_store.dart';
 import 'package:openmoney/ui/views/account_ledger_view.dart';
+import 'package:openmoney/ui/views/budget_view.dart';
 import 'package:openmoney/ui/views/categories_view.dart';
 import 'package:openmoney/ui/views/cash_flow_view.dart';
 import 'package:openmoney/ui/views/due_bills_view.dart';
@@ -1132,6 +1133,18 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     final reloadedBeta = reloadedDb.cats.firstWhere((c) => c.path == 'Projetos › Beta');
     expect(reloadedProjetos.isBlocked, isTrue);
     expect(reloadedBeta.isBlocked, isTrue);
+
+    // Unblock via saveCategory editing with blocked: false (verifies fix where editing unblocks category and propagates to subcategories)
+    store.saveCategory(
+      editingPath: 'Projetos',
+      name: 'Projetos',
+      type: 'Despesa',
+      blocked: false,
+    );
+    expect(store.isCategoryBlocked('Projetos'), isFalse);
+    expect(store.isCategoryBlocked('Projetos › Beta'), isFalse);
+    expect(store.allCategoryPaths('Despesa').contains('Projetos'), isTrue);
+    expect(store.allCategoryPaths('Despesa').contains('Projetos › Beta'), isTrue);
   });
 
   test('23. Inserting a credit card transaction sets store.month to invoice key (ik) instead of transaction date', () {
@@ -2227,5 +2240,77 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     );
     expect(find.text('Preenchimento Automático por Histórico'), findsOneWidget);
     expect(find.text('Período do Histórico para Sugestões'), findsOneWidget);
+  });
+
+  test('41. Budget migration and auto-reconciliation on parent category rename', () {
+    final store = MoneyStore(autoBoot: false);
+
+    // 1. Cria categoria pai e subcategoria com limites
+    store.saveCategory(name: 'Alimentação', type: 'Despesa');
+    store.saveCategory(name: 'Restaurante', parent: 'Alimentação', type: 'Despesa');
+    store.setBudget('Alimentação', 150000);
+    store.setBudget('Alimentação › Restaurante', 60000);
+
+    expect(store.db.budgets['Alimentação'], 150000);
+    expect(store.db.budgets['Alimentação › Restaurante'], 60000);
+
+    // 2. Renomeia categoria pai para "Comida & Mercado"
+    store.saveCategory(
+      editingPath: 'Alimentação',
+      name: 'Comida & Mercado',
+      type: 'Despesa',
+    );
+
+    // Verifica se pai e subcategorias foram renomeadas no db.budgets
+    expect(store.db.budgets.containsKey('Alimentação'), isFalse);
+    expect(store.db.budgets.containsKey('Alimentação › Restaurante'), isFalse);
+    expect(store.db.budgets['Comida & Mercado'], 150000);
+    expect(store.db.budgets['Comida & Mercado › Restaurante'], 60000);
+
+    // 3. Simula dados legados com chave órfã (ex: "Moradia › Taxa Condominial" onde "Moradia" virou "Habitação")
+    store.saveCategory(name: 'Habitação', type: 'Despesa');
+    store.saveCategory(name: 'Taxa Condominial', parent: 'Habitação', type: 'Despesa');
+    store.db.budgets['Moradia › Taxa Condominial'] = 90000; // órfão antigo
+
+    final reconciled = store.sanitizeAndReconcileBudgets();
+    expect(reconciled, greaterThanOrEqualTo(1));
+    expect(store.db.budgets.containsKey('Moradia › Taxa Condominial'), isFalse);
+    expect(store.db.budgets['Habitação › Taxa Condominial'], 90000);
+  });
+
+  testWidgets('42. Blocked categories reset budget to zero and are excluded from BudgetView', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+
+    // Cria categoria e subcategoria com limites
+    store.saveCategory(name: 'Lazer', type: 'Despesa');
+    store.saveCategory(name: 'Cinema', parent: 'Lazer', type: 'Despesa');
+    store.setBudget('Lazer', 20000);
+    store.setBudget('Lazer › Cinema', 10000);
+
+    expect(store.db.budgets['Lazer'], 20000);
+    expect(store.db.budgets['Lazer › Cinema'], 10000);
+
+    // Bloqueia a categoria pai via saveCategory
+    store.saveCategory(
+      editingPath: 'Lazer',
+      name: 'Lazer',
+      type: 'Despesa',
+      blocked: true,
+    );
+
+    // Limites foram zerados (removidos de db.budgets)
+    expect(store.db.budgets.containsKey('Lazer'), isFalse);
+    expect(store.db.budgets.containsKey('Lazer › Cinema'), isFalse);
+
+    // Renderiza BudgetView e garante que "Lazer" não aparece
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: BudgetView(store: store),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lazer'), findsNothing);
+    expect(find.text('↳ Cinema'), findsNothing);
   });
 }

@@ -48,6 +48,8 @@ Ao registrar uma nova despesa (seja pelo botão **Novo Lançamento**, pelo atalh
 
 ## 3. Regras Importantes
 - **Previsões Desconsideradas**: Lançamentos com descrição/favorecido iniciando por "Previsão" (e.g. `Previsão Mercado`, `Previsão Combustível`) representam estimativas de planejamento e **nunca são somados como despesas realizadas**, garantindo que não consumam indevidamente o limite disponível da categoria.
+- **Categorias Bloqueadas Fora do Planejamento**: Categorias e subcategorias bloqueadas não aparecem na tela de Limite de Gastos e seus lançamentos não entram no cálculo dos cards de Limite Previsto, Realizado e Saldo.
+- **Zerar Limite ao Bloquear com Aviso Preventivo**: Ao editar e bloquear uma categoria que possua limite de gastos configurado (seja nela ou em suas subcategorias), o OpenMoney exibe uma confirmação preventiva alertando sobre a redefinição do limite para zero. Se confirmado, os limites são zerados para não reter valores fantasmas.
 - **Receitas e Transferências**: Não são afetadas pela validação de limite.
 - **Subcategorias**: Se a subcategoria não tiver limite próprio, o OpenMoney valida o limite da categoria pai somando todos os gastos daquela família de categorias.
 - **Compras Parceladas**: O sistema avalia o valor da **primeira parcela** contra o orçamento do mês do lançamento, respeitando o impacto real do mês.

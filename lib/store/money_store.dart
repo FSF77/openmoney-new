@@ -2909,6 +2909,7 @@ class MoneyStore extends ChangeNotifier {
         }
       }
     }
+    sanitizeAndReconcileBudgets();
     db.v = 7;
   }
 
@@ -5213,7 +5214,7 @@ class MoneyStore extends ChangeNotifier {
       parent: cleanParent,
       type: type,
       includeInReports: includeInReports,
-      blocked: resolvedBlocked,
+      blocked: (resolvedBlocked == true) ? true : null,
     );
     final newPath = newItem.path;
 
@@ -5235,11 +5236,25 @@ class MoneyStore extends ChangeNotifier {
 
         db.cats[idx] = newItem;
 
+        if (resolvedBlocked == true) {
+          if (editingPath != null) {
+            db.budgets.remove(editingPath);
+          }
+          db.budgets.remove(newPath);
+        }
+
         if (oldCat.parent == null) {
+          final blockChanged = oldCat.isBlocked != (resolvedBlocked == true);
           for (int i = 0; i < db.cats.length; i++) {
             if (db.cats[i].parent == oldCat.name) {
               db.cats[i].parent = cleanParent ?? trimmed;
               db.cats[i].type = type;
+              if (blockChanged) {
+                db.cats[i].blocked = (resolvedBlocked == true) ? true : null;
+              }
+              if (resolvedBlocked == true) {
+                db.budgets.remove(db.cats[i].path);
+              }
             }
           }
         }
@@ -5268,6 +5283,20 @@ class MoneyStore extends ChangeNotifier {
           final bVal = db.budgets.remove(editingPath);
           if (bVal != null) {
             db.budgets[newPath] = bVal;
+          }
+          if (oldCat.parent == null) {
+            final oldPrefix = '${oldCat.name}$kCategorySep';
+            final newPrefix = '$trimmed$kCategorySep';
+            final subBudgetsToMigrate = <String, int>{};
+            db.budgets.removeWhere((k, v) {
+              if (k.startsWith(oldPrefix)) {
+                final suffix = k.substring(oldPrefix.length);
+                subBudgetsToMigrate['$newPrefix$suffix'] = v;
+                return true;
+              }
+              return false;
+            });
+            db.budgets.addAll(subBudgetsToMigrate);
           }
         }
       }
@@ -5365,6 +5394,85 @@ class MoneyStore extends ChangeNotifier {
     save();
   }
 
+  /// Sanitiza e reconcilia limites de gastos (budgets) órfãos após renomeações
+  /// de categorias principais ou exclusões legadas.
+  int sanitizeAndReconcileBudgets() {
+    int modified = 0;
+
+    // Remove qualquer limite de categoria que esteja bloqueada
+    for (final cat in db.cats) {
+      if (cat.isBlocked) {
+        if (db.budgets.remove(cat.path) != null) {
+          modified++;
+        }
+      }
+    }
+
+    final validPaths = db.cats.map((c) => c.path).toSet();
+    final topCatNames =
+        db.cats.where((c) => c.parent == null).map((c) => c.name).toSet();
+    final orphanKeys =
+        db.budgets.keys.where((k) => !validPaths.contains(k)).toList();
+
+    for (final orphan in orphanKeys) {
+      final val = db.budgets[orphan];
+      if (val == null) continue;
+
+      if (orphan.contains(kCategorySep)) {
+        final parts = orphan.split(kCategorySep);
+        final oldParent = parts[0].trim();
+        final subName = parts.sublist(1).join(kCategorySep).trim();
+
+        // Se a categoria principal antiga não existe mais:
+        if (!topCatNames.contains(oldParent)) {
+          // Busca subcategoria correspondente pelo nome
+          final candidates = db.cats
+              .where((c) =>
+                  c.parent != null &&
+                  c.name.toLowerCase() == subName.toLowerCase())
+              .toList();
+
+          CategoryItem? target;
+          if (candidates.length == 1) {
+            target = candidates.first;
+          } else if (candidates.length > 1) {
+            // Se houver mais de uma, prioriza a que tem transações cadastradas
+            final withTxs = candidates
+                .where((c) => db.txs.any((t) => t.cat == c.path))
+                .toList();
+            if (withTxs.length == 1) {
+              target = withTxs.first;
+            } else {
+              // Ou a única candidata que ainda não tem limite definido
+              final withoutBudget = candidates
+                  .where((c) => (db.budgets[c.path] ?? 0) == 0)
+                  .toList();
+              if (withoutBudget.length == 1) {
+                target = withoutBudget.first;
+              }
+            }
+          }
+
+          if (target != null) {
+            // Migra o limite para a nova categoria se ainda estiver zerado/indefinido
+            if ((db.budgets[target.path] ?? 0) == 0) {
+              db.budgets[target.path] = val;
+            }
+            db.budgets.remove(orphan);
+            modified++;
+            continue;
+          }
+        }
+      }
+
+      // Se não há categoria correspondente ativa no sistema, remove chave órfã
+      db.budgets.remove(orphan);
+      modified++;
+    }
+
+    return modified;
+  }
+
   String? commentForPeriod(String periodKey) => db.comments[periodKey];
 
   void setCommentForPeriod(String periodKey, String? comment) {
@@ -5431,11 +5539,18 @@ class MoneyStore extends ChangeNotifier {
     final newBlocked = !cat.isBlocked;
     cat.blocked = newBlocked ? true : null;
 
+    if (newBlocked) {
+      db.budgets.remove(cat.path);
+    }
+
     // Se bloquear uma categoria pai, bloqueia recursivamente suas subcategorias
     if (cat.parent == null) {
       for (int i = 0; i < db.cats.length; i++) {
         if (db.cats[i].parent == cat.name) {
           db.cats[i].blocked = newBlocked ? true : null;
+          if (newBlocked) {
+            db.budgets.remove(db.cats[i].path);
+          }
         }
       }
     }

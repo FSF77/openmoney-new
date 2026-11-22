@@ -105,6 +105,8 @@ class _CategoriesViewState extends State<CategoriesView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final colors = OpenMoneyColors(isDark);
           final topParents = widget.store
               .topCategories(type: type)
               .where((c) => c.name != editing?.name)
@@ -213,20 +215,61 @@ class _CategoriesViewState extends State<CategoriesView> {
                 child: const Text('Cancelar'),
               ),
               FilledButton(
-                onPressed: () {
+                onPressed: () async {
+                  if (blocked) {
+                    int budgetSum = 0;
+                    if (editing != null) {
+                      budgetSum += widget.store.db.budgets[editing.path] ?? 0;
+                      if (editing.parent == null) {
+                        for (final sub in widget.store.subCategories(editing.name)) {
+                          budgetSum += widget.store.db.budgets[sub.path] ?? 0;
+                        }
+                      }
+                    }
+                    if (budgetSum > 0) {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (confirmCtx) => AlertDialog(
+                          title: const Text('Atenção: Limite de Gastos'),
+                          content: Text(
+                            'Esta categoria possui limite de gastos configurado (${formatCurrency(budgetSum, widget.store.baseCurrency)}).\n\n'
+                            'Ao bloqueá-la, este limite será redefinido para zero e ela não aparecerá na tela de limite de gastos.\n\n'
+                            'Deseja continuar?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(confirmCtx, false),
+                              child: const Text('Cancelar'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colors.expense,
+                              ),
+                              onPressed: () => Navigator.pop(confirmCtx, true),
+                              child: const Text('Bloquear e Zerar Limite'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+                    }
+                  }
+
                   final err = widget.store.saveCategory(
                     editingPath: editing?.path,
                     name: nameCtrl.text,
                     parent: parent,
                     type: type,
                     includeInReports: includeInReports,
-                    blocked: blocked ? true : null,
+                    blocked: blocked,
                   );
                   if (err != null) {
                     setModalState(() => errorMsg = err);
                     return;
                   }
-                  Navigator.pop(ctx);
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
                 },
                 child: const Text('Salvar'),
               ),
