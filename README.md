@@ -16,9 +16,8 @@
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
 | 🍏 **macOS** | **v2.5.5** (Build 162) | [⬇️ Baixar OpenMoney-macOS-2.5.5.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.5.zip) | ~12 MB | 22/11/2026 |
-| 🪟 **Windows** | **v2.5.5** (Build 161) | [⬇️ Baixar OpenMoney-Windows-2.5.5.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.5.zip) | ~14 MB | 22/11/2026 |
+| 🪟 **Windows** | **v2.5.5** (Build 162) | [⬇️ Baixar OpenMoney-Windows-2.5.5.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.5.zip) | ~14 MB | 22/11/2026 |
 | 🌐 **Web** | **v2.5.5** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 22/11/2026 |
-
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
