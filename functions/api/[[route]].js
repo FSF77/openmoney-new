@@ -6759,7 +6759,7 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
-  // 11.3 POST, GET & DELETE /api/mcp (Transporte MCP Streamable HTTP Oficial)
+  // 11.3 POST, GET, HEAD & DELETE /api/mcp (Transporte MCP Streamable HTTP Oficial)
   // ==========================================================================
   if (path === "/api/mcp") {
     const originalPath = request.headers.get("X-OpenMoney-Original-Path") || path;
@@ -6772,6 +6772,14 @@ export async function onRequest(context) {
       "Mcp-Session-Id": sessionId,
     };
 
+    if (request.method === "HEAD") {
+      await logMcpDiagnostic(env, request, originalPath, 200, "MCP HEAD");
+      return new Response(null, {
+        status: 200,
+        headers: baseHeaders,
+      });
+    }
+
     if (request.method === "DELETE") {
       await logMcpDiagnostic(env, request, originalPath, 200, "MCP DELETE session");
       return new Response(null, {
@@ -6782,17 +6790,36 @@ export async function onRequest(context) {
 
     if (request.method === "GET") {
       const accept = request.headers.get("Accept") || "";
-      await logMcpDiagnostic(env, request, originalPath, 200, `MCP GET accept=${accept}`);
+      // Pela especificação oficial MCP Streamable HTTP (Sec. 3.3):
+      // Servidores que operam via POST e não mantêm stream SSE reverso DEVEM retornar 405
+      // Method Not Allowed ao receber GET SSE. Isso instrui clientes como Gemini a
+      // operar em modo request-response sobre POST sem aguardar timeout de SSE.
       if (accept.includes("text/event-stream")) {
-        return new Response(": keepalive\n\n", {
-          status: 200,
-          headers: {
-            ...baseHeaders,
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-          },
-        });
+        await logMcpDiagnostic(
+          env,
+          request,
+          originalPath,
+          405,
+          `MCP GET 405 accept=${accept}`
+        );
+        return new Response(
+          JSON.stringify({
+            error: "Method Not Allowed",
+            message:
+              "Server-initiated streaming is not supported. Use HTTP POST for JSON-RPC messages.",
+          }),
+          {
+            status: 405,
+            headers: {
+              ...baseHeaders,
+              "Allow": "POST, DELETE, OPTIONS, HEAD",
+              "Content-Type": "application/json; charset=utf-8",
+            },
+          }
+        );
       }
+
+      await logMcpDiagnostic(env, request, originalPath, 200, `MCP GET accept=${accept}`);
       return new Response(
         JSON.stringify({
           name: "openmoney-cloud",
