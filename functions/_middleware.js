@@ -28,7 +28,7 @@ export async function onRequest(context) {
     }
     const suffix = path.slice("/.well-known/oauth-protected-resource".length);
     const resourcePath = suffix && suffix.startsWith("/") ? suffix : "/api/mcp";
-    logMcpDiagnostic(env, request, path, 200, `protected-resource=${resourcePath}`);
+    await logMcpDiagnostic(env, request, path, 200, `protected-resource=${resourcePath}`);
     return new Response(
       JSON.stringify(getOAuthProtectedResourceMetadata(url, resourcePath)),
       { status: 200, headers: PUBLIC_CORS_HEADERS }
@@ -43,7 +43,7 @@ export async function onRequest(context) {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: PUBLIC_CORS_HEADERS });
     }
-    logMcpDiagnostic(env, request, path, 200, "auth-server-metadata");
+    await logMcpDiagnostic(env, request, path, 200, "auth-server-metadata");
     return new Response(
       JSON.stringify(getOAuthAuthorizationServerMetadata(url)),
       { status: 200, headers: PUBLIC_CORS_HEADERS }

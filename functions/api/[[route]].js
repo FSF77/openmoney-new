@@ -178,6 +178,17 @@ async function ensureSchema(db) {
       CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires
       ON oauth_codes (expires_at)
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS mcp_debug_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        user_agent TEXT,
+        note TEXT
+      )
+    `),
   ]);
   try {
     await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
@@ -3071,17 +3082,6 @@ export function getOAuthAuthorizationServerMetadata(url) {
 export async function logMcpDiagnostic(env, request, path, status, note = "") {
   if (!env || !env.DB) return;
   try {
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS mcp_debug_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at TEXT NOT NULL,
-        method TEXT NOT NULL,
-        path TEXT NOT NULL,
-        status INTEGER NOT NULL,
-        user_agent TEXT,
-        note TEXT
-      )
-    `).run();
     const ua = (request.headers.get("User-Agent") || "").slice(0, 180);
     await env.DB.prepare(
       `INSERT INTO mcp_debug_logs (created_at, method, path, status, user_agent, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
@@ -3476,7 +3476,7 @@ export async function onRequest(context) {
       registrationResponse.client_secret_expires_at = 0;
     }
 
-    logMcpDiagnostic(
+    await logMcpDiagnostic(
       env,
       request,
       path,
@@ -3519,7 +3519,7 @@ export async function onRequest(context) {
       const scope = url.searchParams.get("scope") || "read_write";
       const codeChallenge = url.searchParams.get("code_challenge") || "";
       const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
-      logMcpDiagnostic(
+      await logMcpDiagnostic(
         env,
         request,
         path,
@@ -3766,12 +3766,18 @@ export async function onRequest(context) {
       new Date().toISOString()
     ).run();
 
-    logMcpDiagnostic(
+    const cleanScopeTokens = String(actualScope || "read_write")
+      .split(/\s+/)
+      .filter((s) => s && s !== "openid" && s !== "profile" && s !== "email");
+    const responseScope =
+      cleanScopeTokens.length > 0 ? cleanScopeTokens.join(" ") : "read_write";
+
+    await logMcpDiagnostic(
       env,
       request,
       path,
       200,
-      `token issued client=${displayClient} scope=${actualScope}`
+      `token issued client=${displayClient} scope=${responseScope}`
     );
 
     return jsonResponse(
@@ -3780,7 +3786,7 @@ export async function onRequest(context) {
         token_type: "Bearer",
         expires_in: 31536000,
         refresh_token: rawToken,
-        scope: actualScope || "read_write",
+        scope: responseScope,
       },
       200,
       origin,
@@ -4628,7 +4634,7 @@ export async function onRequest(context) {
   if (!claims || !claims.sub) {
     if (isPublicOrAi) {
       const originalPath = request.headers.get("X-OpenMoney-Original-Path") || path;
-      logMcpDiagnostic(env, request, originalPath, 401, "MCP 401 challenge");
+      await logMcpDiagnostic(env, request, originalPath, 401, "MCP 401 challenge");
       return new Response(
         JSON.stringify({
           error: "invalid_token",
@@ -6619,7 +6625,7 @@ export async function onRequest(context) {
     };
 
     if (request.method === "DELETE") {
-      logMcpDiagnostic(env, request, originalPath, 200, "MCP DELETE session");
+      await logMcpDiagnostic(env, request, originalPath, 200, "MCP DELETE session");
       return new Response(null, {
         status: 200,
         headers: baseHeaders,
@@ -6628,15 +6634,14 @@ export async function onRequest(context) {
 
     if (request.method === "GET") {
       const accept = request.headers.get("Accept") || "";
-      logMcpDiagnostic(env, request, originalPath, 405, `MCP GET accept=${accept}`);
-      // Pela especificação MCP Streamable HTTP (2025-03-26), servidores que respondem
-      // diretamente no POST devem retornar 405 Method Not Allowed ao receber GET SSE.
-      if (accept.includes("text/event-stream") || !accept.includes("text/html")) {
-        return new Response(null, {
-          status: 405,
+      await logMcpDiagnostic(env, request, originalPath, 200, `MCP GET accept=${accept}`);
+      if (accept.includes("text/event-stream")) {
+        return new Response(": keepalive\n\n", {
+          status: 200,
           headers: {
             ...baseHeaders,
-            "Allow": "POST, DELETE, OPTIONS",
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
           },
         });
       }
@@ -6680,7 +6685,7 @@ export async function onRequest(context) {
 
       // Notificação (ex: notifications/initialized) -> 202 Accepted
       if (!rpcResponse) {
-        logMcpDiagnostic(
+        await logMcpDiagnostic(
           env,
           request,
           originalPath,
@@ -6693,7 +6698,7 @@ export async function onRequest(context) {
         });
       }
 
-      logMcpDiagnostic(
+      await logMcpDiagnostic(
         env,
         request,
         originalPath,
