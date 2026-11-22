@@ -1,134 +1,76 @@
-# Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos (ChatGPT, Claude, Gemini, Cursor e LM Studio)
+# Guia do Usuário: Conectando o OpenMoney ao Gemini, ChatGPT, Claude e Agentes de IA
 
-O OpenMoney disponibiliza um **Servidor MCP Remoto (Model Context Protocol)** e uma **API OpenAPI** nativa hospedada diretamente na infraestrutura do **OpenMoney Cloud (Cloudflare Workers & D1)**.
+Conecte seus assistentes de Inteligência Artificial favoritos — **Google Gemini**, **ChatGPT**, **Anthropic Claude**, **Cursor** ou **LM Studio** — diretamente à sua base de dados financeira do OpenMoney.
 
-Essa integração permite conectar seus assistentes de Inteligência Artificial favoritos — **ChatGPT**, **Claude Desktop / Claude Web**, **Google Gemini**, **Cursor**, **LM Studio**, **Claude Code** ou qualquer agente autônomo compatível com MCP — diretamente aos seus dados financeiros com total segurança, privacidade e rastreabilidade.
-
----
-
-## 1. Arquitetura de Segurança, Privacidade e Anti-Wipe
-
-A segurança e a soberania dos seus dados financeiros são os pilares centrais da integração externa do OpenMoney. Todas as conexões utilizam padrões modernos da indústria e múltiplas camadas de proteção:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   SEUS CLIENTES E ASSISTENTES DE IA                     │
-│    (ChatGPT, Claude Desktop/Web, Gemini, Cursor, LM Studio, Agentes)   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │  Transporte Seguro HTTPS
-                                    ▼  (OAuth 2.1 PKCE S256 ou Bearer Token)
-┌────────────────────────────────────────────────────────────────────────┐
-│               GATEWAY DE BORDA: CLOUDFLARE WORKERS                     │
-│  - Autodescoberta RFC 8414 & RFC 9728                                  │
-│  - Dynamic Client Registration (RFC 7591)                              │
-│  - Middleware de Autenticação e Resolução de Inquilino (user_id)       │
-│  - Validação de Escopo: Leitura Estrita (read_only) vs Leitura/Escrita │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│              SALVAGUARDAS E AUDITORIA (ANTI-WIPE GUARD)                │
-│  - [MCP Remoto]: Toda ação de inserção/edição é marcada nos logs       │
-│  - Operações unitárias por ID (impossível apagar base em lote via IA)  │
-│  - Bloqueio HTTP 409 contra uploads vazios ou corrompidos (< 50 KB)   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                     BANCO DE DADOS CLOUDFLARE D1                       │
-│  - api_tokens: Hash SHA-256 do token (o segredo nunca é gravado)       │
-│  - Bases de dados com criptografia de ponta a ponta (AES-256-GCM)      │
-│  - Isolamento estrito por chave de usuário (Multi-Tenant Zero Leak)    │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### 1.1. Autodescoberta OAuth 2.1 (Conexão 1-Clique)
-- **Zero Compartilhamento de Senhas**: O ChatGPT ou Claude conectam-se usando o protocolo **OAuth 2.1**, abrindo uma tela oficial de autorização no próprio domínio seguro `openmoney.app.br`. O modelo de IA nunca recebe sua senha mestra.
-- **Dynamic Client Registration (RFC 7591)**: Suporte completo ao registro dinâmico de clientes, permitindo que os assistentes de IA se cadastrem automaticamente no servidor sem que você precise preencher formulários manuais de credenciais.
-- **Proteção PKCE S256**: O fluxo de login utiliza Prova Criptográfica de Chave (*Proof Key for Code Exchange*) com hash `S256`, impedindo qualquer tentativa de interceptação de códigos de autorização em trânsito.
-- **Mitigação de Authorization Server Mix-Up (RFC 9207)**: Todas as respostas de autorização incluem explicitamente o parâmetro `iss`, garantindo que o assistente confie unicamente no emissor oficial.
-
-### 1.2. Tokens de API Bearer (`opm_live_...`)
-- **Tokens de Alta Entropia**: Gerados via gerador criptográfico pseudo-aleatório (`crypto.getRandomValues`).
-- **Armazenamento Seguro com Hash SHA-256**: Ao gerar uma nova chave no aplicativo, o token é exibido na tela **uma única vez**. O banco de dados Cloudflare D1 armazena estritamente o hash **SHA-256** do token. Caso o banco de dados venha a ser auditado, nenhuma chave utilizável pode ser recuperada.
-- **Confirmação Obrigatória na Revogação**: Ao clicar no ícone de lixeira para revogar um token, o aplicativo solicita confirmação explícita. Uma vez revogado, o token é removido imediatamente do banco D1 e qualquer sessão de IA associada perde o acesso no mesmo instante.
-
-### 1.3. Permissões Granulares (Escopos de Acesso)
-Ao gerar um token ou autorizar uma conexão OAuth, você escolhe o nível de acesso do assistente:
-- **Somente Leitura (`read_only`)**: O assistente pode consultar extratos, saldos, categorias, faturas e relatórios orçamentários, mas qualquer tentativa de criar, editar ou excluir transações é bloqueada imediatamente com erro `HTTP 403 Forbidden`.
-- **Leitura e Escrita (`read_write`)**: O assistente pode também registrar novos lançamentos, atualizar transações e efetuar transferências entre contas.
-
-### 1.4. Trilha de Auditoria e Rastreabilidade Transparente
-Toda operação de inclusão, alteração ou exclusão de lançamentos realizada por agentes externos ou assistentes de IA é automaticamente carimbada com a etiqueta **`[MCP Remoto]`** (ou `[Assistente IA]`) nos registros e na linha do tempo do OpenMoney. Você sempre saberá exatamente o que foi criado ou modificado por uma inteligência artificial.
-
-### 1.5. Salvaguardas Anti-Wipe (Anti-Wipe Guardrails)
-O servidor MCP foi desenhado com limites rígidos para proteger seu patrimônio de alucinações de modelos de linguagem:
-- Não existem ferramentas para apagar bases de dados inteiras, redefinir saldos ou excluir múltiplas contas.
-- Operações de exclusão são unitárias, exigindo o ID exato da transação previamente validada.
-- O backend mantém o bloqueio de segurança `HTTP 409` contra qualquer substituição suspeita de banco de dados com tamanho inferior a 50 KB sem autorização explícita de força.
+Com essa integração, você pode perguntar seu saldo no banco, analisar seus gastos por categoria, registrar despesas ou receitas por texto ou voz e acompanhar limites do mês diretamente pela conversa com a sua IA de preferência.
 
 ---
 
-## 2. Diferença Conceitual de Saldos: Atual vs. Previsto
+## 1. Passo a Passo de Conexão (Foco no Usuário)
 
-Para evitar que assistentes de IA se confundam ao comparar o saldo do aplicativo com extratos bancários, o OpenMoney fornece dois conceitos contábeis distintos via MCP:
+No OpenMoney, abra o menu **Ajustes & Personalização** › **Servidor MCP & Acesso Externo**.
 
-| Conceito | Descrição | Fórmula / Critério |
-| :--- | :--- | :--- |
-| **Saldo Atual do Dia (Conciliado)** | O valor financeiro **realmente disponível na conta hoje**, exatamente igual ao extrato bancário ou carteira. | $\text{Saldo Atual} = \text{opening} + \sum (\text{transações com } \text{rec} = \text{true} \text{ até a data de hoje})$. Ignora transações futuras ou ainda não conferidas. |
-| **Saldo Previsto no Mês** | A projeção financeira calculada até o último dia do mês corrente. | $\text{Saldo Previsto} = \text{Saldo Atual} + \sum (\text{transações pendentes com } \text{rec} = \text{false} \text{ que vencem até o fim do mês})$. Considera contas a pagar e a receber programadas. |
-
-Ao perguntar para a IA *"Qual é o meu saldo no banco?"*, o servidor informa com precisão o **Saldo Atual (Conciliado)** para que você confira com o aplicativo do seu banco, além de informar o **Saldo Previsto** para projeção orçamentária.
+Nessa tela você encontra a URL do servidor MCP e o gerador de chaves de acesso. Escolha abaixo o seu assistente e siga o passo a passo correspondente:
 
 ---
 
-## 3. Guia Prático de Conexão Passo a Passo
+### 1.1. Google Gemini
 
-Para acessar a central de configuração, abra o OpenMoney e navegue até:
-**Ajustes & Personalização** › **Servidor MCP & Acesso Externo (ChatGPT, Claude, Gemini e agentes)**.
+O Gemini permite conectar o OpenMoney com autenticação segura e automática em 1 clique:
 
----
-
-### 3.1. ChatGPT (OpenAI)
-
-O ChatGPT suporta tanto conexão via **Conector de Aplicativo (OAuth 2.1)** quanto via **Custom GPT Actions**.
-
-#### Opção A: Conexão via Aplicativo / Conector MCP (Recomendado — 1 Clique)
-1. No ChatGPT (Web ou Desktop), acesse **Settings (Configurações)** › **Connected Apps (Aplicativos Conectados)** ou crie um conector customizado.
-2. Informe a URL do Servidor MCP:
+1. No **Google Gemini** (navegador ou app), acesse as configurações de **Ferramentas / Custom MCP / Conectores**.
+2. Clique em **Adicionar Novo Servidor / Conector**.
+3. No campo de endereço do servidor, insira a URL oficial:
    ```text
    https://openmoney.app.br/api/mcp
    ```
-3. O ChatGPT detectará automaticamente os metadados de autorização (RFC 8414 / RFC 9728) e abrirá a tela de login do OpenMoney.
-4. Digite seu e-mail e senha do OpenMoney Cloud e clique em **Autorizar**.
-5. O ChatGPT confirma a conexão e passa a responder perguntas sobre suas contas instantaneamente!
+4. O Gemini detectará o servidor e abrirá automaticamente a tela oficial de login do OpenMoney.
+5. Digite seu **e-mail e senha** do OpenMoney Cloud e clique em **Autorizar**.
+6. Pronto! O conector será ativado e você já pode conversar com o Gemini sobre o seu dinheiro.
 
-#### Opção B: Custom GPT com OpenAPI Spec
-1. No ChatGPT, acesse **Explore GPTs** › **Create a GPT** › aba **Configure**.
+*(Alternativa via Gemini Gems / OpenAPI: importe a especificação `https://openmoney.app.br/api/openapi.json` e adicione o Bearer Token gerado no OpenMoney).*
+
+---
+
+### 1.2. ChatGPT (OpenAI)
+
+O ChatGPT suporta tanto o novo **Conector de Aplicativo (1-Clique)** quanto **Custom GPTs**:
+
+#### Opção A: Conector de Aplicativo / MCP (Mais Simples — 1 Clique)
+1. No ChatGPT (Web ou Desktop), acesse **Settings (Configurações)** › **Connected Apps (Aplicativos Conectados)** ou Ferramentas de Desenvolvedor.
+2. Adicione a URL:
+   ```text
+   https://openmoney.app.br/api/mcp
+   ```
+3. A janela de login do OpenMoney abrirá automaticamente. Entre com sua conta e confirme a autorização.
+4. O ChatGPT confirmará a conexão e as ferramentas ficarão prontas para uso em qualquer conversa.
+
+#### Opção B: Custom GPT (Ações Customizadas via OpenAPI)
+1. Acesse **Explore GPTs** › **Create a GPT** › aba **Configure**.
 2. Role até a seção **Actions** e clique em **Create new action**.
-3. No campo **Schema**, clique em **Import from URL** e insira:
+3. Clique em **Import from URL** e cole:
    ```text
    https://openmoney.app.br/api/openapi.json
    ```
 4. Em **Authentication**:
-   - Escolha **API Key** › Tipo **Bearer** e cole seu token `opm_live_...` gerado na central do OpenMoney; ou
-   - Escolha **OAuth** e preencha as URLs de autorização (`https://openmoney.app.br/oauth/authorize`) e de token (`https://openmoney.app.br/api/oauth/token`).
-5. Salve o GPT (privado para você).
+   - Selecione **API Key** › Tipo **Bearer** e cole a chave de acesso gerada no OpenMoney (começa com `opm_live_...`); ou
+   - Selecione **OAuth** e indique as URLs `https://openmoney.app.br/api/oauth/authorize` e `https://openmoney.app.br/api/oauth/token`.
+5. Salve o GPT como privado.
 
 ---
 
-### 3.2. Anthropic Claude (Claude Desktop & Claude Web)
+### 1.3. Anthropic Claude (Claude Desktop & Claude Web)
 
-O Claude suporta conexão nativa utilizando o transporte moderno **Streamable HTTP**.
+O Claude conecta-se ao OpenMoney através do protocolo oficial **Streamable HTTP**:
 
-#### Claude Desktop
-1. No OpenMoney, abra o modal **Servidor MCP & Acesso Externo** e clique em **Novo Token MCP**.
-2. Defina um nome (ex: `Claude Desktop Mac`) e selecione as permissões (**Leitura e Escrita** ou **Somente Leitura**).
-3. Ao gerar, o OpenMoney exibirá o snippet de configuração pronto. Clique em **Copiar JSON para o Claude Desktop**.
-4. No seu computador, abra o arquivo de configuração do Claude Desktop:
+#### No Claude Desktop (Mac e Windows)
+1. No OpenMoney, em **Servidor MCP & Acesso Externo**, clique em **Novo Token MCP**.
+2. Dê um nome (ex.: `Claude Desktop`) e escolha as permissões (**Leitura e Escrita** ou **Somente Leitura**).
+3. Na janela de confirmação, clique em **Copiar JSON para o Claude Desktop**.
+4. Abra o arquivo de configuração do Claude no seu computador:
    - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-5. Adicione o servidor dentro do bloco `"mcpServers"`:
+5. Cole o bloco do OpenMoney dentro da seção `"mcpServers"`:
    ```json
    {
      "mcpServers": {
@@ -142,114 +84,141 @@ O Claude suporta conexão nativa utilizando o transporte moderno **Streamable HT
      }
    }
    ```
-6. Reinicie o Claude Desktop. O ícone de martelo (ferramentas) exibirá as ferramentas do OpenMoney ativas!
+6. Reinicie o Claude Desktop. O ícone de ferramentas (martelo) exibirá as funções do OpenMoney prontas para uso.
 
-#### Claude Web (claude.ai)
-1. No Claude Web, acesse as configurações de conectores ou integrações MCP.
-2. Adicione a URL `https://openmoney.app.br/api/mcp` e autorize via OAuth 2.1 ou insira o Bearer Token.
-
----
-
-### 3.3. Google Gemini / Gemini Live
-
-1. Crie uma **Gemini Gem** ou configure uma extensão com chamada de ferramentas.
-2. Conecte através do endpoint OpenAPI oficial:
-   ```text
-   https://openmoney.app.br/api/openapi.json
-   ```
-3. Defina a autenticação com o cabeçalho `Authorization: Bearer opm_live_...`.
+#### No Claude Web (claude.ai)
+1. Nas configurações do Claude Web, acesse a área de **MCP Connectors**.
+2. Adicione a URL `https://openmoney.app.br/api/mcp` e autorize com sua conta OpenMoney.
 
 ---
 
-### 3.4. LM Studio, Cursor, Claude Code e Agentes Locais
+### 1.4. LM Studio, Cursor, Claude Code e Agentes Locais
 
-#### LM Studio
-1. No LM Studio, navegue até a aba **MCP Servers**.
-2. Adicione um novo servidor HTTP apontando para:
+#### LM Studio (Modelos Locais)
+1. Abra a aba **MCP Servers** no LM Studio.
+2. Adicione um servidor HTTP com:
    - **URL:** `https://openmoney.app.br/api/mcp`
    - **Header:** `Authorization: Bearer opm_live_...`
-3. Qualquer modelo local com suporte a function calling (como Qwen 2.5, Llama 3.3, Mistral) poderá consultar e registrar lançamentos na sua base OpenMoney!
+3. Qualquer modelo local compatível com function calling (Qwen 2.5, Llama 3.3, Mistral) poderá ler e lançar gastos no OpenMoney!
 
 #### Cursor (IDE)
-1. Acesse **Cursor Settings** › **Features** › **MCP**.
+1. Abra **Cursor Settings** › **Features** › **MCP**.
 2. Clique em **Add New MCP Server**:
-   - **Type:** `command` ou `http`
+   - **Type:** `http`
    - **URL:** `https://openmoney.app.br/api/mcp`
    - **Headers:** `{"Authorization": "Bearer opm_live_..."}`
 
 ---
 
-## 4. Catálogo de Ferramentas Expostas (MCP Tools Reference)
+## 2. Exemplos de Perguntas e Comandos para Fazer à IA
 
-Os assistentes externos possuem acesso às seguintes ferramentas estruturadas:
+Com a IA conectada, você pode falar em linguagem natural como se estivesse conversando com um assistente financeiro pessoal:
 
-### 1. `openmoney_get_financial_overview`
-- **Descrição:** Retorna a posição financeira geral consolidada do usuário no mês atual: saldo atual conciliado de todas as contas, saldo previsto até o fim do mês, total de receitas realizadas e pendentes, total de despesas realizadas e pendentes e resultado líquido.
+### Consultas de Saldo e Posição Geral
+- *"Qual é o meu saldo bancário atual no Itaú hoje?"*
+- *"Quanto eu tenho de saldo disponível somando todas as minhas contas?"*
+- *"Qual é a projeção de saldo previsto para o final deste mês?"*
+- *"Como está a fatura aberta do meu cartão de crédito Nubank?"*
 
-### 2. `openmoney_list_accounts`
-- **Descrição:** Lista todas as contas financeiras cadastradas com seus respectivos nomes, identificadores (`id`), tipos (`Corrente`, `Cartão de crédito`, `Poupança`, `Investimento`, `Dinheiro`), saldo atual do dia (conciliado) e saldo previsto.
+### Análise de Extrato e Gastos
+- *"Quanto eu gastei com Alimentação este mês comparado ao mês passado?"*
+- *"Liste os 5 maiores gastos que tive nas últimas duas semanas."*
+- *"Quais assinaturas ou pagamentos recorrentes estão previstos até o fim do mês?"*
+- *"Estou perto de estourar algum limite no meu orçamento?"*
 
-### 3. `openmoney_list_categories`
-- **Descrição:** Lista a árvore completa de categorias e subcategorias cadastradas, indicando seus tipos (`income`, `expense`) e se estão marcadas para participar dos relatórios oficiais.
-
-### 4. `openmoney_query_transactions`
-- **Descrição:** Consulta o extrato de lançamentos com filtros granulares:
-  - `month`: Mês de competência (1 a 12).
-  - `year`: Ano de competência (ex: 2026).
-  - `accountId`: Filtro por conta específica.
-  - `reconciledOnly`: Se `true`, retorna apenas transações já conciliadas.
-  - `search`: Busca textual por beneficiário, anotação ou tag.
-  - `limit`: Quantidade máxima de registros retornados.
-
-### 5. `openmoney_add_transaction` *(Requer permissão de Escrita)*
-- **Descrição:** Insere um novo lançamento na base de dados com recálculo automático de saldos e fatura:
-  - `accountId`: Identificador da conta.
-  - `date`: Data no formato `YYYY-MM-DD`.
-  - `amount`: Valor monetário em reais (ex: `45.90` para despesas ou receitas).
-  - `type`: `expense` (despesa) ou `income` (receita).
-  - `payee`: Nome do favorecido ou estabelecimento.
-  - `category`: Nome da categoria (ex: `"Alimentação › Supermercado"`).
-  - `tags`: Lista opcional de tags (ex: `["#trabalho", "#reembolsavel"]`).
-  - `notes`: Observações adicionais.
-
-### 6. `openmoney_update_transaction` *(Requer permissão de Escrita)*
-- **Descrição:** Atualiza campos de uma transação existente informando seu `id`.
-
-### 7. `openmoney_delete_transaction` *(Requer permissão de Escrita)*
-- **Descrição:** Exclui uma transação específica por seu `id`. A exclusão é unitária e segura.
-
-### 8. `openmoney_transfer_funds` *(Requer permissão de Escrita)*
-- **Descrição:** Efetua uma transferência entre duas contas cadastradas, criando simultaneamente a perna de débito e a perna de crédito vinculadas.
-
-### 9. `openmoney_get_predictions_and_budgets`
-- **Descrição:** Retorna a situação do Limite de Gastos e Previsões Orçamentárias do mês, comparando o limite planejado contra o total efetivamente gasto por categoria.
+### Lançamentos Rápidos e Transferências
+- *"Almocei no restaurante Sabor da Terra e paguei R$ 45,00 no débito Itaú hoje. Lança pra mim na categoria Alimentação com a tag #trabalho."*
+- *"Comprei uma mesa de escritório de R$ 600,00 em 3x no cartão Nubank hoje."*
+- *"Transfira R$ 800,00 da minha Conta Corrente para a Poupança."*
+- *"Atualize o valor do lançamento da farmácia de ontem para R$ 52,00."*
 
 ---
 
-## 5. Exemplos de Prompts para Usar no seu Assistente
+## 3. Gerenciamento de Acesso e Revogação
 
-Uma vez conectado, você pode conversar naturalmente com o ChatGPT, Claude ou Gemini:
+Você tem controle total sobre quais aplicativos e IAs têm acesso aos seus dados:
 
-- *"Qual é o meu saldo atual conciliado no banco hoje?"*
-- *"Quanto eu ainda tenho de saldo previsto para terminar o mês?"*
-- *"Liste os meus 5 maiores gastos com Alimentação neste mês."*
-- *"Acabei de almoçar no Restaurante Sabor da Terra e paguei R$ 42,00 no cartão Itaú. Registre para mim com a tag #trabalho."*
-- *"Quanto eu gastei com Combustível no mês passado comparado a este mês?"*
-- *"Estou estourando alguma previsão orçamentária no Limite de Gastos?"*
-- *"Transfira R$ 500,00 da minha Conta Corrente para a Poupança."*
+- **Visualização de Chaves Ativas**: Em **Ajustes & Personalização** › **Servidor MCP & Acesso Externo**, você vê todos os assistentes conectados, a data de criação e a data/hora do último uso.
+- **Revogação Instantânea com Confirmação**: Para desconectar qualquer IA, clique no ícone de lixeira. O aplicativo perguntará se você confirma a exclusão. Ao confirmar, o acesso é revogado no mesmo milissegundo em todos os servidores da nuvem.
+- **Identificação Clara de Ações**: Qualquer lançamento, alteração ou exclusão feita por uma IA externa aparece identificada nos registros e relatórios do OpenMoney com a marcação **`[MCP Remoto]`**.
 
 ---
 
-## 6. Dúvidas Frequentes (FAQ)
+## 4. Dúvidas Frequentes do Usuário (FAQ)
 
-### O assistente de IA pode apagar todos os meus dados?
-**Não.** O servidor MCP não expõe nenhuma ferramenta de exclusão em lote, eliminação de contas ou substituição de arquivos da base. Todas as exclusões são unitárias por ID e passam por validação prévia. Além disso, as salvaguardas Anti-Wipe da Cloudflare rejeitam qualquer tentativa de upload de base com payload truncado.
+### O assistente de IA pode apagar minha base de dados inteira?
+**Não.** O conector não disponibiliza comandos para apagar contas, zerar saldos ou deletar a base. As exclusões permitidas são sempre unitárias (um lançamento específico por ID) e passam por salvaguardas que impedem alterações em massa.
 
-### O que acontece se eu revogar um token de acesso?
-No mesmo milissegundo em que você confirma a exclusão do token no OpenMoney, o hash correspondente é apagado do banco de dados Cloudflare D1. Qualquer requisição futura feita pelo ChatGPT, Claude ou agente externo usando aquele token receberá o erro `HTTP 401 Unauthorized`.
+### O que acontece se eu estiver com o app aberto no celular/computador e pedir para a IA criar um gasto?
+Graças à sincronização em tempo real (**Sync v2**), o lançamento criado pela IA é gravado na nuvem e transmitido imediatamente via WebSocket. Ele **aparece na tela do seu aplicativo na mesma hora**, sem conflito de dados e sem risco de ser sobrescrito pelo app.
 
-### Posso usar o conector apenas para consulta sem permitir lançamentos?
-**Sim.** Ao criar o token ou autorizar a conexão, selecione a permissão **"Somente Leitura" (`read_only`)**. O assistente poderá responder todas as suas dúvidas financeiras, mas o servidor rejeitará qualquer instrução de inserção ou alteração.
+### Qual a diferença entre "Saldo Atual" e "Saldo Previsto" que a IA informa?
+- **Saldo Atual do Dia (Conciliado):** É o dinheiro real disponível na conta hoje, considerando apenas os lançamentos que você já conferiu e conciliou até a data presente. Esse é o número que bate com o extrato do seu banco.
+- **Saldo Previsto no Mês:** É a projeção matemática calculada até o último dia do mês, somando as receitas a receber e subtraindo contas a pagar e faturas pendentes.
 
-### Como sei se um lançamento foi feito por uma IA ou por mim?
-Todos os lançamentos gerados por assistentes externos recebem o marcador **`[MCP Remoto]`** nos registros e na auditoria do sistema, garantindo transparência total.
+### Posso conectar a IA apenas para ler meus dados, sem permissão para criar lançamentos?
+**Sim.** Ao autorizar uma conexão OAuth ou criar um token de acesso, selecione a opção **"Somente Leitura" (`read_only`)**. O assistente poderá responder dúvidas, montar relatórios e gráficos, mas o servidor rejeitará qualquer tentativa de criar, editar ou apagar registros com erro de permissão.
+
+---
+
+## 5. Informações Técnicas e Arquitetura (Documentação Complementar)
+
+Esta seção documenta a arquitetura técnica, padrões de segurança e especificações de rede para desenvolvedores e administradores do sistema.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   SEUS CLIENTES E ASSISTENTES DE IA                     │
+│    (ChatGPT, Claude Desktop/Web, Gemini, Cursor, LM Studio, Agentes)   │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │  HTTPS / Streamable HTTP (JSON-RPC)
+                                    ▼  (OAuth 2.1 PKCE S256 ou Bearer Token)
+┌────────────────────────────────────────────────────────────────────────┐
+│               GATEWAY DE BORDA: CLOUDFLARE PAGES FUNCTIONS             │
+│  - Autodescoberta RFC 8414 (OAuth Server) e RFC 9728 (Protected Res)  │
+│  - Dynamic Client Registration (RFC 7591) com mitigação RFC 9207 (iss) │
+│  - Resolução de inquilino (user_id) e isolamento multi-tenant          │
+│  - Validação estrita de escopo (read_only vs read_write)               │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                  ┌─────────────────┴─────────────────┐
+                  ▼                                   ▼
+┌───────────────────────────────────┐ ┌───────────────────────────────────┐
+│     INTEGRAÇÃO SYNC V2 & D1       │ │       DURABLE OBJECTS (WS)        │
+│ - user_sync_records: deltas reais │ │ - UserSyncRoom: broadcast em tempo│
+│ - user_databases: snapshot seguro │ │   real para apps conectados       │
+│ - Hash SHA-256 de API tokens      │ │ - 0ms de atraso visual no desktop │
+└───────────────────────────────────┘ └───────────────────────────────────┘
+```
+
+### 5.1. Padrões OAuth 2.1 e Autodescoberta
+- **RFC 9728 (Protected Resource Metadata)**: Endpoint `/.well-known/oauth-protected-resource/api/mcp` orienta clientes externos sobre as autoridades emissoras e escopos suportados.
+- **RFC 8414 & OpenID Connect Discovery**: Endpoints `/.well-known/oauth-authorization-server` e `/.well-known/openid-configuration` expõem os endpoints de autorização, token, registro dinâmico e suporte PKCE `S256`.
+- **RFC 7591 (Dynamic Client Registration - DCR)**: Endpoint `/api/oauth/register` permite registro dinâmico de clientes (`client_name`, `redirect_uris`, `client_secret_post`).
+- **RFC 9207 (Mix-Up Mitigation)**: Parâmetro `iss` retornado no redirecionamento do código de autorização garante a procedência do servidor.
+
+### 5.2. Especificação do Transporte MCP (Streamable HTTP)
+- **Endpoint Principal**: `POST /api/mcp` (e alias `/mcp`). Processa requisições JSON-RPC 2.0 em formato `application/json; charset=utf-8`.
+- **Negociação de Protocolo**: Suporte à versão `protocolVersion: "2025-03-26"` e retrocompatibilidade com versões anteriores (`2024-11-05`).
+- **Tratamento de GET / HEAD**:
+  - `HEAD /api/mcp`: Retorna `200 OK` com cabeçalhos de sessão para sondagens de conectividade.
+  - `GET /api/mcp` (com `Accept: text/event-stream`): Retorna `405 Method Not Allowed` com cabeçalho `Allow: POST, DELETE, OPTIONS, HEAD` conforme a seção 3.3 da especificação MCP Streamable HTTP, instruindo o cliente a operar em modo request-response sobre POST sem aguardar streaming reverso.
+  - `GET /api/mcp` (com `Accept: application/json`): Retorna `200 OK` com metadados do servidor.
+
+### 5.3. Segurança de Dados e Isolamento
+- **Tokens Bearer com Hash Criptográfico**: O segredo bruto `opm_live_...` é exibido apenas no momento da criação. O banco Cloudflare D1 armazena exclusivamente o hash **SHA-256** da chave.
+- **Criptografia Zero-Knowledge**: Bases de dados armazenadas no Cloudflare D1 utilizam criptografia `AES-256-GCM` com chave derivada da credencial do usuário.
+- **Auditoria de Sistema**: Toda mutação externa é registrada na tabela `user_audit_logs` com identificação do `tokenId`, carimbo de data/hora e marcador `[MCP Remoto]`.
+- **Salvaguardas Anti-Wipe**: Bloqueio compulsório `HTTP 409` no backend contra uploads truncados (`< 50 KB`) em bases populadas.
+
+### 5.4. Catálogo de Ferramentas MCP (Tools Reference)
+
+| Ferramenta | Método | Escopo | Finalidade |
+| :--- | :--- | :--- | :--- |
+| `openmoney_get_financial_overview` | Leitura | `read_only` | Resumo financeiro consolidado: saldo bancário conciliado por conta, saldo previsto no mês, total de despesas, receitas e resultado líquido. |
+| `openmoney_list_accounts` | Leitura | `read_only` | Relação detalhada de contas bancárias, tipos, identificadores e saldos. |
+| `openmoney_list_categories` | Leitura | `read_only` | Estrutura hierárquica de categorias e subcategorias cadastradas. |
+| `openmoney_query_transactions` | Leitura | `read_only` | Busca e filtro de lançamentos por data, conta, texto, tag ou status de conciliação. |
+| `openmoney_add_transaction` | Escrita | `read_write` | Criação de despesas, receitas, compras parceladas e transferências com gravação no Sync v2. |
+| `openmoney_update_transaction` | Escrita | `read_write` | Edição de campos de lançamentos existentes por ID. |
+| `openmoney_delete_transaction` | Escrita | `read_write` | Remoção unitária e segura de transação por ID (e de contraparte em transferências). |
+| `openmoney_get_predictions_and_budgets` | Leitura | `read_only` | Situação das previsões orçamentárias e limites de gastos do mês. |
