@@ -47,18 +47,41 @@ class _BatchEditTransactionsModalState
   bool _applyReconciled = false;
   bool _reconciledValue = true;
 
+  ({bool hasExpenses, bool hasIncomes}) _selectedTxTypes() {
+    bool hasExp = false;
+    bool hasInc = false;
+    for (final tx in widget.store.db.txs) {
+      if (!widget.selectedIds.contains(tx.id) || tx.auto == true) continue;
+      final isXfer = (tx.xfer != null && tx.xfer!.isNotEmpty) ||
+          (tx.peer != null && tx.peer!.isNotEmpty);
+      if (isXfer) continue;
+      if (tx.amt < 0) {
+        hasExp = true;
+      } else {
+        hasInc = true;
+      }
+      if (hasExp && hasInc) break;
+    }
+    return (hasExpenses: hasExp, hasIncomes: hasInc);
+  }
+
+  bool get _isMixedTypes {
+    final t = _selectedTxTypes();
+    return t.hasExpenses && t.hasIncomes;
+  }
+
   @override
   void initState() {
     super.initState();
     final store = widget.store;
-    final catOpts = [
-      ...store.allCategoryOptions('Despesa'),
-      ...store.allCategoryOptions('Receita'),
-    ];
+    final types = _selectedTxTypes();
+    final targetCatType =
+        (types.hasIncomes && !types.hasExpenses) ? 'Receita' : 'Despesa';
+    final catOpts = store.allCategoryOptions(targetCatType);
     if (catOpts.isNotEmpty) {
       _selectedCategory = catOpts.first.value;
     } else {
-      final cats = store.allCatNames();
+      final cats = store.allCategoryPaths(targetCatType);
       if (cats.isNotEmpty) {
         _selectedCategory = cats.first;
       }
@@ -81,7 +104,7 @@ class _BatchEditTransactionsModalState
 
   bool get _hasAnyFieldSelected =>
       _applyPayee ||
-      _applyCategory ||
+      (_applyCategory && !_isMixedTypes) ||
       _applyTags ||
       _applyMemo ||
       _applyAmount ||
@@ -111,7 +134,7 @@ class _BatchEditTransactionsModalState
     final payload = BatchTransactionEditPayload(
       applyPayee: _applyPayee,
       payee: _payeeCtrl.text,
-      applyCategory: _applyCategory,
+      applyCategory: _applyCategory && !_isMixedTypes,
       category: _selectedCategory,
       applyTags: _applyTags,
       tagMode: _tagMode,
@@ -211,24 +234,23 @@ class _BatchEditTransactionsModalState
     final c = OpenMoneyColors(isDark);
     final isMobile = MediaQuery.sizeOf(context).width < 640;
 
+    final types = _selectedTxTypes();
+    final isMixedTypes = types.hasExpenses && types.hasIncomes;
+    final allowedCatType =
+        (types.hasIncomes && !types.hasExpenses) ? 'Receita' : 'Despesa';
+
     final seenCats = <String>{};
     final catOptions = <({String label, String value})>[];
-    for (final opt in [
-      ...store.allCategoryOptions('Despesa'),
-      ...store.allCategoryOptions('Receita'),
-    ]) {
-      if (seenCats.add(opt.value)) {
-        catOptions.add(opt);
+    if (!isMixedTypes) {
+      for (final opt in store.allCategoryOptions(allowedCatType)) {
+        if (seenCats.add(opt.value)) {
+          catOptions.add(opt);
+        }
       }
-    }
-    if (_selectedCategory.isNotEmpty && !seenCats.contains(_selectedCategory)) {
-      catOptions.insert(
-        0,
-        (
-          label: _selectedCategory.replaceAll(':', ' › '),
-          value: _selectedCategory,
-        ),
-      );
+      if (catOptions.isNotEmpty &&
+          !catOptions.any((c) => c.value == _selectedCategory)) {
+        _selectedCategory = catOptions.first.value;
+      }
     }
     final accounts = store.db.accounts;
 
@@ -315,37 +337,71 @@ class _BatchEditTransactionsModalState
                       enabled: _applyCategory,
                       onToggle: (v) => setState(() => _applyCategory = v),
                       title: 'Categoria',
-                      subtitle: 'Não altera transferências entre contas',
-                      child: DropdownButtonFormField<String>(
-                        value: catOptions.any((c) => c.value == _selectedCategory)
-                            ? _selectedCategory
-                            : (catOptions.isNotEmpty ? catOptions.first.value : null),
-                        isExpanded: true,
-                        dropdownColor: c.surfaceCard,
-                        style: TextStyle(fontSize: 13, color: c.textPrimary),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: true,
-                          fillColor: c.surfaceCard,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        items: catOptions
-                            .map((opt) => DropdownMenuItem<String>(
-                                  value: opt.value,
-                                  child: Text(
-                                    opt.label,
-                                    overflow: TextOverflow.ellipsis,
+                      subtitle: isMixedTypes
+                          ? 'Não permitido alterar categoria quando Despesas e Receitas estão misturadas'
+                          : (allowedCatType == 'Receita'
+                              ? 'Categorias de Receita (não altera transferências)'
+                              : 'Categorias de Despesa (não altera transferências)'),
+                      child: isMixedTypes
+                          ? Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.orange.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: Colors.orange,
+                                    size: 18,
                                   ),
-                                ))
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() => _selectedCategory = val);
-                          }
-                        },
-                      ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'A seleção contém Despesas e Receitas. Não é permitido alterar lançamentos de despesa para categorias de receita e vice-versa. Selecione apenas despesas ou apenas receitas.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: c.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : DropdownButtonFormField<String>(
+                              value: catOptions.any((c) => c.value == _selectedCategory)
+                                  ? _selectedCategory
+                                  : (catOptions.isNotEmpty ? catOptions.first.value : null),
+                              isExpanded: true,
+                              dropdownColor: c.surfaceCard,
+                              style: TextStyle(fontSize: 13, color: c.textPrimary),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                filled: true,
+                                fillColor: c.surfaceCard,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              items: catOptions
+                                  .map((opt) => DropdownMenuItem<String>(
+                                        value: opt.value,
+                                        child: Text(
+                                          opt.label,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _selectedCategory = val);
+                                }
+                              },
+                            ),
                     ),
 
                     _buildFieldSection(

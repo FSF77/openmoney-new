@@ -3664,6 +3664,27 @@ class MoneyStore extends ChangeNotifier {
     return result;
   }
 
+  /// Retorna 'Despesa' ou 'Receita' para um caminho de categoria cadastrado,
+  /// ou null caso não esteja no catálogo.
+  String? categoryTypeForPath(String catPath) {
+    final clean = catPath.trim();
+    if (clean.isEmpty) return null;
+    final lower = clean.toLowerCase();
+    final rootLower = clean.split(':').first.trim().toLowerCase();
+
+    for (final c in db.cats) {
+      if (c.path.trim().toLowerCase() == lower) {
+        return c.type;
+      }
+    }
+    for (final c in db.cats) {
+      if (c.parent == null && c.name.trim().toLowerCase() == rootLower) {
+        return c.type;
+      }
+    }
+    return null;
+  }
+
   // MARK: - Account Actions
 
   String? saveAccount({
@@ -6716,44 +6737,65 @@ class MoneyStore extends ChangeNotifier {
 
     int updatedCount = 0;
     final targetAcc = payload.applyAccount ? accById(payload.accountId) : null;
+    final targetCatType =
+        payload.applyCategory ? categoryTypeForPath(payload.category) : null;
 
     for (int i = 0; i < db.txs.length; i++) {
       final tx = db.txs[i];
       if (!ids.contains(tx.id) || tx.auto == true) continue;
       final isXfer = (tx.xfer != null && tx.xfer!.isNotEmpty) ||
           (tx.peer != null && tx.peer!.isNotEmpty);
+      bool txModified = false;
 
       if (payload.applyPayee) {
         tx.payee = payload.payee.trim();
+        txModified = true;
       }
       if (payload.applyCategory && !isXfer) {
-        tx.cat = payload.category;
+        final isExpenseTx = tx.amt < 0;
+        final isIncompatible = (isExpenseTx && targetCatType == 'Receita') ||
+            (!isExpenseTx && targetCatType == 'Despesa');
+        if (!isIncompatible) {
+          tx.cat = payload.category;
+          txModified = true;
+        }
       }
       if (payload.applyMemo) {
         tx.memo = payload.memo;
+        txModified = true;
       }
       if (payload.applyDate) {
         tx.date = payload.date;
+        txModified = true;
       }
       if (payload.applyAccount &&
           !isXfer &&
           targetAcc != null) {
         tx.acc = targetAcc.id;
+        txModified = true;
       }
       if (payload.applyReconciled) {
         tx.rec = payload.reconciled;
+        txModified = true;
       }
       if (payload.applyAmount && !isXfer) {
         final absVal = payload.absAmountCents.abs();
         switch (payload.amountSignMode) {
           case BatchAmountSignMode.keepOriginal:
             tx.amt = tx.amt < 0 ? -absVal : absVal;
+            txModified = true;
             break;
           case BatchAmountSignMode.expense:
-            tx.amt = -absVal;
+            if (tx.amt < 0) {
+              tx.amt = -absVal;
+              txModified = true;
+            }
             break;
           case BatchAmountSignMode.income:
-            tx.amt = absVal;
+            if (tx.amt >= 0) {
+              tx.amt = absVal;
+              txModified = true;
+            }
             break;
         }
       }
@@ -6778,7 +6820,10 @@ class MoneyStore extends ChangeNotifier {
             tx.tags = remaining.isEmpty ? null : remaining;
             break;
         }
+        txModified = true;
       }
+
+      if (!txModified) continue;
 
       // Atualiza invoice key para cartão quando conta/data mudar
       final effectiveAcc = accById(tx.acc);

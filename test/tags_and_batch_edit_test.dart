@@ -339,5 +339,66 @@ void main() {
       expect(untagged.totalExpense, equals(10000));
       expect(untagged.totalIncome, equals(0));
     });
+
+    test(
+        'batchUpdateTransactions bloqueia alteração de despesa para categoria de receita e vice-versa',
+        () {
+      final store = makeStore();
+      store.db.txs.addAll([
+        Transaction(
+          id: 'exp1',
+          acc: 'a1',
+          date: '2026-11-10',
+          payee: 'Almoço',
+          cat: 'Alimentação',
+          amt: -4500,
+        ),
+        Transaction(
+          id: 'inc1',
+          acc: 'a1',
+          date: '2026-11-10',
+          payee: 'Pagamento',
+          cat: 'Salário',
+          amt: 300000,
+        ),
+      ]);
+      store.markIndexesDirty();
+
+      // Tentativa de alterar uma Despesa (exp1) para categoria de Receita ('Salário') -> deve ser bloqueada
+      final blockedExpToInc = store.batchUpdateTransactions(
+        ids: {'exp1'},
+        payload: const BatchTransactionEditPayload(
+          applyCategory: true,
+          category: 'Salário',
+        ),
+      );
+      expect(blockedExpToInc, equals(0));
+      expect(store.db.txs.firstWhere((t) => t.id == 'exp1').cat,
+          equals('Alimentação'));
+
+      // Tentativa de alterar uma Receita (inc1) para categoria de Despesa ('Viagem') -> deve ser bloqueada
+      final blockedIncToExp = store.batchUpdateTransactions(
+        ids: {'inc1'},
+        payload: const BatchTransactionEditPayload(
+          applyCategory: true,
+          category: 'Viagem',
+        ),
+      );
+      expect(blockedIncToExp, equals(0));
+      expect(
+          store.db.txs.firstWhere((t) => t.id == 'inc1').cat, equals('Salário'));
+
+      // Alteração válida de Despesa (exp1) para outra categoria de Despesa ('Viagem') -> permitida
+      final allowedExpToExp = store.batchUpdateTransactions(
+        ids: {'exp1'},
+        payload: const BatchTransactionEditPayload(
+          applyCategory: true,
+          category: 'Viagem',
+        ),
+      );
+      expect(allowedExpToExp, equals(1));
+      expect(
+          store.db.txs.firstWhere((t) => t.id == 'exp1').cat, equals('Viagem'));
+    });
   });
 }

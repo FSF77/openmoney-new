@@ -35,7 +35,7 @@ Quando algum filtro avançado estiver ativo, utilize o botão **Limpar filtros**
 No modal **Edição em Lote**, cada campo possui uma caixa de seleção individual para que você altere **apenas o que desejar**, mantendo os demais dados originais de cada lançamento:
 
 - **Nome / Favorecido:** redefine a descrição dos lançamentos selecionados.
-- **Categoria:** altera a categoria *(não altera transferências entre contas)*. O menu suspenso exibe a árvore completa com categorias principais em destaque e subcategorias indentadas com o indicador visual `↳` para localização imediata.
+- **Categoria:** altera a categoria *(não altera transferências entre contas)*. O menu suspenso exibe apenas as categorias compatíveis com o tipo dos lançamentos selecionados (**Despesa** para despesas e **Receita** para receitas), impedindo que despesas recebam categorias de receita e vice-versa (caso a seleção misture despesas e receitas, um aviso orienta a selecionar apenas um tipo para alterar a categoria). As subcategorias são indentadas com o indicador visual `↳` para localização imediata.
 - **Tags:** permite escolher entre três modos de aplicação:
   - **Adicionar:** acrescenta as tags informadas às tags já existentes em cada lançamento.
   - **Substituir:** substitui todas as tags dos lançamentos selecionados pelas novas tags informadas (deixar vazio limpa as tags).
