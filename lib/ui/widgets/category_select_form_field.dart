@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/openmoney_models.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -11,6 +12,7 @@ class CategorySelectFormField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final String labelText;
   final double? width;
+  final bool allowTransfers;
 
   const CategorySelectFormField({
     super.key,
@@ -21,6 +23,7 @@ class CategorySelectFormField extends StatelessWidget {
     required this.onChanged,
     this.labelText = 'Categoria / Transferência',
     this.width,
+    this.allowTransfers = true,
   });
 
   String _displayLabel(List<({String label, String value, bool isHeader})> options) {
@@ -61,8 +64,9 @@ class CategorySelectFormField extends StatelessWidget {
     }
 
     // Contas ativas para transferência (ordenadas com Favoritas primeiro e depois Ativas)
-    final transferAccounts =
-        store.transferDestinationAccounts(excludeId: excludeAccountId);
+    final transferAccounts = allowTransfers
+        ? store.transferDestinationAccounts(excludeId: excludeAccountId)
+        : <Account>[];
 
     final displayText = _displayLabel(options);
 

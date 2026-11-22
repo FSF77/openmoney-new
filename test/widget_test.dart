@@ -23,6 +23,7 @@ import 'package:openmoney/ui/modals/account_modal.dart';
 import 'package:openmoney/ui/modals/batch_edit_transactions_modal.dart';
 import 'package:openmoney/ui/modals/csv_qif_modal.dart';
 import 'package:openmoney/ui/modals/transaction_modal.dart';
+import 'package:openmoney/ui/widgets/category_select_form_field.dart';
 
 void main() {
   group('OpenMoney JSON v6 Schema & Business Rules Parity Tests', () {
@@ -2312,5 +2313,82 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
 
     expect(find.text('Lazer'), findsNothing);
     expect(find.text('↳ Cinema'), findsNothing);
+  });
+
+  testWidgets('43. Predictions support recurring mode and CategorySelectFormField respects allowTransfers', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+
+    // 1. Testa CategorySelectFormField com allowTransfers: false
+    String selectedCat = '';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CategorySelectFormField(
+          store: store,
+          categoryType: 'Despesa',
+          currentSelection: selectedCat,
+          allowTransfers: false,
+          onChanged: (v) => selectedCat = v,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Clica para abrir o menu
+    await tester.tap(find.byType(CategorySelectFormField));
+    await tester.pumpAndSettle();
+
+    // Garante que nenhuma opção de transferência aparece
+    expect(find.textContaining('⇄ Transferência:'), findsNothing);
+
+    // Fecha o menu
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    // 2. Adiciona previsão recorrente via addTransaction com mode: 'recurring'
+    final accId = store.db.accounts.first.id;
+    store.addTransaction(
+      accId: accId,
+      date: '${store.month}-01',
+      payee: 'Previsão Internet Fibra',
+      catSelection: 'Moradia › Internet',
+      memo: 'base:12000',
+      signedAmt: -12000,
+      mode: 'recurring',
+      freq: 'monthly',
+      endDate: '2027-12-01',
+    );
+
+    // Regra de recorrência criada
+    final rule = store.db.recs.firstWhere((r) => r.payee == 'Previsão Internet Fibra');
+    expect(rule.freq, 'monthly');
+    expect(rule.end, '2027-12-01');
+    expect(rule.amt, -12000);
+
+    // Lançamento correspondente gerado
+    final tx = store.db.txs.firstWhere((t) => t.payee == 'Previsão Internet Fibra');
+    expect(tx.amt, -12000);
+    expect(tx.recId, rule.id);
+  });
+
+  testWidgets('44. TransactionCreateModal renders cleanly without RenderFlex overflow in account dropdown', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: ElevatedButton(
+            onPressed: () => showTransactionCreateModal(context, store),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Novo Lançamento'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

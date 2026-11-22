@@ -440,12 +440,19 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
   }
 
   void _openNewPredictionDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
     final accounts = store.activeAccounts;
     if (accounts.isEmpty) return;
 
     String selectedAccId = accounts.first.id;
     String category = '';
     String dateIso = '${store.month}-01';
+    String mode = 'single';
+    String freq = 'monthly';
+    bool hasEndDate = false;
+    String endDateIso =
+        '${int.parse(store.month.substring(0, 4)) + 1}-${store.month.substring(5, 7)}-01';
     final descCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
@@ -496,10 +503,112 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                   categoryType: 'Despesa',
                   currentSelection: category,
                   labelText: 'Categoria',
+                  allowTransfers: false,
                   onChanged: (val) {
                     setDlgState(() => category = val);
                   },
                 ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Tipo de Previsão',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    selectedBackgroundColor:
+                        colors.accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: colors.accent,
+                    foregroundColor: colors.textSecondary,
+                    textStyle: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: 'single',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Única', maxLines: 1),
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: 'recurring',
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Recorrente', maxLines: 1),
+                      ),
+                    ),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: (s) => setDlgState(() => mode = s.first),
+                ),
+                if (mode == 'recurring') ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: freq,
+                    isDense: true,
+                    style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Frequência',
+                      labelStyle: TextStyle(fontSize: 13),
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: kRecurrenceFrequencyOptions
+                        .map((o) => DropdownMenuItem(
+                              value: o.id,
+                              child: Text(o.label,
+                                  style: const TextStyle(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setDlgState(() => freq = v);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Definir Data de Término',
+                        style: TextStyle(fontSize: 13)),
+                    value: hasEndDate,
+                    onChanged: (v) => setDlgState(() => hasEndDate = v ?? false),
+                  ),
+                  if (hasEndDate) ...[
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Data de Término',
+                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      ),
+                      controller:
+                          TextEditingController(text: fmtDate(endDateIso)),
+                      onTap: () async {
+                        final current =
+                            DateTime.tryParse(endDateIso) ?? DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: current,
+                          firstDate:
+                              DateTime.tryParse(dateIso) ?? DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDlgState(() {
+                            endDateIso =
+                                '${picked.year.toString().padLeft(4, '0')}-${pad2(picked.month)}-${pad2(picked.day)}';
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ],
                 const SizedBox(height: 8),
                 TextField(
                   controller: descCtrl,
@@ -548,9 +657,10 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                   catSelection: category,
                   memo: memoTag,
                   signedAmt: -cents,
-                  mode: 'normal',
-                  freq: '',
+                  mode: mode,
+                  freq: mode == 'recurring' ? freq : '',
                   installments: 1,
+                  endDate: (mode == 'recurring' && hasEndDate) ? endDateIso : null,
                 );
 
                 final targetMonth = dateIso.substring(0, 7);

@@ -915,6 +915,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                 ? curDest
                 : (others.isNotEmpty ? others.first.id : null);
           }(),
+          isExpanded: true,
           isDense: true,
           style: TextStyle(fontSize: 13, color: colors.textPrimary),
           decoration: const InputDecoration(
@@ -1950,6 +1951,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                     flex: 3,
                     child: DropdownButtonFormField<String>(
                       value: _accId,
+                      isExpanded: true,
                       isDense: true,
                       style: TextStyle(fontSize: 13, color: colors.textPrimary),
                       decoration: const InputDecoration(
@@ -2153,6 +2155,7 @@ class _TransactionCreateDialogState extends State<_TransactionCreateDialog> {
                   initialValue: _catSelection.startsWith('xfer:')
                       ? _catSelection.substring(5)
                       : (otherAccounts.isNotEmpty ? otherAccounts.first.id : null),
+                  isExpanded: true,
                   isDense: true,
                   style: TextStyle(fontSize: 13, color: colors.textPrimary),
                   decoration: const InputDecoration(
@@ -3038,6 +3041,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
               // Conta destino
               DropdownButtonFormField<String>(
                 initialValue: _accId,
+                isExpanded: true,
                 isDense: true,
                 style: TextStyle(fontSize: 13, color: colors.textPrimary),
                 decoration: const InputDecoration(
@@ -3706,6 +3710,7 @@ Future<void> showInvoicePaymentModal(
                 if (sourceAccounts.isNotEmpty)
                   DropdownButtonFormField<String>(
                     initialValue: sourceAccId,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Debitar da Conta',
                       border: OutlineInputBorder(),

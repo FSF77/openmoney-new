@@ -18,6 +18,24 @@ class CategoriesView extends StatefulWidget {
 class _CategoriesViewState extends State<CategoriesView> {
   String _selectedType = 'Despesa';
 
+  Widget _buildBlockedBadge(OpenMoneyColors colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: colors.expense,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'BLOQUEADA',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
   void _showCategoryDrillDown(String categoryPath) {
     showCategoryDrillDownModal(context, widget.store, categoryPath);
   }
@@ -501,11 +519,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                                   text: '$topCount lanç.',
                                   color: colors.accent,
                                 ),
-                                if (top.isBlocked)
-                                  StatusBadge(
-                                    text: 'BLOQUEADA',
-                                    color: colors.expense,
-                                  ),
+                                if (top.isBlocked) _buildBlockedBadge(colors),
                                 if (!widget.store.isCategoryIncludedInReports(top.path))
                                   StatusBadge(
                                     text: isNarrow ? 'OCULTA' : 'OCULTA DE RELATÓRIOS',
@@ -620,11 +634,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      if (sub.isBlocked)
-                                        StatusBadge(
-                                          text: 'BLOQUEADA',
-                                          color: colors.expense,
-                                        ),
+                                      if (sub.isBlocked) _buildBlockedBadge(colors),
                                       if (!widget.store.isCategoryIncludedInReports(sub.path))
                                         StatusBadge(
                                           text: isNarrow ? 'OCULTA' : 'OCULTA DE RELATÓRIOS',

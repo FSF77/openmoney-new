@@ -98,7 +98,10 @@ Cada categoria que possui previsões ganha um card estruturado:
 A tela de inclusão conta com campos proporcionais e alinhados:
 - **Conta**: Escolha da conta de débito ou cartão.
 - **Data**: Data do lançamento (formato `dd/mm/aaaa`), definindo a competência da previsão.
-- **Categoria**: Dropdown hierárquico com categorias e subcategorias devidamente indentadas (`   ↳ Subcategoria`).
+- **Categoria**: Dropdown hierárquico com categorias e subcategorias devidamente indentadas (`   ↳ Subcategoria`), restrito a despesas (opções de transferência são ocultadas por não se aplicarem a limites de gastos).
+- **Tipo de Previsão**: Seletor para definir se a previsão é:
+  - **Única**: Válida apenas para a competência da data selecionada.
+  - **Recorrente**: Repete-se automaticamente conforme a **frequência** escolhida (Mensal, Semanal, Quinzenal, Anual, etc.), com opção de definir uma **data de término**.
 - **Descrição**: Campo limpo com prompt explicativo `Previsão (ex: Mercado, Combustível, Farmácia...)`.
 - **Valor do Teto**: Valor planejado em centavos/moeda da base.
 - **Observações**: Anotações livres.
