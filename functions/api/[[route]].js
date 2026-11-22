@@ -3218,7 +3218,7 @@ export async function onRequest(context) {
   // 0.2 GET & POST /api/oauth/authorize (Consentimento OAuth 2.0)
   // ==========================================================================
   if (path === "/api/oauth/authorize") {
-    if (request.method === "GET") {
+    if (request.method === "GET" || request.method === "HEAD") {
       const clientId = url.searchParams.get("client_id") || "ChatGPT / Assistente de IA";
       const redirectUri = url.searchParams.get("redirect_uri") || "";
       const state = url.searchParams.get("state") || "";
