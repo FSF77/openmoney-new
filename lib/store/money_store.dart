@@ -27,6 +27,7 @@ enum NavModule {
   categories,
   tags,
   search,
+  agenda,
   dueBills,
   installments,
   predictions,
@@ -556,6 +557,15 @@ class MoneyStore extends ChangeNotifier {
   String sidebarMode = 'expanded'; // 'expanded' | 'miniRail' | 'hidden'
   String startupView = 'lastAccount'; // 'dashboard' | 'lastAccount'
   String ledgerViewMode = 'list'; // 'list' | 'table'
+  List<String> agendaFilters = ['bills', 'income'];
+  void setAgendaFilters(List<String> filters) {
+    agendaFilters = List<String>.from(filters);
+    final cfg = _readConfig();
+    cfg['agendaFilters'] = agendaFilters;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
   /// Preferências do Dashboard de Gráficos (período, contas, metas).
   Map<String, dynamic> chartsPrefs = <String, dynamic>{};
   bool sortAscendingDate = true;
@@ -803,6 +813,7 @@ class MoneyStore extends ChangeNotifier {
       'sidebarMode': sidebarMode,
       'startupView': startupView,
       'ledgerViewMode': ledgerViewMode,
+      'agendaFilters': List<String>.from(agendaFilters),
       'chartsPrefs': Map<String, dynamic>.from(chartsPrefs),
       'sortAscendingDate': sortAscendingDate,
       'dashboardAccountsShowActive': dashboardAccountsShowActive,
@@ -865,6 +876,10 @@ class MoneyStore extends ChangeNotifier {
     }
     if (cfg['ledgerViewMode'] is String) {
       ledgerViewMode = cfg['ledgerViewMode'] as String;
+    }
+    if (cfg['agendaFilters'] is List) {
+      final list = (cfg['agendaFilters'] as List).map((e) => e.toString()).toList();
+      if (list.isNotEmpty) agendaFilters = list;
     }
     if (cfg['sortAscendingDate'] is bool) {
       sortAscendingDate = cfg['sortAscendingDate'] as bool;
@@ -4488,6 +4503,72 @@ class MoneyStore extends ChangeNotifier {
       summary:
           '$prefix${newRec ? "Conciliação marcada" : "Conciliação desmarcada"}: "${tx.payee}" (${formatCurrency(tx.amt, accById(tx.acc)?.effectiveCurrency ?? baseCurrency)})',
       details: isFromAi ? {'source': 'ai_assistant'} : null,
+    );
+  }
+
+  void markTransactionRec(String txId, bool rec) {
+    final idx = db.txs.indexWhere((t) => t.id == txId);
+    if (idx == -1) return;
+    if (db.txs[idx].rec == rec) return;
+    db.txs[idx].rec = rec;
+    final xfer = db.txs[idx].xfer;
+    if (xfer != null) {
+      for (int i = 0; i < db.txs.length; i++) {
+        if (db.txs[i].xfer == xfer) {
+          db.txs[i].rec = rec;
+        }
+      }
+    }
+    markIndexesDirty();
+    save();
+
+    final tx = db.txs[idx];
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.update,
+      entity: AuditEntity.transaction,
+      id: txId,
+      summary:
+          '${rec ? "Marcado como pago/recebido" : "Marcado como pendente"}: "${tx.payee}" (${formatCurrency(tx.amt, accById(tx.acc)?.effectiveCurrency ?? baseCurrency)})',
+    );
+  }
+
+  void quickAddTransaction({
+    required String payee,
+    required int amtCents,
+    required String date,
+    String? cat,
+    String? accId,
+  }) {
+    final effectiveAccId = (accId != null && accId.isNotEmpty)
+        ? accId
+        : (db.accounts.isNotEmpty ? db.accounts.first.id : '');
+    if (effectiveAccId.isEmpty) return;
+
+    final defaultCat = (cat != null && cat.isNotEmpty)
+        ? cat
+        : (amtCents < 0 ? 'Despesas' : 'Receitas');
+
+    final tx = Transaction(
+      id: uid(),
+      acc: effectiveAccId,
+      date: date,
+      payee: payee,
+      cat: defaultCat,
+      amt: amtCents,
+      rec: false,
+    );
+    db.txs.add(tx);
+    markIndexesDirty();
+    save();
+
+    AuditLogManager.instance.logAsync(
+      dbPath: dbPath,
+      action: AuditAction.create,
+      entity: AuditEntity.transaction,
+      id: tx.id,
+      summary:
+          'Adicionado via Agenda: "$payee" (${formatCurrency(amtCents, accById(effectiveAccId)?.effectiveCurrency ?? baseCurrency)})',
     );
   }
 

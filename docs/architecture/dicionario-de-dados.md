@@ -501,6 +501,27 @@ Localizado no diretório de dados da aplicação (`Application Support/OpenMoney
 * `isDarkMode` (`bool`, padrão `true`): Modo de tema visual (escuro ou claro).
 * `accentColorKey` (`string`, padrão `'sky'`): Paleta de cor de destaque ativa.
 * `hidePatrimonyBalance` (`bool`, padrão `false`): Privacidade de saldos (ocultação por padrão com `••••••`).
+* `agendaFilters` (`List<string>`, padrão `["bills", "income"]`): Filtros ativos persistidos na tela de Agenda / Calendário (`bills`, `income`, `done`).
+
+---
+
+### 3. Estruturas em Memória (DTOs da Agenda Financeira)
+Definidas em `lib/models/agenda_models.dart`:
+* `AgendaEntryKind`: Enumeração representando o tipo da pendência (`bill` para conta a pagar, `invoice` para fatura de cartão de crédito, `income` para receita prevista).
+* `AgendaEntry`: Projeção diária para a grade mensal do calendário, consolidando lançamentos (`txs`) e faturas calculadas (`invoiceSummary`).
+  * `id` (`String`): Identificador único da transação ou da fatura (`inv:<cardId>:<invoiceKey>`).
+  * `kind` (`AgendaEntryKind`): Tipo do lançamento.
+  * `date` (`String`): Data ISO (`YYYY-MM-DD`) de vencimento ou competência.
+  * `title` (`String`): Favorecido ou nome da fatura do cartão.
+  * `category` (`String`): Categoria associada.
+  * `accountName` (`String`): Nome da conta ou cartão de origem.
+  * `amountCents` (`int`): Valor monetário absoluto em centavos inteiros.
+  * `currency` (`String`): Moeda do lançamento.
+  * `isDone` (`bool`): Indicador de conciliação / quitação.
+  * `isOverdue` (`bool`): Indicador de vencimento em atraso.
+  * `tx` (`Transaction?`): Referência à transação original para contas e receitas.
+  * `cardId` / `invoiceKey` (`String?`): Referências para quitação e navegação de faturas de cartão.
+* `AgendaMonthSummary`: Totalizadores do mês com valores convertidos na moeda base do sistema (`pendingPayCount`, `pendingPayTotalCents`, `pendingReceiveCount`, `pendingReceiveTotalCents`, `overdueCount`, `overdueTotalCents`, `nextIncomeTitle`, `nextIncomeDate`, `nextIncomeAmountCents`, `currency`).
 
 *(Na versão Web, essas mesmas chaves são armazenadas diretamente no `window.localStorage`).*
 

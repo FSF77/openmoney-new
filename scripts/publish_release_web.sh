@@ -43,13 +43,8 @@ fi
 
 echo "✅ Build Web atualizado em: ${ROOT_DIR}/web-dist"
 
-if command -v npx >/dev/null 2>&1 && ! grep -q "SUBSTITUIR_PELO_ID_DO_SEU_D1_NA_CLOUDFLARE" "${ROOT_DIR}/wrangler.toml" 2>/dev/null; then
-    echo "☁️ Enviando para Cloudflare Pages via Wrangler..."
-    npx wrangler pages deploy "${ROOT_DIR}/web-dist" --project-name=openmoney-new
-fi
-
 echo "📤 Enviando alterações para o GitHub..."
-git add lib/ web/ web-dist/ functions/ cloudflare/ scripts/ wrangler.toml
+git add README.md docs/ test/ lib/ web/ web-dist/ functions/ cloudflare/ scripts/ wrangler.toml pubspec.yaml pubspec.lock version.json
 if ! git diff --staged --quiet; then
     git commit -m "Update OpenMoney Web v${CURRENT_VERSION}+${CURRENT_BUILD}"
     git push origin main

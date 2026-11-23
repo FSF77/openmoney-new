@@ -31,6 +31,7 @@ import 'views/categories_view.dart';
 import 'views/tags_view.dart';
 import 'views/charts_dashboard_view.dart';
 import 'views/dashboard_overview_view.dart';
+import 'views/agenda_view.dart';
 import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
@@ -606,6 +607,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
       case NavModule.tags:
         moduleTitle = 'Tags';
         break;
+      case NavModule.agenda:
+        moduleTitle = 'Agenda';
+        subTitle = 'Calendário Financeiro';
+        break;
       case NavModule.dueBills:
         moduleTitle = 'Contas a Pagar & Receber';
         break;
@@ -1040,6 +1045,19 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               Tooltip(
+                message: 'Agenda',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.calendar_month_outlined,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.agenda
+                        ? colors.accent
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.agenda),
+                ),
+              ),
+              Tooltip(
                 message: 'Contas a Pagar & Receber',
                 child: IconButton(
                   icon: Icon(
@@ -1326,6 +1344,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         return CategoriesView(store: widget.store);
       case NavModule.tags:
         return TagsView(store: widget.store);
+      case NavModule.agenda:
+        return AgendaView(store: widget.store);
       case NavModule.dueBills:
         return DueBillsView(store: widget.store);
       case NavModule.installments:
@@ -1738,6 +1758,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Lançamentos',
                   selected: widget.store.activeModule == NavModule.transactions,
                   onTap: () => selectModule(NavModule.transactions),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Agenda',
+                  selected: widget.store.activeModule == NavModule.agenda,
+                  onTap: () => selectModule(NavModule.agenda),
                 ),
                 _SidebarNavTile(
                   icon: Icons.notifications_active_outlined,

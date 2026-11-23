@@ -214,6 +214,16 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
       },
     ));
     list.add(_CommandItem(
+      title: 'Agenda / Calendário',
+      subtitle: 'Visão mensal de vencimentos, faturas e receitas previstas',
+      icon: Icons.calendar_month_outlined,
+      category: 'MÓDULOS DO SISTEMA',
+      onSelect: () {
+        Navigator.of(context).pop();
+        widget.store.navigateTo(NavModule.agenda);
+      },
+    ));
+    list.add(_CommandItem(
       title: 'Contas a Pagar & Receber',
       subtitle: 'Vencimentos próximos e conciliação de faturas',
       icon: Icons.notifications_active_outlined,

@@ -15,10 +15,9 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.6** (Build 165) | [⬇️ Baixar OpenMoney-macOS-2.5.6.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.6.zip) | ~12 MB | 22/11/2026 |
-| 🪟 **Windows** | **v2.5.5** (Build 164) | [⬇️ Baixar OpenMoney-Windows-2.5.5.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.5.zip) | ~14 MB | 22/11/2026 |
+| 🍏 **macOS** | **v2.5.6** (Build 166) | [⬇️ Baixar OpenMoney-macOS-2.5.6.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.6.zip) | ~12 MB | 22/11/2026 |
+| 🪟 **Windows** | **v2.5.6** (Build 166) | [⬇️ Baixar OpenMoney-Windows-2.5.6.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.6.zip) | ~14 MB | 22/11/2026 |
 | 🌐 **Web** | **v2.5.6** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 22/11/2026 |
-
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -896,6 +895,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](docs/architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Agenda e Calendário Financeiro](docs/manual/guia-agenda-financeira.md)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](docs/manual/guia-assistente-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](docs/manual/guia-boas-vindas.md)
 - [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](docs/manual/guia-conciliacao-bancaria-ofx.md)

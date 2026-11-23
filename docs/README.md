@@ -903,6 +903,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Agenda e Calendário Financeiro](manual/guia-agenda-financeira.md)
 - [Guia do Usuário: Preenchimento Automático (Autofill), Chaves-senha (Passkeys) e Bloqueio Biométrico](manual/guia-autofill-passkeys-e-biometria.md)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](manual/guia-assistente-ia.md)
 - [Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos (ChatGPT, Claude, Gemini, Cursor e LM Studio)](manual/guia-servidor-mcp-e-ia.md)

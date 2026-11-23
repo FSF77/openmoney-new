@@ -2,19 +2,24 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/openmoney_models.dart';
+import '../services/agenda_engine.dart';
 import '../services/native_file_picker.dart';
 import '../store/money_store.dart';
 import 'platform_io.dart';
 
-/// Construtor nativo de documentos PDF 1.4 vetoriais em página A4 (595.28 x 841.89 pt)
+/// Construtor nativo de documentos PDF 1.4 vetoriais em página A4 (595.28 x 841.89 pt ou horizontal)
 class _SimpleA4PdfDocument {
   static const double pageWidth = 595.28;
   static const double pageHeight = 841.89;
 
+  final bool isLandscape;
+  double get effectiveWidth => isLandscape ? pageHeight : pageWidth;
+  double get effectiveHeight => isLandscape ? pageWidth : pageHeight;
+
   final List<StringBuffer> _pages = [];
   late StringBuffer _current;
 
-  _SimpleA4PdfDocument() {
+  _SimpleA4PdfDocument({this.isLandscape = false}) {
     newPage();
   }
 
@@ -87,7 +92,7 @@ class _SimpleA4PdfDocument {
   }
 
   /// Coordenada Y de topo (0 no topo da página A4) para coordenada PDF (0 na base)
-  double _y(double topY) => pageHeight - topY;
+  double _y(double topY) => effectiveHeight - topY;
 
   void fillRect(
     double x,
@@ -222,7 +227,7 @@ class _SimpleA4PdfDocument {
           '<< /Length $streamLen >>\nstream\n$streamStr\nendstream';
 
       objects[pageObjId] = '<< /Type /Page /Parent 2 0 R '
-          '/MediaBox [0 0 ${pageWidth.toStringAsFixed(2)} ${pageHeight.toStringAsFixed(2)}] '
+          '/MediaBox [0 0 ${effectiveWidth.toStringAsFixed(2)} ${effectiveHeight.toStringAsFixed(2)}] '
           '/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> '
           '/Contents $contentObjId 0 R >>';
     }
@@ -1173,6 +1178,194 @@ class PdfReportGenerator {
 
     for (final t in transactions) {
       drawTxRow(t);
+    }
+
+    return doc.buildBytes();
+  }
+
+  /// Gera PDF em página única A4 Paisagem (Horizontal) da Agenda / Calendário Financeiro
+  static Uint8List buildAgendaReportPdfBytes(
+    MoneyStore store,
+    String month, {
+    Set<String>? accountIds,
+    bool includeDone = true,
+  }) {
+    final doc = _SimpleA4PdfDocument(isLandscape: true);
+    final entries = AgendaEngine.generateMonthEntries(
+      store: store,
+      month: month,
+      includeDone: includeDone,
+      accountIds: accountIds,
+    );
+    final summary = AgendaEngine.calculateMonthSummary(
+      store: store,
+      month: month,
+      accountIds: accountIds,
+    );
+    final days = AgendaEngine.buildGridDays(month: month, entries: entries);
+
+    const marginLeft = 28.0;
+    const contentWidth = 841.89 - 56.0; // 785.89 pt
+    final cur = summary.currency;
+
+    // 1. Cabeçalho Superior
+    doc.drawText('OPENMONEY • AGENDA FINANCEIRA', marginLeft, 28, fontSize: 12, bold: true, r: 0.08, g: 0.12, b: 0.20);
+    final monthLabel = fmtMonth(month).toUpperCase();
+    doc.drawText(monthLabel, marginLeft + 230, 28, fontSize: 12, bold: true, r: 0.05, g: 0.45, b: 0.55);
+
+    final now = DateTime.now();
+    final nowStr = 'Emitido em ${now.day.toString().padLeft(2, "0")}/${now.month.toString().padLeft(2, "0")}/${now.year} às ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}';
+    doc.drawTextRight(nowStr, marginLeft + contentWidth, 28, fontSize: 8, r: 0.45, g: 0.48, b: 0.52);
+
+    // Linha divisória topo
+    doc.drawLine(marginLeft, 36, marginLeft + contentWidth, 36, r: 0.85, g: 0.88, b: 0.92, lineWidth: 0.8);
+
+    // 2. Barra de Resumo (3 cartões horizontais)
+    final cardW = (contentWidth - 24) / 3;
+    const cardTopY = 42.0;
+    const cardH = 38.0;
+
+    // Card 1: A Pagar
+    doc.fillRect(marginLeft, cardTopY, cardW, cardH, r: 0.98, g: 0.96, b: 0.95);
+    doc.strokeRect(marginLeft, cardTopY, cardW, cardH, r: 0.92, g: 0.85, b: 0.80, lineWidth: 0.5);
+    doc.drawText('A PAGAR NO MÊS', marginLeft + 8, cardTopY + 12, fontSize: 7, bold: true, r: 0.80, g: 0.35, b: 0.20);
+    final payStr = formatCurrency(summary.pendingPayTotalCents, cur);
+    doc.drawText(payStr, marginLeft + 8, cardTopY + 28, fontSize: 11, bold: true, r: 0.75, g: 0.20, b: 0.15);
+    doc.drawText('${summary.pendingPayCount} contas e faturas', marginLeft + cardW - 85, cardTopY + 28, fontSize: 7, r: 0.50, g: 0.52, b: 0.55);
+
+    // Card 2: A Receber
+    final c2X = marginLeft + cardW + 12;
+    doc.fillRect(c2X, cardTopY, cardW, cardH, r: 0.95, g: 0.98, b: 0.96);
+    doc.strokeRect(c2X, cardTopY, cardW, cardH, r: 0.80, g: 0.90, b: 0.82, lineWidth: 0.5);
+    doc.drawText('A RECEBER NO MÊS', c2X + 8, cardTopY + 12, fontSize: 7, bold: true, r: 0.15, g: 0.55, b: 0.30);
+    final recStr = formatCurrency(summary.pendingReceiveTotalCents, cur);
+    doc.drawText(recStr, c2X + 8, cardTopY + 28, fontSize: 11, bold: true, r: 0.10, g: 0.50, b: 0.25);
+    doc.drawText('${summary.pendingReceiveCount} receitas previstas', c2X + cardW - 88, cardTopY + 28, fontSize: 7, r: 0.50, g: 0.52, b: 0.55);
+
+    // Card 3: Saldo Previsto / Alerta de Atrasados
+    final c3X = c2X + cardW + 12;
+    final netCents = summary.pendingReceiveTotalCents - summary.pendingPayTotalCents;
+    doc.fillRect(c3X, cardTopY, cardW, cardH, r: 0.96, g: 0.97, b: 0.99);
+    doc.strokeRect(c3X, cardTopY, cardW, cardH, r: 0.85, g: 0.88, b: 0.92, lineWidth: 0.5);
+    doc.drawText('RESULTADO PREVISTO', c3X + 8, cardTopY + 12, fontSize: 7, bold: true, r: 0.30, g: 0.40, b: 0.55);
+    final netStr = formatCurrency(netCents, cur);
+    doc.drawText(
+      netStr,
+      c3X + 8,
+      cardTopY + 28,
+      fontSize: 11,
+      bold: true,
+      r: netCents >= 0 ? 0.10 : 0.75,
+      g: netCents >= 0 ? 0.50 : 0.20,
+      b: netCents >= 0 ? 0.25 : 0.15,
+    );
+    if (summary.overdueCount > 0) {
+      doc.drawText('(${summary.overdueCount} atrasados)', c3X + cardW - 85, cardTopY + 28, fontSize: 7, bold: true, r: 0.80, g: 0.20, b: 0.20);
+    }
+
+    // 3. Grade Mensal
+    final gridTopY = cardTopY + cardH + 8;
+    const weekdayHeaderH = 15.0;
+    final numWeeks = (days.length / 7).ceil();
+    final gridAvailH = (595.28 - 20.0) - (gridTopY + weekdayHeaderH);
+    final rowH = gridAvailH / numWeeks;
+    final colW = contentWidth / 7;
+
+    // Cabeçalho dos dias da semana (DOM .. SÁB)
+    const weekHeaders = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
+    for (int i = 0; i < 7; i++) {
+      final cellX = marginLeft + (i * colW);
+      doc.fillRect(cellX, gridTopY, colW, weekdayHeaderH, r: 0.93, g: 0.95, b: 0.97);
+      doc.strokeRect(cellX, gridTopY, colW, weekdayHeaderH, r: 0.82, g: 0.85, b: 0.88, lineWidth: 0.4);
+      doc.drawText(
+        weekHeaders[i],
+        cellX + (colW / 2) - 16,
+        gridTopY + 10.5,
+        fontSize: 7.0,
+        bold: true,
+        r: 0.30,
+        g: 0.35,
+        b: 0.42,
+      );
+    }
+
+    // Linhas de semanas
+    for (int idx = 0; idx < days.length; idx++) {
+      final d = days[idx];
+      final col = idx % 7;
+      final row = idx ~/ 7;
+      final cellX = marginLeft + (col * colW);
+      final cellY = gridTopY + weekdayHeaderH + (row * rowH);
+
+      // Fundo da célula
+      if (!d.isCurrentMonth) {
+        doc.fillRect(cellX, cellY, colW, rowH, r: 0.97, g: 0.98, b: 0.99);
+      } else if (d.isToday) {
+        doc.fillRect(cellX, cellY, colW, rowH, r: 0.95, g: 0.98, b: 0.99);
+      } else {
+        doc.fillRect(cellX, cellY, colW, rowH, r: 1.0, g: 1.0, b: 1.0);
+      }
+      doc.strokeRect(cellX, cellY, colW, rowH, r: 0.85, g: 0.88, b: 0.92, lineWidth: 0.4);
+
+      // Número do dia (baseline posicionado abaixo da linha de topo)
+      doc.drawText(
+        '${d.dayNumber}',
+        cellX + 4,
+        cellY + 11.5,
+        fontSize: 8.0,
+        bold: d.isToday,
+        r: d.isToday ? 0.05 : (d.isCurrentMonth ? 0.20 : 0.60),
+        g: d.isToday ? 0.50 : (d.isCurrentMonth ? 0.22 : 0.62),
+        b: d.isToday ? 0.65 : (d.isCurrentMonth ? 0.25 : 0.65),
+      );
+      if (d.isToday) {
+        doc.drawText('Hoje', cellX + 18, cellY + 11.5, fontSize: 6.5, bold: true, r: 0.05, g: 0.50, b: 0.65);
+      }
+
+      // Itens do dia (até 3 no espaço compacto)
+      final maxVisible = rowH > 75 ? 3 : 2;
+      final visibleEntries = d.entries.take(maxVisible).toList();
+      double itemY = cellY + 22.0;
+
+      for (final entry in visibleEntries) {
+        final isIncome = entry.isIncome;
+        final prefix = isIncome ? '+' : '';
+        final valText = '$prefix${formatCurrency(entry.amountCents, cur)}';
+
+        final txt = '$valText ${entry.title}';
+        doc.drawText(
+          txt,
+          cellX + 3,
+          itemY,
+          fontSize: 6.5,
+          bold: !entry.isDone,
+          r: entry.isDone
+              ? 0.60
+              : (isIncome ? 0.10 : (entry.isOverdue ? 0.85 : 0.70)),
+          g: entry.isDone
+              ? 0.60
+              : (isIncome ? 0.50 : (entry.isOverdue ? 0.15 : 0.35)),
+          b: entry.isDone
+              ? 0.60
+              : (isIncome ? 0.25 : 0.20),
+          maxChars: 22,
+        );
+        itemY += 10.0;
+      }
+
+      if (d.entries.length > maxVisible) {
+        final remaining = d.entries.length - maxVisible;
+        doc.drawText(
+          '+$remaining mais',
+          cellX + 3,
+          itemY,
+          fontSize: 6.0,
+          bold: true,
+          r: 0.40,
+          g: 0.45,
+          b: 0.50,
+        );
+      }
     }
 
     return doc.buildBytes();

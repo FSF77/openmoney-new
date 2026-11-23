@@ -895,6 +895,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](docs/architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Agenda e Calendário Financeiro](docs/manual/guia-agenda-financeira.md)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](docs/manual/guia-assistente-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](docs/manual/guia-boas-vindas.md)
 - [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](docs/manual/guia-conciliacao-bancaria-ofx.md)
