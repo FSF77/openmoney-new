@@ -35,16 +35,17 @@ class PasskeyAuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final opts = await CloudSyncService.instance.getPasskeyRegisterOptions(
+      final resOpts = await CloudSyncService.instance.getPasskeyRegisterOptions(
         customApiUrl: customApiUrl,
       );
-      if (opts == null) {
+      if (resOpts.options == null) {
         return (
           ok: false,
           message: null,
-          error: 'Falha ao obter desafio do servidor Cloud.',
+          error: resOpts.error ?? 'Falha ao obter desafio do servidor Cloud.',
         );
       }
+      final opts = resOpts.options!;
 
       _statusMessage =
           'Aguardando autenticação biométrica (Touch ID, Windows Hello, Face ID)...';
@@ -106,16 +107,18 @@ class PasskeyAuthService extends ChangeNotifier {
     try {
       if (kIsWeb) {
         // Fluxo direto in-page Web
-        final opts = await CloudSyncService.instance.getPasskeyLoginOptions(
+        final resOpts = await CloudSyncService.instance.getPasskeyLoginOptions(
           email: email,
           customApiUrl: customApiUrl,
         );
-        if (opts == null) {
+        if (resOpts.options == null) {
           return (
             ok: false,
-            error: 'Falha ao obter opções de autenticação com Chave-senha.',
+            error: resOpts.error ??
+                'Falha ao obter opções de autenticação com Chave-senha.',
           );
         }
+        final opts = resOpts.options!;
 
         _statusMessage =
           'Aguardando autenticação por biometria / Touch ID / Windows Hello...';

@@ -1674,17 +1674,18 @@ class CloudSyncService extends ChangeNotifier {
   // ==========================================================================
 
   /// Busca as opções e desafio para registrar uma nova Chave-senha
-  Future<Map<String, dynamic>?> getPasskeyRegisterOptions({
+  Future<({Map<String, dynamic>? options, String? error})> getPasskeyRegisterOptions({
     String? customApiUrl,
   }) async {
-    if (!isAuthenticated) return null;
+    if (!isAuthenticated) return (options: null, error: 'Sessão não autenticada.');
     try {
+      final endpointUrl = _endpoint(
+        '/api/auth/passkey/register-options',
+        customBaseUrl: customApiUrl,
+      );
       final res = await platformHttpRequest(
         method: 'POST',
-        url: _endpoint(
-          '/api/auth/passkey/register-options',
-          customBaseUrl: customApiUrl,
-        ),
+        url: endpointUrl,
         headers: _headers(),
       );
       final decoded = _tryDecodeJson(res.body);
@@ -1692,10 +1693,26 @@ class CloudSyncService extends ChangeNotifier {
           res.statusCode < 300 &&
           decoded != null &&
           decoded['ok'] == true) {
-        return Map<String, dynamic>.from(decoded['options'] as Map);
+        return (
+          options: Map<String, dynamic>.from(decoded['options'] as Map),
+          error: null,
+        );
       }
-    } catch (_) {}
-    return null;
+      if (res.statusCode == 404) {
+        return (
+          options: null,
+          error:
+              'Endpoint não encontrado no servidor ($endpointUrl - HTTP 404). O backend Cloudflare precisa ser publicado.',
+        );
+      }
+      return (
+        options: null,
+        error: decoded?['error']?.toString() ??
+            'Servidor retornou HTTP ${res.statusCode} ao solicitar opções de registro de Chave-senha.',
+      );
+    } catch (e) {
+      return (options: null, error: 'Erro de conexão com o servidor: $e');
+    }
   }
 
   /// Valida e conclui o registro da nova Chave-senha
@@ -1749,17 +1766,18 @@ class CloudSyncService extends ChangeNotifier {
   }
 
   /// Busca as opções e desafio para login com Chave-senha
-  Future<Map<String, dynamic>?> getPasskeyLoginOptions({
+  Future<({Map<String, dynamic>? options, String? error})> getPasskeyLoginOptions({
     String? email,
     String? customApiUrl,
   }) async {
     try {
+      final endpointUrl = _endpoint(
+        '/api/auth/passkey/login-options',
+        customBaseUrl: customApiUrl,
+      );
       final res = await platformHttpRequest(
         method: 'POST',
-        url: _endpoint(
-          '/api/auth/passkey/login-options',
-          customBaseUrl: customApiUrl,
-        ),
+        url: endpointUrl,
         headers: _headers(),
         body: jsonEncode({'email': email?.trim() ?? ''}),
       );
@@ -1768,10 +1786,26 @@ class CloudSyncService extends ChangeNotifier {
           res.statusCode < 300 &&
           decoded != null &&
           decoded['ok'] == true) {
-        return Map<String, dynamic>.from(decoded['options'] as Map);
+        return (
+          options: Map<String, dynamic>.from(decoded['options'] as Map),
+          error: null,
+        );
       }
-    } catch (_) {}
-    return null;
+      if (res.statusCode == 404) {
+        return (
+          options: null,
+          error:
+              'Endpoint não encontrado no servidor ($endpointUrl - HTTP 404). O backend Cloudflare precisa ser publicado.',
+        );
+      }
+      return (
+        options: null,
+        error: decoded?['error']?.toString() ??
+            'Servidor retornou HTTP ${res.statusCode} ao solicitar Chave-senha.',
+      );
+    } catch (e) {
+      return (options: null, error: 'Erro de conexão com o servidor: $e');
+    }
   }
 
   /// Valida o login com Chave-senha e salva a sessão ativa

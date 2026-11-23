@@ -4980,6 +4980,293 @@ export async function onRequest(context) {
   }
 
   // ==========================================================================
+  // 2.3. PASSKEY (WEBAUTHN / FIDO2) ENDPOINTS PÚBLICOS DE AUTENTICAÇÃO
+  // ==========================================================================
+
+  // 2.3.1. POST /api/auth/passkey/login-options (Gera desafio para login com Chave-senha)
+  if (path === "/api/auth/passkey/login-options" && request.method === "POST") {
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (_) {}
+
+    try {
+      const cleanEmail = String(body.email || "").trim().toLowerCase();
+      const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
+      const challenge = base64UrlEncode(challengeBytes);
+      const challengeId = "ch_" + crypto.randomUUID();
+      const nowIso = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+      let allowCredentials = [];
+      let targetUserId = null;
+
+      if (cleanEmail) {
+        const u = await env.DB.prepare("SELECT id FROM users WHERE email = ?1")
+          .bind(cleanEmail)
+          .first();
+        if (u) {
+          targetUserId = u.id;
+          const creds = await env.DB.prepare(
+            "SELECT credential_id FROM user_passkeys WHERE user_id = ?1"
+          )
+            .bind(u.id)
+            .all();
+          if (creds && creds.results) {
+            allowCredentials = creds.results.map((r) => ({
+              id: r.credential_id,
+              type: "public-key",
+            }));
+          }
+        }
+      }
+
+      await env.DB.prepare(
+        "INSERT INTO passkey_challenges (id, challenge, user_id, type, created_at, expires_at) VALUES (?1, ?2, ?3, 'login', ?4, ?5)"
+      )
+        .bind(challengeId, challenge, targetUserId, nowIso, expiresAt)
+        .run();
+
+      return jsonResponse(
+        {
+          ok: true,
+          options: {
+            challenge,
+            rpId: getRpId(request),
+            allowCredentials,
+            userVerification: "preferred",
+            timeout: 60000,
+          },
+        },
+        200,
+        origin
+      );
+    } catch (e) {
+      return jsonResponse({ error: "Erro ao gerar opções de login com Chave-senha: " + e.message }, 500, origin);
+    }
+  }
+
+  // 2.3.2. POST /api/auth/passkey/login-verify (Valida assinatura biométrica da Chave-senha e emite JWT)
+  if (path === "/api/auth/passkey/login-verify" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const credId = String(body.credentialId || "").trim();
+    const clientDataB64 = String(body.clientDataJSON || "").trim();
+    const authDataB64 = String(body.authenticatorData || "").trim();
+    const sigB64 = String(body.signature || "").trim();
+    const sessionId = String(body.sessionId || "").trim();
+
+    if (!credId || !clientDataB64 || !authDataB64 || !sigB64) {
+      return jsonResponse({ error: "Dados de autenticação incompletos." }, 400, origin);
+    }
+
+    try {
+      const clientDataRaw = base64UrlDecodeToBytes(clientDataB64);
+      const clientData = JSON.parse(decoder.decode(clientDataRaw));
+
+      if (clientData.type !== "webauthn.get") {
+        return jsonResponse({ error: "Tipo de assertiva inválido." }, 400, origin);
+      }
+
+      const challengeRow = await env.DB.prepare(
+        "SELECT id, user_id FROM passkey_challenges WHERE challenge = ?1 AND type = 'login' AND expires_at > ?2"
+      )
+        .bind(clientData.challenge, new Date().toISOString())
+        .first();
+
+      if (!challengeRow) {
+        return jsonResponse({ error: "Desafio de login inválido ou expirado." }, 400, origin);
+      }
+
+      const passkey = await env.DB.prepare(
+        "SELECT id, user_id, public_key, counter FROM user_passkeys WHERE credential_id = ?1"
+      )
+        .bind(credId)
+        .first();
+
+      if (!passkey) {
+        return jsonResponse({ error: "Chave-senha não encontrada." }, 404, origin);
+      }
+
+      const authDataBytes = base64UrlDecodeToBytes(authDataB64);
+      const clientHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataRaw));
+      const signedData = new Uint8Array(authDataBytes.length + clientHash.length);
+      signedData.set(authDataBytes, 0);
+      signedData.set(clientHash, authDataBytes.length);
+
+      const sigBytes = base64UrlDecodeToBytes(sigB64);
+      const p1363Sig = derToP1363(sigBytes);
+      const spkiKeyBytes = base64UrlDecodeToBytes(passkey.public_key);
+
+      let isVerified = false;
+      try {
+        const cryptoKey = await crypto.subtle.importKey(
+          "spki",
+          spkiKeyBytes,
+          { name: "ECDSA", namedCurve: "P-256" },
+          false,
+          ["verify"]
+        );
+        isVerified = await crypto.subtle.verify(
+          { name: "ECDSA", hash: "SHA-256" },
+          cryptoKey,
+          p1363Sig,
+          signedData
+        );
+        if (!isVerified) {
+          isVerified = await crypto.subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" },
+            cryptoKey,
+            sigBytes,
+            signedData
+          );
+        }
+      } catch (_) {
+        try {
+          const rsaKey = await crypto.subtle.importKey(
+            "spki",
+            spkiKeyBytes,
+            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+            false,
+            ["verify"]
+          );
+          isVerified = await crypto.subtle.verify(
+            "RSASSA-PKCS1-v1_5",
+            rsaKey,
+            sigBytes,
+            signedData
+          );
+        } catch (_) {
+          isVerified = false;
+        }
+      }
+
+      if (!isVerified) {
+        return jsonResponse({ error: "Assinatura biométrica da chave-senha inválida." }, 401, origin);
+      }
+
+      const user = await env.DB.prepare(
+        "SELECT id, email, name FROM users WHERE id = ?1"
+      )
+        .bind(passkey.user_id)
+        .first();
+
+      if (!user) {
+        return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+      }
+
+      const nowIso = new Date().toISOString();
+      await env.DB.prepare(
+        "UPDATE user_passkeys SET last_used_at = ?1 WHERE id = ?2"
+      )
+        .bind(nowIso, passkey.id)
+        .run();
+
+      await env.DB.prepare(
+        "UPDATE users SET last_login_at = ?1, failed_attempts = 0, locked_until = NULL WHERE id = ?2"
+      )
+        .bind(nowIso, user.id)
+        .run();
+
+      await env.DB.prepare("DELETE FROM passkey_challenges WHERE id = ?1")
+        .bind(challengeRow.id)
+        .run();
+
+      const token = await signJwt(
+        { sub: user.id, email: user.email, name: user.name },
+        env
+      );
+
+      const dbRow = await env.DB.prepare(
+        "SELECT revision FROM user_databases WHERE user_id = ?1"
+      )
+        .bind(user.id)
+        .first();
+
+      if (sessionId) {
+        await env.DB.prepare(
+          "UPDATE passkey_desktop_sessions SET status = 'completed', token = ?1, user_id = ?2 WHERE id = ?3"
+        )
+          .bind(token, user.id, sessionId)
+          .run();
+      }
+
+      return jsonResponse(
+        {
+          ok: true,
+          token,
+          user: { id: user.id, email: user.email, name: user.name },
+          revision: dbRow ? Number(dbRow.revision) : 1,
+        },
+        200,
+        origin
+      );
+    } catch (e) {
+      return jsonResponse({ error: "Erro ao validar chave-senha: " + e.message }, 400, origin);
+    }
+  }
+
+  // 2.3.3. POST /api/auth/passkey/desktop-session (Cria sessão temporária para login Desktop via Browser)
+  if (path === "/api/auth/passkey/desktop-session" && request.method === "POST") {
+    const sessionId = "ds_" + crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    await env.DB.prepare(
+      "INSERT INTO passkey_desktop_sessions (id, status, created_at, expires_at) VALUES (?1, 'pending', ?2, ?3)"
+    )
+      .bind(sessionId, nowIso, expiresAt)
+      .run();
+
+    return jsonResponse({ ok: true, sessionId }, 200, origin);
+  }
+
+  // 2.3.4. GET /api/auth/passkey/desktop-session (Verifica status da sessão Desktop)
+  if (path === "/api/auth/passkey/desktop-session" && request.method === "GET") {
+    const sId = url.searchParams.get("sessionId");
+    if (!sId) {
+      return jsonResponse({ error: "sessionId obrigatório." }, 400, origin);
+    }
+    const row = await env.DB.prepare(
+      "SELECT token, user_id, status FROM passkey_desktop_sessions WHERE id = ?1 AND expires_at > ?2"
+    )
+      .bind(sId, new Date().toISOString())
+      .first();
+
+    if (!row) {
+      return jsonResponse({ ok: false, status: "expired" }, 404, origin);
+    }
+    if (row.status === "completed" && row.token) {
+      const u = await env.DB.prepare("SELECT id, email, name FROM users WHERE id = ?1")
+        .bind(row.user_id)
+        .first();
+      const dbRow = await env.DB.prepare("SELECT revision FROM user_databases WHERE user_id = ?1")
+        .bind(row.user_id)
+        .first();
+
+      await env.DB.prepare("DELETE FROM passkey_desktop_sessions WHERE id = ?1").bind(sId).run();
+
+      return jsonResponse(
+        {
+          ok: true,
+          status: "completed",
+          token: row.token,
+          user: u,
+          revision: dbRow ? Number(dbRow.revision) : 1,
+        },
+        200,
+        origin
+      );
+    }
+    return jsonResponse({ ok: true, status: "pending" }, 200, origin);
+  }
+
+  // ==========================================================================
   // Todas as rotas abaixo exigem Token JWT ou OAuth Bearer válido
   // ==========================================================================
   const claims = await authenticateRequest(request, env);
@@ -5433,286 +5720,7 @@ export async function onRequest(context) {
     }
   }
 
-  // 3.1.3. POST /api/auth/passkey/login-options (Gera desafio para login com Chave-senha)
-  if (path === "/api/auth/passkey/login-options" && request.method === "POST") {
-    let body = {};
-    try {
-      body = await request.json();
-    } catch (_) {}
-
-    const cleanEmail = String(body.email || "").trim().toLowerCase();
-    const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
-    const challenge = base64UrlEncode(challengeBytes);
-    const challengeId = "ch_" + crypto.randomUUID();
-    const nowIso = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    let allowCredentials = [];
-    let targetUserId = null;
-
-    if (cleanEmail) {
-      const u = await env.DB.prepare("SELECT id FROM users WHERE email = ?1")
-        .bind(cleanEmail)
-        .first();
-      if (u) {
-        targetUserId = u.id;
-        const creds = await env.DB.prepare(
-          "SELECT credential_id FROM user_passkeys WHERE user_id = ?1"
-        )
-          .bind(u.id)
-          .all();
-        if (creds && creds.results) {
-          allowCredentials = creds.results.map((r) => ({
-            id: r.credential_id,
-            type: "public-key",
-          }));
-        }
-      }
-    }
-
-    await env.DB.prepare(
-      "INSERT INTO passkey_challenges (id, challenge, user_id, type, created_at, expires_at) VALUES (?1, ?2, ?3, 'login', ?4, ?5)"
-    )
-      .bind(challengeId, challenge, targetUserId, nowIso, expiresAt)
-      .run();
-
-    return jsonResponse(
-      {
-        ok: true,
-        options: {
-          challenge,
-          rpId: getRpId(request),
-          allowCredentials,
-          userVerification: "preferred",
-          timeout: 60000,
-        },
-      },
-      200,
-      origin
-    );
-  }
-
-  // 3.1.4. POST /api/auth/passkey/login-verify (Valida assinatura biométrica da Chave-senha e emite JWT)
-  if (path === "/api/auth/passkey/login-verify" && request.method === "POST") {
-    let body;
-    try {
-      body = await request.json();
-    } catch (_) {
-      return jsonResponse({ error: "JSON inválido." }, 400, origin);
-    }
-
-    const credId = String(body.credentialId || "").trim();
-    const clientDataB64 = String(body.clientDataJSON || "").trim();
-    const authDataB64 = String(body.authenticatorData || "").trim();
-    const sigB64 = String(body.signature || "").trim();
-    const sessionId = String(body.sessionId || "").trim();
-
-    if (!credId || !clientDataB64 || !authDataB64 || !sigB64) {
-      return jsonResponse({ error: "Dados de autenticação incompletos." }, 400, origin);
-    }
-
-    try {
-      const clientDataRaw = base64UrlDecodeToBytes(clientDataB64);
-      const clientData = JSON.parse(decoder.decode(clientDataRaw));
-
-      if (clientData.type !== "webauthn.get") {
-        return jsonResponse({ error: "Tipo de assertiva inválido." }, 400, origin);
-      }
-
-      const challengeRow = await env.DB.prepare(
-        "SELECT id, user_id FROM passkey_challenges WHERE challenge = ?1 AND type = 'login' AND expires_at > ?2"
-      )
-        .bind(clientData.challenge, new Date().toISOString())
-        .first();
-
-      if (!challengeRow) {
-        return jsonResponse({ error: "Desafio de login inválido ou expirado." }, 400, origin);
-      }
-
-      const passkey = await env.DB.prepare(
-        "SELECT id, user_id, public_key, counter FROM user_passkeys WHERE credential_id = ?1"
-      )
-        .bind(credId)
-        .first();
-
-      if (!passkey) {
-        return jsonResponse({ error: "Chave-senha não encontrada." }, 404, origin);
-      }
-
-      const authDataBytes = base64UrlDecodeToBytes(authDataB64);
-      const clientHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataRaw));
-      const signedData = new Uint8Array(authDataBytes.length + clientHash.length);
-      signedData.set(authDataBytes, 0);
-      signedData.set(clientHash, authDataBytes.length);
-
-      const sigBytes = base64UrlDecodeToBytes(sigB64);
-      const p1363Sig = derToP1363(sigBytes);
-      const spkiKeyBytes = base64UrlDecodeToBytes(passkey.public_key);
-
-      let isVerified = false;
-      try {
-        const cryptoKey = await crypto.subtle.importKey(
-          "spki",
-          spkiKeyBytes,
-          { name: "ECDSA", namedCurve: "P-256" },
-          false,
-          ["verify"]
-        );
-        isVerified = await crypto.subtle.verify(
-          { name: "ECDSA", hash: "SHA-256" },
-          cryptoKey,
-          p1363Sig,
-          signedData
-        );
-        if (!isVerified) {
-          isVerified = await crypto.subtle.verify(
-            { name: "ECDSA", hash: "SHA-256" },
-            cryptoKey,
-            sigBytes,
-            signedData
-          );
-        }
-      } catch (_) {
-        try {
-          const rsaKey = await crypto.subtle.importKey(
-            "spki",
-            spkiKeyBytes,
-            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-            false,
-            ["verify"]
-          );
-          isVerified = await crypto.subtle.verify(
-            "RSASSA-PKCS1-v1_5",
-            rsaKey,
-            sigBytes,
-            signedData
-          );
-        } catch (_) {
-          isVerified = false;
-        }
-      }
-
-      if (!isVerified) {
-        return jsonResponse({ error: "Assinatura biométrica da chave-senha inválida." }, 401, origin);
-      }
-
-      const user = await env.DB.prepare(
-        "SELECT id, email, name FROM users WHERE id = ?1"
-      )
-        .bind(passkey.user_id)
-        .first();
-
-      if (!user) {
-        return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
-      }
-
-      const nowIso = new Date().toISOString();
-      await env.DB.prepare(
-        "UPDATE user_passkeys SET last_used_at = ?1 WHERE id = ?2"
-      )
-        .bind(nowIso, passkey.id)
-        .run();
-
-      await env.DB.prepare(
-        "UPDATE users SET last_login_at = ?1, failed_attempts = 0, locked_until = NULL WHERE id = ?2"
-      )
-        .bind(nowIso, user.id)
-        .run();
-
-      await env.DB.prepare("DELETE FROM passkey_challenges WHERE id = ?1")
-        .bind(challengeRow.id)
-        .run();
-
-      const token = await signJwt(
-        { sub: user.id, email: user.email, name: user.name },
-        env
-      );
-
-      const dbRow = await env.DB.prepare(
-        "SELECT revision FROM user_databases WHERE user_id = ?1"
-      )
-        .bind(user.id)
-        .first();
-
-      if (sessionId) {
-        await env.DB.prepare(
-          "UPDATE passkey_desktop_sessions SET status = 'completed', token = ?1, user_id = ?2 WHERE id = ?3"
-        )
-          .bind(token, user.id, sessionId)
-          .run();
-      }
-
-      return jsonResponse(
-        {
-          ok: true,
-          token,
-          user: { id: user.id, email: user.email, name: user.name },
-          revision: dbRow ? Number(dbRow.revision) : 1,
-        },
-        200,
-        origin
-      );
-    } catch (e) {
-      return jsonResponse({ error: "Erro ao validar chave-senha: " + e.message }, 400, origin);
-    }
-  }
-
-  // 3.1.5. POST /api/auth/passkey/desktop-session (Cria sessão temporária para login Desktop via Browser)
-  if (path === "/api/auth/passkey/desktop-session" && request.method === "POST") {
-    const sessionId = "ds_" + crypto.randomUUID();
-    const nowIso = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    await env.DB.prepare(
-      "INSERT INTO passkey_desktop_sessions (id, status, created_at, expires_at) VALUES (?1, 'pending', ?2, ?3)"
-    )
-      .bind(sessionId, nowIso, expiresAt)
-      .run();
-
-    return jsonResponse({ ok: true, sessionId }, 200, origin);
-  }
-
-  // 3.1.6. GET /api/auth/passkey/desktop-session (Verifica status da sessão Desktop)
-  if (path === "/api/auth/passkey/desktop-session" && request.method === "GET") {
-    const sId = url.searchParams.get("sessionId");
-    if (!sId) {
-      return jsonResponse({ error: "sessionId obrigatório." }, 400, origin);
-    }
-    const row = await env.DB.prepare(
-      "SELECT token, user_id, status FROM passkey_desktop_sessions WHERE id = ?1 AND expires_at > ?2"
-    )
-      .bind(sId, new Date().toISOString())
-      .first();
-
-    if (!row) {
-      return jsonResponse({ ok: false, status: "expired" }, 404, origin);
-    }
-    if (row.status === "completed" && row.token) {
-      const u = await env.DB.prepare("SELECT id, email, name FROM users WHERE id = ?1")
-        .bind(row.user_id)
-        .first();
-      const dbRow = await env.DB.prepare("SELECT revision FROM user_databases WHERE user_id = ?1")
-        .bind(row.user_id)
-        .first();
-
-      await env.DB.prepare("DELETE FROM passkey_desktop_sessions WHERE id = ?1").bind(sId).run();
-
-      return jsonResponse(
-        {
-          ok: true,
-          status: "completed",
-          token: row.token,
-          user: u,
-          revision: dbRow ? Number(dbRow.revision) : 1,
-        },
-        200,
-        origin
-      );
-    }
-    return jsonResponse({ ok: true, status: "pending" }, 200, origin);
-  }
-
-  // 3.1.7. GET /api/auth/passkey/list (Lista Chaves-senha cadastradas do usuário)
+  // 3.1.3. GET /api/auth/passkey/list (Lista Chaves-senha cadastradas do usuário)
   if (path === "/api/auth/passkey/list" && request.method === "GET") {
     if (!userId) {
       return jsonResponse({ error: "Sessão não autenticada." }, 401, origin);
