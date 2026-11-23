@@ -47,6 +47,22 @@ Para garantir que a conta pertence de fato ao titular:
 
 ---
 
+## 🔑 3.1. Preenchimento Automático (Autofill) e Chaves-senha (Passkeys)
+
+O OpenMoney suporta autenticação de última geração tanto para gerenciadores de senha quanto para acesso biométrico sem senha:
+
+1. **Preenchimento Automático com Gerenciadores de Senha (Autofill):**
+   - Ao clicar nos campos de e-mail ou senha, gerenciadores como **1Password, Bitwarden, Apple Chaves (iCloud Keychain) e Google Password Manager** preenchem suas credenciais automaticamente. Ao cadastrar ou alterar a senha, o app sugere o salvamento no cofre do seu sistema operacional.
+2. **Login com 1 Clique por Chave-senha (Passkey / WebAuthn):**
+   - Na tela de login, clique no botão destacado **"Entrar com Chave-senha (Passkey)"**.
+   - Na Web, basta encostar o dedo no **Touch ID** ou olhar para o **Face ID / Windows Hello**.
+   - No Desktop (macOS e Windows), o app abre o navegador padrão automaticamente para validar sua biometria e retorna conectado ao aplicativo em segundos (*Desktop Session Bridge*).
+3. **Gerenciamento de Chaves-senha:**
+   - Acesse **Cloud & Sincronização > Configurações da Conta** para registrar a Chave-senha do seu dispositivo atual ou revogar chaves de aparelhos antigos.
+   - Para o passo a passo detalhado, consulte o [Guia de Autofill, Chaves-senha e Bloqueio Biométrico](guia-autofill-passkeys-e-biometria.md).
+
+---
+
 ## 🔀 4. Alternando entre Modo Local e Modo Online no Menu Lateral (Desktop)
 
 No rodapé da barra lateral dos aplicativos Desktop, há um seletor rápido com duas pílulas:

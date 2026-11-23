@@ -21,6 +21,8 @@ Ao abrir o aplicativo pela primeira vez sem uma base configurada, a tela de boas
 
 No Desktop, você pode alternar entre **Local** e **Online** a qualquer momento pelo seletor no rodapé da barra lateral.
 
+> 🔒 **Autenticação e Proteção:** A tela de login conta com preenchimento automático para **1Password, Bitwarden e Apple Chaves**, login com 1 clique por **Chave-senha (Passkey)** e opção de **Bloqueio Biométrico por Touch ID / Windows Hello** ao abrir o aplicativo (veja o [Guia de Autofill, Chaves-senha e Bloqueio Biométrico](guia-autofill-passkeys-e-biometria.md)).
+
 ---
 
 ## 2. 🧭 Conhecendo a tela

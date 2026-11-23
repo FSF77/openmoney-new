@@ -32,6 +32,10 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Silence experimental coroutine deprecation warning in modern MSVC (STL1011) for local_auth_windows
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -43,6 +47,7 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
+  target_compile_definitions(${TARGET} PUBLIC "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
 endfunction()
 
 # Flutter library and tool build rules.
@@ -56,6 +61,13 @@ add_subdirectory("runner")
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+# Apply coroutine deprecation suppression directly to all plugin targets
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  if(TARGET ${plugin}_plugin)
+    target_compile_definitions(${plugin}_plugin PRIVATE "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
+  endif()
+endforeach(plugin)
 
 
 # === Installation ===

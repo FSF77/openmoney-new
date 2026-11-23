@@ -903,6 +903,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [Guia do Usuário: Preenchimento Automático (Autofill), Chaves-senha (Passkeys) e Bloqueio Biométrico](manual/guia-autofill-passkeys-e-biometria.md)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](manual/guia-assistente-ia.md)
 - [Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos (ChatGPT, Claude, Gemini, Cursor e LM Studio)](manual/guia-servidor-mcp-e-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](manual/guia-boas-vindas.md)
@@ -953,6 +954,7 @@ OpenMoneyFlutter/
 - [ADR 034: Validação Estrita de Datas, Alertas de Janela Temporal e Exclusão de Previsões no Autocompletar](adr/034-date-validation-range-warnings-and-prediction-payee-exclusion.md)
 - [ADR 035: Dashboard de Gráficos (Analytics) com fl_chart](adr/035-charts-dashboard-analytics.md)
 - [ADR 036: Servidor MCP Remoto (Streamable HTTP), OAuth 2.1, PKCE S256 e Isolamento de Segurança](adr/036-mcp-remote-server-and-oauth2.md)
+- [ADR 037: Preenchimento Automático (Autofill), Chaves-senha (Passkeys / WebAuthn / FIDO2) e Bloqueio Biométrico](adr/037-autofill-passkeys-webauthn-and-biometric-lock.md)
 
 ---
 
