@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/ai_assistant_service.dart';
+import '../../services/biometric_service.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
@@ -195,6 +196,60 @@ class _SettingsViewState extends State<SettingsView> {
                     value: widget.store.hidePatrimonyBalance,
                     onChanged: (v) =>
                         widget.store.toggleHidePatrimonyBalance(),
+                  ),
+                ),
+                const Divider(height: 20),
+                _buildSettingRow(
+                  colors: colors,
+                  title: 'Bloqueio por ${BiometricService.instance.systemBiometricLabel}',
+                  subtitle: kIsWeb
+                      ? 'Desbloqueio biométrico disponível nos aplicativos nativos Desktop (macOS, Windows) e Mobile.'
+                      : 'Exigir autenticação por ${BiometricService.instance.systemBiometricLabel} para abrir o aplicativo (desativado por padrão).',
+                  trailing: Switch(
+                    value: widget.store.requireBiometricUnlock,
+                    onChanged: kIsWeb
+                        ? null
+                        : (val) async {
+                            if (val) {
+                              final canAuth = await BiometricService.instance.canAuthenticate();
+                              if (!canAuth) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: Colors.red.shade800,
+                                      content: const Text(
+                                        'Nenhum leitor biométrico ou chave compatível detectada neste dispositivo.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+                              final ok = await BiometricService.instance.authenticate(
+                                reason: 'Confirme sua biometria para ativar o bloqueio do OpenMoney',
+                              );
+                              if (ok) {
+                                widget.store.setRequireBiometricUnlock(true);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('✓ Bloqueio por biometria ativado com sucesso!'),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Autenticação biométrica não concluída. Recurso não ativado.'),
+                                    ),
+                                  );
+                                }
+                              }
+                            } else {
+                              widget.store.setRequireBiometricUnlock(false);
+                            }
+                          },
                   ),
                 ),
                 const Divider(height: 20),

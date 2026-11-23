@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cloud_sync_service.dart';
 import '../../services/native_file_picker.dart';
+import '../../services/passkey_auth_service.dart';
 import '../../services/platform_io.dart';
 import '../../services/update_service.dart';
 import '../../store/money_store.dart';
@@ -45,6 +48,71 @@ class _AuthViewState extends State<AuthView> {
     _serverUrlCtrl = TextEditingController(
       text: CloudSyncService.instance.apiBaseUrl,
     );
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkPasskeyDesktopBridge();
+      });
+    }
+  }
+
+  Future<void> _checkPasskeyDesktopBridge() async {
+    final search = webWindowSearch();
+    if (search.contains('passkey_session=')) {
+      final uri = Uri.tryParse(
+        'https://dummy/?${search.startsWith("?") ? search.substring(1) : search}',
+      );
+      final sId = uri?.queryParameters['passkey_session'];
+      final emailParam = uri?.queryParameters['email'];
+      if (sId != null && sId.isNotEmpty) {
+        if (emailParam != null && emailParam.isNotEmpty) {
+          _emailCtrl.text = emailParam;
+        }
+        await _handlePasskeyLogin(sessionId: sId);
+      }
+    }
+  }
+
+  Future<void> _handlePasskeyLogin({String? sessionId}) async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = 'Iniciando autenticação por Chave-senha...';
+    });
+
+    final customUrl = _serverUrlCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+
+    final res = await PasskeyAuthService.instance.loginWithPasskey(
+      email: email.isNotEmpty ? email : null,
+      sessionId: sessionId,
+      customApiUrl: customUrl.isEmpty ? null : customUrl,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (res.ok) {
+      if (sessionId != null && sessionId.isNotEmpty) {
+        setState(() {
+          _infoMessage =
+              '✓ Autenticado com sucesso via Chave-senha! A sessão foi sincronizada com o aplicativo OpenMoney no seu computador. Você já pode fechar esta aba.';
+          _errorMessage = null;
+        });
+        webClearUrlQueryParams();
+      } else {
+        await widget.store.switchToCloudMode();
+        await widget.store.syncFromCloud();
+        widget.store.saveCloudSessionToConfig();
+      }
+    } else if (res.error != null) {
+      setState(() {
+        _errorMessage = res.error;
+        _infoMessage = null;
+      });
+    }
   }
 
   @override
@@ -135,6 +203,7 @@ class _AuthViewState extends State<AuthView> {
       );
       if (mounted) {
         if (res.ok) {
+          TextInput.finishAutofillContext(shouldSave: true);
           await widget.store.syncFromCloud();
           widget.store.saveCloudSessionToConfig();
           return;
@@ -292,6 +361,7 @@ class _AuthViewState extends State<AuthView> {
 
       if (!mounted) return;
       if (res.ok) {
+        TextInput.finishAutofillContext(shouldSave: true);
         await widget.store.switchToCloudMode();
         if (_importedInitialJson != null) {
           widget.store.loadFromJsonMap(
@@ -346,6 +416,7 @@ class _AuthViewState extends State<AuthView> {
         customApiUrl: customUrl.isEmpty ? null : customUrl,
       );
       if (res.ok) {
+        TextInput.finishAutofillContext(shouldSave: true);
         await store.switchToCloudMode();
         await store.syncFromCloud();
         store.saveCloudSessionToConfig();
@@ -625,48 +696,115 @@ class _AuthViewState extends State<AuthView> {
                       ),
                       const SizedBox(height: 20),
 
-                      if (_isRegisterMode) ...[
-                        _buildTextField(
-                          colors: colors,
-                          controller: _nameCtrl,
-                          label: 'Seu Nome',
-                          hint: 'Ex: Fabiano',
-                          icon: Icons.person_outline,
+                      if (!_isRegisterMode) ...[
+                        SizedBox(
+                          height: 44,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor:
+                                  colors.accent.withValues(alpha: 0.08),
+                              foregroundColor: colors.accent,
+                              side: BorderSide(
+                                color: colors.accent.withValues(alpha: 0.45),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                            ),
+                            icon: const Icon(Icons.fingerprint, size: 20),
+                            label: const Text(
+                              'Entrar com Chave-senha (Passkey)',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            onPressed: _isLoading ? null : _handlePasskeyLogin,
+                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: colors.borderGlass)),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text(
+                                'ou continue com senha',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider(color: colors.borderGlass)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
                       ],
 
-                      _buildTextField(
-                        colors: colors,
-                        controller: _emailCtrl,
-                        label: 'E-mail',
-                        hint: 'seu@email.com',
-                        icon: Icons.alternate_email,
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 12),
+                      AutofillGroup(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_isRegisterMode) ...[
+                              _buildTextField(
+                                colors: colors,
+                                controller: _nameCtrl,
+                                label: 'Seu Nome',
+                                hint: 'Ex: Fabiano',
+                                icon: Icons.person_outline,
+                                textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.name],
+                              ),
+                              const SizedBox(height: 12),
+                            ],
 
-                      _buildTextField(
-                        colors: colors,
-                        controller: _passwordCtrl,
-                        label: 'Senha',
-                        hint: _isRegisterMode
-                            ? 'Mínimo de 8 caracteres'
-                            : 'Digite sua senha',
-                        icon: Icons.lock_outline,
-                        obscureText: _obscurePassword,
-                        onSubmitted: (_) => _submit(),
-                        suffix: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                            size: 18,
-                            color: colors.textSecondary,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
+                            _buildTextField(
+                              colors: colors,
+                              controller: _emailCtrl,
+                              label: 'E-mail',
+                              hint: 'seu@email.com',
+                              icon: Icons.alternate_email,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.email,
+                                AutofillHints.username,
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+
+                            _buildTextField(
+                              colors: colors,
+                              controller: _passwordCtrl,
+                              label: 'Senha',
+                              hint: _isRegisterMode
+                                  ? 'Mínimo de 8 caracteres'
+                                  : 'Digite sua senha',
+                              icon: Icons.lock_outline,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: [
+                                _isRegisterMode
+                                    ? AutofillHints.newPassword
+                                    : AutofillHints.password,
+                              ],
+                              onSubmitted: (_) => _submit(),
+                              suffix: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 18,
+                                  color: colors.textSecondary,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 
@@ -1024,6 +1162,7 @@ class _AuthViewState extends State<AuthView> {
         TextField(
           controller: _registerCodeCtrl,
           keyboardType: TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
           maxLength: 6,
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -1162,14 +1301,21 @@ class _AuthViewState extends State<AuthView> {
         ),
         const SizedBox(height: 16),
         if (_forgotStep == 1) ...[
-          _buildTextField(
-            colors: colors,
-            controller: _emailCtrl,
-            label: 'E-mail Cadastrado',
-            hint: 'seu@email.com',
-            icon: Icons.alternate_email,
-            keyboardType: TextInputType.emailAddress,
-            onSubmitted: (_) => _requestResetCode(),
+          AutofillGroup(
+            child: _buildTextField(
+              colors: colors,
+              controller: _emailCtrl,
+              label: 'E-mail Cadastrado',
+              hint: 'seu@email.com',
+              icon: Icons.alternate_email,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [
+                AutofillHints.email,
+                AutofillHints.username,
+              ],
+              onSubmitted: (_) => _requestResetCode(),
+            ),
           ),
           const SizedBox(height: 18),
           SizedBox(
@@ -1261,26 +1407,32 @@ class _AuthViewState extends State<AuthView> {
             hint: 'Ex: 123456',
             icon: Icons.pin_outlined,
             keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.oneTimeCode],
           ),
           const SizedBox(height: 12),
-          _buildTextField(
-            colors: colors,
-            controller: _newPasswordCtrl,
-            label: 'Nova Senha',
-            hint: 'Mínimo de 8 caracteres',
-            icon: Icons.lock_outline,
-            obscureText: _obscureNewPassword,
-            onSubmitted: (_) => _resetPasswordAndLogin(),
-            suffix: IconButton(
-              icon: Icon(
-                _obscureNewPassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                size: 18,
-                color: colors.textSecondary,
-              ),
-              onPressed: () => setState(
-                () => _obscureNewPassword = !_obscureNewPassword,
+          AutofillGroup(
+            child: _buildTextField(
+              colors: colors,
+              controller: _newPasswordCtrl,
+              label: 'Nova Senha',
+              hint: 'Mínimo de 8 caracteres',
+              icon: Icons.lock_outline,
+              obscureText: _obscureNewPassword,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.newPassword],
+              onSubmitted: (_) => _resetPasswordAndLogin(),
+              suffix: IconButton(
+                icon: Icon(
+                  _obscureNewPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 18,
+                  color: colors.textSecondary,
+                ),
+                onPressed: () => setState(
+                  () => _obscureNewPassword = !_obscureNewPassword,
+                ),
               ),
             ),
           ),
@@ -1372,6 +1524,8 @@ class _AuthViewState extends State<AuthView> {
     required IconData icon,
     bool obscureText = false,
     TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    Iterable<String>? autofillHints,
     Widget? suffix,
     ValueChanged<String>? onSubmitted,
   }) {
@@ -1391,6 +1545,8 @@ class _AuthViewState extends State<AuthView> {
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          autofillHints: autofillHints,
           onSubmitted: onSubmitted,
           style: TextStyle(fontSize: 13.5, color: colors.textPrimary),
           decoration: InputDecoration(

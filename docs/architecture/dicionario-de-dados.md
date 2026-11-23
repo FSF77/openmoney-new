@@ -447,9 +447,41 @@ Logs temporários e anônimos mantidos na nuvem para diagnóstico de falhas de t
 * `user_agent` (`TEXT`): Cabeçalho User-Agent do cliente (ex: Google-Gemini, Claude, ChatGPT).
 * `note` (`TEXT`): Informações de diagnóstico resumidas (sem dados confidenciais do usuário).
 
+### 15. `user_passkeys` (Chaves-senha WebAuthn / FIDO2)
+Armazena as chaves públicas biométricas vinculadas a cada conta para login sem senha (*Passkeys*).
+* `id` (`TEXT PRIMARY KEY`): Identificador único do registro da chave (`pk_...`).
+* `user_id` (`TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE`): Usuário proprietário da chave-senha.
+* `credential_id` (`TEXT UNIQUE NOT NULL`): Identificador único da credencial WebAuthn emitido pelo autenticador do dispositivo.
+* `public_key` (`TEXT NOT NULL`): Chave pública em formato SubjectPublicKeyInfo (SPKI) codificada em Base64URL.
+* `counter` (`INTEGER NOT NULL DEFAULT 0`): Contador de assinaturas para proteção contra replay attacks.
+* `device_name` (`TEXT NOT NULL DEFAULT ''`): Rótulo amigável do dispositivo registrado (ex: "MacBook", "Navegador Web").
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO 8601 de criação.
+* `last_used_at` (`TEXT`): Timestamp ISO 8601 da última autenticação bem-sucedida.
+* **Índice:** `idx_user_passkeys_user ON user_passkeys (user_id)`.
+
+### 16. `passkey_challenges` (Desafios Criptográficos Temporários de WebAuthn)
+Armazena desafios randômicos de 32 bytes gerados pelo servidor para registro e autenticação com tempo de vida de 5 minutos.
+* `id` (`TEXT PRIMARY KEY`): Identificador do desafio (`ch_...`).
+* `challenge` (`TEXT NOT NULL`): Desafio criptográfico gerado via `crypto.getRandomValues`.
+* `user_id` (`TEXT`): Usuário associado (presente no registro; opcional no login).
+* `type` (`TEXT NOT NULL`): Finalidade do desafio (`'register'` ou `'login'`).
+* `created_at` (`TEXT NOT NULL`): Timestamp ISO 8601 de geração.
+* `expires_at` (`TEXT NOT NULL`): Timestamp de expiração rápida (5 minutos).
+* **Índice:** `idx_passkey_challenges_expires ON passkey_challenges (expires_at)`.
+
+### 17. `passkey_desktop_sessions` (Ponte de Autenticação WebAuthn Desktop ↔ Navegador)
+Sessões temporárias para permitir que aplicativos desktop (macOS e Windows) concluam login com Chave-senha no navegador padrão com segurança e sincronizem o token JWT emitido.
+* `id` (`TEXT PRIMARY KEY`): Identificador da sessão desktop (`ds_...`).
+* `token` (`TEXT`): Token JWT de autenticação gerado após a validação da Chave-senha.
+* `user_id` (`TEXT`): Usuário autenticado.
+* `status` (`TEXT NOT NULL DEFAULT 'pending'`): Estado da sessão (`'pending'` ou `'completed'`).
+* `created_at` (`TEXT NOT NULL`): Timestamp de início da sessão.
+* `expires_at` (`TEXT NOT NULL`): Timestamp de expiração (5 minutos).
+* **Índice:** `idx_passkey_desktop_expires ON passkey_desktop_sessions (expires_at)`.
+
 ---
 
-## 💾 14. Estrutura de Arquivos Locais e Estado de Sincronização (Cliente)
+## 💾 18. Estrutura de Arquivos Locais e Estado de Sincronização (Cliente)
 
 Além da base `openmoney.json`, os clientes mantêm artefatos locais para configurações e resiliência offline do Sync v2 (ver [ADR 025](../adr/025-sync-kv-store-local-persistence.md)):
 
@@ -460,6 +492,15 @@ Localizados no diretório de dados do app (`Application Support/OpenMoneyNew` no
 * `cloud_cache/<key>.json`: Snapshots em cache offline gravados em arquivos individuais por conta via escrita atômica (`.tmp.<pid>` + `rename`), separados do `sync_kv_store.json`.
 * `openmoney_sync_session` e `openmoney_saved_accounts`: Sessão de autenticação ativa e lista de contas conectadas.
 * `openmoney_web_config`: Configurações locais da aplicação.
+
+### 2. `config.json` (Preferências Globais e Ajustes da Aplicação)
+Localizado no diretório de dados da aplicação (`Application Support/OpenMoneyNew/config.json` no macOS, `%APPDATA%\OpenMoneyNew\config.json` no Windows, `Documents/OpenMoneyNew/config.json` no iOS, ou `localStorage['openmoney_web_config']` na Web):
+* `requireBiometricUnlock` (`bool`, padrão `false`): Define se o aplicativo exige autenticação biométrica (Touch ID no macOS, Face ID/Touch ID no iOS, Windows Hello no Windows, Biometria no Android) ao abrir o aplicativo. É 100% opcional e desativado por padrão.
+* `startupView` (`string`, padrão `'lastAccount'`): Tela inicial de abertura (`'dashboard'` ou `'lastAccount'`).
+* `reminderDaysAhead` (`int`, padrão `3`): Antecedência em dias para alertas de vencimento de contas e faturas.
+* `isDarkMode` (`bool`, padrão `true`): Modo de tema visual (escuro ou claro).
+* `accentColorKey` (`string`, padrão `'sky'`): Paleta de cor de destaque ativa.
+* `hidePatrimonyBalance` (`bool`, padrão `false`): Privacidade de saldos (ocultação por padrão com `••••••`).
 
 *(Na versão Web, essas mesmas chaves são armazenadas diretamente no `window.localStorage`).*
 

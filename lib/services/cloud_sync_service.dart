@@ -391,8 +391,10 @@ class CloudSyncService extends ChangeNotifier {
     };
   }
 
-  String _endpoint(String path) {
-    final base = resolvedBaseUrl;
+  String _endpoint(String path, {String? customBaseUrl}) {
+    final base = (customBaseUrl != null && customBaseUrl.trim().isNotEmpty)
+        ? customBaseUrl.trim().replaceAll(RegExp(r'/+$'), '')
+        : resolvedBaseUrl;
     if (base.isEmpty) return path;
     return '$base$path';
   }
@@ -1659,6 +1661,289 @@ class CloudSyncService extends ChangeNotifier {
       final res = await platformHttpRequest(
         method: 'DELETE',
         url: _endpoint('/api/tokens/$tokenId'),
+        headers: _headers(),
+      );
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ==========================================================================
+  // MARK: - Chave-senha (Passkeys / WebAuthn / FIDO2)
+  // ==========================================================================
+
+  /// Busca as opções e desafio para registrar uma nova Chave-senha
+  Future<Map<String, dynamic>?> getPasskeyRegisterOptions({
+    String? customApiUrl,
+  }) async {
+    if (!isAuthenticated) return null;
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint(
+          '/api/auth/passkey/register-options',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        return Map<String, dynamic>.from(decoded['options'] as Map);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Valida e conclui o registro da nova Chave-senha
+  Future<({bool ok, String? message, String? error})> verifyPasskeyRegister({
+    required String credentialId,
+    required String clientDataJSON,
+    required String attestationObject,
+    required String publicKeySpki,
+    String? deviceName,
+    String? customApiUrl,
+  }) async {
+    if (!isAuthenticated) {
+      return (ok: false, message: null, error: 'Sessão não autenticada.');
+    }
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint(
+          '/api/auth/passkey/register-verify',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+        body: jsonEncode({
+          'credentialId': credentialId,
+          'clientDataJSON': clientDataJSON,
+          'attestationObject': attestationObject,
+          'publicKeySpki': publicKeySpki,
+          'deviceName': deviceName ?? 'Chave-senha',
+        }),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        return (
+          ok: true,
+          message: decoded['message']?.toString(),
+          error: null,
+        );
+      }
+      return (
+        ok: false,
+        message: null,
+        error: decoded?['error']?.toString() ??
+            'Falha ao registrar Chave-senha (HTTP ${res.statusCode}).',
+      );
+    } catch (e) {
+      return (ok: false, message: null, error: 'Erro de conexão: $e');
+    }
+  }
+
+  /// Busca as opções e desafio para login com Chave-senha
+  Future<Map<String, dynamic>?> getPasskeyLoginOptions({
+    String? email,
+    String? customApiUrl,
+  }) async {
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint(
+          '/api/auth/passkey/login-options',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+        body: jsonEncode({'email': email?.trim() ?? ''}),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        return Map<String, dynamic>.from(decoded['options'] as Map);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Valida o login com Chave-senha e salva a sessão ativa
+  Future<({bool ok, String? error})> verifyPasskeyLogin({
+    required String credentialId,
+    required String clientDataJSON,
+    required String authenticatorData,
+    required String signature,
+    String? userHandle,
+    String? sessionId,
+    String? customApiUrl,
+  }) async {
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint(
+          '/api/auth/passkey/login-verify',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+        body: jsonEncode({
+          'credentialId': credentialId,
+          'clientDataJSON': clientDataJSON,
+          'authenticatorData': authenticatorData,
+          'signature': signature,
+          'userHandle': userHandle,
+          'sessionId': sessionId,
+        }),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['ok'] == true) {
+        final token = decoded['token'] as String;
+        final user = decoded['user'] as Map<String, dynamic>;
+        _apiBaseUrl = customApiUrl ?? _apiBaseUrl;
+        _authToken = token;
+        _userId = user['id'] as String;
+        _userEmail = user['email'] as String;
+        _userName = (user['name'] ?? '') as String;
+        _revision = (decoded['revision'] as num?)?.toInt() ?? 1;
+        _webOfflineGuestMode = false;
+        _state = CloudSyncState.synced;
+        _lastError = null;
+        exportSessionToConfig({});
+        notifyListeners();
+        return (ok: true, error: null);
+      }
+      return (
+        ok: false,
+        error: decoded?['error']?.toString() ??
+            'Chave-senha não autorizada (HTTP ${res.statusCode}).',
+      );
+    } catch (e) {
+      return (ok: false, error: 'Erro de conexão: $e');
+    }
+  }
+
+  /// Cria uma sessão temporária para login de desktop via navegador
+  Future<({String? sessionId, String? error})> createPasskeyDesktopSession({
+    String? customApiUrl,
+  }) async {
+    try {
+      final res = await platformHttpRequest(
+        method: 'POST',
+        url: _endpoint(
+          '/api/auth/passkey/desktop-session',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['sessionId'] is String) {
+        return (sessionId: decoded['sessionId'] as String, error: null);
+      }
+      if (res.statusCode == 404) {
+        return (
+          sessionId: null,
+          error:
+              'O servidor em $resolvedBaseUrl ainda não possui suporte a Chave-senha (HTTP 404). O backend Cloudflare precisa ser publicado.',
+        );
+      }
+      final msg = decoded?['error']?.toString() ??
+          'Falha no servidor ao criar sessão de Chave-senha (HTTP ${res.statusCode}).';
+      return (sessionId: null, error: msg);
+    } catch (e) {
+      return (sessionId: null, error: 'Erro de conexão com o servidor: $e');
+    }
+  }
+
+  /// Verifica se o login Desktop no navegador foi concluído com sucesso
+  Future<({bool ok, String? message, String? error})> checkPasskeyDesktopSession({
+    required String sessionId,
+    String? customApiUrl,
+  }) async {
+    try {
+      final res = await platformHttpRequest(
+        method: 'GET',
+        url: _endpoint(
+          '/api/auth/passkey/desktop-session?sessionId=$sessionId',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 && res.statusCode < 300 && decoded != null) {
+        if (decoded['status'] == 'completed' && decoded['token'] is String) {
+          final token = decoded['token'] as String;
+          final user = (decoded['user'] as Map<String, dynamic>?) ?? {};
+          _apiBaseUrl = customApiUrl ?? _apiBaseUrl;
+          _authToken = token;
+          _userId = (user['id'] ?? '') as String;
+          _userEmail = (user['email'] ?? '') as String;
+          _userName = (user['name'] ?? '') as String;
+          _revision = (decoded['revision'] as num?)?.toInt() ?? 1;
+          _webOfflineGuestMode = false;
+          _state = CloudSyncState.synced;
+          _lastError = null;
+          exportSessionToConfig({});
+          notifyListeners();
+          return (ok: true, message: null, error: null);
+        }
+        return (ok: false, message: 'pending', error: null);
+      }
+      return (ok: false, message: null, error: 'Sessão expirada.');
+    } catch (e) {
+      return (ok: false, message: null, error: 'Erro de conexão: $e');
+    }
+  }
+
+  /// Lista as chaves-senha registradas do usuário logado
+  Future<List<Map<String, dynamic>>> fetchPasskeys({
+    String? customApiUrl,
+  }) async {
+    if (!isAuthenticated) return const [];
+    try {
+      final res = await platformHttpRequest(
+        method: 'GET',
+        url: _endpoint(
+          '/api/auth/passkey/list',
+          customBaseUrl: customApiUrl,
+        ),
+        headers: _headers(),
+      );
+      final decoded = _tryDecodeJson(res.body);
+      if (res.statusCode >= 200 &&
+          res.statusCode < 300 &&
+          decoded != null &&
+          decoded['passkeys'] is List) {
+        return (decoded['passkeys'] as List)
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Exclui uma chave-senha cadastrada
+  Future<bool> deletePasskey(String passkeyId, {String? customApiUrl}) async {
+    if (!isAuthenticated || passkeyId.isEmpty) return false;
+    try {
+      final res = await platformHttpRequest(
+        method: 'DELETE',
+        url: _endpoint(
+          '/api/auth/passkey/$passkeyId',
+          customBaseUrl: customApiUrl,
+        ),
         headers: _headers(),
       );
       return res.statusCode >= 200 && res.statusCode < 300;

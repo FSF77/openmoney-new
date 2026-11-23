@@ -1005,3 +1005,44 @@ class PlatformWebSocket {
     _ws = null;
   }
 }
+
+bool webPasskeyIsSupported() {
+  try {
+    final fn = _window.getProperty<JSFunction?>('openmoneyPasskeyIsSupported'.toJS);
+    if (fn != null) {
+      final res = fn.callAsFunction() as JSBoolean?;
+      return res?.toDart ?? false;
+    }
+  } catch (_) {}
+  return false;
+}
+
+Future<String> webPasskeyRegister(String optionsJson) async {
+  try {
+    final fn = _window.getProperty<JSFunction?>('openmoneyPasskeyRegister'.toJS);
+    if (fn == null) return jsonEncode({'ok': false, 'error': 'WebAuthn não disponível.'});
+    final promise = fn.callAsFunction(null, optionsJson.toJS) as JSPromise<JSString>?;
+    if (promise == null) {
+      return jsonEncode({'ok': false, 'error': 'Falha ao iniciar registro WebAuthn.'});
+    }
+    final jsResult = await promise.toDart;
+    return jsResult.toDart;
+  } catch (e) {
+    return jsonEncode({'ok': false, 'error': e.toString()});
+  }
+}
+
+Future<String> webPasskeyLogin(String optionsJson) async {
+  try {
+    final fn = _window.getProperty<JSFunction?>('openmoneyPasskeyLogin'.toJS);
+    if (fn == null) return jsonEncode({'ok': false, 'error': 'WebAuthn não disponível.'});
+    final promise = fn.callAsFunction(null, optionsJson.toJS) as JSPromise<JSString>?;
+    if (promise == null) {
+      return jsonEncode({'ok': false, 'error': 'Falha ao iniciar autenticação WebAuthn.'});
+    }
+    final jsResult = await promise.toDart;
+    return jsResult.toDart;
+  } catch (e) {
+    return jsonEncode({'ok': false, 'error': e.toString()});
+  }
+}

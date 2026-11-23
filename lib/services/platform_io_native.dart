@@ -396,3 +396,11 @@ class PlatformWebSocket {
     _ws = null;
   }
 }
+
+bool webPasskeyIsSupported() => false;
+
+Future<String> webPasskeyRegister(String optionsJson) async =>
+    jsonEncode({'ok': false, 'error': 'WebAuthn não suportado no ambiente nativo.'});
+
+Future<String> webPasskeyLogin(String optionsJson) async =>
+    jsonEncode({'ok': false, 'error': 'WebAuthn não suportado no ambiente nativo.'});

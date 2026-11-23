@@ -83,5 +83,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>O OpenMoney utiliza Face ID para proteger e desbloquear seus dados financeiros com segurança.</string>
 </dict>
 </plist>

@@ -528,6 +528,7 @@ class MoneyStore extends ChangeNotifier {
   }
   int reminderDaysAhead = 3;
   bool isDarkMode = true;
+  bool requireBiometricUnlock = false;
   static const List<double> kFontScales = [0.90, 1.00, 1.15, 1.30, 1.45];
   double fontScaleDesktop = 1.0;
   double fontScaleMobile = 1.0;
@@ -827,10 +828,14 @@ class MoneyStore extends ChangeNotifier {
       'aiConsumptionMode': aiConsumptionMode,
       'aiPreferredModel': aiPreferredModel,
       'isGeminiAiEnabled': isGeminiAiEnabled,
+      'requireBiometricUnlock': requireBiometricUnlock,
     };
   }
 
   void applyPreferencesMap(Map<String, dynamic> cfg) {
+    if (cfg['requireBiometricUnlock'] is bool) {
+      requireBiometricUnlock = cfg['requireBiometricUnlock'] as bool;
+    }
     if (cfg['reminderDaysAhead'] is num) {
       reminderDaysAhead =
           (cfg['reminderDaysAhead'] as num).toInt().clamp(1, 60);
@@ -1289,6 +1294,16 @@ class MoneyStore extends ChangeNotifier {
     startupView = view;
     final cfg = _readConfig();
     cfg['startupView'] = view;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setRequireBiometricUnlock(bool value) {
+    if (requireBiometricUnlock == value) return;
+    requireBiometricUnlock = value;
+    final cfg = _readConfig();
+    cfg['requireBiometricUnlock'] = value;
     _writeConfig(cfg);
     _syncPreferencesOnWeb();
     notifyListeners();

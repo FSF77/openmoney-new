@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cloud_sync_service.dart';
+import '../../services/passkey_auth_service.dart';
 import '../../services/sync_engine.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
@@ -43,6 +45,9 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
   bool _isError = false;
   List<CloudBackupInfo> _cloudBackups = const [];
   bool _loadingBackups = false;
+  bool _showPasskeys = false;
+  List<Map<String, dynamic>> _userPasskeys = const [];
+  bool _loadingPasskeys = false;
 
   late final TextEditingController _serverCtrl;
   final _nameCtrl = TextEditingController();
@@ -67,6 +72,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     _serverCtrl = TextEditingController(text: initialServer);
     if (_cloud.isAuthenticated) {
       _loadCloudBackups();
+      _loadPasskeys();
     }
   }
 
@@ -161,6 +167,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
       );
       if (mounted) {
         if (res.ok) {
+          TextInput.finishAutofillContext(shouldSave: true);
           widget.store.saveCloudSessionToConfig();
           await widget.store.syncFromCloud();
           await _loadCloudBackups();
@@ -190,6 +197,108 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
       setState(() {
         _cloudBackups = list;
         _loadingBackups = false;
+      });
+    }
+  }
+
+  Future<void> _loadPasskeys() async {
+    if (!_cloud.isAuthenticated) return;
+    setState(() => _loadingPasskeys = true);
+    final list = await _cloud.fetchPasskeys(
+      customApiUrl:
+          _serverCtrl.text.trim().isEmpty ? null : _serverCtrl.text.trim(),
+    );
+    if (mounted) {
+      setState(() {
+        _userPasskeys = list;
+        _loadingPasskeys = false;
+      });
+    }
+  }
+
+  Future<void> _registerNewPasskey() async {
+    final devName = kIsWeb
+        ? 'Navegador Web'
+        : 'Dispositivo';
+    setState(() {
+      _isBusy = true;
+      _statusMsg = 'Aguardando validação biométrica no dispositivo...';
+      _isError = false;
+    });
+
+    final res = await PasskeyAuthService.instance.registerPasskey(
+      deviceName: devName,
+      customApiUrl:
+          _serverCtrl.text.trim().isEmpty ? null : _serverCtrl.text.trim(),
+    );
+
+    if (mounted) {
+      setState(() {
+        _isBusy = false;
+        if (res.ok) {
+          _statusMsg = res.message ?? '✓ Chave-senha cadastrada com sucesso!';
+          _isError = false;
+        } else {
+          _statusMsg = res.error ?? 'Falha ao cadastrar Chave-senha.';
+          _isError = true;
+        }
+      });
+      await _loadPasskeys();
+    }
+  }
+
+  Future<void> _deletePasskey(String id) async {
+    final ok = await _cloud.deletePasskey(
+      id,
+      customApiUrl:
+          _serverCtrl.text.trim().isEmpty ? null : _serverCtrl.text.trim(),
+    );
+    if (ok) {
+      await _loadPasskeys();
+    }
+  }
+
+  Future<void> _handlePasskeyLogin() async {
+    if (_isBusy) return;
+    setState(() {
+      _isBusy = true;
+      _statusMsg = 'Aguardando validação por Chave-senha...';
+      _isError = false;
+    });
+
+    final email = _emailCtrl.text.trim();
+    final customUrl = _serverCtrl.text.trim();
+
+    final res = await PasskeyAuthService.instance.loginWithPasskey(
+      email: email.isNotEmpty ? email : null,
+      customApiUrl: customUrl.isEmpty ? null : customUrl,
+    );
+
+    if (!mounted) return;
+    setState(() => _isBusy = false);
+
+    if (res.ok) {
+      final wasWelcomeScreen = widget.store.showWelcomeScreen;
+      widget.store.saveCloudSessionToConfig();
+      await widget.store.syncFromCloud();
+      await _loadCloudBackups();
+      await _loadPasskeys();
+      if (wasWelcomeScreen || widget.store.showWelcomeScreen) {
+        widget.store.showWelcomeScreen = false;
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _addingAnotherAccount = false;
+          _statusMsg = '✓ Conectado com sucesso via Chave-senha!';
+          _isError = false;
+        });
+      }
+    } else if (res.error != null) {
+      setState(() {
+        _statusMsg = res.error;
+        _isError = true;
       });
     }
   }
@@ -286,6 +395,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
 
     if (!mounted) return;
     if (res.ok) {
+      TextInput.finishAutofillContext(shouldSave: true);
       final wasWelcomeScreen = widget.store.showWelcomeScreen;
       widget.store.saveCloudSessionToConfig();
       await widget.store.switchToCloudMode(
@@ -435,6 +545,7 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     );
     if (!mounted) return;
     if (res.ok) {
+      TextInput.finishAutofillContext(shouldSave: true);
       final wasWelcomeScreen = widget.store.showWelcomeScreen;
       widget.store.saveCloudSessionToConfig();
       final synced = await widget.store.syncFromCloud();
@@ -1944,6 +2055,176 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             ],
           ),
         ],
+
+        // Gerenciamento de Chaves-senha (Passkeys)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() => _showPasskeys = !_showPasskeys),
+            icon: Icon(
+              Icons.fingerprint_rounded,
+              size: 16,
+              color: colors.accentBlue,
+            ),
+            label: Text(
+              _showPasskeys
+                  ? 'Ocultar Chaves-senha (Passkeys)'
+                  : 'Gerenciar Chaves-senha (Passkeys)',
+              style: TextStyle(
+                fontSize: 12,
+                color: colors.accentBlue,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        if (_showPasskeys) ...[
+          Container(
+            margin: const EdgeInsets.only(top: 6, bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.bgPrimary.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colors.borderGlass),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.key_rounded, size: 16, color: colors.accentBlue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Chaves-senha vinculadas à conta',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      onPressed: _loadingPasskeys ? null : _loadPasskeys,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Permite fazer login sem senha usando Touch ID, Face ID ou Windows Hello.',
+                  style: TextStyle(fontSize: 11.5, color: colors.textSecondary),
+                ),
+                const SizedBox(height: 10),
+                if (_loadingPasskeys) ...[
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                ] else if (_userPasskeys.isEmpty) ...[
+                  Text(
+                    'Nenhuma Chave-senha cadastrada ainda.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontStyle: FontStyle.italic,
+                      color: colors.textSecondary.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ] else ...[
+                  ..._userPasskeys.map((pk) {
+                    final dName =
+                        pk['device_name']?.toString() ?? 'Chave-senha';
+                    final created = pk['created_at']?.toString() ?? '';
+                    final pkId = pk['id']?.toString() ?? '';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.bgSecondary.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            size: 15,
+                            color: colors.accentGreen,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                                if (created.isNotEmpty)
+                                  Text(
+                                    'Criada em ${created.split("T").first}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 16,
+                              color: colors.accentRed,
+                            ),
+                            tooltip: 'Excluir Chave-senha',
+                            onPressed: () => _deletePasskey(pkId),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                const SizedBox(height: 8),
+                if (kIsWeb) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_moderator_outlined, size: 16),
+                    label: const Text(
+                      'Cadastrar Chave-senha neste Dispositivo',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onPressed: _isBusy ? null : _registerNewPasskey,
+                  ),
+                ] else ...[
+                  Text(
+                    '💡 Para cadastrar uma nova Chave-senha com Touch ID ou Windows Hello, acesse openmoney.app.br no seu navegador e vincule seu dispositivo.',
+                    style: TextStyle(fontSize: 11, color: colors.textSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
         _buildLocalDatabaseSection(colors),
         const SizedBox(height: 14),
         // Seção: Gerenciar Base (Criar Nova Base em Branco / Excluir Base Existente com Avisos de Cuidado)
@@ -2086,10 +2367,19 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             const SizedBox(height: 10),
           ],
           if (_forgotStep == 1) ...[
-            _buildInput(
-              colors: colors,
-              controller: _emailCtrl,
-              label: 'E-mail Cadastrado',
+            AutofillGroup(
+              child: _buildInput(
+                colors: colors,
+                controller: _emailCtrl,
+                label: 'E-mail Cadastrado',
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [
+                  AutofillHints.email,
+                  AutofillHints.username,
+                ],
+                onSubmitted: (_) => _handleRequestResetCode(),
+              ),
             ),
             const SizedBox(height: 14),
             SizedBox(
@@ -2160,13 +2450,21 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
               colors: colors,
               controller: _resetCodeCtrl,
               label: 'Código de Verificação (6 dígitos)',
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.oneTimeCode],
             ),
             const SizedBox(height: 10),
-            _buildInput(
-              colors: colors,
-              controller: _newForgotPassCtrl,
-              label: 'Nova Senha (mín. 8 caracteres)',
-              obscure: true,
+            AutofillGroup(
+              child: _buildInput(
+                colors: colors,
+                controller: _newForgotPassCtrl,
+                label: 'Nova Senha (mín. 8 caracteres)',
+                obscure: true,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.newPassword],
+                onSubmitted: (_) => _handleResetPasswordAndLogin(),
+              ),
             ),
             const SizedBox(height: 14),
             SizedBox(
@@ -2400,6 +2698,10 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             colors: colors,
             controller: _registerCodeCtrl,
             label: 'Código de Confirmação (6 dígitos)',
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            onSubmitted: (_) => _handleConfirmRegister(),
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -2460,25 +2762,71 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
             ],
           ),
           const SizedBox(height: 12),
-          if (_isRegisterMode) ...[
-            _buildInput(
-              colors: colors,
-              controller: _nameCtrl,
-              label: 'Nome',
+          if (!_isRegisterMode) ...[
+            SizedBox(
+              height: 40,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: colors.accent.withValues(alpha: 0.08),
+                  foregroundColor: colors.accent,
+                  side: BorderSide(
+                    color: colors.accent.withValues(alpha: 0.45),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.fingerprint, size: 18),
+                label: const Text(
+                  'Entrar com Chave-senha (Passkey)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                onPressed: _isBusy ? null : _handlePasskeyLogin,
+              ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
           ],
-          _buildInput(
-            colors: colors,
-            controller: _emailCtrl,
-            label: 'E-mail',
-          ),
-          const SizedBox(height: 10),
-          _buildInput(
-            colors: colors,
-            controller: _passwordCtrl,
-            label: 'Senha',
-            obscure: true,
+          AutofillGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_isRegisterMode) ...[
+                  _buildInput(
+                    colors: colors,
+                    controller: _nameCtrl,
+                    label: 'Nome',
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                _buildInput(
+                  colors: colors,
+                  controller: _emailCtrl,
+                  label: 'E-mail',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [
+                    AutofillHints.email,
+                    AutofillHints.username,
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _buildInput(
+                  colors: colors,
+                  controller: _passwordCtrl,
+                  label: 'Senha',
+                  obscure: true,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: [
+                    _isRegisterMode
+                        ? AutofillHints.newPassword
+                        : AutofillHints.password,
+                  ],
+                  onSubmitted: (_) => _handleAuth(),
+                ),
+              ],
+            ),
           ),
           if (!_isRegisterMode) ...[
             const SizedBox(height: 4),
@@ -2679,10 +3027,18 @@ class _CloudAccountDialogState extends State<_CloudAccountDialog> {
     required TextEditingController controller,
     required String label,
     bool obscure = false,
+    TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    Iterable<String>? autofillHints,
+    ValueChanged<String>? onSubmitted,
   }) {
     return TextField(
       controller: controller,
       obscureText: obscure,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      autofillHints: autofillHints,
+      onSubmitted: onSubmitted,
       style: TextStyle(fontSize: 13, color: colors.textPrimary),
       decoration: InputDecoration(
         labelText: label,

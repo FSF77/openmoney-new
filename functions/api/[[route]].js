@@ -189,6 +189,50 @@ async function ensureSchema(db) {
         note TEXT
       )
     `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_passkeys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        credential_id TEXT UNIQUE NOT NULL,
+        public_key TEXT NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        device_name TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_used_at TEXT
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_user_passkeys_user
+      ON user_passkeys (user_id)
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS passkey_challenges (
+        id TEXT PRIMARY KEY,
+        challenge TEXT NOT NULL,
+        user_id TEXT,
+        type TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_passkey_challenges_expires
+      ON passkey_challenges (expires_at)
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS passkey_desktop_sessions (
+        id TEXT PRIMARY KEY,
+        token TEXT,
+        user_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_passkey_desktop_expires
+      ON passkey_desktop_sessions (expires_at)
+    `),
   ]);
   try {
     await db.prepare("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0").run();
@@ -314,6 +358,42 @@ function base64UrlDecodeToBytes(b64url) {
     b64 += "=";
   }
   return base64ToBytes(b64);
+}
+
+function getRpId(request) {
+  try {
+    const url = new URL(request.url);
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return "localhost";
+    if (host.endsWith("openmoney.app.br")) return "openmoney.app.br";
+    if (host.endsWith("pages.dev")) return host;
+    return host;
+  } catch (_) {
+    return "openmoney.app.br";
+  }
+}
+
+function derToP1363(der) {
+  if (der.length === 64) return der;
+  try {
+    let offset = 2;
+    if (der[1] & 0x80) offset += (der[1] & 0x7f);
+    offset += 1;
+    let rLen = der[offset++];
+    let r = der.slice(offset, offset + rLen);
+    offset += rLen;
+    offset += 1;
+    let sLen = der[offset++];
+    let s = der.slice(offset, offset + sLen);
+    if (r.length === 33 && r[0] === 0) r = r.slice(1);
+    if (s.length === 33 && s[0] === 0) s = s.slice(1);
+    const out = new Uint8Array(64);
+    out.set(r, 32 - r.length);
+    out.set(s, 64 - s.length);
+    return out;
+  } catch (_) {
+    return der;
+  }
 }
 
 function timingSafeEqual(a, b) {
@@ -5236,6 +5316,430 @@ export async function onRequest(context) {
       .run();
 
     return jsonResponse({ ok: true }, 200, origin);
+  }
+
+  // ==========================================================================
+  // 3.1. PASSKEY (WEBAUTHN / FIDO2) ENDPOINTS
+  // ==========================================================================
+
+  // 3.1.1. POST /api/auth/passkey/register-options (Gera desafio para criar Chave-senha)
+  if (path === "/api/auth/passkey/register-options" && request.method === "POST") {
+    if (!userId) {
+      return jsonResponse({ error: "Sessão não autenticada." }, 401, origin);
+    }
+    const u = await env.DB.prepare("SELECT email, name FROM users WHERE id = ?1")
+      .bind(userId)
+      .first();
+    if (!u) {
+      return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+    }
+
+    const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
+    const challenge = base64UrlEncode(challengeBytes);
+    const challengeId = "ch_" + crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    await env.DB.prepare(
+      "INSERT INTO passkey_challenges (id, challenge, user_id, type, created_at, expires_at) VALUES (?1, ?2, ?3, 'register', ?4, ?5)"
+    )
+      .bind(challengeId, challenge, userId, nowIso, expiresAt)
+      .run();
+
+    const rpId = getRpId(request);
+
+    return jsonResponse(
+      {
+        ok: true,
+        options: {
+          challenge,
+          rp: { name: "OpenMoney", id: rpId },
+          user: {
+            id: base64UrlEncode(encoder.encode(userId)),
+            name: u.email,
+            displayName: u.name || u.email,
+          },
+          pubKeyCredParams: [
+            { type: "public-key", alg: -7 },  // ES256
+            { type: "public-key", alg: -257 }, // RS256
+          ],
+          authenticatorSelection: {
+            residentKey: "preferred",
+            userVerification: "preferred",
+          },
+          timeout: 60000,
+          attestation: "none",
+        },
+      },
+      200,
+      origin
+    );
+  }
+
+  // 3.1.2. POST /api/auth/passkey/register-verify (Registra a Chave-senha com a Chave Pública)
+  if (path === "/api/auth/passkey/register-verify" && request.method === "POST") {
+    if (!userId) {
+      return jsonResponse({ error: "Sessão não autenticada." }, 401, origin);
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const credId = String(body.credentialId || "").trim();
+    const pubKey = String(body.publicKeySpki || "").trim();
+    const devName = String(body.deviceName || "Chave-senha").trim();
+    const clientDataB64 = String(body.clientDataJSON || "").trim();
+
+    if (!credId || !pubKey || !clientDataB64) {
+      return jsonResponse({ error: "Dados de chave-senha incompletos." }, 400, origin);
+    }
+
+    try {
+      const clientDataRaw = base64UrlDecodeToBytes(clientDataB64);
+      const clientData = JSON.parse(decoder.decode(clientDataRaw));
+      if (clientData.type !== "webauthn.create") {
+        return jsonResponse({ error: "Tipo de credencial inválido." }, 400, origin);
+      }
+
+      const challengeRow = await env.DB.prepare(
+        "SELECT id FROM passkey_challenges WHERE challenge = ?1 AND user_id = ?2 AND type = 'register' AND expires_at > ?3"
+      )
+        .bind(clientData.challenge, userId, new Date().toISOString())
+        .first();
+
+      if (!challengeRow) {
+        return jsonResponse({ error: "Desafio de registro inválido ou expirado." }, 400, origin);
+      }
+
+      const passkeyId = "pk_" + crypto.randomUUID();
+      const nowIso = new Date().toISOString();
+
+      await env.DB.prepare(
+        "INSERT INTO user_passkeys (id, user_id, credential_id, public_key, counter, device_name, created_at, last_used_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?6)"
+      )
+        .bind(passkeyId, userId, credId, pubKey, devName, nowIso)
+        .run();
+
+      await env.DB.prepare("DELETE FROM passkey_challenges WHERE id = ?1")
+        .bind(challengeRow.id)
+        .run();
+
+      return jsonResponse({ ok: true, message: "Chave-senha cadastrada com sucesso!" }, 200, origin);
+    } catch (e) {
+      return jsonResponse({ error: "Falha ao registrar chave-senha: " + e.message }, 400, origin);
+    }
+  }
+
+  // 3.1.3. POST /api/auth/passkey/login-options (Gera desafio para login com Chave-senha)
+  if (path === "/api/auth/passkey/login-options" && request.method === "POST") {
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (_) {}
+
+    const cleanEmail = String(body.email || "").trim().toLowerCase();
+    const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
+    const challenge = base64UrlEncode(challengeBytes);
+    const challengeId = "ch_" + crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    let allowCredentials = [];
+    let targetUserId = null;
+
+    if (cleanEmail) {
+      const u = await env.DB.prepare("SELECT id FROM users WHERE email = ?1")
+        .bind(cleanEmail)
+        .first();
+      if (u) {
+        targetUserId = u.id;
+        const creds = await env.DB.prepare(
+          "SELECT credential_id FROM user_passkeys WHERE user_id = ?1"
+        )
+          .bind(u.id)
+          .all();
+        if (creds && creds.results) {
+          allowCredentials = creds.results.map((r) => ({
+            id: r.credential_id,
+            type: "public-key",
+          }));
+        }
+      }
+    }
+
+    await env.DB.prepare(
+      "INSERT INTO passkey_challenges (id, challenge, user_id, type, created_at, expires_at) VALUES (?1, ?2, ?3, 'login', ?4, ?5)"
+    )
+      .bind(challengeId, challenge, targetUserId, nowIso, expiresAt)
+      .run();
+
+    return jsonResponse(
+      {
+        ok: true,
+        options: {
+          challenge,
+          rpId: getRpId(request),
+          allowCredentials,
+          userVerification: "preferred",
+          timeout: 60000,
+        },
+      },
+      200,
+      origin
+    );
+  }
+
+  // 3.1.4. POST /api/auth/passkey/login-verify (Valida assinatura biométrica da Chave-senha e emite JWT)
+  if (path === "/api/auth/passkey/login-verify" && request.method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: "JSON inválido." }, 400, origin);
+    }
+
+    const credId = String(body.credentialId || "").trim();
+    const clientDataB64 = String(body.clientDataJSON || "").trim();
+    const authDataB64 = String(body.authenticatorData || "").trim();
+    const sigB64 = String(body.signature || "").trim();
+    const sessionId = String(body.sessionId || "").trim();
+
+    if (!credId || !clientDataB64 || !authDataB64 || !sigB64) {
+      return jsonResponse({ error: "Dados de autenticação incompletos." }, 400, origin);
+    }
+
+    try {
+      const clientDataRaw = base64UrlDecodeToBytes(clientDataB64);
+      const clientData = JSON.parse(decoder.decode(clientDataRaw));
+
+      if (clientData.type !== "webauthn.get") {
+        return jsonResponse({ error: "Tipo de assertiva inválido." }, 400, origin);
+      }
+
+      const challengeRow = await env.DB.prepare(
+        "SELECT id, user_id FROM passkey_challenges WHERE challenge = ?1 AND type = 'login' AND expires_at > ?2"
+      )
+        .bind(clientData.challenge, new Date().toISOString())
+        .first();
+
+      if (!challengeRow) {
+        return jsonResponse({ error: "Desafio de login inválido ou expirado." }, 400, origin);
+      }
+
+      const passkey = await env.DB.prepare(
+        "SELECT id, user_id, public_key, counter FROM user_passkeys WHERE credential_id = ?1"
+      )
+        .bind(credId)
+        .first();
+
+      if (!passkey) {
+        return jsonResponse({ error: "Chave-senha não encontrada." }, 404, origin);
+      }
+
+      const authDataBytes = base64UrlDecodeToBytes(authDataB64);
+      const clientHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataRaw));
+      const signedData = new Uint8Array(authDataBytes.length + clientHash.length);
+      signedData.set(authDataBytes, 0);
+      signedData.set(clientHash, authDataBytes.length);
+
+      const sigBytes = base64UrlDecodeToBytes(sigB64);
+      const p1363Sig = derToP1363(sigBytes);
+      const spkiKeyBytes = base64UrlDecodeToBytes(passkey.public_key);
+
+      let isVerified = false;
+      try {
+        const cryptoKey = await crypto.subtle.importKey(
+          "spki",
+          spkiKeyBytes,
+          { name: "ECDSA", namedCurve: "P-256" },
+          false,
+          ["verify"]
+        );
+        isVerified = await crypto.subtle.verify(
+          { name: "ECDSA", hash: "SHA-256" },
+          cryptoKey,
+          p1363Sig,
+          signedData
+        );
+        if (!isVerified) {
+          isVerified = await crypto.subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" },
+            cryptoKey,
+            sigBytes,
+            signedData
+          );
+        }
+      } catch (_) {
+        try {
+          const rsaKey = await crypto.subtle.importKey(
+            "spki",
+            spkiKeyBytes,
+            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+            false,
+            ["verify"]
+          );
+          isVerified = await crypto.subtle.verify(
+            "RSASSA-PKCS1-v1_5",
+            rsaKey,
+            sigBytes,
+            signedData
+          );
+        } catch (_) {
+          isVerified = false;
+        }
+      }
+
+      if (!isVerified) {
+        return jsonResponse({ error: "Assinatura biométrica da chave-senha inválida." }, 401, origin);
+      }
+
+      const user = await env.DB.prepare(
+        "SELECT id, email, name FROM users WHERE id = ?1"
+      )
+        .bind(passkey.user_id)
+        .first();
+
+      if (!user) {
+        return jsonResponse({ error: "Usuário não encontrado." }, 404, origin);
+      }
+
+      const nowIso = new Date().toISOString();
+      await env.DB.prepare(
+        "UPDATE user_passkeys SET last_used_at = ?1 WHERE id = ?2"
+      )
+        .bind(nowIso, passkey.id)
+        .run();
+
+      await env.DB.prepare(
+        "UPDATE users SET last_login_at = ?1, failed_attempts = 0, locked_until = NULL WHERE id = ?2"
+      )
+        .bind(nowIso, user.id)
+        .run();
+
+      await env.DB.prepare("DELETE FROM passkey_challenges WHERE id = ?1")
+        .bind(challengeRow.id)
+        .run();
+
+      const token = await signJwt(
+        { sub: user.id, email: user.email, name: user.name },
+        env
+      );
+
+      const dbRow = await env.DB.prepare(
+        "SELECT revision FROM user_databases WHERE user_id = ?1"
+      )
+        .bind(user.id)
+        .first();
+
+      if (sessionId) {
+        await env.DB.prepare(
+          "UPDATE passkey_desktop_sessions SET status = 'completed', token = ?1, user_id = ?2 WHERE id = ?3"
+        )
+          .bind(token, user.id, sessionId)
+          .run();
+      }
+
+      return jsonResponse(
+        {
+          ok: true,
+          token,
+          user: { id: user.id, email: user.email, name: user.name },
+          revision: dbRow ? Number(dbRow.revision) : 1,
+        },
+        200,
+        origin
+      );
+    } catch (e) {
+      return jsonResponse({ error: "Erro ao validar chave-senha: " + e.message }, 400, origin);
+    }
+  }
+
+  // 3.1.5. POST /api/auth/passkey/desktop-session (Cria sessão temporária para login Desktop via Browser)
+  if (path === "/api/auth/passkey/desktop-session" && request.method === "POST") {
+    const sessionId = "ds_" + crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    await env.DB.prepare(
+      "INSERT INTO passkey_desktop_sessions (id, status, created_at, expires_at) VALUES (?1, 'pending', ?2, ?3)"
+    )
+      .bind(sessionId, nowIso, expiresAt)
+      .run();
+
+    return jsonResponse({ ok: true, sessionId }, 200, origin);
+  }
+
+  // 3.1.6. GET /api/auth/passkey/desktop-session (Verifica status da sessão Desktop)
+  if (path === "/api/auth/passkey/desktop-session" && request.method === "GET") {
+    const sId = url.searchParams.get("sessionId");
+    if (!sId) {
+      return jsonResponse({ error: "sessionId obrigatório." }, 400, origin);
+    }
+    const row = await env.DB.prepare(
+      "SELECT token, user_id, status FROM passkey_desktop_sessions WHERE id = ?1 AND expires_at > ?2"
+    )
+      .bind(sId, new Date().toISOString())
+      .first();
+
+    if (!row) {
+      return jsonResponse({ ok: false, status: "expired" }, 404, origin);
+    }
+    if (row.status === "completed" && row.token) {
+      const u = await env.DB.prepare("SELECT id, email, name FROM users WHERE id = ?1")
+        .bind(row.user_id)
+        .first();
+      const dbRow = await env.DB.prepare("SELECT revision FROM user_databases WHERE user_id = ?1")
+        .bind(row.user_id)
+        .first();
+
+      await env.DB.prepare("DELETE FROM passkey_desktop_sessions WHERE id = ?1").bind(sId).run();
+
+      return jsonResponse(
+        {
+          ok: true,
+          status: "completed",
+          token: row.token,
+          user: u,
+          revision: dbRow ? Number(dbRow.revision) : 1,
+        },
+        200,
+        origin
+      );
+    }
+    return jsonResponse({ ok: true, status: "pending" }, 200, origin);
+  }
+
+  // 3.1.7. GET /api/auth/passkey/list (Lista Chaves-senha cadastradas do usuário)
+  if (path === "/api/auth/passkey/list" && request.method === "GET") {
+    if (!userId) {
+      return jsonResponse({ error: "Sessão não autenticada." }, 401, origin);
+    }
+    const rows = await env.DB.prepare(
+      "SELECT id, credential_id, device_name, created_at, last_used_at FROM user_passkeys WHERE user_id = ?1 ORDER BY created_at DESC"
+    )
+      .bind(userId)
+      .all();
+
+    return jsonResponse({ ok: true, passkeys: rows?.results || [] }, 200, origin);
+  }
+
+  // 3.1.8. DELETE /api/auth/passkey/:id (Exclui uma Chave-senha cadastrada)
+  if (path.startsWith("/api/auth/passkey/") && request.method === "DELETE") {
+    if (!userId) {
+      return jsonResponse({ error: "Sessão não autenticada." }, 401, origin);
+    }
+    const passkeyId = path.split("/").pop();
+    if (!passkeyId) {
+      return jsonResponse({ error: "ID inválido." }, 400, origin);
+    }
+    await env.DB.prepare("DELETE FROM user_passkeys WHERE id = ?1 AND user_id = ?2")
+      .bind(passkeyId, userId)
+      .run();
+
+    return jsonResponse({ ok: true, message: "Chave-senha excluída." }, 200, origin);
   }
 
   // ==========================================================================
