@@ -26,9 +26,10 @@ Logo abaixo do cabeçalho, dois cartões compactos (no mesmo padrão visual da t
 Ambos ocupam altura mínima (~50px), garantindo que a grade dos dias fique ampla e totalmente visível sem empurrar o conteúdo para fora da tela.
 
 ### 1.4 Resolução Rápida Direto pelo Calendário (Fluxo de 1 Clique)
-Você não precisa sair da Agenda para dar baixa em suas contas:
-1. **Contas a Pagar e Receitas:** Clique sobre a pílula do lançamento na grade. No diálogo que se abre, clique no botão verde **"Marcar como Paga"** ou **"Marcar como Recebida"**. O item é conciliado na hora e os totalizadores do topo se atualizam automaticamente. Se cometeu um engano, basta clicar no item e escolher **"Desmarcar"**.
-2. **Faturas de Cartão de Crédito:** As compras do cartão não poluem a grade individualmente; elas aparecem de forma consolidada no dia do **vencimento da fatura**. Ao clicar na fatura, você vê o valor total de compras, o que já foi pago e o saldo pendente, com o botão **"Pagar Fatura"** para realizar o pagamento direto.
+Você não precisa sair da Agenda para gerenciar suas contas:
+1. **Clicar no Número do Dia:** Ao clicar diretamente sobre o **número do dia** (`day.dayNumber`), uma janela modal se abre exibindo detalhadamente todas as contas, receitas e faturas daquela data. No topo da janela, você também encontra o menu `+` para lançar uma nova despesa, receita ou transferência para aquele dia específico.
+2. **Contas a Pagar e Receitas na Grade:** Clique sobre a pílula do lançamento na grade. No diálogo que se abre, clique no botão verde **"Marcar como Paga"** ou **"Marcar como Recebida"**. O item é conciliado na hora e os totalizadores do topo se atualizam automaticamente. Se cometeu um engano, basta clicar no item e escolher **"Desmarcar"**.
+3. **Faturas de Cartão de Crédito:** As compras do cartão não poluem a grade individualmente; elas aparecem de forma consolidada no dia do **vencimento da fatura**. Ao clicar na fatura, você vê o valor total de compras, o que já foi pago e o saldo pendente, com o botão **"Pagar Fatura"** para realizar o pagamento direto.
 
 ### 1.5 Filtros Rápidos do Topo
 Chips intuitivos permitem alternar o que você deseja visualizar:

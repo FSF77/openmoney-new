@@ -53,6 +53,15 @@ void main() {
 
     // Cartão de resumo e item
     expect(find.textContaining('Condomínio Mensal'), findsWidgets);
+
+    // Clicar no número do dia abre o diálogo de lançamentos daquele dia
+    final dayNum = DateTime.now().day.toString();
+    final dayTarget = find.text(dayNum).first;
+    await t.tap(dayTarget);
+    await t.pumpAndSettle();
+
+    expect(find.textContaining('Dia '), findsOneWidget);
+    expect(find.text('Fechar'), findsOneWidget);
   });
 
   testWidgets('renderiza tela da Agenda em modo Mobile responsivo', (t) async {

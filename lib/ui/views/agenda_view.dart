@@ -870,36 +870,50 @@ class _AgendaViewState extends State<AgendaView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Número do dia
+          // Número do dia e ações
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 18,
-                height: 18,
-                alignment: Alignment.center,
-                decoration: day.isToday
-                    ? BoxDecoration(
-                        color: colors.accent,
-                        shape: BoxShape.circle,
-                      )
-                    : null,
-                child: Text(
-                  '${day.dayNumber}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: day.isToday ? FontWeight.w900 : FontWeight.w700,
-                    color: day.isToday
-                        ? Colors.white
-                        : (day.isCurrentMonth
-                            ? colors.textPrimary
-                            : colors.textSecondary.withValues(alpha: 0.4)),
+              // Número do dia clicável com tooltip e feedback
+              Tooltip(
+                message: 'Ver lançamentos do dia ${day.dayNumber}',
+                child: InkWell(
+                  onTap: () => _showDayEntriesDialog(day),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: day.isToday
+                          ? BoxDecoration(
+                              color: colors.accent,
+                              shape: BoxShape.circle,
+                            )
+                          : null,
+                      child: Text(
+                        '${day.dayNumber}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: day.isToday ? FontWeight.w900 : FontWeight.w700,
+                          color: day.isToday
+                              ? Colors.white
+                              : (day.isCurrentMonth
+                                  ? colors.textPrimary
+                                  : colors.textSecondary.withValues(alpha: 0.4)),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+
+              // Ação à direita: Novo lançamento (+)
               PopupMenuButton<String>(
                 tooltip: 'Novo lançamento',
                 padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                 iconSize: 13,
                 icon: Icon(
                   Icons.add,
@@ -1531,27 +1545,72 @@ class _AgendaViewState extends State<AgendaView> {
                 color: colors.textPrimary,
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
+            PopupMenuButton<String>(
               tooltip: 'Adicionar lançamento neste dia',
-              onPressed: () {
+              icon: const Icon(Icons.add_circle_outline),
+              onSelected: (txType) {
                 Navigator.of(ctx).pop();
-                _openTransactionModal(txType: 'expense', initialDate: day.date);
+                _openTransactionModal(txType: txType, initialDate: day.date);
               },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'expense',
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Icon(Icons.arrow_downward_rounded, size: 14, color: Colors.redAccent),
+                      SizedBox(width: 8),
+                      Text('Nova Despesa', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'income',
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Icon(Icons.arrow_upward_rounded, size: 14, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text('Nova Receita', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'transfer',
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_horiz_rounded, size: 14, color: colors.accent),
+                      const SizedBox(width: 8),
+                      const Text('Nova Transferência', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         content: SizedBox(
           width: 440,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: day.entries.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, idx) {
-              final entry = day.entries[idx];
-              return _buildMobileEntryTile(colors, entry);
-            },
-          ),
+          child: day.entries.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(
+                      'Nenhum vencimento ou receita para este dia.',
+                      style: TextStyle(fontSize: 13, color: colors.textSecondary),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: day.entries.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, idx) {
+                    final entry = day.entries[idx];
+                    return _buildMobileEntryTile(colors, entry);
+                  },
+                ),
         ),
         actions: [
           TextButton(
