@@ -7490,6 +7490,9 @@ class MoneyStore extends ChangeNotifier {
     var grandCurrent = 0;
     var grandSpent = 0;
     var grandDeducted = 0;
+    var grandCategoriesRemaining = 0;
+    var grandOverrun = 0;
+    var overrunCount = 0;
 
     final sortedCategories = predsByCategory.keys.toList()..sort();
 
@@ -7551,12 +7554,16 @@ class MoneyStore extends ChangeNotifier {
 
       final catDeducted = catBase < netSpentInBase ? catBase : netSpentInBase;
       final catRemaining = (catBase - netSpentInBase) > 0 ? (catBase - netSpentInBase) : 0;
+      final catOverrun = netSpentInBase > catBase ? netSpentInBase - catBase : 0;
       final pct = catBase > 0 ? (netSpentInBase / catBase).clamp(0.0, 1.0) : 0.0;
 
       grandBase += catBase;
       grandCurrent += catCurrent;
       grandSpent += netSpentInBase;
       grandDeducted += catDeducted;
+      grandCategoriesRemaining += catRemaining;
+      grandOverrun += catOverrun;
+      if (catOverrun > 0) overrunCount++;
 
       groups.add(PredictionCategoryGroup(
         category: cat,
@@ -7571,7 +7578,7 @@ class MoneyStore extends ChangeNotifier {
       ));
     }
 
-    final grandRemaining = (grandBase - grandSpent) > 0 ? (grandBase - grandSpent) : 0;
+    final globalRemaining = grandBase - grandSpent;
 
     return PredictionsSummaryReport(
       periodLabel: fmtMonth(targetMonth),
@@ -7579,7 +7586,10 @@ class MoneyStore extends ChangeNotifier {
       totalCurrentCents: grandCurrent,
       totalSpentCents: grandSpent,
       totalDeductedCents: grandDeducted,
-      totalRemainingCents: grandRemaining,
+      totalRemainingCents: grandCategoriesRemaining,
+      totalOverrunCents: grandOverrun,
+      overrunCategoriesCount: overrunCount,
+      globalRemainingCents: globalRemaining,
       groups: groups,
       allPredictions: allPredItems,
     );

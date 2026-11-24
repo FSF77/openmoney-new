@@ -145,6 +145,12 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
           builder: (context, c) {
             final isWide = c.maxWidth >= 780;
             final w = isWide ? (c.maxWidth - 36) / 4 : (c.maxWidth - 12) / 2;
+            final spentPct = report.totalPlannedBaseCents > 0
+                ? ((report.totalSpentCents / report.totalPlannedBaseCents) * 100).round()
+                : 0;
+            final predCount = report.allPredictions.length;
+            final catCount = report.groups.length;
+            final overrunCats = report.overrunCategoriesCount;
 
             return Wrap(
               spacing: 12,
@@ -155,6 +161,7 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                   child: KpiMetricCard(
                     label: 'Teto Previsto',
                     value: formatCurrency(report.totalPlannedBaseCents, cur, showSymbol: false),
+                    subtitle: '$predCount ${predCount == 1 ? 'previsão' : 'previsões'} ($catCount ${catCount == 1 ? 'cat.' : 'cats.'})',
                     valueColor: colors.textPrimary,
                     icon: Icons.track_changes,
                   ),
@@ -162,28 +169,41 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                 SizedBox(
                   width: w,
                   child: KpiMetricCard(
-                    label: 'Total Abatido',
-                    value: formatCurrency(report.totalDeductedCents, cur, showSymbol: false),
-                    valueColor: colors.warning,
+                    label: 'Gasto Real',
+                    value: formatCurrency(report.totalSpentCents, cur, showSymbol: false),
+                    subtitle: report.totalPlannedBaseCents > 0
+                        ? '$spentPct% do teto previsto'
+                        : 'Sem teto definido',
+                    valueColor: report.totalSpentCents > report.totalPlannedBaseCents
+                        ? colors.expense
+                        : colors.warning,
                     icon: Icons.call_made,
                   ),
                 ),
                 SizedBox(
                   width: w,
                   child: KpiMetricCard(
-                    label: 'Saldo',
-                    value: formatCurrency(report.totalRemainingCents, cur, showSymbol: false),
-                    valueColor: report.totalRemainingCents > 0 ? colors.income : colors.expense,
-                    icon: Icons.account_balance_wallet,
+                    label: 'Estouro',
+                    value: formatCurrency(report.totalOverrunCents, cur, showSymbol: false),
+                    subtitle: overrunCats > 0
+                        ? '$overrunCats ${overrunCats == 1 ? 'cat. estourada' : 'cats. estouradas'}'
+                        : 'Dentro dos tetos',
+                    valueColor: report.totalOverrunCents > 0 ? colors.expense : colors.income,
+                    icon: report.totalOverrunCents > 0
+                        ? Icons.warning_amber_rounded
+                        : Icons.check_circle_outline,
                   ),
                 ),
                 SizedBox(
                   width: w,
                   child: KpiMetricCard(
-                    label: 'Previsões',
-                    value: '${report.allPredictions.length}',
-                    valueColor: colors.accent,
-                    icon: Icons.format_list_numbered,
+                    label: 'Saldo',
+                    value: formatCurrency(report.globalRemainingCents, cur, showSymbol: false),
+                    subtitle: report.totalOverrunCents > 0
+                        ? 'Nos tetos: ${formatCurrency(report.totalRemainingCents, cur, showSymbol: false)}'
+                        : 'Disponível no orçamento',
+                    valueColor: report.globalRemainingCents > 0 ? colors.income : colors.expense,
+                    icon: Icons.account_balance_wallet,
                   ),
                 ),
               ],

@@ -44,6 +44,10 @@ class PredictionCategoryGroup {
     required this.predictions,
     required this.spentTransactions,
   });
+
+  int get overrunCents =>
+      totalSpentCents > totalBaseCents ? totalSpentCents - totalBaseCents : 0;
+  bool get isOverrun => totalSpentCents > totalBaseCents;
 }
 
 class PredictionsSummaryReport {
@@ -53,6 +57,9 @@ class PredictionsSummaryReport {
   final int totalSpentCents;
   final int totalDeductedCents;
   final int totalRemainingCents;
+  final int totalOverrunCents;
+  final int overrunCategoriesCount;
+  final int globalRemainingCents;
   final List<PredictionCategoryGroup> groups;
   final List<PredictionItemDetail> allPredictions;
 
@@ -63,6 +70,9 @@ class PredictionsSummaryReport {
     required this.totalSpentCents,
     required this.totalDeductedCents,
     required this.totalRemainingCents,
+    required this.totalOverrunCents,
+    required this.overrunCategoriesCount,
+    required this.globalRemainingCents,
     required this.groups,
     required this.allPredictions,
   });

@@ -1,108 +1,108 @@
 # Guia do Usuário: Gestão e Acompanhamento de Previsões Orçamentárias
 
-Este documento descreve o funcionamento, as regras contábeis e o fluxo operacional da tela dedicada de **Previsões** no OpenMoney (disponível para macOS, Windows, Web e Mobile).
+Este guia mostra como usar a tela de **Previsões** no OpenMoney (**Desktop macOS/Windows**, **Web PWA** e **Mobile iOS/Android**) para reservar tetos mensais de gastos, acompanhar o consumo real por categoria e evitar surpresas no orçamento.
 
 ---
 
-## 1. O que são as Previsões Orçamentárias?
+## 1. Passo a Passo Prático de Uso
 
-No OpenMoney, uma **Previsão** é uma transação planejada que funciona como uma **reserva prévia de teto de gastos** para uma categoria dentro de uma competência mensal (ex.: *Previsão Mercado*, *Previsão Combustível*, *Previsão Farmácia*).
+### 1.1 Onde acessar
+No menu lateral (ou gaveta no Mobile), dentro da seção **PLANEJAMENTO**, clique em **Previsões** (ícone de varinha mágica, logo acima de *Limite de Gastos*).
 
-Diferente do *Limite de Gastos* (que atua como um teto teórico global em relatórios), a **Previsão afeta ativamente o saldo projetado e o fluxo de caixa**, garantindo que o dinheiro reservado para essas despesas essenciais conste como comprometido no orçamento.
+### 1.2 Criando uma Nova Previsão em 1 Clique
+1. Clique no botão **+ Nova Previsão** no canto superior direito.
+2. Preencha os campos do formulário:
+   - **Conta**: escolha a conta bancária ou cartão de crédito onde a previsão será lançada.
+   - **Data**: selecione a data de competência (`dd/mm/aaaa`).
+   - **Categoria**: escolha a categoria ou subcategoria de despesa (listadas de forma hierárquica e indentada).
+   - **Descrição**: digite apenas o complemento (ex.: `Mercado`, `Combustível`, `Farmácia`). O sistema mantém automaticamente o prefixo padrão **`Previsão`**.
+   - **Valor do Teto**: informe o valor máximo planejado para o mês.
+   - **Observações**: anotações opcionais.
+   - **Tipo de Previsão**: escolha entre **Única** (apenas o mês selecionado) ou **Recorrente** (repete automaticamente nos meses seguintes conforme a frequência escolhida).
+   - **Ajustar com gastos do mês imediatamente**: mantenha marcado se quiser que o sistema já abata os gastos existentes daquela categoria ao salvar.
+3. Clique em **Salvar**.
 
----
+### 1.3 Entendendo os 4 Indicadores (KPIs) do Topo
+No topo da tela de **Previsões**, você acompanha a saúde do seu orçamento mensal por meio de 4 cards:
 
-## 2. A Tela de Previsões
+1. **Teto Previsto**:
+   - Soma de todos os valores base planejados para o mês.
+   - Exibe no subtítulo quantas previsões e categorias estão ativas no período.
+2. **Gasto Real**:
+   - Soma real e integral de **todas as despesas** lançadas nas categorias que possuem previsão no mês (sem travar ou ocultar valores que ultrapassaram o teto).
+   - Exibe no subtítulo o percentual já consumido do teto global previsto (ex.: `92% do teto previsto`).
+3. **Estouro**:
+   - Soma exata apenas do valor que **ultrapassou** o teto nas categorias estouradas.
+   - Fica em **vermelho** quando há estouro (ex.: `2 cats. estouradas`) ou em **verde** (`Dentro dos tetos`) quando nenhuma categoria excedeu o planejado.
+4. **Saldo**:
+   - É o **Saldo Líquido Global** do orçamento (`Teto Previsto − Gasto Real`), mostrando quanto dinheiro real ainda resta antes de estourar o orçamento total do mês.
+   - Quando houver estouro em alguma categoria, o subtítulo exibe **`Nos tetos: ...`**, informando quanto ainda existe disponível somando apenas as categorias que não estouraram.
 
-Acessível na seção **PLANEJAMENTO** do menu lateral (acima de *Limite de Gastos*) com o ícone de varinha mágica / ajuste (`wand.and.stars` / `auto_fix_high`).
-
-### 2.1 Barra Superior e Controles
-- **Seletor de Competência (`< Mês/Ano >`)**: Permite navegar pelos meses do ano para analisar tanto o planejamento corrente quanto meses futuros ou passados.
-- **Modo de Apuração**: Alterna entre:
-  - **Por Mês**: Abate despesas reais cuja data do lançamento pertence ao mês civil.
-  - **Por Fatura do Cartão**: Abate despesas bancárias com data no mês e despesas de cartão cuja fatura vence no mês (regime de desembolso de caixa).
-- **Horizonte de Meses Avaliados**: Configurado em **Ajustes & Personalização** (1, 2, 3, 6 ou 12 meses, padrão: **3 meses**), definindo quantas competências consecutivas a rotina avalia e ajusta ao ser disparada.
-- **Botão "Ajustar"**: Executa a rotina automática que calcula todos os gastos reais das categorias e abate dos tetos previstos, exibindo o modal de resumo com a data de cada previsão (`dd/mm/aaaa`), valor original, gastos consumidos e novo saldo.
-- **Botão "+ Nova Previsão"**: Abre o formulário padronizado de criação.
-
-### 2.2 Cards de Indicadores (KPIs)
-No topo da tela são exibidos 4 cards consolidados da competência:
-1. **TETO PREVISTO**: Soma dos valores base originais planejados para o mês.
-2. **TOTAL ABATIDO**: Soma dos valores efetivamente consumidos pelas compras reais das categorias previstas.
-3. **SALDO REMANESCENTE**: O que resta de orçamento livre nas previsões ($Base - Abatido$). Exibido em verde quando positivo e em vermelho caso esgotado.
-4. **PREVISÕES**: Quantidade total de lançamentos de previsão cadastrados no mês.
-
-### 2.3 Visão por Categoria (Barras de Progresso e Drill-Down)
-Cada categoria que possui previsões ganha um card estruturado:
-- **Cabeçalho da Categoria**: Ícone, nome da categoria, valor base original, total gasto real e saldo remanescente.
-- **Barra de Progresso Dinâmica**:
-  - 🟢 **Verde**: Consumo saudável (< 70% do teto).
-  - 🟡 **Amarelo**: Atenção (entre 70% e 99% do teto).
-  - 🔴 **Vermelho**: Teto atingido / esgotado (≥ 100%).
-- **Lista de Previsões Cadastradas**:
-  - Exibe a **descrição da previsão** na linha superior e, logo abaixo, o **nome da conta associada** junto ao badge **ESGOTADA** (quando o saldo estiver zerado), evitando sobreposição com o valor disponível à direita em telas estreitas.
-  - Ações rápidas:
-    - ✏️ **Editar**: Abre o modal de edição do lançamento.
-    - 🔄 **Restaurar Teto**: Reseta o valor atual de volta para o valor base original gravado no memo.
-- **Acordeão "Ver lançamentos que abateram este teto"**:
-  - Exibe a lista completa de todas as despesas reais que causaram o abatimento da previsão.
-  - Colunas: **Data (`dd/mm/aaaa`)**, **Favorecido / Estabelecimento**, **Notas / Observações (`• Nota`)** e **Valor**.
-
----
-
-## 3. Regras de Negócio e Comportamento Contábil
-
-### 3.1 Convenção de Nomenclatura e Identificação
-- Uma transação é reconhecida como previsão quando a descrição inicia com o prefixo **`Previsão`** (validado por `isPredictionPayee`).
-- Na criação manual, o sistema preenche ou preserva automaticamente esse prefixo.
-
-### 3.2 Preservação do Teto Base Original
-- Ao criar ou salvar uma previsão, a base orçamentária é gravada de forma transparente no campo de notas (`memo`):
-  ```
-  [Previsão base: R$ 1.500,00] Notas adicionais opcionais...
-  ```
-- Isso permite que o usuário clique em **"Ajustar"** quantas vezes quiser ao longo do mês à medida que novas compras forem inseridas, sem que ocorra dupla dedução: o recálculo sempre parte do teto original.
-
-### 3.3 Regra de Previsão Esgotada (Valor Zerado)
-- **Não exclusão**: Quando as despesas reais atingem ou superam o teto da previsão, a transação **NÃO é excluída** do banco de dados.
-- O seu valor (`amt`) é atualizado para **R$ 0,00**, mantendo a base original memorizada.
-- **Motivo**: Preservar o histórico completo do planejamento, permitindo ao usuário auditar o que havia sido planejado e restaurar o teto a qualquer momento.
-
-### 3.4 Regra Contábil de Vinculação da Previsão
-- **A previsão orçamentária pertence ao mês estritamente pela sua data de lançamento (`tx.date`):**
-  - Mesmo que uma previsão tenha sido criada em uma conta de cartão de crédito, o sistema **não desloca** a previsão para a data da fatura daquele cartão.
-  - Uma previsão com data de lançamento em Novembro (`05/11/2026`) representa com exatidão o teto planejado para **Novembro**.
-
-### 3.5 Modos de Abatimento (`predMode`) e Regime de Desembolso
-1. **Regime Civil (`predMode == "month"` — Por Mês):**
-   - Abate todos os gastos reais da categoria cuja **data de lançamento** pertença ao mês (`date.startsWith(targetMonth)`).
-   - Engloba transações em contas correntes, caixas e cartões de crédito sem distinção de vencimento de fatura.
-2. **Regime de Caixa / Desembolso (`predMode == "invoice"` — Por Fatura de Cartão):**
-   - **Gastos bancários (corrente, poupança, dinheiro):** entram pela **data do lançamento**, pois a saída do saldo ocorre imediatamente no próprio mês.
-   - **Gastos em cartão de crédito:** entram pela **competência de vencimento da fatura** (`(t.ik ?? invKeyFor(cardCfg, t.date)) == targetMonth`), pois o desembolso efetivo para o pagamento ocorre na data de vencimento da fatura.
-
-### 3.6 Horizonte Configurável de Meses (`predMonths`)
-- **Parâmetro nos Ajustes:** Em **Ajustes & Personalização › Geral & Inicialização › Meses no Ajuste de Previsões**, o usuário pode configurar quantos meses consecutivos são avaliados ao disparar a rotina:
-  - **1 mês** (apenas a competência selecionada).
-  - **2 meses** (mês selecionado + próximo mês).
-  - **3 meses (Padrão)** (mês selecionado + 2 meses futuros).
-  - **6 meses** (semestre a partir do mês selecionado).
-  - **12 meses** (ano completo a partir do mês selecionado).
-- **Validade:** Aplica-se a **ambos os regimes** (`Por Mês` e `Por Fatura de Cartão`).
-- **Tooltip Dinâmico:** No cabeçalho do extrato de contas, o botão de modo de abatimento exibe no tooltip a quantidade de meses ativa configurada (ex.: *"...(3 meses)"* ou *"...(1 mês)"*).
+### 1.4 Acompanhando por Categoria e Ajustando em 1 Clique
+- **Barra de Progresso**:
+  - 🟢 **Verde**: consumo saudável (< 70% do teto).
+  - 🟡 **Amarelo**: atenção (entre 70% e 99% do teto).
+  - 🔴 **Vermelho**: teto atingido ou ultrapassado (≥ 100%).
+- **Botão "Ajustar"**: no cabeçalho, recalcula e abate os gastos reais sobre os tetos das previsões. Se uma previsão atingir o teto, ela fica zerada (`0,00`) com o badge **ESGOTADA** — **nunca é excluída**, preservando o histórico para conferência.
+- **Restaurar Teto (🔄)** e **Editar (✏️)**: em cada previsão dentro do card da categoria, você pode editar o lançamento ou restaurar o valor atual para a base original com 1 clique.
+- **Ver lançamentos que abateram este teto**: clique na linha expansível abaixo da previsão para ver cada despesa real da categoria (`dd/mm/aaaa`, favorecido, `• observação` e valor).
+- **Analisar IA** *(quando o Assistente de IA estiver habilitado)*: abre uma análise detalhada das suas previsões e aumentos de categoria no mês.
 
 ---
 
-## 4. Modal de Nova Previsão
+## 2. Caso Prático do Dia a Dia
 
-A tela de inclusão conta com campos proporcionais e alinhados:
-- **Conta**: Escolha da conta de débito ou cartão.
-- **Data**: Data do lançamento (formato `dd/mm/aaaa`), definindo a competência da previsão.
-- **Categoria**: Dropdown hierárquico com categorias e subcategorias devidamente indentadas (`   ↳ Subcategoria`), restrito a despesas (opções de transferência são ocultadas por não se aplicarem a limites de gastos).
-- **Tipo de Previsão**: Seletor para definir se a previsão é:
-  - **Única**: Válida apenas para a competência da data selecionada.
-  - **Recorrente**: Repete-se automaticamente conforme a **frequência** escolhida (Mensal, Semanal, Quinzenal, Anual, etc.), com opção de definir uma **data de término**.
-- **Descrição**: Campo limpo com prompt explicativo `Previsão (ex: Mercado, Combustível, Farmácia...)`.
-- **Valor do Teto**: Valor planejado em centavos/moeda da base.
-- **Observações**: Anotações livres.
-- **Toggle "Ajustar com gastos do mês imediatamente"**: Ao salvar, já executa a rotina de abatimento caso já existam gastos reais cadastrados na categoria naquele mês.
+Imagine que você planejou **R$ 5.000,00** distribuídos em 7 previsões no mês, e durante o mês realizou os seguintes gastos:
+
+| Categoria | Base Planejada | Gasto Real | Saldo no Teto | Estouro |
+| :--- | ---: | ---: | ---: | ---: |
+| Alimentação › Almoço | 200,00 | 143,45 | 56,55 | 0,00 |
+| Alimentação › Bares e Restaurantes | 400,00 | 946,82 | 0,00 *(Esgotada)* | **546,82** |
+| Alimentação › Mercado | 3.000,00 | 2.397,79 | 602,21 | 0,00 |
+| Cuidados Pessoais | 150,00 | 27,98 | 122,02 | 0,00 |
+| Farmácia | 150,00 | 463,05 | 0,00 *(Esgotada)* | **313,05** |
+| Transporte › Combustível | 800,00 | 369,35 | 430,65 | 0,00 |
+| Transporte › Metro, Ônibus e Taxi | 300,00 | 263,88 | 36,12 | 0,00 |
+| **Totais** | **5.000,00** | **4.612,32** | **1.247,55** | **859,87** |
+
+Nos **4 KPIs do topo**, você enxergará instantaneamente:
+- **Teto Previsto**: `5.000,00` (`7 previsões (7 cats.)`)
+- **Gasto Real**: `4.612,32` (`92% do teto previsto`)
+- **Estouro**: `859,87` (`2 cats. estouradas`)
+- **Saldo**: `387,68` (`Nos tetos: 1.247,55`)
+
+Assim fica claro que, embora ainda existam `1.247,55` livres nos tetos de Mercado, Combustível, Almoço, etc., você já estourou `859,87` em Bares e Farmácia — portanto, seu **saldo real global** antes de ultrapassar os `5.000,00` do mês é **`387,68`**.
+
+---
+
+## 3. Dúvidas Comuns (FAQ) e Controle de Segurança
+
+- **Por que o "Saldo" no card superior pode ser menor que a soma dos saldos das categorias?**
+  Porque o card **Saldo** reflete o orçamento global (`Teto Previsto − Gasto Real`). Se você estourou uma categoria (ex.: gastou R$ 946,82 em um teto de R$ 400,00), esse excesso consome parte da folga global. O subtítulo `Nos tetos: ...` continua mostrando exatamente quanto falta para esgotar as categorias que ainda têm saldo.
+- **Por que uma previsão esgotada fica com valor R$ 0,00 em vez de ser apagada?**
+  Para que você não perca o controle nem o histórico do que foi planejado. Mantendo o lançamento zerado com o badge **ESGOTADA**, o sistema continua listando os gastos daquela categoria e permite restaurar a base original com 1 clique.
+- **A previsão em cartão de crédito muda de mês conforme a fatura?**
+  Não. A previsão sempre pertence ao mês da sua **data de lançamento** (`tx.date`). O que muda conforme o modo escolhido no botão de engrenagem/filtro (`Por Mês` vs. `Por Fatura do Cartão`) é quais gastos reais abatem aquela previsão.
+- **Os dados das previsões ficam salvos com segurança?**
+  Sim. Cada previsão é uma transação padrão com prefixo `Previsão` e tag `[Previsão base: ...]` no campo de notas, compatível com o backup automático local em `.zip`, Sync v2 na nuvem e proteção Anti-Wipe.
+
+---
+
+## 4. Detalhamento Técnico e Arquitetura (Desenvolvedores)
+
+### 4.1 Identificação e Preservação da Base
+- **Prefixo obrigatório**: `isPredictionPayee(payee)` verifica o prefixo normalizado `"previsao"`.
+- **Tag de base no `memo`**: `[Previsão base: R$ X,XX]` gravada por `memoWithBaseTag(memo, baseCents)` e lida por `parseBaseFromMemo(memo)`. Isso garante recálculo determinístico sem dedução duplicada ao acionar `adjustPredictions`.
+
+### 4.2 Modos de Apuração (`predMode`) e Horizonte (`predMonths`)
+- **`predMode == "month"` (Padrão)**: filtra despesas reais da categoria pela data do lançamento (`t.date.startsWith(targetMonth)`).
+- **`predMode == "invoice"` (Por Fatura de Cartão)**: despesas em contas bancárias entram pela data do lançamento, enquanto compras em cartão de crédito entram pela competência de vencimento da fatura (`(t.ik ?? invKeyFor(cardCfg, t.date)) == targetMonth`).
+- **`predMonths`**: configurável em *Ajustes & Personalização* (1, 2, 3 [padrão], 6 ou 12 meses), define quantas competências consecutivas são ajustadas por `adjustPredictions`.
+
+### 4.3 Estruturas e Arquivos no Flutter (`lib/`)
+- **`lib/models/prediction_models.dart`**:
+  - `PredictionItemDetail`: item individual com `baseCents`, `currentCents`, `deductedCents`, `isExhausted`.
+  - `PredictionCategoryGroup`: agrupamento por categoria com `totalBaseCents`, `totalSpentCents`, `remainingCents`, `overrunCents`, `isOverrun`, `percentSpent`, `predictions` e `spentTransactions`.
+  - `PredictionsSummaryReport`: consolidação mensal com `totalPlannedBaseCents`, `totalSpentCents`, `totalOverrunCents`, `overrunCategoriesCount`, `totalRemainingCents` (soma nos tetos) e `globalRemainingCents` (`totalPlannedBaseCents - totalSpentCents`).
+- **`lib/store/money_store.dart`**: métodos `getPredictionsReport(targetMonth)`, `adjustPredictions(targetMonth)` e `restorePredictionBase(txId)`.
+- **`lib/ui/views/predictions_management_view.dart`**: tela responsiva para Desktop, Web e Mobile com `KpiMetricCard`, `Wrap` e `LayoutBuilder`.
