@@ -20,15 +20,19 @@ for arg in "$@"; do
         --help|-h)
             echo "Uso: ./scripts/publish_release_macos.sh [VERSÃO] [\"Notas da Versão\"]"
             echo ""
+            echo "Padrão CalVer automático (YYYY.M.D+BUILD):"
+            echo "  Se nenhuma VERSÃO for informada, utiliza automaticamente a data de hoje ($(date "+%Y.%-m.%-d"))."
+            echo ""
             echo "Exemplos:"
             echo "  ./scripts/publish_release_macos.sh"
-            echo "  ./scripts/publish_release_macos.sh 2.1.1"
-            echo "  ./scripts/publish_release_macos.sh 2.1.1 \"Correções e melhorias gerais\""
+            echo "  ./scripts/publish_release_macos.sh \"Correções e melhorias gerais\""
+            echo "  ./scripts/publish_release_macos.sh 2026.11.24 \"Correções e melhorias gerais\""
             exit 0
             ;;
         *)
             if [[ "$arg" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-                CUSTOM_VERSION="$arg"
+                # Normaliza cada segmento numérico para remover zeros à esquerda (compatibilidade SemVer/pubspec.yaml)
+                CUSTOM_VERSION=$(echo "$arg" | awk -F. '{printf "%d.%d.%d", $1, $2, $3}')
             elif [ -z "$RELEASE_NOTES" ]; then
                 RELEASE_NOTES="$arg"
             fi
@@ -36,22 +40,25 @@ for arg in "$@"; do
     esac
 done
 
-# Extrai versão atual do pubspec.yaml
+# Extrai versão e build atuais do pubspec.yaml
 CURRENT_VERSION=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 1)
 CURRENT_BUILD=$(grep -E "^version:" "${ROOT_DIR}/pubspec.yaml" | head -n 1 | awk '{print $2}' | cut -d '+' -f 2)
 
+# Gera a versão CalVer do dia (YYYY.M.D sem zeros à esquerda para compatibilidade estrita com pubspec.yaml)
+TODAY_CALVER=$(date "+%Y.%-m.%-d")
+
 if [ -z "$CURRENT_VERSION" ]; then
-    CURRENT_VERSION="2.0.0"
+    CURRENT_VERSION="$TODAY_CALVER"
 fi
 if [ -z "$CURRENT_BUILD" ]; then
     CURRENT_BUILD="1"
 fi
 
-# Define a versão final
+# Define a versão final (usa a informada ou a data CalVer do dia automaticamente)
 if [ -n "$CUSTOM_VERSION" ]; then
     VERSION="$CUSTOM_VERSION"
 else
-    VERSION="$CURRENT_VERSION"
+    VERSION="$TODAY_CALVER"
 fi
 
 # Incrementa automaticamente o Build Number (+1)

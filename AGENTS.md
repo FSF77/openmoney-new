@@ -30,9 +30,9 @@ Este documento registra as diretrizes, repositório oficial, versionamento e flu
    - **Isolamento Absoluto de Testes Automatizados (Zero-Impact Guard):** O `MoneyStore` e a camada de I/O nativo (`platform_io_native`) detectam automaticamente `Platform.environment['FLUTTER_TEST']` e redirecionam o `Application Support` para diretórios temporários (`OpenMoney_Test_Support`). Testes automatizados (`flutter test`) nunca acessam ou gravam no `config.json` real da máquina de desenvolvimento nem alteram referências de bases ou contas locais/nuvem.
    - **Atualização Compulsória do Dicionário de Dados (`docs/architecture/dicionario-de-dados.md`):** Toda e qualquer adição, alteração ou remoção de campos em modelos locais (`openmoney.json`), tabelas relacionais no Cloudflare D1, estruturas em memória (DTOs) ou chaves de persistência/sincronização DEVE ser documentada e sincronizada imediatamente no Dicionário de Dados oficial, mantendo descrições, tipos, valores padrão, chaves primárias/estrangeiras e regras de validação rigorosamente atualizadas em todo desenvolvimento.
 
-3. **Política de Versionamento:**
-   - **Versão Semântica (`Version`):** Controlada em `pubspec.yaml` (ex: `2.5.0`).
-   - **Build Number:** Incrementado automaticamente (`+1`) a cada compilação de release no `pubspec.yaml` e sincronizado em `lib/services/update_service.dart` e `version.json`.
+3. **Política de Versionamento (CalVer + Build Sequencial):**
+   - **Versão por Data (`CalVer — YYYY.M.D`):** Controlada em `pubspec.yaml` no formato `YYYY.M.D+BUILD` (ex: `2026.11.24+170`), sem zeros à esquerda nos segmentos de mês/dia para compatibilidade estrita com a especificação do `pubspec.yaml` do Dart/Flutter.
+   - **Build Number (`+BUILD`):** Incrementado automaticamente (`+1`) a cada compilação de release no `pubspec.yaml` e sincronizado em `lib/services/update_service.dart` e `version.json` (servindo também como critério de desempate para múltiplos builds publicados no mesmo dia).
 
 4. **Diretriz de Documentação e Manuais (User-First Always):**
    - Todo manual e guia de uso (`docs/manual/`) deve seguir estritamente a ordem centrada no usuário:
@@ -49,9 +49,9 @@ Este documento registra as diretrizes, repositório oficial, versionamento e flu
 - **Comando único de compilação e publicação:**
   ```bash
   cd /Users/fabiano/Developer/OpenMoneyFlutter
-  ./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]
+  ./scripts/publish_release_macos.sh ["Notas da Versão"]
   ```
-  *(Exemplo: `./scripts/publish_release_macos.sh 2.5.1 "Notas da versão..."`)*
+  *(Exemplo: `./scripts/publish_release_macos.sh "Notas da versão..."` — a versão assume automaticamente a data do dia `YYYY.M.D`, ou pode ser informada opcionalmente como `./scripts/publish_release_macos.sh 2026.11.24 "Notas da versão..."`)*
 - **Comportamento automatizado:**
   1. Incrementa o build no `pubspec.yaml` (`+1`), sincroniza `lib/services/update_service.dart`, `version.json` e atualiza a seção de downloads no `README.md` com a nova versão compilada para macOS e Web.
   2. Compila o binário macOS release (`flutter build macos --release`) e a versão Web (`web-dist/`).
