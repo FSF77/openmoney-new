@@ -871,7 +871,7 @@ OpenMoneyFlutter/
 ├── functions/api/[[route]].js       # Backend Cloudflare Pages Functions (API REST, Auth, D1, Anti-Wipe Guard)
 ├── cloudflare/sync-worker/          # Cloudflare Worker & Durable Object (UserSyncRoom WebSocket realtime)
 ├── coletor/                         # OpenMoney Coletor Mobile PWA (entrada rápida offline + scanner OCR)
-├── docs/                            # Documentação oficial (ADRs 001-034, Arquitetura, Dicionário de Dados e Manuais)
+├── docs/                            # Documentação oficial (ADRs 001-038, Arquitetura, Dicionário de Dados e Manuais)
 ├── scripts/                         # Scripts automatizados de build e publicação (macOS, Windows e Web)
 └── test/                            # Suíte de testes automatizados de regras contábeis e sincronização
 ```
@@ -897,7 +897,10 @@ OpenMoneyFlutter/
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
 - [Guia do Usuário: Agenda e Calendário Financeiro](docs/manual/guia-agenda-financeira.md)
+- [Guia do Usuário: Atualizações do Sistema, Versionamento por Data (CalVer) e Releases](docs/manual/guia-atualizacao-e-versionamento.md)
+- [Guia do Usuário: Preenchimento Automático (Autofill), Chaves-senha (Passkeys) e Bloqueio Biométrico](docs/manual/guia-autofill-passkeys-e-biometria.md)
 - [Guia do Usuário: Assistente Financeira com IA (Gemini, Claude, ChatGPT, Apple Intelligence e Siri)](docs/manual/guia-assistente-ia.md)
+- [Guia do Usuário: Servidor MCP Remoto & Agentes de IA Externos (ChatGPT, Claude, Gemini, Cursor e LM Studio)](docs/manual/guia-servidor-mcp-e-ia.md)
 - [Guia do Usuário: Boas-Vindas e Primeiros Passos](docs/manual/guia-boas-vindas.md)
 - [Guia do Usuário: Conciliação Bancária e de Faturas via Extrato OFX](docs/manual/guia-conciliacao-bancaria-ofx.md)
 - [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](docs/manual/guia-dashboard-e-personalizacao.md)
@@ -944,6 +947,10 @@ OpenMoneyFlutter/
 - [ADR 032: Filtros de Sugestão de Favorecido por Tipo e Escopo Configurável](docs/adr/032-payee-suggestion-filters-and-configurable-scope.md)
 - [ADR 033: Saldo Inicial no CSV, Exportação/Importação de Contas, Máscara de Data e Calculadora Integrada](docs/adr/033-csv-opening-balance-accounts-auto-date-calculator.md)
 - [ADR 034: Validação Estrita de Datas, Alertas de Janela Temporal e Exclusão de Previsões no Autocompletar](docs/adr/034-date-validation-range-warnings-and-prediction-payee-exclusion.md)
+- [ADR 035: Dashboard de Gráficos (Analytics) com fl_chart](docs/adr/035-charts-dashboard-analytics.md)
+- [ADR 036: Servidor MCP Remoto (Streamable HTTP), OAuth 2.1, PKCE S256 e Isolamento de Segurança](docs/adr/036-mcp-remote-server-and-oauth2.md)
+- [ADR 037: Preenchimento Automático (Autofill), Chaves-senha (Passkeys / WebAuthn / FIDO2) e Bloqueio Biométrico](docs/adr/037-autofill-passkeys-webauthn-and-biometric-lock.md)
+- [ADR 038: Adoção do Padrão de Versionamento por Data (CalVer YYYY.M.D+BUILD) e Automação de Releases](docs/adr/038-calver-date-versioning-and-release-automation.md)
 
 ---
 

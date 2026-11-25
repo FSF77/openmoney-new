@@ -163,9 +163,10 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
 
 ---
 
-## 6. Procedimentos de Build e Publicação (OpenMoney Flutter)
+## 6. Procedimentos de Build, Versionamento (CalVer) e Publicação (OpenMoney Flutter)
 
 ### OpenMoney Flutter (`/Users/fabiano/Developer/OpenMoneyFlutter`)
+- **Padrão de Versionamento CalVer (`YYYY.M.D+BUILD` — ADR 038):** a versão segue a data da compilação sem zeros à esquerda nos segmentos de mês e dia (ex.: `2026.11.24+170`), combinada ao contador sequencial de build (`+BUILD`). Veja o [Guia de Atualizações e Versionamento](../manual/guia-atualizacao-e-versionamento.md).
 - **Testes e análise estática:** `flutter analyze` e `flutter test`.
-- **macOS e Web (publicar release):** `./scripts/publish_release_macos.sh [VERSÃO] ["Notas da Versão"]` (incrementa build no `pubspec.yaml`, compila macOS release e `web-dist/`, sincroniza `version.json` e envia para `FSF77/openmoney-new`).
-- **Windows (encadeado após o macOS):** `scripts\publish_release_windows.bat` (puxa versão/notas do macOS via `git pull origin main`, compila binário Windows, atualiza `version.json` e faz push da tag `v${VERSION}-windows`).
+- **macOS e Web (publicar release):** `./scripts/publish_release_macos.sh ["Notas da Versão"]` (assume automaticamente a data do dia `YYYY.M.D`, incrementa `+1` no build do `pubspec.yaml`, compila macOS release e `web-dist/`, sincroniza `version.json` e `README.md`, e envia para `FSF77/openmoney-new`).
+- **Windows (encadeado após o macOS):** `scripts\publish_release_windows.bat` (puxa versão/build/notas do macOS via `git pull origin main`, compila binário Windows, atualiza `version.json` e `README.md`, e faz push da tag `v${VERSION}-windows`).
