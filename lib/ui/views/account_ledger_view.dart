@@ -770,11 +770,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 8),
                             ),
-                            onPressed: () {
-                              final res = widget.store
-                                  .adjustPredictions(widget.store.month);
-                              showPredictionsAdjustModal(context, res);
-                            },
+                            onPressed: () => runPredictionsAdjustmentWithPrompt(
+                              context,
+                              widget.store,
+                            ),
                             child: const Icon(Icons.auto_fix_high, size: 16),
                           ),
                         ),
@@ -1190,11 +1189,10 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
                           minimumSize: const Size(36, 34),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
-                        onPressed: () {
-                          final res = widget.store
-                              .adjustPredictions(widget.store.month);
-                          showPredictionsAdjustModal(context, res);
-                        },
+                        onPressed: () => runPredictionsAdjustmentWithPrompt(
+                          context,
+                          widget.store,
+                        ),
                         child: const Icon(Icons.auto_fix_high, size: 17),
                       ),
                     ),

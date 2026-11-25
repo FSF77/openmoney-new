@@ -257,6 +257,130 @@ class _BatchDeleteDialogState extends State<_BatchDeleteDialog> {
   }
 }
 
+Future<PredictionsAdjustResult?> runPredictionsAdjustmentWithPrompt(
+  BuildContext context,
+  MoneyStore store, {
+  String? selectedMonthOverride,
+  bool showResultModal = true,
+}) async {
+  final currentYM = store.realCurrentMonthYM;
+  final selectedYM = (selectedMonthOverride != null &&
+          selectedMonthOverride.trim().isNotEmpty)
+      ? selectedMonthOverride.trim()
+      : store.month;
+
+  String startMonth = currentYM;
+
+  if (store.isSelectedMonthBeyondPredictionsHorizon(
+    selectedYM,
+    currentMonthOverride: currentYM,
+  )) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+    final count = store.db.predMonths > 0 ? store.db.predMonths : 3;
+    final currentHorizonEnd =
+        store.predictionsHorizonEndMonth(baseMonthYM: currentYM);
+    final selectedHorizonEnd =
+        store.predictionsHorizonEndMonth(baseMonthYM: selectedYM);
+
+    final currentPeriodText = count > 1
+        ? '${fmtMonth(currentYM)} a ${fmtMonth(currentHorizonEnd)}'
+        : fmtMonth(currentYM);
+    final selectedPeriodText = count > 1
+        ? '${fmtMonth(selectedYM)} a ${fmtMonth(selectedHorizonEnd)}'
+        : fmtMonth(selectedYM);
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSecondary,
+        title: Row(
+          children: [
+            Icon(Icons.auto_fix_high, color: colors.accent),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('Período do Abatimento de Previsões'),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'O mês selecionado (${fmtMonth(selectedYM)}) é maior que o horizonte configurado de $count ${count == 1 ? "mês" : "meses"} a partir do mês atual ($currentPeriodText).',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: colors.textPrimary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Deseja considerar o abatimento a partir do mês atual ou do mês selecionado?',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              GlassCard(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '• A partir do Mês Atual: $currentPeriodText',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '• A partir do Mês Selecionado: $selectedPeriodText',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, selectedYM),
+            child: Text('Mês Selecionado (${fmtMonth(selectedYM)})'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, currentYM),
+            child: Text('Mês Atual (${fmtMonth(currentYM)})'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null) return null;
+    startMonth = choice;
+  }
+
+  final res = store.adjustPredictions(startMonth);
+  if (showResultModal && context.mounted) {
+    await showPredictionsAdjustModal(context, res);
+  }
+  return res;
+}
+
 Future<void> showPredictionsAdjustModal(
   BuildContext context,
   PredictionsAdjustResult result,

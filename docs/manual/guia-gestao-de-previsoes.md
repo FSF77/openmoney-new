@@ -43,7 +43,10 @@ No topo da tela de **Previsões**, você acompanha a saúde do seu orçamento me
   - 🟢 **Verde**: consumo saudável (< 70% do teto).
   - 🟡 **Amarelo**: atenção (entre 70% e 99% do teto).
   - 🔴 **Vermelho**: teto atingido ou ultrapassado (≥ 100%).
-- **Botão "Ajustar"**: no cabeçalho, recalcula e abate os gastos reais sobre os tetos das previsões. Se uma previsão atingir o teto, ela fica zerada (`0,00`) com o badge **ESGOTADA** — **nunca é excluída**, preservando o histórico para conferência.
+- **Botão "Ajustar"**: no cabeçalho (ou no botão de abatimento do extrato de contas), recalcula e abate os gastos reais sobre os tetos das previsões.
+  - **Considera Sempre o Mês Atual Real**: por padrão, o abatimento inicia sempre a partir do **mês atual real do calendário** (e não do mês selecionado na tela), avaliando a quantidade de meses definida em *Ajustes & Personalização* (`predMonths`, padrão: 3 meses).
+  - **Confirmação para Meses Futuros Além do Horizonte**: caso o mês selecionado na tela seja maior que o horizonte configurável (`predMonths`) a partir do mês atual, o OpenMoney pergunta se você deseja considerar o abatimento **a partir do mês atual** ou **a partir do mês selecionado**.
+  - Se uma previsão atingir o teto, ela fica zerada (`0,00`) com o badge **ESGOTADA** — **nunca é excluída**, preservando o histórico para conferência.
 - **Restaurar Teto (🔄)** e **Editar (✏️)**: em cada previsão dentro do card da categoria, você pode editar o lançamento ou restaurar o valor atual para a base original com 1 clique.
 - **Ver lançamentos que abateram este teto**: clique na linha expansível abaixo da previsão para ver cada despesa real da categoria (`dd/mm/aaaa`, favorecido, `• observação` e valor).
 - **Analisar IA** *(quando o Assistente de IA estiver habilitado)*: abre uma análise detalhada das suas previsões e aumentos de categoria no mês.
@@ -97,7 +100,7 @@ Assim fica claro que, embora ainda existam `1.247,55` livres nos tetos de Mercad
 ### 4.2 Modos de Apuração (`predMode`) e Horizonte (`predMonths`)
 - **`predMode == "month"` (Padrão)**: filtra despesas reais da categoria pela data do lançamento (`t.date.startsWith(targetMonth)`).
 - **`predMode == "invoice"` (Por Fatura de Cartão)**: despesas em contas bancárias entram pela data do lançamento, enquanto compras em cartão de crédito entram pela competência de vencimento da fatura (`(t.ik ?? invKeyFor(cardCfg, t.date)) == targetMonth`).
-- **`predMonths`**: configurável em *Ajustes & Personalização* (1, 2, 3 [padrão], 6 ou 12 meses), define quantas competências consecutivas são ajustadas por `adjustPredictions`.
+- **`predMonths` e Resolução do Mês Inicial**: configurável em *Ajustes & Personalização* (1, 2, 3 [padrão], 6 ou 12 meses), define quantas competências consecutivas são ajustadas por `adjustPredictions`. O disparo na interface (`runPredictionsAdjustmentWithPrompt`) inicia sempre pelo mês atual real (`realCurrentMonthYM`), exceto quando o mês selecionado ultrapassa a janela `predMonths` (`isSelectedMonthBeyondPredictionsHorizon`), ocasião em que exibe diálogo para o usuário escolher entre iniciar pelo mês atual ou pelo mês selecionado.
 
 ### 4.3 Estruturas e Arquivos no Flutter (`lib/`)
 - **`lib/models/prediction_models.dart`**:

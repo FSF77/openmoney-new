@@ -5057,10 +5057,65 @@ class MoneyStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  PredictionsAdjustResult adjustPredictions(String targetMonth) {
+  /// Retorna o mês atual real do calendário no formato 'YYYY-MM'.
+  String get realCurrentMonthYM => todayISO().substring(0, 7);
+
+  /// Retorna o último mês ('YYYY-MM') coberto pelo horizonte `db.predMonths`
+  /// quando iniciado a partir de [baseMonthYM] (padrão: `realCurrentMonthYM`).
+  String predictionsHorizonEndMonth({String? baseMonthYM}) {
+    final start = (baseMonthYM != null && baseMonthYM.trim().isNotEmpty)
+        ? baseMonthYM.trim()
+        : realCurrentMonthYM;
+    final count = db.predMonths > 0 ? db.predMonths : 3;
+    return addMonthsYM(start, count - 1);
+  }
+
+  /// Verifica se o [selectedMonthYM] ultrapassa o horizonte de `db.predMonths`
+  /// meses configurados a partir do mês atual real ([currentMonthOverride] para testes).
+  bool isSelectedMonthBeyondPredictionsHorizon(
+    String selectedMonthYM, {
+    String? currentMonthOverride,
+  }) {
+    final currentYM =
+        (currentMonthOverride != null && currentMonthOverride.trim().isNotEmpty)
+            ? currentMonthOverride.trim()
+            : realCurrentMonthYM;
+    final horizonEnd = predictionsHorizonEndMonth(baseMonthYM: currentYM);
+    return selectedMonthYM.trim().compareTo(horizonEnd) > 0;
+  }
+
+  /// Resolve o mês inicial para a rotina de abatimento de previsões:
+  /// Por padrão retorna sempre o mês atual real ([currentMonthOverride] ou `realCurrentMonthYM`).
+  /// Caso [selectedMonthYM] seja maior que o horizonte `predMonths` e [useSelectedWhenBeyond]
+  /// seja `true`, retorna [selectedMonthYM].
+  String resolvePredictionsStartMonth({
+    String? selectedMonthYM,
+    String? currentMonthOverride,
+    bool useSelectedWhenBeyond = false,
+  }) {
+    final currentYM =
+        (currentMonthOverride != null && currentMonthOverride.trim().isNotEmpty)
+            ? currentMonthOverride.trim()
+            : realCurrentMonthYM;
+    if (selectedMonthYM != null &&
+        selectedMonthYM.trim().isNotEmpty &&
+        useSelectedWhenBeyond &&
+        isSelectedMonthBeyondPredictionsHorizon(
+          selectedMonthYM,
+          currentMonthOverride: currentYM,
+        )) {
+      return selectedMonthYM.trim();
+    }
+    return currentYM;
+  }
+
+  PredictionsAdjustResult adjustPredictions([String? targetMonth]) {
+    final startMonth = (targetMonth != null && targetMonth.trim().isNotEmpty)
+        ? targetMonth.trim()
+        : realCurrentMonthYM;
     final invoiceMode = db.predMode == 'invoice';
     final count = db.predMonths > 0 ? db.predMonths : 3;
-    final months = List.generate(count, (i) => addMonthsYM(targetMonth, i));
+    final months = List.generate(count, (i) => addMonthsYM(startMonth, i));
 
     // Grupos de abatimento: previsões + lançamentos que as abatem
     final groups = <({String cat, List<Transaction> preds, List<Transaction> spent, String label})>[];
@@ -5084,7 +5139,7 @@ class MoneyStore extends ChangeNotifier {
       }
 
       final monthLabel =
-          (months.length > 1 && m != targetMonth) ? ' • ${fmtMonth(m)}' : '';
+          (months.length > 1 && m != startMonth) ? ' • ${fmtMonth(m)}' : '';
 
       predsByCategory.forEach((cat, preds) {
         final List<Transaction> spent;
@@ -5112,13 +5167,16 @@ class MoneyStore extends ChangeNotifier {
     }
 
     if (allPredCount == 0) {
+      final periodLabel = months.length > 1
+          ? '${fmtMonth(months.first)} a ${fmtMonth(months.last)}'
+          : fmtMonth(startMonth);
       final res = PredictionsAdjustResult(
         title: 'Ajustar Previsões',
         message:
-            'Nenhum lançamento com descrição iniciando por "Previsão" foi encontrado em ${fmtMonth(targetMonth)}.',
+            'Nenhum lançamento com descrição iniciando por "Previsão" foi encontrado em $periodLabel.',
         hasExhausted: false,
         items: const [],
-        month: targetMonth,
+        month: startMonth,
         totalDeductedCents: 0,
       );
       lastPredictionsResult = res;
@@ -5275,7 +5333,7 @@ class MoneyStore extends ChangeNotifier {
       message: sections.join('\n\n'),
       hasExhausted: exhaustedItems.isNotEmpty,
       items: detailedItems,
-      month: targetMonth,
+      month: startMonth,
       totalDeductedCents: totalDeductedCents,
     );
     lastPredictionsResult = result;

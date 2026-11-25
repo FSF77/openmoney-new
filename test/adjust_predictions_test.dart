@@ -113,4 +113,89 @@ void main() {
     final restored = Database.fromJson(json);
     expect(restored.predMonths, 6);
   });
+
+  test('abatimento considera por padrao o mes atual real e verifica quando mes selecionado ultrapassa predMonths', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db = Database(
+      accounts: [
+        Account(id: 'bank', name: 'Banco', type: 'Corrente', opening: 0),
+      ],
+      predMode: 'month',
+      predMonths: 3,
+    );
+
+    // Mês atual de referência: 2026-11
+    // Com predMonths = 3, o horizonte a partir do mês atual cobre: 2026-11, 2026-12 e 2027-01
+    expect(store.predictionsHorizonEndMonth(baseMonthYM: '2026-11'), '2027-01');
+
+    // Mês passado (2026-10), mês atual (2026-11) e meses dentro da janela (2026-12, 2027-01) NÃO ultrapassam o horizonte
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2026-10', currentMonthOverride: '2026-11'),
+      isFalse,
+    );
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2026-11', currentMonthOverride: '2026-11'),
+      isFalse,
+    );
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2026-12', currentMonthOverride: '2026-11'),
+      isFalse,
+    );
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2027-01', currentMonthOverride: '2026-11'),
+      isFalse,
+    );
+
+    // Mesmo que useSelectedWhenBeyond seja true, meses dentro ou anteriores ao horizonte sempre iniciam no mês atual real
+    expect(
+      store.resolvePredictionsStartMonth(
+        selectedMonthYM: '2026-10',
+        currentMonthOverride: '2026-11',
+        useSelectedWhenBeyond: true,
+      ),
+      '2026-11',
+    );
+    expect(
+      store.resolvePredictionsStartMonth(
+        selectedMonthYM: '2027-01',
+        currentMonthOverride: '2026-11',
+        useSelectedWhenBeyond: true,
+      ),
+      '2026-11',
+    );
+
+    // Mês selecionado além do horizonte de 3 meses (2027-02 em diante) -> ultrapassa predMonths!
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2027-02', currentMonthOverride: '2026-11'),
+      isTrue,
+    );
+    expect(
+      store.resolvePredictionsStartMonth(
+        selectedMonthYM: '2027-02',
+        currentMonthOverride: '2026-11',
+        useSelectedWhenBeyond: false,
+      ),
+      '2026-11',
+    );
+    expect(
+      store.resolvePredictionsStartMonth(
+        selectedMonthYM: '2027-02',
+        currentMonthOverride: '2026-11',
+        useSelectedWhenBeyond: true,
+      ),
+      '2027-02',
+    );
+
+    // Com predMonths = 1, o horizonte a partir de 2026-11 cobre apenas 2026-11; 2026-12 já ultrapassa
+    store.setPredMonths(1);
+    expect(store.predictionsHorizonEndMonth(baseMonthYM: '2026-11'), '2026-11');
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2026-11', currentMonthOverride: '2026-11'),
+      isFalse,
+    );
+    expect(
+      store.isSelectedMonthBeyondPredictionsHorizon('2026-12', currentMonthOverride: '2026-11'),
+      isTrue,
+    );
+  });
 }

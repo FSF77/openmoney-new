@@ -123,10 +123,10 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                   OutlinedButton.icon(
                     icon: const Icon(Icons.auto_fix_normal, size: 16),
                     label: const Text('Ajustar'),
-                    onPressed: () {
-                      final res = store.adjustPredictions(store.month);
-                      showPredictionsAdjustModal(context, res);
-                    },
+                    onPressed: () => runPredictionsAdjustmentWithPrompt(
+                      context,
+                      store,
+                    ),
                   ),
                   FilledButton.icon(
                     icon: const Icon(Icons.add, size: 16),
@@ -662,7 +662,7 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
             FilledButton(
-              onPressed: () {
+              onPressed: () async {
                 final cents = parseCents(amountCtrl.text);
                 if (cents == null || cents <= 0 || category.isEmpty) return;
 
@@ -684,12 +684,18 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
                 );
 
                 final targetMonth = dateIso.substring(0, 7);
-                if (autoAdjust) {
-                  store.adjustPredictions(targetMonth);
-                }
-
                 Navigator.pop(ctx);
-                setState(() {});
+                if (autoAdjust && context.mounted) {
+                  await runPredictionsAdjustmentWithPrompt(
+                    context,
+                    store,
+                    selectedMonthOverride: targetMonth,
+                    showResultModal: false,
+                  );
+                }
+                if (mounted) {
+                  setState(() {});
+                }
               },
               child: const Text('Salvar'),
             ),

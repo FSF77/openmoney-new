@@ -15,9 +15,10 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2.5.7** (Build 168) | [⬇️ Baixar OpenMoney-macOS-2.5.7.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.7.zip) | ~12 MB | 23/11/2026 |
+| 🍏 **macOS** | **v2.5.7** (Build 169) | [⬇️ Baixar OpenMoney-macOS-2.5.7.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.7.zip) | ~12 MB | 23/11/2026 |
 | 🪟 **Windows** | **v2.5.7** (Build 168) | [⬇️ Baixar OpenMoney-Windows-2.5.7.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.7.zip) | ~14 MB | 23/11/2026 |
 | 🌐 **Web** | **v2.5.7** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 23/11/2026 |
+
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -455,7 +456,7 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
   - **Dois Regimes Contábeis de Abatimento (`predMode`)**:
     - **Por Mês (`month` — Padrão)**: Abate despesas reais cuja data de lançamento pertence ao mês civil.
     - **Por Fatura (`invoice`)**: Considera a data do lançamento para contas bancárias/dinheiro e a **competência de vencimento da fatura** para compras de cartão de crédito (regime de desembolso de caixa).
-  - **Horizonte de Meses Configurável (`predMonths`)**: Na tela de **Ajustes & Personalização**, o usuário define quantos meses consecutivos são avaliados na execução (**1 mês**, **2 meses**, **3 meses (Padrão)**, **6 meses** ou **12 meses**), aplicável a ambos os regimes e com tooltip dinâmico no extrato.
+  - **Horizonte de Meses Configurável (`predMonths`) e Mês Atual Real**: Na tela de **Ajustes & Personalização**, o usuário define quantos meses consecutivos são avaliados na execução (**1 mês**, **2 meses**, **3 meses (Padrão)**, **6 meses** ou **12 meses**), aplicável a ambos os regimes e com tooltip dinâmico no extrato. O abatimento sempre considera por padrão o **mês atual real do calendário** (e não o mês selecionado na navegação), e caso o mês selecionado seja maior que o horizonte configurável (`predMonths`), pergunta se deseja iniciar a partir do mês atual ou do mês selecionado.
   - **Identificação Automática**: Localiza instantaneamente todos os lançamentos do mês cuja descrição comece com `Previsão` (ex: `Previsão Posto`, `Previsão Mercado`), sem distinção de maiúsculas/minúsculas e acentos.
   - **Apuração Global de Gastos da Categoria**: Varre todas as contas ativas no período e calcula o total dos gastos efetivamente realizados na mesma categoria (desconsiderando transferências e outras previsões).
   - **Abatimento Proporcional Inteligente**: Reduz o valor da previsão com base nos gastos reais da categoria. A base original é gravada de forma transparente na nota (`[Previsão base: R$ X,XX]`), garantindo que execuções sucessivas não causem deduções repetidas.

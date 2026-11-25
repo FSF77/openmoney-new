@@ -1,14 +1,14 @@
 {
   "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2.5.7",
+  "version": "2.5.8",
   "web": {
-    "version": "2.5.7",
-    "build": 169,
-    "releaseDate": "23/11/2026"
+    "version": "2.5.8",
+    "build": 170,
+    "releaseDate": "24/11/2026"
   },
-  "build": 169,
-  "notes": "Novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, melhorias na rotina de login, permite usar gerenciador de senhas, uso de chave-senhas (passkey), Servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, Assistente IA, você pode usar sua IA para analise dos dados, Anteriores: Campo de valor com calculadora dinâmica. Importar extrato OFX para conciliação, Backup automático com 4 snapshots diários, classificar lançamentos por tags, tela de lançamentos gerais com edição em lotes, Acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
-  "releaseDate": "23/11/2026",
+  "build": 170,
+  "notes": "Pequenos ajustes na tela e rotina de abatimentos de previsões, novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, melhorias na rotina de login, permite usar gerenciador de senhas, uso de chave-senhas (passkey), Servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, Assistente IA, você pode usar sua IA para analise dos dados, Anteriores: Campo de valor com calculadora dinâmica. Importar extrato OFX para conciliação, Backup automático, classificar lançamentos por tags, Acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
+  "releaseDate": "24/11/2026",
   "windows": {
     "build": 168,
     "version": "2.5.7",
@@ -18,12 +18,12 @@
     "releaseDate": "23/11/2026"
   },
   "macos": {
-    "version": "2.5.7",
-    "build": 169,
-    "releaseDate": "23/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.7.zip",
-    "sha256": "f7c3c807000dfc1c698d21e8ea56a91fda20dca400068d563c3d63483a9b7592",
+    "version": "2.5.8",
+    "build": 170,
+    "releaseDate": "24/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2.5.8.zip",
+    "sha256": "77988ba34a330f74c83d26e74aefa58a016cc8c6118aaaf389d29b272ed678b7",
     "sizeMb": 12
   },
-  "title": "OpenMoney Flutter v2.5.7"
+  "title": "OpenMoney Flutter v2.5.8"
 }

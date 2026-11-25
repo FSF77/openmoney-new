@@ -59,9 +59,12 @@ Estabeleceu-se a inclusão do parâmetro de persistência `predMode` no banco de
 - **Chave no JSON:** `"predMonths"` (tipo `int`, padrão `3`).
   - Define o horizonte de meses consecutivos avaliados ao rodar a rotina (`1`, `2`, `3`, `6` ou `12` meses), aplicável a ambos os modos (`month` e `invoice`).
 - **Retrocompatibilidade estrita:** Se as chaves forem omitidas, assumem-se `"month"` e `3`. Na gravação, se os valores forem os padrões, os campos são suprimidos da serialização, garantindo bases limpas e retrocompatíveis.
-- **Controle de Interface:**
+- **Controle de Interface e Resolução do Mês Inicial:**
   - Tela de **Ajustes & Personalização**: seletor visual de horizonte (`1 mês`, `2 meses`, `3 meses (Padrão)`, `6 meses`, `12 meses`) e modo de abatimento (`Por Mês` vs `Por Fatura`).
-  - Cabeçalho do extrato de lançamentos: menu discreto (`tune`) para alternância rápida de modo e botão de disparo com tooltip dinâmico indicando o horizonte configurado.
+  - Cabeçalho do extrato de lançamentos e tela de Previsões: menu discreto (`tune`) para alternância rápida de modo e botão de disparo com tooltip dinâmico indicando o horizonte configurado.
+  - **Regra do Mês Atual Real vs. Mês Selecionado (`runPredictionsAdjustmentWithPrompt`)**:
+    - Sempre que o usuário dispara o abatimento de previsões, o sistema considera por padrão o **mês atual real do calendário** (`realCurrentMonthYM = todayISO().substring(0, 7)`), e não o mês selecionado na barra de navegação.
+    - Caso o **mês selecionado** na tela ultrapasse o horizonte de meses configurado (`predMonths`) a partir do mês atual real (`selectedMonth > addMonthsYM(realCurrentMonthYM, predMonths - 1)`), o sistema apresenta um diálogo perguntando se o usuário deseja considerar o abatimento **a partir do mês atual** ou **a partir do mês selecionado**.
 
 ---
 
