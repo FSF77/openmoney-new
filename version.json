@@ -1,29 +1,29 @@
 {
-  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
-  "version": "2026.11.24",
-  "web": {
-    "version": "2026.11.24",
-    "build": 171,
-    "releaseDate": "24/11/2026"
-  },
-  "build": 171,
-  "notes": "Novo modelo para versionamento, Pequenos ajustes na tela e rotina de abatimentos de previsões, novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, melhorias na rotina de login, permite usar gerenciador de senhas, uso de chave-senhas (passkey), Servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, Assistente IA, você pode usar sua IA para analise dos dados, Anteriores: Campo de valor com calculadora dinâmica. Importar extrato OFX para conciliação, Backup automático, classificar lançamentos por tags, Acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
-  "releaseDate": "24/11/2026",
-  "windows": {
-    "build": 168,
-    "version": "2.5.7",
-    "sizeMb": 14,
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2.5.7.zip",
-    "sha256": "9df2f00f66c6fb73c15a52ab7568edbdf3436d24c18b65b52983ec3cb68975ed",
-    "releaseDate": "23/11/2026"
-  },
-  "macos": {
-    "version": "2026.11.24",
-    "build": 171,
-    "releaseDate": "24/11/2026",
-    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.24.zip",
-    "sha256": "a58c22492342a541928d62066f1698bf5f2173cb6ff564c54faee1afbe52ce38",
-    "sizeMb": 12
-  },
-  "title": "OpenMoney Flutter v2026.11.24"
+    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
+    "version":  "2026.11.24",
+    "web":  {
+                "version":  "2026.11.24",
+                "build":  171,
+                "releaseDate":  "24/11/2026"
+            },
+    "build":  171,
+    "notes":  "Novo modelo para versionamento, Pequenos ajustes na tela e rotina de abatimentos de previsões, novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, melhorias na rotina de login, permite usar gerenciador de senhas, uso de chave-senhas (passkey), Servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, Assistente IA, você pode usar sua IA para analise dos dados, Anteriores: Campo de valor com calculadora dinâmica. Importar extrato OFX para conciliação, Backup automático, classificar lançamentos por tags, Acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
+    "releaseDate":  "24/11/2026",
+    "windows":  {
+                    "build":  171,
+                    "version":  "2026.11.24",
+                    "sizeMb":  14,
+                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2026.11.24.zip",
+                    "sha256":  "b727d9aa059fa61281343694d09f180afb4e509b5df0de0fb679a1129f778568",
+                    "releaseDate":  "24/11/2026"
+                },
+    "macos":  {
+                  "version":  "2026.11.24",
+                  "build":  171,
+                  "releaseDate":  "24/11/2026",
+                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.24.zip",
+                  "sha256":  "a58c22492342a541928d62066f1698bf5f2173cb6ff564c54faee1afbe52ce38",
+                  "sizeMb":  12
+              },
+    "title":  "OpenMoney Flutter v2026.11.24"
 }
