@@ -69,6 +69,9 @@ Estrutura principal do arquivo `openmoney.json`.
 | `baseCurrency` | `String?` | Não | `"BRL"` | Moeda padrão/base de consolidação financeira do sistema (ex: `"BRL"`, `"USD"`, `"EUR"`). | Referencia catálogo `SUPPORTED_CURRENCIES` |
 | `rates` | `Map<String, CurrencyRateInfo>?` | Não | `{}` | Cotações correntes persistidas em relação ao `BRL`, indexadas pelo código ISO da moeda (`"USD"`, `"EUR"`, etc.). | Contém `rate`, `updatedAt`, `manual` (e `source` opcional) |
 | `tags` | `List<String>` | Não | `[]` | Catálogo global de tags personalizadas criadas pelo usuário (ou registradas ao salvar lançamentos). Omitido do JSON quando vazio. | Referenciado por `Transaction.tags` e Sync v2 (`tags/<nome>`) |
+| `investAssets` | `List<InvestAsset>` | Não | `[]` | Ativos financeiros da carteira de investimentos (Ações, FIIs, ETFs, BDRs, Renda Fixa, Tesouro Direto, Criptomoedas). Omitido do JSON quando vazio. | 1:N com `InvestAsset` e Sync v2 (`investAssets/<id>`) |
+| `investOps` | `List<InvestOperation>` | Não | `[]` | Operações da carteira de investimentos (compras, vendas, proventos, amortizações, splits, posição inicial). Omitido do JSON quando vazio. | 1:N com `InvestOperation` e Sync v2 (`investOps/<id>`) |
+| `investIndicators` | `MarketIndicators?` | Não | `null` | Indicadores macroeconômicos de referência (`cdiAnnual`, `selicAnnual`, `ipca12m`) para cálculo de Renda Fixa. Omitido do JSON quando nulo. | Sync v2 (`meta/investIndicators`) |
 
 ### 3.1. Estrutura de Cotação de Moeda (`CurrencyRateInfo`)
 
@@ -502,6 +505,17 @@ Localizado no diretório de dados da aplicação (`Application Support/OpenMoney
 * `accentColorKey` (`string`, padrão `'sky'`): Paleta de cor de destaque ativa.
 * `hidePatrimonyBalance` (`bool`, padrão `false`): Privacidade de saldos (ocultação por padrão com `••••••`).
 * `agendaFilters` (`List<string>`, padrão `["bills", "income"]`): Filtros ativos persistidos na tela de Agenda / Calendário (`bills`, `income`, `done`).
+* `investDividendCategory` (`string`, padrão `"Investimentos (-) › Rendimentos"`): Categoria padrão aplicada ao creditar proventos da carteira no caixa da conta de custódia.
+* `investIrCategory` (`string`, padrão `"Investimentos (-) › IR"`): Categoria padrão aplicada ao lançar o IR retido na fonte no resgate/venda de títulos tributados de Renda Fixa / Tesouro Direto.
+
+---
+
+### 4. Carteira de Investimentos (`InvestAsset`, `InvestOperation`, `MarketIndicators`)
+Definidas em `lib/models/investment_models.dart`:
+* **`InvestAsset`**: `id` (`String`), `ticker` (`String`), `name` (`String`), `assetClass` (`stock` | `fii` | `etf` | `bdr` | `fixedIncome` | `tesouro` | `crypto` | `other`), `subType` (`String?`), `accountId` (`String` → `Account.id`), `currency` (`String`, padrão `"BRL"`), `indexer` (`cdi` | `selic` | `ipca` | `prefixado` | `other`), `ratePct` (`double?`), `maturityDate` (`String?`), `liquidity` (`String?`), `taxExempt` (`bool`), `currentPriceCents` (`int?`), `priceUpdatedAt` (`String?`), `manualPrice` (`bool`), `priceSource` (`String?`), `memo` (`String?`), `inactive` (`bool`, padrão `false` — arquiva o ativo sem excluir histórico).
+* **`InvestOperation`**: `id` (`String`), `assetId` (`String` → `InvestAsset.id`), `accountId` (`String` → `Account.id`), `type` (`buy` | `sell` | `dividend` | `jcp` | `fiiYield` | `amortization` | `split` | `inplit` | `bonus` | `initialPosition`), `date` (`YYYY-MM-DD`), `quantity` (`double` — precisão de até 8 casas para criptomoedas; não altera a precisão de 2 casas dos valores monetários), `unitPriceCents` (`int`), `feesCents` (`int`), `taxCents` (`int`, padrão `0` — IR retido na fonte em vendas de Renda Fixa), `totalCents` (`int`), `linkedTxId` (`String?` → `Transaction.id`), `linkedTaxTxId` (`String?` → `Transaction.id` do débito de IR), `memo` (`String`), `createdAt` (`double`).
+* **`MarketIndicators`**: `cdiAnnual` (`double`), `selicAnnual` (`double`), `ipca12m` (`double`), `updatedAt` (`String`), `manual` (`bool`).
+* **`Transaction.investOpId`** (`String?`): Referência opcional na transação de caixa (`Transferência (-)` / `Transferência (+)` / proventos) vinculada à operação na carteira.
 
 ---
 

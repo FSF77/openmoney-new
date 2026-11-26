@@ -35,6 +35,7 @@ import 'views/agenda_view.dart';
 import 'views/due_bills_view.dart';
 import 'views/installments_view.dart';
 import 'views/global_search_view.dart';
+import 'views/investments_view.dart';
 import 'views/reports_view.dart';
 import 'views/settings_view.dart';
 import 'widgets/ai_assistant_drawer.dart';
@@ -585,6 +586,10 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         moduleTitle = 'Lançamentos';
         subTitle = 'Consolidado';
         break;
+      case NavModule.investments:
+        moduleTitle = 'Carteira de Investimentos';
+        subTitle = 'Posição & Rentabilidade';
+        break;
       case NavModule.cashFlow:
         moduleTitle = 'Fluxo de Caixa';
         subTitle = fmtMonth(widget.store.month);
@@ -985,7 +990,7 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 final isSelected =
                     widget.store.activeModule == NavModule.account &&
                         widget.store.selectedAccountId == a.id;
-                final bal = widget.store.balance(a, predicted: false);
+                final bal = widget.store.accountTotalBalance(a, predicted: false);
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1042,6 +1047,19 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         : colors.textSecondary,
                   ),
                   onPressed: () => selectModule(NavModule.transactions),
+                ),
+              ),
+              Tooltip(
+                message: 'Investimentos',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.candlestick_chart_rounded,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.investments
+                        ? colors.income
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.investments),
                 ),
               ),
               Tooltip(
@@ -1332,6 +1350,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
         return AccountLedgerView(store: widget.store, account: acc);
       case NavModule.transactions:
         return AllTransactionsView(store: widget.store);
+      case NavModule.investments:
+        return InvestmentsView(store: widget.store);
       case NavModule.cashFlow:
         return CashFlowView(store: widget.store);
       case NavModule.reports:
@@ -1567,8 +1587,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     return _SidebarAccountTile(
                       key: ValueKey(a.id),
                       account: a,
-                      balanceCents: widget.store.balance(a, predicted: false),
-                      predCents: widget.store.balance(a, predicted: true),
+                      balanceCents: widget.store.accountTotalBalance(a, predicted: false),
+                      predCents: widget.store.accountTotalBalance(a, predicted: true),
                       selected:
                           widget.store.activeModule == NavModule.account &&
                               widget.store.selectedAccountId == a.id,
@@ -1629,8 +1649,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   return _SidebarAccountTile(
                     key: ValueKey(a.id),
                     account: a,
-                    balanceCents: widget.store.balance(a, predicted: false),
-                    predCents: widget.store.balance(a, predicted: true),
+                    balanceCents: widget.store.accountTotalBalance(a, predicted: false),
+                    predCents: widget.store.accountTotalBalance(a, predicted: true),
                     selected: widget.store.activeModule == NavModule.account &&
                         widget.store.selectedAccountId == a.id,
                     colors: colors,
@@ -1695,8 +1715,8 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                     return _SidebarAccountTile(
                       key: ValueKey(a.id),
                       account: a,
-                      balanceCents: widget.store.balance(a, predicted: false),
-                      predCents: widget.store.balance(a, predicted: true),
+                      balanceCents: widget.store.accountTotalBalance(a, predicted: false),
+                      predCents: widget.store.accountTotalBalance(a, predicted: true),
                       selected:
                           widget.store.activeModule == NavModule.account &&
                               widget.store.selectedAccountId == a.id,
@@ -1758,6 +1778,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Lançamentos',
                   selected: widget.store.activeModule == NavModule.transactions,
                   onTap: () => selectModule(NavModule.transactions),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.candlestick_chart_rounded,
+                  label: 'Investimentos',
+                  selected: widget.store.activeModule == NavModule.investments,
+                  onTap: () => selectModule(NavModule.investments),
                 ),
                 _SidebarNavTile(
                   icon: Icons.calendar_month_outlined,

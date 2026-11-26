@@ -180,5 +180,55 @@ void main() {
         isEmpty,
       );
     });
+
+    test('Diff e Merge de investAssets, investOps e investIndicators funciona sem eco', () {
+      final dbA = Database(accounts: [
+        Account(id: 'inv1', name: 'Corretora', type: 'Investimento', opening: 0),
+      ]);
+      final dbB = Database(accounts: [
+        Account(id: 'inv1', name: 'Corretora', type: 'Investimento', opening: 0),
+      ]);
+      final prefsA = <String, dynamic>{};
+      final prefsB = <String, dynamic>{};
+      final baseA = <String, String>{};
+      final baseB = <String, String>{};
+
+      SyncEngine.extractRecordMap(dbA, prefsA).forEach((k, v) => baseA[k] = v.jsonStr);
+      SyncEngine.extractRecordMap(dbB, prefsB).forEach((k, v) => baseB[k] = v.jsonStr);
+
+      dbA.investAssets.add(InvestAsset(
+        id: 'ast1',
+        ticker: 'PETR4',
+        name: 'Petrobras',
+        assetClass: InvestAssetClass.stock,
+        accountId: 'inv1',
+      ));
+      dbA.investOps.add(InvestOperation(
+        id: 'op1',
+        assetId: 'ast1',
+        accountId: 'inv1',
+        type: InvestOpType.buy,
+        date: '2026-11-25',
+        quantity: 100,
+        unitPriceCents: 3500,
+      ));
+      dbA.investIndicators = MarketIndicators(cdiAnnual: 11.4, updatedAt: '2026-11-25');
+
+      final diff = SyncEngine.computeDiff(baseline: baseA, db: dbA, prefs: prefsA);
+      expect(diff.length, 3);
+
+      SyncEngine.applyChangesToDatabase(
+        db: dbB,
+        prefs: prefsB,
+        changes: diff,
+        baseline: baseB,
+      );
+
+      expect(dbB.investAssets.length, 1);
+      expect(dbB.investAssets.first.ticker, 'PETR4');
+      expect(dbB.investOps.length, 1);
+      expect(dbB.investIndicators?.cdiAnnual, 11.4);
+      expect(SyncEngine.computeDiff(baseline: baseB, db: dbB, prefs: prefsB), isEmpty);
+    });
   });
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/openmoney_models.dart';
 import '../services/agenda_engine.dart';
+import '../services/investment_engine.dart';
 import '../services/native_file_picker.dart';
 import '../store/money_store.dart';
 import 'platform_io.dart';
@@ -1419,5 +1420,130 @@ class PdfReportGenerator {
         );
       }
     }
+  }
+
+  /// Exporta o Relatório de Posição Atual da Carteira de Investimentos em PDF A4 Paisagem.
+  static Future<void> exportInvestmentPositionPdf(
+    BuildContext context,
+    MoneyStore store,
+    PortfolioSummary summary,
+  ) async {
+    final doc = _SimpleA4PdfDocument(isLandscape: true);
+    const marginLeft = 24.0;
+    const marginRight = 24.0;
+    final contentWidth = doc.effectiveWidth - marginLeft - marginRight;
+    final baseCur = store.baseCurrency;
+
+    void drawHeader() {
+      doc.fillRect(marginLeft, 22, contentWidth, 34, r: 0.10, g: 0.22, b: 0.38);
+      doc.drawText(
+        'OpenMoney · Relatório de Posição Atual de Investimentos',
+        marginLeft + 12,
+        43,
+        fontSize: 12,
+        bold: true,
+        r: 1,
+        g: 1,
+        b: 1,
+      );
+      doc.drawText(
+        'Gerado em ${fmtDate(todayISO())}',
+        doc.effectiveWidth - marginRight - 130,
+        43,
+        fontSize: 8.5,
+        r: 0.85,
+        g: 0.90,
+        b: 0.98,
+      );
+    }
+
+    drawHeader();
+
+    // Resumo consolidado
+    doc.drawText(
+      'Aplicado: ${formatCurrency(summary.totalCostBasisCents, baseCur)}   |   '
+      'Atualizado Líquido: ${formatCurrency(summary.totalMarketValueNetCents, baseCur)}   |   '
+      'Rentabilidade: ${formatCurrency(summary.totalUnrealizedPnlCents, baseCur)} (${summary.totalUnrealizedPnlPct.toStringAsFixed(2)}%)   |   '
+      'Realizado: ${formatCurrency(summary.totalRealizedPnlCents, baseCur)}   |   '
+      'Proventos: ${formatCurrency(summary.totalDividendsCents, baseCur)}',
+      marginLeft,
+      72,
+      fontSize: 8.5,
+      bold: true,
+      r: 0.15,
+      g: 0.20,
+      b: 0.28,
+    );
+
+    const cols = [
+      ('Ativo', 75.0),
+      ('Classe', 65.0),
+      ('Qtde', 65.0),
+      ('Valor Compra', 85.0),
+      ('PM Compra', 75.0),
+      ('PM Venda', 75.0),
+      ('Preço Atual', 75.0),
+      ('Valor Atual', 85.0),
+      ('Rentab.', 95.0),
+      ('Proventos', 75.0),
+    ];
+
+    double y = 88.0;
+    void drawTableHeader() {
+      doc.fillRect(marginLeft, y, contentWidth, 18, r: 0.92, g: 0.94, b: 0.97);
+      double x = marginLeft + 4;
+      for (final c in cols) {
+        doc.drawText(c.$1, x, y + 12, fontSize: 7.5, bold: true, r: 0.2, g: 0.25, b: 0.35);
+        x += c.$2;
+      }
+      y += 20;
+    }
+
+    drawTableHeader();
+
+    for (final p in summary.positions) {
+      if (y > doc.effectiveHeight - 36) {
+        doc.newPage();
+        drawHeader();
+        y = 70.0;
+        drawTableHeader();
+      }
+      final cur = p.asset.currency;
+      final rowVals = [
+        p.asset.displayCode,
+        p.asset.assetClass.shortLabel,
+        formatInvestQty(p.currentQty, p.asset.assetClass),
+        formatCurrency(p.currentCostBasisCents, cur),
+        formatCurrency(p.avgBuyPriceCents, cur),
+        p.avgSellPriceCents > 0 ? formatCurrency(p.avgSellPriceCents, cur) : '-',
+        formatCurrency(p.currentUnitPriceCents, cur),
+        formatCurrency(p.currentNetValueCents, cur),
+        '${formatCurrency(p.unrealizedPnlCents, cur)} (${p.unrealizedPnlPct.toStringAsFixed(1)}%)',
+        formatCurrency(p.totalDividendsCents, cur),
+      ];
+      double x = marginLeft + 4;
+      for (int i = 0; i < cols.length; i++) {
+        doc.drawText(
+          rowVals[i],
+          x,
+          y + 11,
+          fontSize: 7.2,
+          r: 0.15,
+          g: 0.15,
+          b: 0.18,
+        );
+        x += cols[i].$2;
+      }
+      doc.drawLine(marginLeft, y + 15, marginLeft + contentWidth, y + 15,
+          r: 0.88, g: 0.90, b: 0.93, lineWidth: 0.4);
+      y += 16;
+    }
+
+    final bytes = doc.buildBytes();
+    await saveAndOpenPdfBytes(
+      context,
+      pdfBytes: bytes,
+      defaultFileName: 'posicao_investimentos_${todayISO()}.pdf',
+    );
   }
 }

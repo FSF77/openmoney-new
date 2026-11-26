@@ -33,9 +33,10 @@ class DashboardOverviewView extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final isCompact = width < 760 || store.uiDensityMode == 'compact';
 
-    final totalReal = store.totalBalance(predicted: false);
-    final totalPred = store.totalBalance(predicted: true);
-    final totalPredYear = store.totalBalancePredictedYear();
+    final investMarket = store.portfolioMarketValue();
+    final totalReal = store.totalBalance(predicted: false) + investMarket;
+    final totalPred = store.totalBalance(predicted: true) + investMarket;
+    final totalPredYear = store.totalBalancePredictedYear() + investMarket;
     final dueSummary = store.dueBillsSummary();
     final dueItems = store.dueBillItems(withinDays: store.reminderDaysAhead);
     final cardAccounts = store.db.accounts
@@ -770,8 +771,8 @@ class DashboardOverviewView extends StatelessWidget {
       if (a.type != 'Poupança' && a.type != 'Investimento') return false;
       if (a.isInactive) return false;
       if (!showZero) {
-        final real = store.balance(a, predicted: false);
-        final pred = store.balance(a, predicted: true);
+        final real = store.accountTotalBalance(a, predicted: false);
+        final pred = store.accountTotalBalance(a, predicted: true);
         if (real == 0 && pred == 0) return false;
       }
       return true;
@@ -813,6 +814,32 @@ class DashboardOverviewView extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Tooltip(
+                message: 'Abrir Carteira de Investimentos',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => store.navigateTo(NavModule.investments),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.candlestick_chart_rounded,
+                            size: 15, color: colors.accent),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Carteira',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: colors.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
                 message: store.hideInvestmentsBalance
                     ? 'Exibir valores'
                     : 'Ocultar valores',
@@ -848,8 +875,10 @@ class DashboardOverviewView extends StatelessWidget {
             )
           else
             ...allInvestments.map((acc) {
-              final realBalance = store.balance(acc, predicted: false);
-              final predBalance = store.balance(acc, predicted: true);
+              final realBalance = store.accountTotalBalance(acc, predicted: false);
+              final predBalance = store.accountTotalBalance(acc, predicted: true);
+              final cashOnly = store.balance(acc, predicted: false);
+              final marketOnly = realBalance - cashOnly;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
@@ -886,9 +915,11 @@ class DashboardOverviewView extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              acc.effectiveCurrency != store.baseCurrency
-                                  ? '${acc.type} • ${currencyMetaFor(acc.effectiveCurrency).flag} ${acc.effectiveCurrency}'
-                                  : acc.type,
+                              marketOnly != 0 && !store.hideInvestmentsBalance
+                                  ? 'Caixa ${formatCurrency(cashOnly, acc.effectiveCurrency)} + Ativos ${formatCurrency(marketOnly, acc.effectiveCurrency)}'
+                                  : (acc.effectiveCurrency != store.baseCurrency
+                                      ? '${acc.type} • ${currencyMetaFor(acc.effectiveCurrency).flag} ${acc.effectiveCurrency}'
+                                      : acc.type),
                               style: TextStyle(
                                 fontSize: 10.5,
                                 color: colors.textSecondary,

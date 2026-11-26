@@ -1587,6 +1587,8 @@ function applySyncChangesToSnapshot(payloadObj, prefsObj, changes) {
   if (!Array.isArray(payloadObj.cats)) payloadObj.cats = [];
   if (!Array.isArray(payloadObj.txs)) payloadObj.txs = [];
   if (!Array.isArray(payloadObj.recs)) payloadObj.recs = [];
+  if (!Array.isArray(payloadObj.investAssets)) payloadObj.investAssets = [];
+  if (!Array.isArray(payloadObj.investOps)) payloadObj.investOps = [];
   if (!payloadObj.budgets || typeof payloadObj.budgets !== "object") {
     payloadObj.budgets = {};
   }
@@ -1598,6 +1600,8 @@ function applySyncChangesToSnapshot(payloadObj, prefsObj, changes) {
   let catMap = null;
   let txMap = null;
   let recMap = null;
+  let investAssetMap = null;
+  let investOpMap = null;
   let pendingAccountOrder = null;
 
   for (const ch of changes) {
@@ -1667,11 +1671,37 @@ function applySyncChangesToSnapshot(payloadObj, prefsObj, changes) {
       } else {
         payloadObj.comments[id] = String(ch.data);
       }
+    } else if (coll === "investAssets") {
+      if (!investAssetMap) {
+        investAssetMap = new Map();
+        for (const a of payloadObj.investAssets) {
+          if (a && a.id !== undefined) investAssetMap.set(String(a.id), a);
+        }
+      }
+      if (isDel) {
+        investAssetMap.delete(id);
+      } else {
+        investAssetMap.set(id, ch.data);
+      }
+    } else if (coll === "investOps") {
+      if (!investOpMap) {
+        investOpMap = new Map();
+        for (const o of payloadObj.investOps) {
+          if (o && o.id !== undefined) investOpMap.set(String(o.id), o);
+        }
+      }
+      if (isDel) {
+        investOpMap.delete(id);
+      } else {
+        investOpMap.set(id, ch.data);
+      }
     } else if (coll === "meta") {
       if (id === "predMode" && !isDel) {
         payloadObj.predMode = ch.data === "invoice" ? "invoice" : "month";
       } else if (id === "accountOrder" && Array.isArray(ch.data)) {
         pendingAccountOrder = ch.data.map((x) => String(x));
+      } else if (id === "investIndicators" && !isDel && ch.data && typeof ch.data === "object") {
+        payloadObj.investIndicators = ch.data;
       }
     } else if (coll === "prefs") {
       if (id === "userPrefs" && ch.data && typeof ch.data === "object") {
@@ -1684,6 +1714,8 @@ function applySyncChangesToSnapshot(payloadObj, prefsObj, changes) {
   if (accMap) payloadObj.accounts = Array.from(accMap.values());
   if (catMap) payloadObj.cats = Array.from(catMap.values());
   if (recMap) payloadObj.recs = Array.from(recMap.values());
+  if (investAssetMap) payloadObj.investAssets = Array.from(investAssetMap.values());
+  if (investOpMap) payloadObj.investOps = Array.from(investOpMap.values());
 
   if (pendingAccountOrder && Array.isArray(payloadObj.accounts)) {
     const byId = new Map();
@@ -3782,6 +3814,132 @@ export async function onRequest(context) {
         origin
       );
     }
+
+  // ==========================================================================
+  // 0.0 GET /api/market/quotes & /api/market/indicators (Proxy sem CORS)
+  // ==========================================================================
+  if (path === "/api/market/quotes" && request.method === "GET") {
+    const rawSyms = String(url.searchParams.get("symbols") || "").trim();
+    const symbols = rawSyms
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0)
+      .slice(0, 40);
+    const quotes = {};
+    const nowIso = new Date().toISOString();
+    await Promise.all(
+      symbols.map(async (sym) => {
+        try {
+          // Criptomoedas (ex: BTC-BRL, USDC-BRL, BTC-USD): tenta Binance primeiro
+          if (/^[A-Z0-9]+-(BRL|USD)$/.test(sym)) {
+            const [base, quote] = sym.split("-");
+            if (quote === "USD" && (base === "USDC" || base === "USDT")) {
+              quotes[sym] = {
+                price: 1.0,
+                currency: "USD",
+                updatedAt: nowIso,
+                source: "USD Paridade",
+              };
+              return;
+            }
+            const binanceSym = quote === "USD" ? `${base}USDT` : `${base}BRL`;
+            try {
+              const bRes = await fetch(
+                `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(binanceSym)}`,
+                { headers: { "User-Agent": "OpenMoney-Worker/1.0" } }
+              );
+              if (bRes.ok) {
+                const bJson = await bRes.json();
+                const bPrice = Number(bJson?.price || 0);
+                if (bPrice > 0) {
+                  quotes[sym] = {
+                    price: bPrice,
+                    currency: quote,
+                    updatedAt: nowIso,
+                    source: "Binance",
+                  };
+                  return;
+                }
+              }
+            } catch (_) {}
+            try {
+              const cbRes = await fetch(
+                `https://api.coinbase.com/v2/prices/${encodeURIComponent(base)}-${encodeURIComponent(quote)}/spot`,
+                { headers: { "User-Agent": "OpenMoney-Worker/1.0" } }
+              );
+              if (cbRes.ok) {
+                const cbJson = await cbRes.json();
+                const cbPrice = Number(cbJson?.data?.amount || 0);
+                if (cbPrice > 0) {
+                  quotes[sym] = {
+                    price: cbPrice,
+                    currency: quote,
+                    updatedAt: nowIso,
+                    source: "Coinbase",
+                  };
+                  return;
+                }
+              }
+            } catch (_) {}
+          }
+
+          const upstream = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`,
+            { headers: { "User-Agent": "OpenMoney-Worker/1.0" } }
+          );
+          if (!upstream.ok) return;
+          const json = await upstream.json();
+          const meta = json?.chart?.result?.[0]?.meta;
+          const price = Number(meta?.regularMarketPrice || meta?.chartPreviousClose || 0);
+          if (price > 0) {
+            quotes[sym] = {
+              price,
+              currency: String(meta?.currency || "BRL"),
+              updatedAt: nowIso,
+              source: "Yahoo Finance",
+            };
+          }
+        } catch (_) {}
+      })
+    );
+    const res = jsonResponse({ quotes, updatedAt: nowIso }, 200, origin);
+    res.headers.set("Cache-Control", "public, max-age=300");
+    return res;
+  }
+
+  if (path === "/api/market/indicators" && request.method === "GET") {
+    const fetchSgs = async (serie) => {
+      try {
+        const r = await fetch(
+          `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${serie}/dados/ultimos/1?formato=json`,
+          { headers: { "User-Agent": "OpenMoney-Worker/1.0" } }
+        );
+        if (!r.ok) return null;
+        const arr = await r.json();
+        const val = Number(String(arr?.[0]?.valor || "").replace(",", "."));
+        return Number.isFinite(val) ? val : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const [cdi, selic, ipca] = await Promise.all([
+      fetchSgs(4389),
+      fetchSgs(432),
+      fetchSgs(13522),
+    ]);
+    const res = jsonResponse(
+      {
+        cdiAnnual: cdi ?? 11.15,
+        selicAnnual: selic ?? 11.25,
+        ipca12m: ipca ?? 4.5,
+        updatedAt: new Date().toISOString(),
+      },
+      200,
+      origin
+    );
+    res.headers.set("Cache-Control", "public, max-age=3600");
+    return res;
+  }
 
   // ==========================================================================
   // 0.1 GET /api/openapi.json (OpenAPI 3.0 para ChatGPT Custom Actions / Gemini)

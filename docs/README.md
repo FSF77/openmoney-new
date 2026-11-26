@@ -55,6 +55,7 @@ O **OpenMoney** combina o poder de controle financeiro e o rigor contábil do cl
 - **📲 OpenMoney Coletor Mobile (PWA & Scanner OCR)**: Web App progressivo offline para iPhone/Android com reconhecimento ótico de recibos por câmera (OCR local em WebAssembly), autocompletar inteligente de favorecidos e exportação de lote temporário para importação no macOS sem risco de sobrescrita de base.
 - **🧾 Importação Inteligente de Comprovantes via OCR & IA Multimodal (macOS & Windows)**: Varredura de pastas de recibos, faturas e cupons fiscais (PDF e imagens). Utiliza OCR nativo (Apple Vision no macOS / Windows.Media.Ocr no Windows) e Inteligência Artificial multimodal (Google Gemini Flash com modelo BYOK) com tela de conferência em Split View e arquivamento automático para subpasta `processados/`.
 - **📊 Controle Financeiro Rigoroso**: Saldo Real vs. Previsto, conciliação de lançamentos, gestão de faturas de cartão de crédito com pagamento parcial/adiantamento, lançamentos recorrentes, parcelamentos inteligentes, limites de gastos e relatórios analíticos detalhados.
+- **📈 Carteira de Investimentos Completa (Ações, FIIs, Renda Fixa, Tesouro Direto e Cripto)**: Controle multi-corretora com Preço Médio de compra e venda, lucro realizado, proventos (`Investimentos (-) › Rendimentos`), tabela regressiva automática de IR no resgate (`Investimentos (-) › IR`), cotações online (B3/Exterior, BCB CDI/Selic/IPCA e Cripto via Binance/Coinbase/Mercado Bitcoin/CoinGecko/AwesomeAPI), importação de planilhas B3 (`.xlsx`/`.csv`), saldo atualizado (`Caixa Livre + Carteira`) no Dashboard/menu lateral e exportação PDF A4 e CSV completo.
 
 ---
 
@@ -913,6 +914,7 @@ OpenMoneyFlutter/
 - [Guia do Usuário: Dashboard Geral, Cockpit e Central de Personalização](manual/guia-dashboard-e-personalizacao.md)
 - [Guia do Usuário: Filtros Avançados e Edição em Massa (Lote)](manual/guia-edicao-em-massa.md)
 - [Guia do Usuário: Gestão e Acompanhamento de Previsões Orçamentárias](manual/guia-gestao-de-previsoes.md)
+- [Guia do Usuário: Carteira de Investimentos (Ações, FIIs, Renda Fixa, Tesouro e Cripto)](manual/guia-investimentos.md)
 - [Guia do Usuário: Lançamentos Parcelados e Transferências Recorrentes](manual/guia-lancamentos-e-transferencias-recorrentes.md)
 - [Guia do Usuário: Limite de Gastos e Alerta Preventivo de Orçamento](manual/guia-limite-de-gastos-e-alertas.md)
 - [Guia do Usuário: Contas Multi-Moeda, Câmbio e Cotações Históricas](manual/guia-multi-moeda-e-cambio.md)
@@ -958,6 +960,7 @@ OpenMoneyFlutter/
 - [ADR 036: Servidor MCP Remoto (Streamable HTTP), OAuth 2.1, PKCE S256 e Isolamento de Segurança](adr/036-mcp-remote-server-and-oauth2.md)
 - [ADR 037: Preenchimento Automático (Autofill), Chaves-senha (Passkeys / WebAuthn / FIDO2) e Bloqueio Biométrico](adr/037-autofill-passkeys-webauthn-and-biometric-lock.md)
 - [ADR 038: Adoção do Padrão de Versionamento por Data (CalVer YYYY.M.D+BUILD) e Automação de Releases](adr/038-calver-date-versioning-and-release-automation.md)
+- [ADR 039: Módulo Unificado de Carteira de Investimentos](adr/039-investment-portfolio-management.md)
 
 ---
 

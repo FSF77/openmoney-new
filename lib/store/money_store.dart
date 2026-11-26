@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart';
 import '../models/openmoney_models.dart';
 import '../models/prediction_models.dart';
 import '../services/audit_log_manager.dart';
+import '../services/b3_import_service.dart';
 import '../services/backup_manager.dart';
 import '../services/cash_flow_engine.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/currency_rate_service.dart';
 import '../services/importers_exporters.dart';
+import '../services/investment_engine.dart';
+import '../services/investment_quote_service.dart';
 import '../services/native_file_picker.dart';
 import '../services/ofx_reconciliation_service.dart';
 import '../services/platform_io.dart';
@@ -19,6 +22,7 @@ import '../ui/theme/liquid_glass.dart';
 enum NavModule {
   dashboard,
   account,
+  investments,
   transactions,
   cashFlow,
   reports,
@@ -572,6 +576,8 @@ class MoneyStore extends ChangeNotifier {
   bool dashboardAccountsShowActive = true;
   bool dashboardAccountsShowZeroBalance = true;
   bool dashboardInvestmentsShowZeroBalance = true;
+  String investDividendCategory = 'Investimentos (-) › Rendimentos';
+  String investIrCategory = 'Investimentos (-) › IR';
   bool dashboardCardsShowZeroBalance = true;
   List<String> dashboardWidgetsOrder = [
     'patrimony',
@@ -819,6 +825,8 @@ class MoneyStore extends ChangeNotifier {
       'dashboardAccountsShowActive': dashboardAccountsShowActive,
       'dashboardAccountsShowZeroBalance': dashboardAccountsShowZeroBalance,
       'dashboardInvestmentsShowZeroBalance': dashboardInvestmentsShowZeroBalance,
+      'investDividendCategory': investDividendCategory,
+      'investIrCategory': investIrCategory,
       'dashboardCardsShowZeroBalance': dashboardCardsShowZeroBalance,
       'dashboardWidgetsOrder': List<String>.from(dashboardWidgetsOrder),
       'dashboardWidgets': Map<String, bool>.from(dashboardWidgets),
@@ -894,6 +902,15 @@ class MoneyStore extends ChangeNotifier {
     if (cfg['dashboardInvestmentsShowZeroBalance'] is bool) {
       dashboardInvestmentsShowZeroBalance =
           cfg['dashboardInvestmentsShowZeroBalance'] as bool;
+    }
+    if (cfg['investDividendCategory'] is String &&
+        (cfg['investDividendCategory'] as String).trim().isNotEmpty) {
+      investDividendCategory =
+          (cfg['investDividendCategory'] as String).trim();
+    }
+    if (cfg['investIrCategory'] is String &&
+        (cfg['investIrCategory'] as String).trim().isNotEmpty) {
+      investIrCategory = (cfg['investIrCategory'] as String).trim();
     }
     if (cfg['dashboardCardsShowZeroBalance'] is bool) {
       dashboardCardsShowZeroBalance =
@@ -7662,6 +7679,541 @@ class MoneyStore extends ChangeNotifier {
     final sign = tx.amt < 0 ? -1 : 1;
     tx.amt = sign * base;
     save();
+  }
+
+  // =========================================================================
+  // CARTEIRA DE INVESTIMENTOS
+  // =========================================================================
+
+  void setInvestDividendCategory(String cat) {
+    final trimmed = cat.trim();
+    if (trimmed.isEmpty) return;
+    investDividendCategory = trimmed;
+    final cfg = _readConfig();
+    cfg['investDividendCategory'] = trimmed;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  void setInvestIrCategory(String cat) {
+    final trimmed = cat.trim();
+    if (trimmed.isEmpty) return;
+    investIrCategory = trimmed;
+    final cfg = _readConfig();
+    cfg['investIrCategory'] = trimmed;
+    _writeConfig(cfg);
+    _syncPreferencesOnWeb();
+    notifyListeners();
+  }
+
+  /// Garante que a categoria (e seu pai, se houver ` › `) exista em `db.cats`.
+  void ensureCategoryPath(String path, {String type = 'Despesa'}) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return;
+    final parts = trimmed.split(kCategorySep);
+    final parentName = parts[0].trim();
+    if (parentName.isEmpty) return;
+    bool changed = false;
+
+    final hasParent = db.cats.any(
+      (c) =>
+          c.parent == null &&
+          c.type == type &&
+          c.name.toLowerCase() == parentName.toLowerCase(),
+    );
+    if (!hasParent) {
+      db.cats.add(CategoryItem(name: parentName, parent: null, type: type));
+      changed = true;
+    }
+
+    if (parts.length > 1) {
+      final subName = parts[1].trim();
+      if (subName.isNotEmpty) {
+        final hasSub = db.cats.any(
+          (c) =>
+              c.parent != null &&
+              c.parent!.toLowerCase() == parentName.toLowerCase() &&
+              c.type == type &&
+              c.name.toLowerCase() == subName.toLowerCase(),
+        );
+        if (!hasSub) {
+          db.cats.add(
+            CategoryItem(name: subName, parent: parentName, type: type),
+          );
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      db.cats.sort(byCatSort);
+      save();
+    }
+  }
+
+  PortfolioSummary portfolioSummary({String? accountId, String? targetCurrency}) {
+    return InvestmentEngine.computePortfolio(
+      db,
+      accountId: accountId,
+      targetCurrency: targetCurrency,
+    );
+  }
+
+  /// Valor atualizado líquido da carteira na moeda base (ou da conta especificada).
+  int portfolioMarketValue({String? accountId, String? targetCurrency}) {
+    return portfolioSummary(
+      accountId: accountId,
+      targetCurrency: targetCurrency,
+    ).totalMarketValueNetCents;
+  }
+
+  /// Caixa livre somado nas contas de Investimento (ou em uma conta específica).
+  int investmentCashBalance({String? accountId, bool predicted = false}) {
+    int sum = 0;
+    for (final a in db.accounts) {
+      if (accountId != null) {
+        if (a.id == accountId) sum += balance(a, predicted: predicted);
+      } else if (a.type == 'Investimento' && a.isActive) {
+        sum += convertToBase(balance(a, predicted: predicted), a.effectiveCurrency);
+      }
+    }
+    return sum;
+  }
+
+  /// Saldo total atualizado da conta: para contas 'Investimento' com ativos,
+  /// retorna Caixa Livre + Valor Atualizado dos Ativos (convertido para moeda da conta).
+  int accountTotalBalance(Account a, {bool predicted = false}) {
+    final cash = balance(a, predicted: predicted);
+    if (a.type != 'Investimento') return cash;
+    final hasAssets = db.investAssets.any((ast) => ast.accountId == a.id) ||
+        db.investOps.any((op) => op.accountId == a.id);
+    if (!hasAssets) return cash;
+    final market = portfolioMarketValue(
+      accountId: a.id,
+      targetCurrency: a.effectiveCurrency,
+    );
+    return cash + market;
+  }
+
+  InvestAsset? investAssetById(String? id) {
+    if (id == null) return null;
+    for (final a in db.investAssets) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  void addOrUpdateInvestAsset(InvestAsset asset) {
+    final idx = db.investAssets.indexWhere((a) => a.id == asset.id);
+    if (idx >= 0) {
+      final oldAsset = db.investAssets[idx];
+      db.investAssets[idx] = asset;
+      if (oldAsset.accountId != asset.accountId) {
+        for (int i = 0; i < db.investOps.length; i++) {
+          final op = db.investOps[i];
+          if (op.assetId == asset.id && op.accountId == oldAsset.accountId) {
+            db.investOps[i] = op.copyWith(accountId: asset.accountId);
+            if (op.linkedTxId != null) {
+              final txIdx = db.txs.indexWhere((t) => t.id == op.linkedTxId);
+              if (txIdx >= 0) {
+                db.txs[txIdx] = db.txs[txIdx].copyWith(acc: asset.accountId);
+              }
+            }
+            if (op.linkedTaxTxId != null) {
+              final taxIdx = db.txs.indexWhere((t) => t.id == op.linkedTaxTxId);
+              if (taxIdx >= 0) {
+                db.txs[taxIdx] = db.txs[taxIdx].copyWith(acc: asset.accountId);
+              }
+            }
+          }
+        }
+        _indexesDirty = true;
+      }
+    } else {
+      db.investAssets.add(asset);
+    }
+    save();
+  }
+
+  void deleteInvestAsset(String assetId, {bool deleteLinkedTxs = true}) {
+    final ops = db.investOps.where((o) => o.assetId == assetId).toList();
+    for (final op in ops) {
+      if (deleteLinkedTxs && op.linkedTxId != null) {
+        db.txs.removeWhere((t) => t.id == op.linkedTxId);
+      }
+      if (deleteLinkedTxs && op.linkedTaxTxId != null) {
+        db.txs.removeWhere((t) => t.id == op.linkedTaxTxId);
+      }
+    }
+    db.investOps.removeWhere((o) => o.assetId == assetId);
+    db.investAssets.removeWhere((a) => a.id == assetId);
+    _indexesDirty = true;
+    save();
+  }
+
+  void updateAssetManualPrice(
+    String assetId,
+    int priceCents, {
+    bool manual = true,
+  }) {
+    final idx = db.investAssets.indexWhere((a) => a.id == assetId);
+    if (idx < 0) return;
+    db.investAssets[idx] = db.investAssets[idx].copyWith(
+      currentPriceCents: priceCents,
+      manualPrice: manual,
+      priceUpdatedAt: DateTime.now().toIso8601String(),
+      priceSource: manual ? 'Manual' : db.investAssets[idx].priceSource,
+    );
+    save();
+  }
+
+  void addInvestOperation(
+    InvestOperation op, {
+    bool affectAccountCash = true,
+    String? dividendCategory,
+    String? irCategory,
+  }) {
+    InvestOperation finalOp = op;
+    if (affectAccountCash &&
+        (op.type.isCashOut ||
+            op.type.isCashIn ||
+            op.type == InvestOpType.initialPosition) &&
+        op.totalCents > 0) {
+      final asset = investAssetById(op.assetId);
+      final ticker = asset?.displayCode ?? 'Ativo';
+      final isOut =
+          op.type == InvestOpType.buy || op.type == InvestOpType.initialPosition;
+      final isIncome = op.type.isIncome;
+      final effDivCat =
+          (dividendCategory != null && dividendCategory.trim().isNotEmpty)
+              ? dividendCategory.trim()
+              : investDividendCategory;
+      final cat = isIncome
+          ? effDivCat
+          : (isOut ? 'Transferência (-)' : 'Transferência (+)');
+      final signedAmt = isOut ? -op.totalCents.abs() : op.totalCents.abs();
+      final txId = uid();
+      final tx = Transaction(
+        id: txId,
+        acc: op.accountId,
+        date: op.date,
+        payee: '${op.type.label} $ticker',
+        cat: cat,
+        memo: op.memo.isNotEmpty
+            ? op.memo
+            : 'Carteira: ${op.type.label} de $ticker',
+        amt: signedAmt,
+        rec: op.date.compareTo(todayISO()) <= 0,
+        investOpId: op.id,
+      );
+      db.txs.add(tx);
+      finalOp = op.copyWith(linkedTxId: txId);
+
+      if (op.type == InvestOpType.sell && op.taxCents > 0) {
+        final effIrCat =
+            (irCategory != null && irCategory.trim().isNotEmpty)
+                ? irCategory.trim()
+                : investIrCategory;
+        ensureCategoryPath(effIrCat, type: 'Despesa');
+        final taxTxId = uid();
+        db.txs.add(Transaction(
+          id: taxTxId,
+          acc: op.accountId,
+          date: op.date,
+          payee: 'IR Resgate $ticker',
+          cat: effIrCat,
+          memo: 'IR retido na fonte · Venda $ticker',
+          amt: -op.taxCents.abs(),
+          rec: op.date.compareTo(todayISO()) <= 0,
+          investOpId: op.id,
+        ));
+        finalOp = finalOp.copyWith(linkedTaxTxId: taxTxId);
+      }
+    }
+
+    db.investOps.add(finalOp);
+    _indexesDirty = true;
+    save();
+  }
+
+  void updateInvestOperation(
+    InvestOperation updatedOp, {
+    bool affectAccountCash = true,
+    String? dividendCategory,
+    String? irCategory,
+  }) {
+    final idx = db.investOps.indexWhere((o) => o.id == updatedOp.id);
+    if (idx < 0) return;
+    final oldOp = db.investOps[idx];
+    final existingTxId = oldOp.linkedTxId ?? updatedOp.linkedTxId;
+    final existingTaxTxId = oldOp.linkedTaxTxId ?? updatedOp.linkedTaxTxId;
+
+    final shouldHaveCashTx = affectAccountCash &&
+        (updatedOp.type.isCashOut ||
+            updatedOp.type.isCashIn ||
+            updatedOp.type == InvestOpType.initialPosition) &&
+        updatedOp.totalCents > 0;
+
+    InvestOperation finalOp = updatedOp;
+
+    if (shouldHaveCashTx) {
+      final asset = investAssetById(updatedOp.assetId);
+      final ticker = asset?.displayCode ?? 'Ativo';
+      final isOut = updatedOp.type == InvestOpType.buy ||
+          updatedOp.type == InvestOpType.initialPosition;
+      final isIncome = updatedOp.type.isIncome;
+      final effDivCat =
+          (dividendCategory != null && dividendCategory.trim().isNotEmpty)
+              ? dividendCategory.trim()
+              : investDividendCategory;
+      final cat = isIncome
+          ? effDivCat
+          : (isOut ? 'Transferência (-)' : 'Transferência (+)');
+      final signedAmt =
+          isOut ? -updatedOp.totalCents.abs() : updatedOp.totalCents.abs();
+      final memoText = updatedOp.memo.isNotEmpty
+          ? updatedOp.memo
+          : 'Carteira: ${updatedOp.type.label} de $ticker';
+
+      if (existingTxId != null) {
+        final txIdx = db.txs.indexWhere((t) => t.id == existingTxId);
+        if (txIdx >= 0) {
+          db.txs[txIdx] = db.txs[txIdx].copyWith(
+            acc: updatedOp.accountId,
+            date: updatedOp.date,
+            payee: '${updatedOp.type.label} $ticker',
+            cat: cat,
+            memo: memoText,
+            amt: signedAmt,
+            rec: updatedOp.date.compareTo(todayISO()) <= 0,
+            investOpId: updatedOp.id,
+          );
+          finalOp = updatedOp.copyWith(linkedTxId: existingTxId);
+        } else {
+          final newTxId = uid();
+          db.txs.add(Transaction(
+            id: newTxId,
+            acc: updatedOp.accountId,
+            date: updatedOp.date,
+            payee: '${updatedOp.type.label} $ticker',
+            cat: cat,
+            memo: memoText,
+            amt: signedAmt,
+            rec: updatedOp.date.compareTo(todayISO()) <= 0,
+            investOpId: updatedOp.id,
+          ));
+          finalOp = updatedOp.copyWith(linkedTxId: newTxId);
+        }
+      } else {
+        final newTxId = uid();
+        db.txs.add(Transaction(
+          id: newTxId,
+          acc: updatedOp.accountId,
+          date: updatedOp.date,
+          payee: '${updatedOp.type.label} $ticker',
+          cat: cat,
+          memo: memoText,
+          amt: signedAmt,
+          rec: updatedOp.date.compareTo(todayISO()) <= 0,
+          investOpId: updatedOp.id,
+        ));
+        finalOp = updatedOp.copyWith(linkedTxId: newTxId);
+      }
+
+      if (updatedOp.type == InvestOpType.sell && updatedOp.taxCents > 0) {
+        final effIrCat =
+            (irCategory != null && irCategory.trim().isNotEmpty)
+                ? irCategory.trim()
+                : investIrCategory;
+        ensureCategoryPath(effIrCat, type: 'Despesa');
+        final taxAmt = -updatedOp.taxCents.abs();
+        if (existingTaxTxId != null) {
+          final taxIdx = db.txs.indexWhere((t) => t.id == existingTaxTxId);
+          if (taxIdx >= 0) {
+            db.txs[taxIdx] = db.txs[taxIdx].copyWith(
+              acc: updatedOp.accountId,
+              date: updatedOp.date,
+              payee: 'IR Resgate $ticker',
+              cat: effIrCat,
+              memo: 'IR retido na fonte · Venda $ticker',
+              amt: taxAmt,
+              rec: updatedOp.date.compareTo(todayISO()) <= 0,
+              investOpId: updatedOp.id,
+            );
+            finalOp = finalOp.copyWith(linkedTaxTxId: existingTaxTxId);
+          } else {
+            final newTaxTxId = uid();
+            db.txs.add(Transaction(
+              id: newTaxTxId,
+              acc: updatedOp.accountId,
+              date: updatedOp.date,
+              payee: 'IR Resgate $ticker',
+              cat: effIrCat,
+              memo: 'IR retido na fonte · Venda $ticker',
+              amt: taxAmt,
+              rec: updatedOp.date.compareTo(todayISO()) <= 0,
+              investOpId: updatedOp.id,
+            ));
+            finalOp = finalOp.copyWith(linkedTaxTxId: newTaxTxId);
+          }
+        } else {
+          final newTaxTxId = uid();
+          db.txs.add(Transaction(
+            id: newTaxTxId,
+            acc: updatedOp.accountId,
+            date: updatedOp.date,
+            payee: 'IR Resgate $ticker',
+            cat: effIrCat,
+            memo: 'IR retido na fonte · Venda $ticker',
+            amt: taxAmt,
+            rec: updatedOp.date.compareTo(todayISO()) <= 0,
+            investOpId: updatedOp.id,
+          ));
+          finalOp = finalOp.copyWith(linkedTaxTxId: newTaxTxId);
+        }
+      } else {
+        if (existingTaxTxId != null) {
+          db.txs.removeWhere((t) => t.id == existingTaxTxId);
+        }
+        finalOp = finalOp.copyWith(clearLinkedTaxTx: true);
+      }
+    } else {
+      if (existingTxId != null) {
+        db.txs.removeWhere((t) => t.id == existingTxId);
+      }
+      if (existingTaxTxId != null) {
+        db.txs.removeWhere((t) => t.id == existingTaxTxId);
+      }
+      finalOp = updatedOp.copyWith(clearLinkedTx: true, clearLinkedTaxTx: true);
+    }
+
+    db.investOps[idx] = finalOp;
+    _indexesDirty = true;
+    save();
+  }
+
+  void deleteInvestOperation(String opId, {bool deleteLinkedTx = true}) {
+    final idx = db.investOps.indexWhere((o) => o.id == opId);
+    if (idx < 0) return;
+    final op = db.investOps[idx];
+    if (deleteLinkedTx && op.linkedTxId != null) {
+      db.txs.removeWhere((t) => t.id == op.linkedTxId);
+    }
+    if (deleteLinkedTx && op.linkedTaxTxId != null) {
+      db.txs.removeWhere((t) => t.id == op.linkedTaxTxId);
+    }
+    db.investOps.removeAt(idx);
+    _indexesDirty = true;
+    save();
+  }
+
+  /// Importa itens parseados da B3 (Posição Inicial ou Operações).
+  /// Se `convertCashBalance` for true no modo Posição Inicial, gera uma única
+  /// `Transferência (-)` no valor total aplicado para converter o saldo da conta.
+  int importB3Items(
+    List<B3ImportItem> items, {
+    required String accountId,
+    bool convertCashBalance = false,
+  }) {
+    final selected = items.where((i) => i.selected).toList();
+    if (selected.isEmpty) return 0;
+
+    int importedCount = 0;
+    int totalAppliedCents = 0;
+
+    for (final item in selected) {
+      InvestAsset? asset;
+      for (final existing in db.investAssets) {
+        if (existing.accountId == accountId &&
+            existing.displayCode == item.ticker.toUpperCase()) {
+          asset = existing;
+          break;
+        }
+      }
+      if (asset == null) {
+        asset = InvestAsset(
+          ticker: item.ticker.toUpperCase(),
+          name: item.name,
+          assetClass: item.assetClass,
+          subType: item.subType,
+          accountId: accountId,
+          currentPriceCents: item.currentPriceCents,
+          priceUpdatedAt: item.currentPriceCents != null
+              ? DateTime.now().toIso8601String()
+              : null,
+          priceSource: item.currentPriceCents != null ? 'B3 Import' : null,
+        );
+        db.investAssets.add(asset);
+      } else if (item.currentPriceCents != null && !asset.manualPrice) {
+        final aIdx = db.investAssets.indexWhere((a) => a.id == asset!.id);
+        if (aIdx >= 0) {
+          db.investAssets[aIdx] = asset.copyWith(
+            currentPriceCents: item.currentPriceCents,
+            priceUpdatedAt: DateTime.now().toIso8601String(),
+            priceSource: 'B3 Import',
+          );
+        }
+      }
+
+      final op = InvestOperation(
+        assetId: asset.id,
+        accountId: accountId,
+        type: item.opType,
+        date: item.dateIso,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+        totalCents: item.totalCents,
+        memo: 'Importado B3${item.institution.isNotEmpty ? " (${item.institution})" : ""}',
+      );
+      db.investOps.add(op);
+      totalAppliedCents += item.totalCents;
+      importedCount++;
+    }
+
+    if (convertCashBalance && totalAppliedCents > 0) {
+      db.txs.add(Transaction(
+        acc: accountId,
+        date: todayISO(),
+        payee: 'Posição Inicial Carteira (B3)',
+        cat: 'Transferência (-)',
+        memo: 'Conversão de saldo da conta para $importedCount ativo(s) importado(s) da B3',
+        amt: -totalAppliedCents.abs(),
+        rec: true,
+      ));
+    }
+
+    _indexesDirty = true;
+    save();
+    return importedCount;
+  }
+
+  Future<int> refreshInvestmentQuotes({bool force = false}) async {
+    if (db.investAssets.isEmpty) return 0;
+    final quotes = await InvestmentQuoteService.fetchQuotes(db.investAssets);
+    int updated = 0;
+    for (int i = 0; i < db.investAssets.length; i++) {
+      final a = db.investAssets[i];
+      if (a.manualPrice && !force) continue;
+      final q = quotes[a.id];
+      if (q != null) {
+        db.investAssets[i] = a.copyWith(
+          currentPriceCents: q.priceCents,
+          priceUpdatedAt: q.updatedAt,
+          priceSource: q.source,
+          manualPrice: false,
+        );
+        updated++;
+      }
+    }
+    final indicators = await InvestmentQuoteService.fetchIndicators();
+    if (indicators != null && !(db.investIndicators?.manual ?? false)) {
+      db.investIndicators = indicators;
+    }
+    if (updated > 0 || indicators != null) {
+      save();
+    }
+    return updated;
   }
 
   @override

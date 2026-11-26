@@ -191,8 +191,8 @@ class AnalyticsEngine {
     for (final t in store.db.txs) {
       if (!accFilterOk(t.acc)) continue;
 
-      // Transferências entre contas: rigorosamente igual ao relatório contábil (buildMonthlyReport)
-      if (t.xfer != null || t.peer != null) continue;
+      // Transferências entre contas (ou compra/venda de investimentos): rigorosamente igual ao relatório contábil (buildMonthlyReport)
+      if (isTransferTransaction(t)) continue;
 
       // Categorias incluídas em relatórios: rigorosamente igual ao relatório contábil
       if (!store.isCategoryIncludedInReports(t.cat)) continue;

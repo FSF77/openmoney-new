@@ -406,9 +406,59 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
             .toList();
 
     final isMobile = MediaQuery.sizeOf(context).width < 720;
+    final hasInvestAssets = acc.type == 'Investimento' &&
+        widget.store.db.investAssets.any((a) => a.accountId == acc.id);
+    final investCash = hasInvestAssets ? widget.store.balance(acc) : 0;
+    final investMarket = hasInvestAssets
+        ? widget.store.portfolioMarketValue(
+            accountId: acc.id,
+            targetCurrency: acc.effectiveCurrency,
+          )
+        : 0;
 
     return Column(
       children: [
+        if (hasInvestAssets)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              isMobile ? 10 : 16,
+              isMobile ? 6 : 10,
+              isMobile ? 10 : 16,
+              0,
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.surfaceGlass,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Caixa Livre: ${formatCurrency(investCash, acc.effectiveCurrency)}  •  '
+                    'Carteira Atualizada: ${formatCurrency(investMarket, acc.effectiveCurrency)}  •  '
+                    'Total: ${formatCurrency(investCash + investMarket, acc.effectiveCurrency)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        widget.store.navigateTo(NavModule.investments),
+                    icon: const Icon(Icons.candlestick_chart_rounded, size: 16),
+                    label: const Text('Abrir Carteira'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         // 1. Account Executive Header
         Padding(
           padding: EdgeInsets.fromLTRB(

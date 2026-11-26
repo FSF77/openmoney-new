@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'investment_models.dart';
+export 'investment_models.dart';
 
 const String kCardType = 'Cartão de crédito';
 const String kCategorySep = ' › ';
@@ -540,6 +542,7 @@ class Transaction {
   double? rate;
   List<String>? tags;
   String? fitid;
+  String? investOpId;
 
   Transaction({
     String? id,
@@ -566,6 +569,7 @@ class Transaction {
     this.rate,
     this.tags,
     String? fitid,
+    this.investOpId,
   }) : id = id ?? uid(),
         createdAt =
             createdAt ?? (DateTime.now().millisecondsSinceEpoch / 1000.0),
@@ -613,6 +617,9 @@ class Transaction {
       rate: (json['rate'] as num?)?.toDouble(),
       tags: parsedTags,
       fitid: (rawFit != null && rawFit.isNotEmpty) ? rawFit : null,
+      investOpId: (json['investOpId'] as String?)?.trim().isNotEmpty == true
+          ? (json['investOpId'] as String).trim()
+          : null,
     );
   }
 
@@ -641,6 +648,8 @@ class Transaction {
         if (rate != null) 'rate': rate,
         if (tags != null && tags!.isNotEmpty) 'tags': tags,
         if (fitid != null && fitid!.isNotEmpty) 'fitid': fitid,
+        if (investOpId != null && investOpId!.isNotEmpty)
+          'investOpId': investOpId,
       };
 
   Transaction copyWith({
@@ -668,6 +677,7 @@ class Transaction {
     double? rate,
     List<String>? tags,
     String? fitid,
+    String? investOpId,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -694,6 +704,7 @@ class Transaction {
       rate: rate ?? this.rate,
       tags: tags ?? this.tags,
       fitid: fitid ?? this.fitid,
+      investOpId: investOpId ?? this.investOpId,
     );
   }
 }
@@ -806,6 +817,11 @@ class Database {
   Map<String, CurrencyRateInfo> rates;
   List<String> tags;
 
+  /// Carteira de Investimentos
+  List<InvestAsset> investAssets;
+  List<InvestOperation> investOps;
+  MarketIndicators? investIndicators;
+
   String get effectiveBaseCurrency =>
       baseCurrency.trim().isNotEmpty ? baseCurrency.trim().toUpperCase() : 'BRL';
 
@@ -822,11 +838,16 @@ class Database {
     String? baseCurrency,
     Map<String, CurrencyRateInfo>? rates,
     List<String>? tags,
+    List<InvestAsset>? investAssets,
+    List<InvestOperation>? investOps,
+    this.investIndicators,
   }) : baseCurrency = (baseCurrency != null && baseCurrency.trim().isNotEmpty)
             ? baseCurrency.trim().toUpperCase()
             : 'BRL',
         rates = rates ?? {},
         tags = tags ?? [],
+        investAssets = investAssets ?? [],
+        investOps = investOps ?? [],
         accounts = accounts ??
             [
               Account(
@@ -913,6 +934,28 @@ class Database {
           .toList();
     }
 
+    List<InvestAsset> parsedInvestAssets = [];
+    if (json['investAssets'] is List) {
+      parsedInvestAssets = (json['investAssets'] as List)
+          .whereType<Map>()
+          .map((m) => InvestAsset.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
+    }
+
+    List<InvestOperation> parsedInvestOps = [];
+    if (json['investOps'] is List) {
+      parsedInvestOps = (json['investOps'] as List)
+          .whereType<Map>()
+          .map((m) => InvestOperation.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
+    }
+
+    MarketIndicators? parsedIndicators;
+    if (json['investIndicators'] is Map) {
+      parsedIndicators = MarketIndicators.fromJson(
+          Map<String, dynamic>.from(json['investIndicators'] as Map));
+    }
+
     return Database(
       accounts: (parsedAccounts != null && parsedAccounts.isNotEmpty)
           ? parsedAccounts
@@ -937,6 +980,9 @@ class Database {
       baseCurrency: rawBase,
       rates: parsedRates,
       tags: parsedTags,
+      investAssets: parsedInvestAssets,
+      investOps: parsedInvestOps,
+      investIndicators: parsedIndicators,
     );
   }
 
@@ -954,6 +1000,12 @@ class Database {
         if (rates.isNotEmpty)
           'rates': rates.map((k, v) => MapEntry(k, v.toJson())),
         if (tags.isNotEmpty) 'tags': tags,
+        if (investAssets.isNotEmpty)
+          'investAssets': investAssets.map((a) => a.toJson()).toList(),
+        if (investOps.isNotEmpty)
+          'investOps': investOps.map((o) => o.toJson()).toList(),
+        if (investIndicators != null)
+          'investIndicators': investIndicators!.toJson(),
       };
 }
 

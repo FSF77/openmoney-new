@@ -173,6 +173,36 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
       jsonStr: jsonEncode(accOrder),
     );
 
+    if (db.investIndicators != null) {
+      final d = db.investIndicators!.toJson();
+      map['meta/investIndicators'] = (
+        coll: 'meta',
+        id: 'investIndicators',
+        data: d,
+        jsonStr: jsonEncode(d),
+      );
+    }
+
+    for (final asset in db.investAssets) {
+      final d = asset.toJson();
+      map['investAssets/${asset.id}'] = (
+        coll: 'investAssets',
+        id: asset.id,
+        data: d,
+        jsonStr: jsonEncode(d),
+      );
+    }
+
+    for (final op in db.investOps) {
+      final d = op.toJson();
+      map['investOps/${op.id}'] = (
+        coll: 'investOps',
+        id: op.id,
+        data: d,
+        jsonStr: jsonEncode(d),
+      );
+    }
+
     if (prefs.isNotEmpty) {
       map['prefs/userPrefs'] = (
         coll: 'prefs',
@@ -248,6 +278,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     Map<String, CategoryItem>? catMap;
     Map<String, Transaction>? txMap;
     Map<String, RecurrenceRule>? recMap;
+    Map<String, InvestAsset>? investAssetMap;
+    Map<String, InvestOperation>? investOpMap;
     List<String>? pendingAccountOrder;
 
     for (final ch in changes) {
@@ -341,6 +373,30 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
             baseline[key] = jsonEncode(tagName);
           }
         }
+      } else if (coll == 'investAssets') {
+        investAssetMap ??= {for (final a in db.investAssets) a.id: a};
+        if (isDel) {
+          if (investAssetMap.remove(id) != null) modified = true;
+          baseline.remove(key);
+        } else if (ch.data is Map) {
+          final parsed = InvestAsset.fromJson(
+              Map<String, dynamic>.from(ch.data as Map));
+          investAssetMap[id] = parsed;
+          baseline[key] = jsonEncode(parsed.toJson());
+          modified = true;
+        }
+      } else if (coll == 'investOps') {
+        investOpMap ??= {for (final o in db.investOps) o.id: o};
+        if (isDel) {
+          if (investOpMap.remove(id) != null) modified = true;
+          baseline.remove(key);
+        } else if (ch.data is Map) {
+          final parsed = InvestOperation.fromJson(
+              Map<String, dynamic>.from(ch.data as Map));
+          investOpMap[id] = parsed;
+          baseline[key] = jsonEncode(parsed.toJson());
+          modified = true;
+        }
       } else if (coll == 'meta') {
         if (id == 'predMode' && !isDel) {
           final mode = ch.data == 'invoice' ? 'invoice' : 'month';
@@ -353,6 +409,11 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
           pendingAccountOrder =
               (ch.data as List).map((e) => e.toString()).toList();
           baseline[key] = jsonEncode(pendingAccountOrder);
+          modified = true;
+        } else if (id == 'investIndicators' && !isDel && ch.data is Map) {
+          db.investIndicators = MarketIndicators.fromJson(
+              Map<String, dynamic>.from(ch.data as Map));
+          baseline[key] = jsonEncode(db.investIndicators!.toJson());
           modified = true;
         }
       } else if (coll == 'prefs') {
@@ -374,6 +435,8 @@ class SyncEngine extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (catMap != null) db.cats = catMap.values.toList();
     if (recMap != null) db.recs = recMap.values.toList();
+    if (investAssetMap != null) db.investAssets = investAssetMap.values.toList();
+    if (investOpMap != null) db.investOps = investOpMap.values.toList();
 
     if (pendingAccountOrder != null && db.accounts.length > 1) {
       final byId = {for (final a in db.accounts) a.id: a};
