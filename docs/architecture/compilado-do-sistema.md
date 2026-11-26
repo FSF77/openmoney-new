@@ -75,12 +75,16 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
    - Quando **`dueDay <= closeDay`**, aplica a virada de competência (+1 mês via `addMonthsYM(k, 1)`), garantindo que a chave `ik` corresponda sempre ao **mês de vencimento** da fatura.
 2. **Vigência de Faturas (`isVigenteInvoice`):**
    - Uma fatura é vigente se pertencer ao ciclo atualmente em aberto (`invoiceKey == currentOpenKey`) **ou** se estiver fechada dentro da janela regular de pagamento (`closeDate <= today && dueDate >= today`), eliminando falsos atrasos em Contas a Pagar.
-3. **Seleção Manual de Fatura (Override) e Direcionamento Inteligente:**
+3. **Seleção Manual de Fatura (Override) e Direcionamento Inteligente (`defaultInvoiceForAccount`):**
    - O usuário pode sobrescrever manualmente `tx.ik` na inclusão ou edição.
-   - Ao inserir ou navegar para lançamento em cartão, a tela posiciona a visualização no mês da fatura (`ik`); ao alternar entre cartão e conta bancária tradicional na barra lateral, ajusta adequadamente para a fatura aberta do cartão ou mês corrente da conta.
+   - Ao inserir um lançamento em cartão, a tela posiciona a visualização na fatura do lançamento (`ik`); ao alternar para uma conta de cartão na barra lateral (`MoneyStore.navigateTo` / `AccountLedgerView`) ou visualizar o resumo no `DashboardOverviewView`, `defaultInvoiceForAccount(acc)` prioriza a fatura fechada recentemente que ainda esteja dentro da janela até o vencimento (`closeDate <= today <= dueDate` com `chargesCents > 0 && !isFullyPaid`) antes de apontar para `invKeyFor(card, today)`.
 4. **Pagamento Parcial, Adiantamento e Conciliação Automática (`syncCards`):**
    - Pagamentos manuais parciais ou antecipados geram transferência para o cartão vinculada à competência `ik`.
    - `syncCards` consolida $\text{Charges} = \sum |\text{Despesas}|$ e $\text{Payments} = \sum \text{Pagamentos}$ do ciclo, mantendo de forma idempotente (`inv:{cardId}:{ik}`, `auto: true`, `ik`) uma transação automática no vencimento cobrando **apenas o saldo remanescente** — ou cancelando-a quando liquidada (badge verde **LIQUIDADA**).
+5. **Saldo Previsto sem Rolagem Prematura de Fatura Fechada:**
+   - Em `rebuildIndexes`, `rebuildPredictedBalances`, `cardInvoiceMonthData` e `totalBalancePredictedYear`, transações automáticas de quitação (`tx.auto == true`) de faturas anteriores (`ik < _month` ou `ik < key`) abatem o saldo previsto daquela fatura enquanto `today <= dueDate`, evitando que uma fatura fechada dentro do prazo seja somada ao período seguinte. A dívida só rola para os ciclos posteriores caso `today > dueDate` sem conciliação (`!tx.rec`).
+6. **Conciliação Inicial de Lançamentos em Fatura Posterior (`_shouldStartReconciled`):**
+   - Em `addTransaction` (avulsos e 1ª parcela de parcelamentos) e `syncRecs`, lançamentos não-transferência em cartão cuja competência `resolvedIk` seja posterior à fatura ativa em aberto (`defaultInvoiceForAccount(acc, today: today)`) iniciam com `rec = false`, mantendo o **Saldo Real** alinhado à fatura fechada em aberto até sua quitação.
 
 ### 3.3 Edição, Cópia, Movimentação entre Contas e Transferências
 - **Copiar Lançamento como Novo (`TransactionCopySheet`):** preenche descrição (removendo sufixo de parcela `(x/y)`), categoria/transferência, nota e valor, inicializando a data com **hoje** e permitindo escolher conta, repetição e tags sem alterar o original (desabilitado para transações `auto == true`).

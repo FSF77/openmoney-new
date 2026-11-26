@@ -653,9 +653,9 @@ class MoneyStore extends ChangeNotifier {
         final acc = accById(accountId);
         if (acc != null) {
           if (acc.type == kCardType && acc.card != null) {
-            final openIk = invKeyFor(acc.card!, todayISO());
-            if (_month.compareTo(openIk) < 0) {
-              _month = openIk;
+            final targetIk = defaultInvoiceForAccount(acc);
+            if (_month != targetIk) {
+              _month = targetIk;
               syncRecs();
               rebuildPredictedBalances();
             }
@@ -2070,11 +2070,21 @@ class MoneyStore extends ChangeNotifier {
       final cardAcc = cardAccounts[tx.acc];
       if (cardAcc != null) {
         // Para cartão de crédito: lançamentos normais entram se ik <= _month;
-        // Lançamentos automáticos de quitação só abatem a previsão se conciliados (tx.rec)
-        if (tx.auto != true || tx.rec) {
-          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
-          if (ik.compareTo(_month) <= 0) {
+        // Pagamentos automáticos só abatem se conciliados, ou se de fatura anterior ainda dentro do prazo de vencimento.
+        final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
+        if (ik.compareTo(_month) <= 0) {
+          if (tx.auto != true) {
             predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          } else {
+            if (tx.rec) {
+              predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+            } else if (ik.compareTo(_month) < 0) {
+              final dueDate = cardAcc.invoices?[ik]?.due ??
+                  invDates(cardAcc.card!, ik).due;
+              if (todayISO().compareTo(dueDate) <= 0) {
+                predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+              }
+            }
           }
         }
       } else {
@@ -2156,11 +2166,21 @@ class MoneyStore extends ChangeNotifier {
       final cardAcc = cardAccounts[tx.acc];
       if (cardAcc != null) {
         // Para cartão de crédito: lançamentos normais entram se ik <= _month;
-        // Lançamentos automáticos de quitação só abatem a previsão se conciliados (tx.rec)
-        if (tx.auto != true || tx.rec) {
-          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
-          if (ik.compareTo(_month) <= 0) {
+        // Pagamentos automáticos só abatem se conciliados, ou se de fatura anterior ainda dentro do prazo de vencimento.
+        final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
+        if (ik.compareTo(_month) <= 0) {
+          if (tx.auto != true) {
             predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          } else {
+            if (tx.rec) {
+              predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+            } else if (ik.compareTo(_month) < 0) {
+              final dueDate = cardAcc.invoices?[ik]?.due ??
+                  invDates(cardAcc.card!, ik).due;
+              if (todayISO().compareTo(dueDate) <= 0) {
+                predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+              }
+            }
           }
         }
       } else {
@@ -3024,7 +3044,14 @@ class MoneyStore extends ChangeNotifier {
               cat: r.cat,
               memo: r.memo,
               amt: r.amt,
-              rec: d.compareTo(today) <= 0 && seq == 1,
+              rec: seq == 1 &&
+                  _shouldStartReconciled(
+                    acc: curAcc,
+                    date: d,
+                    today: today,
+                    txIk: curIk,
+                    isTransfer: isTransfer,
+                  ),
               xfer: xid,
               ik: curIk,
               recId: r.id,
@@ -3373,13 +3400,24 @@ class MoneyStore extends ChangeNotifier {
       }
     }
 
+    final today = todayISO();
     for (final tx in db.txs) {
       final cardAcc = cardAccounts[tx.acc];
       if (cardAcc != null) {
-        if (tx.auto != true || tx.rec) {
-          final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
-          if (ik.compareTo(endYearMonth) <= 0) {
+        final ik = tx.ik ?? tx.inv ?? invKeyFor(cardAcc.card!, tx.date);
+        if (ik.compareTo(endYearMonth) <= 0) {
+          if (tx.auto != true) {
             predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+          } else {
+            if (tx.rec) {
+              predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+            } else if (ik.compareTo(endYearMonth) <= 0) {
+              final dueDate = cardAcc.invoices?[ik]?.due ??
+                  invDates(cardAcc.card!, ik).due;
+              if (today.compareTo(dueDate) <= 0 && dueDate.compareTo(endOfYear) <= 0) {
+                predByAcc[tx.acc] = (predByAcc[tx.acc] ?? 0) + tx.amt;
+              }
+            }
           }
         }
       } else {
@@ -3583,6 +3621,39 @@ class MoneyStore extends ChangeNotifier {
     );
   }
 
+  /// Retorna a fatura padrão/ativa de um cartão de crédito para navegação e visualização.
+  /// Se existir uma fatura anterior que fechou recentemente e cujo vencimento ainda não ocorreu
+  /// (ou seja, está em aberto aguardando quitação entre a data de fechamento e o vencimento)
+  /// e possuir saldo a pagar, essa fatura fechada é retornada.
+  /// Caso contrário (já quitada ou sem pendências), retorna a fatura aberta do ciclo atual.
+  String defaultInvoiceForAccount(Account acc, {String? today}) {
+    final refToday = today ?? todayISO();
+    final cardCfg = acc.card;
+    if (cardCfg == null) {
+      return refToday.length >= 7 ? refToday.substring(0, 7) : refToday;
+    }
+    final openIk = invKeyFor(cardCfg, refToday);
+    final prevIk = addMonthsYM(openIk, -1);
+    final prevDates = invDates(cardCfg, prevIk);
+    final invInfo = acc.invoices?[prevIk];
+    final closeDate = (invInfo != null && invInfo.close.isNotEmpty)
+        ? invInfo.close
+        : prevDates.close;
+    final dueDate = (invInfo != null && invInfo.due.isNotEmpty)
+        ? invInfo.due
+        : prevDates.due;
+
+    // Fatura anterior fechada recentemente aguardando quitação até o vencimento
+    if (closeDate.compareTo(refToday) <= 0 && dueDate.compareTo(refToday) >= 0) {
+      final summary = invoiceSummary(acc.id, prevIk);
+      if (summary != null && summary.chargesCents > 0 && !summary.isFullyPaid) {
+        return prevIk;
+      }
+    }
+
+    return openIk;
+  }
+
   /// Retorna os lançamentos e saldo anterior acumulado da fatura `key` de um cartão de crédito.
   AccountMonthData cardInvoiceMonthData(String cardId, String key) {
     final cardAcc = accById(cardId);
@@ -3598,15 +3669,27 @@ class MoneyStore extends ChangeNotifier {
     int priorReal = cardAcc.opening;
     int priorPred = cardAcc.opening;
     final invTxs = <Transaction>[];
+    final today = todayISO();
 
     for (final t in cardTxs) {
-      if (t.auto == true && !t.rec) continue;
       final ik = t.ik ?? t.inv ?? invKeyFor(cardCfg, t.date);
       if (ik.compareTo(key) < 0) {
-        if (t.rec) priorReal += t.amt;
-        priorPred += t.amt;
+        if (t.rec) {
+          priorReal += t.amt;
+          priorPred += t.amt;
+        } else if (t.auto == true) {
+          final dueDate = cardAcc.invoices?[ik]?.due ??
+              invDates(cardCfg, ik).due;
+          if (today.compareTo(dueDate) <= 0) {
+            priorPred += t.amt;
+          }
+        } else {
+          priorPred += t.amt;
+        }
       } else if (ik == key) {
-        invTxs.add(t);
+        if (t.auto != true || t.rec) {
+          invTxs.add(t);
+        }
       }
     }
 
@@ -4211,6 +4294,29 @@ class MoneyStore extends ChangeNotifier {
 
   // MARK: - Transaction Actions
 
+  bool _shouldStartReconciled({
+    required Account? acc,
+    required String date,
+    required String today,
+    String? txIk,
+    bool isTransfer = false,
+  }) {
+    if (date.compareTo(today) > 0) return false;
+    if (!isTransfer &&
+        acc != null &&
+        acc.type == kCardType &&
+        acc.card != null) {
+      final resolvedIk = (txIk != null && txIk.isNotEmpty)
+          ? txIk
+          : invKeyFor(acc.card!, date);
+      final activeIk = defaultInvoiceForAccount(acc, today: today);
+      if (resolvedIk.compareTo(activeIk) > 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   void addTransaction({
     required String accId,
     required String date,
@@ -4297,7 +4403,14 @@ class MoneyStore extends ChangeNotifier {
             cat: catLabel,
             memo: memo,
             amt: parts[i],
-            rec: d.compareTo(today) <= 0 && i == 0,
+            rec: i == 0 &&
+                _shouldStartReconciled(
+                  acc: curAcc,
+                  date: d,
+                  today: today,
+                  txIk: ik,
+                  isTransfer: isXfer,
+                ),
             ik: ik,
             plan: pid,
             pn: i + 1,
@@ -4310,7 +4423,13 @@ class MoneyStore extends ChangeNotifier {
       _month = targetMonth;
     } else {
       final xid = isXfer ? uid() : null;
-      final rec = date.compareTo(today) <= 0;
+      final rec = _shouldStartReconciled(
+        acc: curAcc,
+        date: date,
+        today: today,
+        txIk: baseIk,
+        isTransfer: isXfer,
+      );
 
       int? computedPeerAmt;
       double? curTxRate = resolvedCurRate;

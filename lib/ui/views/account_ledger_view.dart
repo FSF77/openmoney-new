@@ -92,9 +92,9 @@ class _AccountLedgerViewState extends State<AccountLedgerView> {
   void _checkCreditCardOpenInvoice() {
     final acc = widget.account;
     if (acc.type == kCardType && acc.card != null) {
-      final openIk = invKeyFor(acc.card!, todayISO());
-      if (widget.store.month.compareTo(openIk) < 0) {
-        widget.store.month = openIk;
+      final targetIk = widget.store.defaultInvoiceForAccount(acc);
+      if (widget.store.month != targetIk) {
+        widget.store.month = targetIk;
       }
     } else {
       final curMonth = todayISO().substring(0, 7);

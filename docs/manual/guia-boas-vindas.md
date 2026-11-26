@@ -128,6 +128,12 @@ No OpenMoney, toda fatura é identificada pelo **mês da sua data de vencimento*
 - A conciliação automática (`syncCards`) abate todos os pagamentos parciais já feitos e agenda no dia do vencimento **apenas o saldo restante**. Quando paga integralmente, a fatura exibe o status verde **LIQUIDADA**.
 - Use **Fatura PDF** para imprimir ou salvar em PDF A4 a conferência da fatura.
 
+### Comportamento entre o fechamento e o vencimento
+Considere um cartão que **fecha no dia 25/11** e **vence no dia 05/12**, com uma nova compra lançada no dia **26/11**:
+- **Fatura em aberto selecionada automaticamente:** Ao clicar no cartão na barra lateral ou no Dashboard enquanto a fatura recém-fechada ainda aguarda pagamento (entre o fechamento em 25/11 e o vencimento em 05/12), o app direciona diretamente para essa fatura em aberto (**dez/26**). Assim que ela for paga/quitada, o cartão passa a abrir automaticamente o ciclo seguinte (**jan/27**).
+- **Saldo Previsto sem acúmulo indevido:** Enquanto a fatura fechada estiver dentro do prazo até o vencimento (`05/12`), o saldo previsto do próximo período considera que ela será paga no vencimento e não soma o valor ao novo ciclo. O saldo só rola para o período seguinte caso passe da data de vencimento sem pagamento.
+- **Lançamentos do próximo ciclo nascem não conciliados:** Ao inserir uma compra após o fechamento (única, parcelada ou recorrente) que já cai na fatura seguinte (`jan/27`) enquanto a fatura anterior (`dez/26`) ainda está fechada e pendente de pagamento, o novo lançamento inicia automaticamente como **não conciliado**. Isso evita somar o valor no **Saldo Real** da fatura atual e permite conferir/conciliar após quitar a fatura em aberto. Quando a fatura anterior é paga, novos lançamentos do ciclo atual voltam a iniciar conciliados normalmente.
+
 ---
 
 ## 7. 🏷️ Categorias e Tags (`#tags`)

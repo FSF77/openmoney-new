@@ -1489,8 +1489,8 @@ class DashboardOverviewView extends StatelessWidget {
               if (showZero) return true;
               final card = acc.card;
               if (card == null) return true;
-              final currentIk = invKeyFor(card, todayISO());
-              final summary = store.invoiceSummary(acc.id, currentIk);
+              final targetIk = store.defaultInvoiceForAccount(acc);
+              final summary = store.invoiceSummary(acc.id, targetIk);
               final remainingCents = summary?.remainingCents ?? 0;
               final clearedCents = summary?.clearedCents ?? 0;
               return remainingCents != 0 || clearedCents != 0;
@@ -1511,8 +1511,8 @@ class DashboardOverviewView extends StatelessWidget {
             return Column(
               children: filtered.map((acc) {
                 final card = acc.card!;
-                final currentIk = invKeyFor(card, todayISO());
-                final summary = store.invoiceSummary(acc.id, currentIk);
+                final targetIk = store.defaultInvoiceForAccount(acc);
+                final summary = store.invoiceSummary(acc.id, targetIk);
                 final remainingCents = summary?.remainingCents ?? 0;
                 final clearedCents = summary?.clearedCents ?? 0;
                 final closeDate = summary?.closeDate ?? '';

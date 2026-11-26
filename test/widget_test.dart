@@ -2391,4 +2391,150 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     expect(find.text('Novo Lançamento'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('45. Credit card invoice navigation and predicted balance rollover prevention when bill recently closed and awaiting payment', () {
+    final store = MoneyStore(autoBoot: false);
+    store.saveAccount(
+      name: 'Nubank Crédito',
+      type: kCardType,
+      openingCents: 0,
+      closeDay: 25,
+      dueDay: 5,
+      payAccId: 'a1',
+    );
+    final card = store.db.accounts.firstWhere((a) => a.type == kCardType);
+
+    // Compra no ciclo que fechou em 25/11 (ik: 2026-12, vence 05/12/2026)
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-20',
+      payee: 'Supermercado',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -10000, // R$ 100,00
+    );
+
+    // Compra no novo ciclo após fechamento em 26/11 (ik: 2027-01, vence 05/01/2027)
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-26',
+      payee: 'Farmácia Novo Ciclo',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -5000, // R$ 50,00
+    );
+
+    store.syncCards();
+
+    // 1. Fatura padrão ao alternar/navegar para a conta do cartão em 26/11
+    // Como a fatura de 2026-12 fechou em 25/11 e vence em 05/12 e ainda não foi paga, deve abrir 2026-12
+    final targetIk = store.defaultInvoiceForAccount(card);
+    expect(targetIk, '2026-12');
+
+    store.month = '2026-11';
+    store.navigateTo(NavModule.account, accountId: card.id);
+    expect(store.month, '2026-12');
+
+    // 2. Saldo previsto na fatura de 2026-12: reflete a fatura fechada a pagar (-R$ 100,00)
+    store.month = '2026-12';
+    store.rebuildIndexes();
+    expect(store.balance(card, predicted: true), -10000);
+
+    // 3. Saldo previsto no próximo período (2027-01):
+    // Como a fatura de 2026-12 tem pagamento programado para 05/12 (dentro do prazo),
+    // o valor de 2026-12 NÃO é somado ao de 2027-01. A previsão de 2027-01 é apenas -R$ 50,00.
+    store.month = '2027-01';
+    store.rebuildIndexes();
+    expect(store.balance(card, predicted: true), -5000);
+
+    // 4. Saldo anterior na visualização da fatura 2027-01
+    final monthDataJan = store.cardInvoiceMonthData(card.id, '2027-01');
+    expect(monthDataJan.openingPred, 0);
+    expect(monthDataJan.transactions.length, 1);
+    expect(monthDataJan.transactions.first.payee, 'Farmácia Novo Ciclo');
+
+    // 5. Após quitação/conciliação da fatura de 2026-12, a fatura ativa para navegação avança para 2027-01
+    final autoTx = store.db.txs.firstWhere((t) => t.auto == true && t.ik == '2026-12' && t.card == card.id);
+    autoTx.rec = true;
+    store.rebuildIndexes();
+    expect(store.defaultInvoiceForAccount(card), '2027-01');
+  });
+
+  test('46. New credit card transaction targeting invoice after open unpaid invoice starts unreconciled', () {
+    final store = MoneyStore(autoBoot: false);
+    store.saveAccount(
+      name: 'Nubank Crédito',
+      type: kCardType,
+      openingCents: 0,
+      closeDay: 25,
+      dueDay: 5,
+      payAccId: 'a1',
+    );
+    final card = store.db.accounts.firstWhere((a) => a.type == kCardType);
+
+    // Compra na fatura que fechou em 25/11 (ik: 2026-12, ainda em aberto até 05/12)
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-20',
+      payee: 'Supermercado Dezembro',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -10000,
+    );
+    final txDez = store.db.txs.firstWhere((t) => t.payee == 'Supermercado Dezembro');
+    expect(txDez.rec, isTrue);
+    expect(store.balance(card, predicted: false), -10000);
+
+    // Compra única no dia 26/11 (ik: 2027-01), posterior à fatura fechada ainda em aberto (2026-12)
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-26',
+      payee: 'Farmácia Janeiro',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -5000,
+    );
+    final txJan = store.db.txs.firstWhere((t) => t.payee == 'Farmácia Janeiro');
+    expect(txJan.ik, '2027-01');
+    expect(txJan.rec, isFalse);
+    // Saldo real não soma a compra de janeiro enquanto dezembro estiver em aberto
+    expect(store.balance(card, predicted: false), -10000);
+
+    store.month = '2027-01';
+    store.rebuildIndexes();
+    expect(store.balance(card, predicted: true), -5000);
+
+    // Compra parcelada no dia 26/11 também inicia não conciliada na 1ª parcela
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-26',
+      payee: 'Parcelado Janeiro',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -6000,
+      mode: 'installment',
+      installments: 2,
+    );
+    final parc1 = store.db.txs.firstWhere((t) => t.payee == 'Parcelado Janeiro (1/2)');
+    expect(parc1.ik, '2027-01');
+    expect(parc1.rec, isFalse);
+
+    // Após quitar/conciliar a fatura de 2026-12, defaultInvoiceForAccount avança para 2027-01
+    // e novas compras em 26/11 voltam a iniciar conciliadas normalmente
+    final autoTx = store.db.txs.firstWhere((t) => t.auto == true && t.ik == '2026-12' && t.card == card.id);
+    autoTx.rec = true;
+    store.rebuildIndexes();
+    expect(store.defaultInvoiceForAccount(card), '2027-01');
+
+    store.addTransaction(
+      accId: card.id,
+      date: '2026-11-26',
+      payee: 'Compra Pós Quitação',
+      catSelection: 'Geral',
+      memo: '',
+      signedAmt: -3000,
+    );
+    final txPos = store.db.txs.firstWhere((t) => t.payee == 'Compra Pós Quitação');
+    expect(txPos.rec, isTrue);
+  });
 }
