@@ -4632,29 +4632,41 @@ class MoneyStore extends ChangeNotifier {
     }
 
     final oldAccId = t.acc;
+    final oldPeerId = t.peer;
+    final oldXfer = t.xfer;
+    final oldDate = t.date;
+    final wasXfer = oldXfer != null;
     final targetAccId = newAccId ?? oldAccId;
     final accChanged = targetAccId != oldAccId;
 
     final cleanPayee =
         newPayee.replaceAll(RegExp(r'\s*\(\d+\/\d+\)$'), '').trim();
-    final isXfer = newCatSelection.startsWith('xfer:');
+    final willBeXfer = newCatSelection.startsWith('xfer:');
+    final newPeerId = willBeXfer ? newCatSelection.substring(5) : null;
+
+    if (willBeXfer &&
+        (newPeerId == null || newPeerId.isEmpty || newPeerId == targetAccId)) {
+      return;
+    }
+
+    final cAcc = accById(targetAccId);
+    final curCurrency = cAcc?.effectiveCurrency ?? 'BRL';
+    final peerAcc = newPeerId != null ? accById(newPeerId) : null;
+    final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
+
     final String newCat;
-    if (isXfer) {
-      final pId = newCatSelection.substring(5);
-      newCat = 'Transferência: ${accById(pId)?.name ?? ""}';
-    } else if (t.xfer != null) {
-      newCat = t.cat;
+    if (willBeXfer) {
+      newCat = 'Transferência: ${peerAcc?.name ?? ""}';
     } else {
       newCat = newCatSelection;
     }
 
-    final oldDate = t.date;
-    db.txs[idx].acc = targetAccId;
-    db.txs[idx].date = newDate;
-    db.txs[idx].memo = newMemo;
-    db.txs[idx].amt = newSignedAmt;
+    t.acc = targetAccId;
+    t.date = newDate;
+    t.memo = newMemo;
+    t.amt = newSignedAmt;
     if (txRate != null && txRate > 0) {
-      db.txs[idx].rate = txRate;
+      t.rate = txRate;
     }
     List<String>? resolvedTags;
     if (newTags != null) {
@@ -4663,75 +4675,195 @@ class MoneyStore extends ChangeNotifier {
         _registerTagsInCatalog(normalizedTags);
       }
       resolvedTags = normalizedTags.isEmpty ? null : normalizedTags;
-      db.txs[idx].tags = resolvedTags;
+      t.tags = resolvedTags;
     }
 
-    final cAcc = accById(targetAccId);
     if (cAcc != null && cAcc.type == kCardType && cAcc.card != null) {
       if (newIk != null && newIk.isNotEmpty) {
-        db.txs[idx].ik = newIk;
-      } else if (accChanged || (newDate != oldDate && db.txs[idx].ik == null)) {
-        db.txs[idx].ik = invKeyFor(cAcc.card!, newDate);
+        t.ik = newIk;
+      } else if (accChanged || (newDate != oldDate && t.ik == null)) {
+        t.ik = invKeyFor(cAcc.card!, newDate);
       }
     } else {
-      db.txs[idx].ik = null;
+      t.ik = null;
     }
 
-    if (t.xfer != null) {
-      final xfer = t.xfer!;
-      db.txs[idx].payee = newPayee;
-      final curCurrency = cAcc?.effectiveCurrency ?? 'BRL';
+    if (wasXfer && willBeXfer) {
+      final xfer = oldXfer;
+      t.peer = newPeerId;
+      t.cat = newCat;
+      t.payee = newPayee;
+
+      final int computedPeerAmt;
+      double? curTxRate = t.rate;
+      double? peerTxRate;
+
+      if (curCurrency == peerCurrency) {
+        computedPeerAmt = -newSignedAmt;
+        if (curCurrency == 'BRL') {
+          curTxRate = null;
+          peerTxRate = null;
+        } else {
+          final resolvedRate = (txRate != null && txRate > 0)
+              ? txRate
+              : ((t.rate != null && t.rate! > 0)
+                  ? t.rate!
+                  : rateToBrl(curCurrency));
+          curTxRate = resolvedRate;
+          peerTxRate = resolvedRate;
+        }
+      } else {
+        computedPeerAmt = peerSignedAmt ??
+            -convertCents(
+              newSignedAmt,
+              fromCurrency: curCurrency,
+              toCurrency: peerCurrency,
+              rates: db.rates,
+            );
+        if (curCurrency == 'BRL' &&
+            peerCurrency != 'BRL' &&
+            newSignedAmt != 0 &&
+            computedPeerAmt != 0) {
+          peerTxRate = newSignedAmt.abs() / computedPeerAmt.abs();
+          curTxRate = null;
+        } else if (curCurrency != 'BRL' &&
+            peerCurrency == 'BRL' &&
+            newSignedAmt != 0 &&
+            computedPeerAmt != 0) {
+          curTxRate = computedPeerAmt.abs() / newSignedAmt.abs();
+          peerTxRate = null;
+        } else {
+          curTxRate = curCurrency == 'BRL'
+              ? null
+              : (txRate ?? t.rate ?? rateToBrl(curCurrency));
+          peerTxRate = peerCurrency == 'BRL' ? null : rateToBrl(peerCurrency);
+        }
+      }
+      t.rate = curTxRate;
 
       for (int i = 0; i < db.txs.length; i++) {
         if (db.txs[i].xfer == xfer && db.txs[i].id != t.id) {
+          final oldPeerAccId = db.txs[i].acc;
+          final peerAccChanged = oldPeerAccId != newPeerId;
+          db.txs[i].acc = newPeerId!;
+          db.txs[i].peer = targetAccId;
+          db.txs[i].cat = 'Transferência: ${cAcc?.name ?? ""}';
           db.txs[i].date = newDate;
           db.txs[i].payee = newPayee;
           db.txs[i].memo = newMemo;
+          db.txs[i].amt = computedPeerAmt;
+          db.txs[i].rate = peerTxRate;
           if (newTags != null) {
             db.txs[i].tags =
                 resolvedTags == null ? null : List<String>.from(resolvedTags);
           }
 
-          final peerAcc = accById(db.txs[i].acc);
-          final peerCurrency = peerAcc?.effectiveCurrency ?? 'BRL';
-
-          if (curCurrency == peerCurrency) {
-            db.txs[i].amt = -newSignedAmt;
-          } else {
-            if (peerSignedAmt != null) {
-              db.txs[i].amt = peerSignedAmt;
-            }
-          }
-
-          if (accChanged) {
-            db.txs[i].peer = targetAccId;
-            db.txs[i].cat =
-                'Transferência: ${accById(targetAccId)?.name ?? ""}';
-          }
           if (peerAcc != null &&
               peerAcc.type == kCardType &&
               peerAcc.card != null) {
-            if (newIk != null && newIk.isNotEmpty) {
-              db.txs[i].ik = newIk;
-            } else if (newDate != oldDate && db.txs[i].ik == null) {
+            if (peerAccChanged ||
+                newDate != oldDate ||
+                db.txs[i].ik == null) {
               db.txs[i].ik = invKeyFor(peerAcc.card!, newDate);
             }
+          } else {
+            db.txs[i].ik = null;
           }
         }
       }
+    } else if (wasXfer && !willBeXfer) {
+      db.txs.removeWhere((x) => x.xfer == oldXfer && x.id != t.id);
+      t.xfer = null;
+      t.peer = null;
+      t.cat = newCat;
+    } else if (!wasXfer && willBeXfer) {
+      final xid = uid();
+      t.xfer = xid;
+      t.peer = newPeerId;
+      t.cat = newCat;
+      t.payee = newPayee;
+
+      final int computedPeerAmt;
+      double? curTxRate = t.rate;
+      double? peerTxRate;
+
+      if (curCurrency == peerCurrency) {
+        computedPeerAmt = -newSignedAmt;
+        if (curCurrency == 'BRL') {
+          curTxRate = null;
+          peerTxRate = null;
+        } else {
+          final resolvedRate = (txRate != null && txRate > 0)
+              ? txRate
+              : ((t.rate != null && t.rate! > 0)
+                  ? t.rate!
+                  : rateToBrl(curCurrency));
+          curTxRate = resolvedRate;
+          peerTxRate = resolvedRate;
+        }
+      } else {
+        computedPeerAmt = peerSignedAmt ??
+            -convertCents(
+              newSignedAmt,
+              fromCurrency: curCurrency,
+              toCurrency: peerCurrency,
+              rates: db.rates,
+            );
+        if (curCurrency == 'BRL' &&
+            peerCurrency != 'BRL' &&
+            newSignedAmt != 0 &&
+            computedPeerAmt != 0) {
+          peerTxRate = newSignedAmt.abs() / computedPeerAmt.abs();
+          curTxRate = null;
+        } else if (curCurrency != 'BRL' &&
+            peerCurrency == 'BRL' &&
+            newSignedAmt != 0 &&
+            computedPeerAmt != 0) {
+          curTxRate = computedPeerAmt.abs() / newSignedAmt.abs();
+          peerTxRate = null;
+        } else {
+          curTxRate = curCurrency == 'BRL'
+              ? null
+              : (txRate ?? t.rate ?? rateToBrl(curCurrency));
+          peerTxRate = peerCurrency == 'BRL' ? null : rateToBrl(peerCurrency);
+        }
+      }
+      t.rate = curTxRate;
+
+      final peerIsCard = peerAcc?.type == kCardType && peerAcc?.card != null;
+      final peerIk =
+          peerIsCard ? invKeyFor(peerAcc!.card!, newDate) : null;
+      db.txs.add(
+        Transaction(
+          id: uid(),
+          acc: newPeerId!,
+          peer: targetAccId,
+          date: newDate,
+          payee: newPayee,
+          cat: 'Transferência: ${cAcc?.name ?? ""}',
+          memo: newMemo,
+          amt: computedPeerAmt,
+          rec: t.rec,
+          xfer: xid,
+          ik: peerIk,
+          rate: peerTxRate,
+          tags: t.tags == null ? null : List<String>.from(t.tags!),
+        ),
+      );
     }
 
     if (scope == ScopeChoice.forward && t.recId != null && t.recSeq != null) {
       final recId = t.recId!;
       final baseSeq = t.recSeq!;
       final dateChanged = newDate != oldDate;
-      db.txs[idx].payee = cleanPayee;
-      db.txs[idx].cat = newCat;
+      t.payee = cleanPayee;
+      t.cat = newCat;
 
       final rIdx = db.recs.indexWhere((r) => r.id == recId);
       if (rIdx != -1) {
         final freq = db.recs[rIdx].freq;
-        if (accChanged) db.recs[rIdx].acc = targetAccId;
+        db.recs[rIdx].acc = targetAccId;
+        db.recs[rIdx].peer = willBeXfer ? newPeerId : null;
         db.recs[rIdx].payee = cleanPayee;
         db.recs[rIdx].cat = newCat;
         db.recs[rIdx].memo = newMemo;
@@ -4742,25 +4874,64 @@ class MoneyStore extends ChangeNotifier {
       }
 
       final freq = (rIdx != -1 ? db.recs[rIdx].freq : t.recFreq) ?? 'monthly';
-      final targetAccName = accById(targetAccId)?.name ?? '';
+      final targetAccName = cAcc?.name ?? '';
+      if (wasXfer && !willBeXfer) {
+        db.txs.removeWhere((item) {
+          if (item.recId != recId ||
+              item.id == t.id ||
+              (item.recSeq ?? 0) <= baseSeq ||
+              item.rec) {
+            return false;
+          }
+          return item.id.endsWith(':peer') ||
+              (item.peer != null &&
+                  oldPeerId != null &&
+                  item.acc == oldPeerId &&
+                  item.peer == oldAccId);
+        });
+      }
+
+      final int futurePeerAmt = !willBeXfer
+          ? -newSignedAmt
+          : (curCurrency == peerCurrency
+              ? -newSignedAmt
+              : (peerSignedAmt ??
+                  -convertCents(
+                    newSignedAmt,
+                    fromCurrency: curCurrency,
+                    toCurrency: peerCurrency,
+                    rates: db.rates,
+                  )));
+
       for (int i = 0; i < db.txs.length; i++) {
         if (db.txs[i].recId == recId &&
             db.txs[i].id != t.id &&
             (db.txs[i].recSeq ?? 0) > baseSeq &&
             !db.txs[i].rec) {
-          final isPeer = db.txs[i].peer != null &&
-              db.txs[i].acc != targetAccId &&
-              (t.peer == db.txs[i].acc || t.acc == db.txs[i].acc);
-          if (isPeer) {
+          final isPeer = db.txs[i].id.endsWith(':peer') ||
+              (wasXfer &&
+                  db.txs[i].peer != null &&
+                  oldPeerId != null &&
+                  db.txs[i].acc == oldPeerId &&
+                  db.txs[i].peer == oldAccId);
+          if (isPeer && willBeXfer) {
+            db.txs[i].acc = newPeerId!;
+            db.txs[i].peer = targetAccId;
+            db.txs[i].cat = 'Transferência: $targetAccName';
             db.txs[i].payee = cleanPayee;
             db.txs[i].memo = newMemo;
-            db.txs[i].amt = -newSignedAmt;
-            if (accChanged) {
-              db.txs[i].peer = targetAccId;
-              db.txs[i].cat = 'Transferência: $targetAccName';
+            db.txs[i].amt = futurePeerAmt;
+            if (newTags != null) {
+              db.txs[i].tags = resolvedTags == null
+                  ? null
+                  : List<String>.from(resolvedTags);
             }
           } else {
-            if (accChanged) db.txs[i].acc = targetAccId;
+            db.txs[i].acc = targetAccId;
+            db.txs[i].peer = willBeXfer ? newPeerId : null;
+            if (!willBeXfer) {
+              db.txs[i].xfer = null;
+            }
             db.txs[i].payee = cleanPayee;
             db.txs[i].cat = newCat;
             db.txs[i].memo = newMemo;
@@ -4792,8 +4963,8 @@ class MoneyStore extends ChangeNotifier {
       final basePn = t.pn!;
       final dateChanged = newDate != oldDate;
       final pt = t.pt ?? 1;
-      db.txs[idx].payee = '$cleanPayee ($basePn/$pt)';
-      db.txs[idx].cat = newCat;
+      t.payee = '$cleanPayee ($basePn/$pt)';
+      t.cat = newCat;
 
       for (int i = 0; i < db.txs.length; i++) {
         if (db.txs[i].plan == plan &&
@@ -4818,20 +4989,20 @@ class MoneyStore extends ChangeNotifier {
           if (cAcc != null && cAcc.type == kCardType && cAcc.card != null) {
             final step = opn - basePn;
             final base =
-                newIk ?? db.txs[idx].ik ?? invKeyFor(cAcc.card!, newDate);
+                newIk ?? t.ik ?? invKeyFor(cAcc.card!, newDate);
             db.txs[i].ik = addMonthsYM(base, step);
           } else {
             db.txs[i].ik = null;
           }
         }
       }
-    } else if (t.xfer == null) {
+    } else if (!willBeXfer) {
       if (t.pn != null && t.pt != null && t.plan != null) {
-        db.txs[idx].payee = '$cleanPayee (${t.pn}/${t.pt})';
+        t.payee = '$cleanPayee (${t.pn}/${t.pt})';
       } else {
-        db.txs[idx].payee = newPayee;
+        t.payee = newPayee;
       }
-      db.txs[idx].cat = newCat;
+      t.cat = newCat;
     }
 
     syncRecs();

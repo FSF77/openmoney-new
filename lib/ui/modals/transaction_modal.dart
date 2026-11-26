@@ -264,6 +264,9 @@ class _TransactionEditDialog extends StatefulWidget {
 }
 
 class _TransactionEditDialogState extends State<_TransactionEditDialog> {
+  late Transaction _effectiveTx;
+  Transaction? _peerTx;
+  bool _isOrphanCreditTransfer = false;
   late String _accId;
   late final TextEditingController _dateCtrl;
   late final TextEditingController _payeeCtrl;
@@ -286,7 +289,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     final clean = _dateCtrl.text.trim();
     if (clean.length == 10 || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(clean)) {
       final res = validateTransactionDate(clean);
-      final dateChanged = res.isoDate != widget.tx.date;
+      final dateChanged = res.isoDate != _effectiveTx.date;
       setState(() {
         _dateError = res.isValid ? null : res.error;
         _dateWarning = (res.isWarning && dateChanged) ? res.warningMessage : null;
@@ -305,46 +308,62 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   void initState() {
     super.initState();
     final t = widget.tx;
-    _accId = t.acc;
-    _dateCtrl = TextEditingController(text: fmtDate(t.date));
-    _payeeCtrl = TextEditingController(text: t.payee);
-    _memoCtrl = TextEditingController(text: t.memo);
-    _amtCtrl = TextEditingController(text: formatInputCents(t.amt));
-    _isExpense = t.amt < 0;
-    if (t.peer != null && t.xfer != null) {
-      _catSelection = 'xfer:${t.peer}';
-    } else {
-      _catSelection = t.cat;
-    }
     final isTransfer = t.xfer != null ||
         t.peer != null ||
-        _catSelection.startsWith('xfer:') ||
         t.cat.startsWith('Transferência:');
-    if (isTransfer) {
-      _txType = 'transfer';
-      _isExpense = true;
-      if (!_catSelection.startsWith('xfer:')) {
-        final others = widget.store.transferDestinationAccounts(excludeId: _accId);
-        if (others.isNotEmpty) {
-          _catSelection = 'xfer:${others.first.id}';
-        }
-      }
-    } else {
-      _txType = _isExpense ? 'expense' : 'income';
-    }
-    _customIk = t.ik;
-    _tags = List<String>.from(t.tags ?? const []);
-
-    // Inicializar campos cross-currency caso seja transferência entre moedas distintas
-    int peerAbs = 0;
-    if (t.xfer != null) {
+    Transaction? foundPeer;
+    if (isTransfer && t.xfer != null) {
       for (final candidate in widget.store.db.txs) {
         if (candidate.xfer == t.xfer && candidate.id != t.id) {
-          peerAbs = candidate.amt.abs();
+          foundPeer = candidate;
           break;
         }
       }
     }
+
+    if (isTransfer && t.amt > 0) {
+      if (foundPeer != null) {
+        _effectiveTx = foundPeer;
+        _peerTx = t;
+      } else {
+        _effectiveTx = t;
+        _peerTx = null;
+        _isOrphanCreditTransfer = true;
+      }
+    } else {
+      _effectiveTx = t;
+      _peerTx = foundPeer;
+    }
+
+    final eff = _effectiveTx;
+    _accId = eff.acc;
+    _dateCtrl = TextEditingController(text: fmtDate(eff.date));
+    _payeeCtrl = TextEditingController(text: eff.payee);
+    _memoCtrl = TextEditingController(text: eff.memo);
+    _amtCtrl = TextEditingController(text: formatInputCents(eff.amt.abs()));
+    _isExpense = eff.amt < 0;
+
+    if (isTransfer) {
+      _txType = 'transfer';
+      _isExpense = true;
+      final candidatePeerId = _peerTx?.acc ?? eff.peer ?? '';
+      if (candidatePeerId.isNotEmpty &&
+          candidatePeerId != _accId &&
+          widget.store.accById(candidatePeerId) != null) {
+        _catSelection = 'xfer:$candidatePeerId';
+      } else {
+        final others = widget.store.transferDestinationAccounts(excludeId: _accId);
+        _catSelection = others.isNotEmpty ? 'xfer:${others.first.id}' : '';
+      }
+    } else {
+      _catSelection = eff.cat;
+      _txType = _isExpense ? 'expense' : 'income';
+    }
+    _customIk = eff.ik;
+    _tags = List<String>.from(eff.tags ?? const []);
+
+    // Inicializar campos cross-currency caso seja transferência entre moedas distintas
+    final int peerAbs = _peerTx?.amt.abs() ?? 0;
     _peerAmtCtrl = TextEditingController(
       text: peerAbs > 0 ? formatInputCents(peerAbs) : '',
     );
@@ -357,8 +376,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       destCur = widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL';
     }
     final double initRate;
-    if (curCur != destCur && t.amt.abs() > 0 && peerAbs > 0) {
-      initRate = peerAbs / t.amt.abs();
+    if (curCur != destCur && eff.amt.abs() > 0 && peerAbs > 0) {
+      initRate = peerAbs / eff.amt.abs();
     } else if (curCur != destCur) {
       initRate = exchangeRateBetween(
         fromCurrency: curCur,
@@ -369,8 +388,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       final baseCur = widget.store.baseCurrency;
       final baseBrl =
           baseCur == 'BRL' ? 1.0 : widget.store.rateToBrl(baseCur);
-      final rawBrlRate = (t.rate != null && t.rate! > 0)
-          ? t.rate!
+      final rawBrlRate = (eff.rate != null && eff.rate! > 0)
+          ? eff.rate!
           : widget.store.rateToBrl(curCur);
       initRate = baseBrl > 0 ? (rawBrlRate / baseBrl) : rawBrlRate;
     }
@@ -416,7 +435,26 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     if (parts.length == 3) {
       return '${parts[2].padLeft(4, '0')}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
     }
-    return widget.tx.date;
+    return _effectiveTx.date;
+  }
+
+  void _refreshTransferCrossRate() {
+    if (_txType != 'transfer' || !_catSelection.startsWith('xfer:')) return;
+    final srcCur = widget.store.accById(_accId)?.effectiveCurrency ?? 'BRL';
+    final peerId = _catSelection.substring(5);
+    final destCur = widget.store.accById(peerId)?.effectiveCurrency ?? 'BRL';
+    if (srcCur != destCur) {
+      final r = exchangeRateBetween(
+        fromCurrency: srcCur,
+        toCurrency: destCur,
+        rates: widget.store.db.rates,
+      );
+      _rateCtrl.text = r.toStringAsFixed(4).replaceAll('.', ',');
+      final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
+      if (srcCents > 0) {
+        _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
+      }
+    }
   }
 
   Future<void> _pickDate() async {
@@ -441,15 +479,15 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   }
 
   Future<void> _handleSave() async {
-    final isReconciledPast =
-        widget.tx.rec && widget.tx.date.compareTo(todayISO()) < 0;
+    final isReconciledPast = (widget.tx.rec || _effectiveTx.rec) &&
+        _effectiveTx.date.compareTo(todayISO()) < 0;
     if (isReconciledPast) {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Lançamento Já Conciliado'),
           content: Text(
-            'Este lançamento já está conciliado e possui data anterior a hoje (${fmtDate(widget.tx.date)}).\n\nDeseja realmente salvar as alterações?',
+            'Este lançamento já está conciliado e possui data anterior a hoje (${fmtDate(_effectiveTx.date)}).\n\nDeseja realmente salvar as alterações?',
           ),
           actions: [
             TextButton(
@@ -484,7 +522,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       );
       return;
     }
-    final dateChanged = dateVal.isoDate != widget.tx.date;
+    final dateChanged = dateVal.isoDate != _effectiveTx.date;
     if (dateVal.isWarning && dateChanged) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final ok = await confirmDateWarningDialog(
@@ -495,10 +533,36 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
       if (!ok) return;
     }
 
+    if (_txType == 'transfer') {
+      final peerId = _catSelection.startsWith('xfer:')
+          ? _catSelection.substring(5)
+          : '';
+      if (peerId.isEmpty || peerId == _accId) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Origem e Destino Inválidos'),
+            content: const Text(
+              'A conta de origem e a conta de destino da transferência devem ser diferentes.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
     final isoDate = dateVal.isoDate!;
     final absCents = (parseCents(_amtCtrl.text) ?? 0).abs();
-    final signedAmt =
-        (_txType == 'transfer' || _isExpense) ? -absCents : absCents;
+    final signedAmt = _txType == 'transfer'
+        ? (_isOrphanCreditTransfer ? absCents : -absCents)
+        : (_isExpense ? -absCents : absCents);
     final rawPayee = _payeeCtrl.text.trim();
     final finalPayee = rawPayee.isEmpty
         ? (_txType == 'transfer' ? 'Transferência' : 'Sem descrição')
@@ -534,7 +598,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
     }
 
     widget.store.updateTransaction(
-      txId: widget.tx.id,
+      txId: _effectiveTx.id,
       newAccId: _accId,
       newDate: isoDate,
       newPayee: finalPayee,
@@ -556,15 +620,15 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final isInstallment = widget.tx.plan != null &&
-        (widget.tx.pn != null || widget.tx.pt != null);
-    final isRecurring = widget.tx.recId != null;
+    final isInstallment = _effectiveTx.plan != null &&
+        (_effectiveTx.pn != null || _effectiveTx.pt != null);
+    final isRecurring = _effectiveTx.recId != null;
     final isSeries = isInstallment || isRecurring;
     final isXfer = _txType == 'transfer' || _catSelection.startsWith('xfer:');
 
     final matchingRule = isRecurring
         ? widget.store.db.recs.cast<RecurrenceRule?>().firstWhere(
-              (r) => r?.id == widget.tx.recId,
+              (r) => r?.id == _effectiveTx.recId,
               orElse: () => null,
             )
         : null;
@@ -628,8 +692,8 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                   children: [
                     Text(
                       isInstallment
-                          ? 'Lançamento Parcelado • Parcela ${widget.tx.pn ?? 1} de ${widget.tx.pt ?? 1}'
-                          : '${isXfer ? "Transferência Recorrente" : "Lançamento Recorrente"} • ${kRecurrenceFrequencyOptions.firstWhere((o) => o.id == (widget.tx.recFreq ?? "monthly"), orElse: () => kRecurrenceFrequencyOptions[3]).label} (Ocorrência #${widget.tx.recSeq ?? 1})',
+                          ? 'Lançamento Parcelado • Parcela ${_effectiveTx.pn ?? 1} de ${_effectiveTx.pt ?? 1}'
+                          : '${isXfer ? "Transferência Recorrente" : "Lançamento Recorrente"} • ${kRecurrenceFrequencyOptions.firstWhere((o) => o.id == (_effectiveTx.recFreq ?? "monthly"), orElse: () => kRecurrenceFrequencyOptions[3]).label} (Ocorrência #${_effectiveTx.recSeq ?? 1})',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -639,7 +703,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                     const SizedBox(height: 2),
                     Text(
                       isInstallment
-                          ? 'Este lançamento faz parte de um plano em ${widget.tx.pt ?? 1} parcelas.'
+                          ? 'Este lançamento faz parte de um plano em ${_effectiveTx.pt ?? 1} parcelas.'
                           : (matchingRule?.end != null
                               ? 'Regra programada com término em ${fmtDate(matchingRule!.end!)}.'
                               : 'Regra programada por tempo indeterminado.'),
@@ -735,13 +799,13 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
               isExpanded: true,
               isDense: true,
               style: TextStyle(fontSize: 13, color: colors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Conta',
-                labelStyle: TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText: _txType == 'transfer' ? 'Conta de Origem' : 'Conta',
+                labelStyle: const TextStyle(fontSize: 13),
                 isDense: true,
                 contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                border: OutlineInputBorder(),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: const OutlineInputBorder(),
               ),
               items: widget.store.db.accounts
                   .map((a) => DropdownMenuItem(
@@ -759,6 +823,7 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
               onChanged: (v) {
                 if (v != null) {
                   setState(() {
+                    final previousAccId = _accId;
                     _accId = v;
                     final newAcc = widget.store.accById(v);
                     if (newAcc?.type == kCardType && newAcc?.card != null) {
@@ -767,13 +832,19 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
                       _customIk = null;
                     }
                     if (_txType == 'transfer' &&
-                        _catSelection.startsWith('xfer:$_accId')) {
-                      final others = widget.store
-                          .transferDestinationAccounts(excludeId: _accId);
-                      if (others.isNotEmpty) {
-                        _catSelection = 'xfer:${others.first.id}';
+                        _catSelection == 'xfer:$v') {
+                      if (previousAccId != v &&
+                          widget.store.accById(previousAccId) != null) {
+                        _catSelection = 'xfer:$previousAccId';
+                      } else {
+                        final others = widget.store
+                            .transferDestinationAccounts(excludeId: _accId);
+                        if (others.isNotEmpty) {
+                          _catSelection = 'xfer:${others.first.id}';
+                        }
                       }
                     }
+                    _refreshTransferCrossRate();
                   });
                 }
               },
@@ -904,58 +975,88 @@ class _TransactionEditDialogState extends State<_TransactionEditDialog> {
 
       // Categoria OU Conta de Destino
       if (_txType == 'transfer') ...[
-        DropdownButtonFormField<String>(
-          value: () {
-            final curDest = _catSelection.startsWith('xfer:')
-                ? _catSelection.substring(5)
-                : '';
-            final others =
-                widget.store.transferDestinationAccounts(excludeId: _accId);
-            return others.any((a) => a.id == curDest)
-                ? curDest
-                : (others.isNotEmpty ? others.first.id : null);
-          }(),
-          isExpanded: true,
-          isDense: true,
-          style: TextStyle(fontSize: 13, color: colors.textPrimary),
-          decoration: const InputDecoration(
-            labelText: 'Conta de Destino da Transferência',
-            labelStyle: TextStyle(fontSize: 13),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            border: OutlineInputBorder(),
-          ),
-          items: widget.store
-              .transferDestinationAccounts(excludeId: _accId)
-              .map((a) => DropdownMenuItem(
-                    value: a.id,
-                    child: Text('⇄ Transferência: ${a.name}',
-                        style: const TextStyle(fontSize: 13)),
-                  ))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) {
-              setState(() {
-                _catSelection = 'xfer:$v';
-                final destAcc = widget.store.accById(v);
-                final srcCur = targetAcc?.effectiveCurrency ?? 'BRL';
-                final destCur = destAcc?.effectiveCurrency ?? 'BRL';
-                if (srcCur != destCur) {
-                  final r = exchangeRateBetween(
-                    fromCurrency: srcCur,
-                    toCurrency: destCur,
-                    rates: widget.store.db.rates,
-                  );
-                  _rateCtrl.text = r.toStringAsFixed(4).replaceAll('.', ',');
-                  final srcCents = (parseCents(_amtCtrl.text) ?? 0).abs();
-                  if (srcCents > 0) {
-                    _peerAmtCtrl.text = formatInputCents((srcCents * r).round());
-                  }
-                }
-              });
+        Builder(builder: (context) {
+          final destAccounts = List<Account>.from(
+            widget.store.transferDestinationAccounts(excludeId: _accId),
+          );
+          final curDest = _catSelection.startsWith('xfer:')
+              ? _catSelection.substring(5)
+              : '';
+          if (curDest.isNotEmpty &&
+              curDest != _accId &&
+              !destAccounts.any((a) => a.id == curDest)) {
+            final hiddenDest = widget.store.accById(curDest);
+            if (hiddenDest != null) {
+              destAccounts.add(hiddenDest);
             }
-          },
-        ),
+          }
+          final String? selectedDest =
+              destAccounts.any((a) => a.id == curDest)
+                  ? curDest
+                  : (destAccounts.isNotEmpty ? destAccounts.first.id : null);
+
+          return Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedDest,
+                  isExpanded: true,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: colors.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Conta de Destino da Transferência',
+                    labelStyle: TextStyle(fontSize: 13),
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: destAccounts
+                      .map((a) => DropdownMenuItem(
+                            value: a.id,
+                            child: Text('⇄ Transferência: ${a.name}',
+                                style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _catSelection = 'xfer:$v';
+                        _refreshTransferCrossRate();
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.swap_vert_rounded, size: 20),
+                tooltip: 'Inverter origem e destino',
+                visualDensity: VisualDensity.compact,
+                onPressed: (selectedDest == null ||
+                        selectedDest.isEmpty ||
+                        selectedDest == _accId)
+                    ? null
+                    : () {
+                        setState(() {
+                          final previousAccId = _accId;
+                          _accId = selectedDest;
+                          _catSelection = 'xfer:$previousAccId';
+                          final newAcc = widget.store.accById(_accId);
+                          if (newAcc?.type == kCardType &&
+                              newAcc?.card != null) {
+                            _customIk =
+                                invKeyFor(newAcc!.card!, _resolveIsoDate());
+                          } else {
+                            _customIk = null;
+                          }
+                          _refreshTransferCrossRate();
+                        });
+                      },
+              ),
+            ],
+          );
+        }),
       ] else ...[
         CategorySelectFormField(
           store: widget.store,
@@ -2721,11 +2822,27 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
   @override
   void initState() {
     super.initState();
-    final t = widget.sourceTx;
+    final rawTx = widget.sourceTx;
+    Transaction effectiveTx = rawTx;
+    if (rawTx.xfer != null && rawTx.amt > 0) {
+      for (final candidate in widget.store.db.txs) {
+        if (candidate.xfer == rawTx.xfer &&
+            candidate.id != rawTx.id &&
+            candidate.amt < 0) {
+          effectiveTx = candidate;
+          break;
+        }
+      }
+    }
+    final t = effectiveTx;
     final available = _availableAccounts();
-    _accId = available.any((a) => a.id == t.acc)
-        ? t.acc
-        : (available.isNotEmpty ? available.first.id : t.acc);
+    final preferredAccId =
+        (rawTx.xfer != null && rawTx.amt > 0 && effectiveTx.id == rawTx.id && rawTx.peer != null)
+            ? rawTx.peer!
+            : t.acc;
+    _accId = available.any((a) => a.id == preferredAccId)
+        ? preferredAccId
+        : (available.isNotEmpty ? available.first.id : preferredAccId);
 
     final todayStr = todayISO();
     _dateCtrl = TextEditingController(text: fmtDate(todayStr));
@@ -2738,8 +2855,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
     _isExpense = t.amt < 0;
     _tags = List<String>.from(t.tags ?? const []);
 
-    if (t.peer != null && t.peer!.isNotEmpty) {
-      _catSelection = 'xfer:${t.peer}';
+    final peerIdForCopy =
+        (rawTx.xfer != null && rawTx.amt > 0 && effectiveTx.id == rawTx.id)
+            ? rawTx.acc
+            : t.peer;
+    if (peerIdForCopy != null && peerIdForCopy.isNotEmpty) {
+      _catSelection = 'xfer:$peerIdForCopy';
+      _isExpense = true;
     } else {
       _catSelection = t.cat;
     }
@@ -3067,6 +3189,7 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                 onChanged: (v) {
                   if (v != null) {
                     setState(() {
+                      final previousAccId = _accId;
                       _accId = v;
                       final newAcc = widget.store.accById(v);
                       if (newAcc?.type == kCardType && newAcc?.card != null) {
@@ -3075,8 +3198,13 @@ class _TransactionCopyDialogState extends State<_TransactionCopyDialog> {
                       } else {
                         _customIk = null;
                       }
-                      if (_catSelection.startsWith('xfer:$v')) {
-                        _catSelection = '';
+                      if (_catSelection == 'xfer:$v') {
+                        if (previousAccId != v &&
+                            widget.store.accById(previousAccId) != null) {
+                          _catSelection = 'xfer:$previousAccId';
+                        } else {
+                          _catSelection = '';
+                        }
                       }
                     });
                   }
