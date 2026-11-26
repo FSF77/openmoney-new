@@ -217,7 +217,9 @@ class _ChartsDashboardViewState extends State<ChartsDashboardView> {
           color: colors.accent,
           colors: colors,
           spark: netWorthSpark,
-          hint: 'Saldo consolidado em $cur',
+          hint: s.investmentsNetWorth > 0
+              ? 'Contas ${formatCurrency(s.cashNetWorth, cur)} · Carteira ${formatCurrency(s.investmentsNetWorth, cur)}'
+              : 'Saldo consolidado em $cur',
         )),
         tile(KpiCard(
           label: 'Receitas',

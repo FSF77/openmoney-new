@@ -92,6 +92,7 @@ class PayeeRank {
 class AnalyticsSnapshot {
   final String currency;
   final int income, expense, net, netWorth;
+  final int cashNetWorth, investmentsNetWorth;
   final int prevIncome, prevExpense;
   final double savingsRate;
   final int burnPerDay;
@@ -113,6 +114,8 @@ class AnalyticsSnapshot {
     required this.expense,
     required this.net,
     required this.netWorth,
+    this.cashNetWorth = 0,
+    this.investmentsNetWorth = 0,
     required this.prevIncome,
     required this.prevExpense,
     required this.savingsRate,
@@ -281,15 +284,26 @@ class AnalyticsEngine {
     // ---------- Patrimônio Líquido Consolidado Atual ----------
     final nwAccounts =
         accounts.where((a) => a.isActive && accFilterOk(a.id)).toList();
-    int currentConsolidatedNetWorth = 0;
+    int cashNetWorth = 0;
+    int investmentsNetWorth = 0;
     if (f.accountIds.isEmpty) {
-      currentConsolidatedNetWorth = store.totalBalance(predicted: false);
+      cashNetWorth = store.totalBalance(predicted: false);
+      investmentsNetWorth = store.portfolioMarketValue();
     } else {
       for (final a in nwAccounts) {
-        currentConsolidatedNetWorth += store.convertToBase(
+        cashNetWorth += store.convertToBase(
             store.balance(a, predicted: false), a.effectiveCurrency);
+        final accMarket = store.portfolioMarketValue(
+          accountId: a.id,
+          targetCurrency: a.effectiveCurrency,
+        );
+        if (accMarket != 0) {
+          investmentsNetWorth +=
+              store.convertToBase(accMarket, a.effectiveCurrency);
+        }
       }
     }
+    final currentConsolidatedNetWorth = cashNetWorth + investmentsNetWorth;
 
     // ---------- Patrimônio mês a mês (Histórico) ----------
     int opening = 0;
@@ -301,6 +315,7 @@ class AnalyticsEngine {
     for (final t in store.db.txs) {
       if (!nwIds.contains(t.acc)) continue;
       if (isPredictionPayee(t.payee)) continue;
+      if (t.investOpId != null && isTransferTransaction(t)) continue;
       if (t.date.length < 7) continue;
       final v = conv(t, t.amt);
       final ym = t.date.substring(0, 7);
@@ -473,6 +488,8 @@ class AnalyticsEngine {
       expense: expense,
       net: income - expense,
       netWorth: netWorthNow,
+      cashNetWorth: cashNetWorth,
+      investmentsNetWorth: investmentsNetWorth,
       prevIncome: prevIncome,
       prevExpense: prevExpense,
       savingsRate: savingsRate,

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
+import 'package:openmoney/services/analytics_engine.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
 import 'package:openmoney/services/investment_engine.dart';
 import 'package:openmoney/services/investment_quote_service.dart';
@@ -586,6 +587,50 @@ void main() {
       final inactiveCdb = cdb.copyWith(inactive: true);
       final roundTrip = InvestAsset.fromJson(inactiveCdb.toJson());
       expect(roundTrip.inactive, isTrue);
+    });
+
+    test('AnalyticsEngine inclui valor atualizado da carteira no Patrimônio Líquido', () {
+      final store = MoneyStore();
+      final invAcc = Account(
+        id: 'inv1',
+        name: 'Corretora',
+        type: 'Investimento',
+        opening: 1000000, // R$ 10.000,00
+      );
+      store.db = Database(accounts: [invAcc]);
+
+      final petr = InvestAsset(
+        id: 'petr4',
+        ticker: 'PETR4',
+        name: 'Petrobras',
+        assetClass: InvestAssetClass.stock,
+        accountId: 'inv1',
+        currentPriceCents: 4200, // R$ 42,00
+      );
+      store.addOrUpdateInvestAsset(petr);
+      store.addInvestOperation(
+        InvestOperation(
+          id: 'buy_petr',
+          assetId: 'petr4',
+          accountId: 'inv1',
+          type: InvestOpType.buy,
+          date: todayISO(),
+          quantity: 100,
+          unitPriceCents: 4000, // R$ 4.000,00 aplicados -> R$ 6.000 caixa
+          totalCents: 400000,
+        ),
+        affectAccountCash: true,
+      );
+
+      final curYM = todayISO().substring(0, 7);
+      final snap = AnalyticsEngine.compute(
+        store,
+        AnalyticsFilter(fromYM: curYM, toYM: curYM, isAllTime: true),
+      );
+      // Caixa R$ 6.000 + Carteira R$ 4.200 = R$ 10.200,00
+      expect(snap.cashNetWorth, 600000);
+      expect(snap.investmentsNetWorth, 420000);
+      expect(snap.netWorth, 1020000);
     });
   });
 }

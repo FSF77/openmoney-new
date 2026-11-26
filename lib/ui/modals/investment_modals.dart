@@ -1639,20 +1639,33 @@ class _AssetOperationsDialog extends StatelessWidget {
                             final op = ops[i];
                             final accName =
                                 store.accById(op.accountId)?.name ?? '';
-                            return Card(
+                            return Container(
                               margin: const EdgeInsets.only(bottom: 6),
+                              decoration: BoxDecoration(
+                                color: colors.surfaceCard,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: colors.borderGlass),
+                              ),
                               child: ListTile(
                                 dense: true,
                                 title: Text(
                                   '${op.type.label} · ${fmtDate(op.date)}${accName.isNotEmpty ? " · $accName" : ""}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: colors.textPrimary,
+                                  ),
                                 ),
                                 subtitle: Text(
                                   'Qtde: ${formatInvestQty(op.quantity, asset.assetClass)} · '
                                   'Unit: ${formatCurrency(op.unitPriceCents, cur)}'
                                   '${op.feesCents > 0 ? " · Taxas: ${formatCurrency(op.feesCents, cur)}" : ""}'
+                                  '${op.taxCents > 0 ? " · IR: ${formatCurrency(op.taxCents, cur)}" : ""}'
                                   '${op.memo.isNotEmpty ? " · ${op.memo}" : ""}',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -1661,6 +1674,7 @@ class _AssetOperationsDialog extends StatelessWidget {
                                       formatCurrency(op.totalCents, cur),
                                       style: TextStyle(
                                         fontWeight: FontWeight.w800,
+                                        fontSize: 13,
                                         color: op.type.isCashIn
                                             ? colors.income
                                             : colors.textPrimary,
@@ -1669,7 +1683,7 @@ class _AssetOperationsDialog extends StatelessWidget {
                                     IconButton(
                                       tooltip: 'Editar operação',
                                       icon: const Icon(Icons.edit_outlined,
-                                          size: 18),
+                                          size: 17),
                                       onPressed: () =>
                                           showInvestmentOperationModal(
                                         context,
@@ -1679,10 +1693,14 @@ class _AssetOperationsDialog extends StatelessWidget {
                                     ),
                                     IconButton(
                                       tooltip: 'Excluir operação',
-                                      icon: const Icon(Icons.delete_outline,
-                                          size: 18),
+                                      icon: Icon(Icons.delete_outline,
+                                          size: 17, color: colors.expense),
                                       onPressed: () =>
-                                          store.deleteInvestOperation(op.id),
+                                          confirmDeleteInvestOperation(
+                                        context,
+                                        store,
+                                        op,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1736,4 +1754,57 @@ class _DetailStat extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Diálogo de confirmação antes de excluir qualquer operação da carteira.
+Future<bool> confirmDeleteInvestOperation(
+  BuildContext context,
+  MoneyStore store,
+  InvestOperation op,
+) async {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final colors = OpenMoneyColors(isDark);
+  final asset = store.investAssetById(op.assetId);
+  final cur = asset?.currency ?? store.baseCurrency;
+  final hasLinked = op.linkedTxId != null || op.linkedTaxTxId != null;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: colors.surfaceCard,
+      title: Text(
+        'Excluir Operação?',
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      content: Text(
+        'Tem certeza que deseja excluir ${op.type.label} de ${asset?.displayCode ?? "Ativo"} '
+        'em ${fmtDate(op.date)} no valor de ${formatCurrency(op.totalCents, cur)}?'
+        '${hasLinked ? "\n\nOs lançamentos vinculados no caixa da conta também serão removidos." : ""}',
+        style: TextStyle(color: colors.textSecondary, fontSize: 13),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colors.expense,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Excluir'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true) {
+    store.deleteInvestOperation(op.id);
+    return true;
+  }
+  return false;
 }
