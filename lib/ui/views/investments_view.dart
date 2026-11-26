@@ -28,6 +28,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
 
   int _sortColumnIndex = 0; // Ativo (padrão crescente A -> Z)
   bool _sortAscending = true;
+  bool? _filtersExpandedOverride;
+  bool _summaryExpanded = true;
   final ScrollController _tableHScrollCtrl = ScrollController();
   final ScrollController _tableVScrollCtrl = ScrollController();
 
@@ -147,7 +149,11 @@ class _InvestmentsViewState extends State<InvestmentsView>
     return names.join(' / ');
   }
 
-  void _exportCsv(PortfolioSummary summary) {
+  String _encodeCsvRows(List<List<String>> rows) {
+    return '\uFEFF${rows.map((r) => r.map((c) => '"${c.replaceAll('"', '""')}"').join(';')).join('\r\n')}';
+  }
+
+  void _exportConsolidatedCsv(PortfolioSummary summary) {
     final rows = <List<String>>[
       [
         'Corretora / Conta',
@@ -202,13 +208,147 @@ class _InvestmentsViewState extends State<InvestmentsView>
             p.asset.priceUpdatedAt ?? '',
           ]),
     ];
-    final csv =
-        '\uFEFF${rows.map((r) => r.map((c) => '"${c.replaceAll('"', '""')}"').join(';')).join('\r\n')}';
     exportCsvWithFeedback(
       context,
-      csv: csv,
+      csv: _encodeCsvRows(rows),
       defaultName: 'posicao_investimentos_${todayISO()}.csv',
       title: 'Exportar Posição de Investimentos (CSV)',
+    );
+  }
+
+  void _exportOperationsCsv() {
+    final ops = widget.store.db.investOps
+        .where((op) => _accountFilter == null || op.accountId == _accountFilter)
+        .toList()
+      ..sort((a, b) {
+        final d = a.date.compareTo(b.date);
+        return d != 0 ? d : a.createdAt.compareTo(b.createdAt);
+      });
+
+    if (ops.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhuma operação encontrada para exportar.'),
+        ),
+      );
+      return;
+    }
+
+    final rows = <List<String>>[
+      [
+        'Data',
+        'Data ISO',
+        'Tipo',
+        'Corretora / Conta',
+        'Ativo',
+        'Nome',
+        'Classe',
+        'Subtipo',
+        'Moeda',
+        'Qtde',
+        'Preço Unitário',
+        'Taxas / Corretagem',
+        'IR Retido',
+        'Valor Total',
+        'Movimentou Caixa',
+        'Observação',
+      ],
+      ...ops.map((op) {
+        final asset = widget.store.investAssetById(op.assetId);
+        final accName = widget.store.accById(op.accountId)?.name ?? '';
+        final cls = asset?.assetClass ?? InvestAssetClass.stock;
+        return [
+          fmtDate(op.date),
+          op.date,
+          op.type.label,
+          accName,
+          asset?.displayCode ?? op.assetId,
+          asset?.name ?? '',
+          cls.label,
+          asset?.subType ?? '',
+          asset?.currency ?? widget.store.baseCurrency,
+          formatInvestQty(op.quantity, cls),
+          formatInputCents(op.unitPriceCents),
+          formatInputCents(op.feesCents),
+          formatInputCents(op.taxCents),
+          formatInputCents(op.totalCents),
+          (op.linkedTxId != null && op.linkedTxId!.isNotEmpty) ? 'Sim' : 'Não',
+          op.memo,
+        ];
+      }),
+    ];
+
+    exportCsvWithFeedback(
+      context,
+      csv: _encodeCsvRows(rows),
+      defaultName: 'operacoes_investimentos_${todayISO()}.csv',
+      title: 'Exportar Operações de Investimentos (CSV)',
+    );
+  }
+
+  Future<void> _showExportCsvDialog(PortfolioSummary summary) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = OpenMoneyColors(isDark);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surfaceCard,
+        title: const Text('Exportar Investimentos (CSV)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: ListTile(
+                leading: Icon(Icons.summarize_outlined, color: colors.accent),
+                title: const Text(
+                  'Posição Consolidada',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text(
+                  'Resumo atual por ativo (quantidades, PM, rentabilidade e proventos).',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _exportConsolidatedCsv(summary);
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.borderGlass),
+              ),
+              child: ListTile(
+                leading: Icon(Icons.receipt_long_outlined, color: colors.income),
+                title: const Text(
+                  'Operações Detalhadas (com data)',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text(
+                  'Histórico completo de compras, vendas, proventos, taxas e IR por data.',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _exportOperationsCsv();
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -273,7 +413,11 @@ class _InvestmentsViewState extends State<InvestmentsView>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final isMobile = MediaQuery.sizeOf(context).width < 720;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isMobile = screenWidth < 720;
+    final isCompactHeader = screenWidth < 560;
+    final useIconOnlyActions = screenWidth < 1100;
+    final isCompactKpi = screenWidth < 900;
     final baseCur = widget.store.baseCurrency;
 
     final summary = widget.store.portfolioSummary(accountId: _accountFilter);
@@ -302,170 +446,237 @@ class _InvestmentsViewState extends State<InvestmentsView>
         .where((a) => a.isActive && a.type == 'Investimento')
         .toList();
 
+    final titleRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.candlestick_chart_rounded,
+          size: isMobile ? 20 : 26,
+          color: colors.income,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            'Investimentos',
+            style: TextStyle(
+              fontSize: isMobile ? 16 : 20,
+              fontWeight: FontWeight.w900,
+              color: colors.textPrimary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: colors.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            'Carteira',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: colors.accent,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: _summaryExpanded ? 'Ocultar resumo' : 'Mostrar resumo',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => setState(() => _summaryExpanded = !_summaryExpanded),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                _summaryExpanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: colors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final actionButtons = <Widget>[
+      _CompactActionBtn(
+        icon: Icons.add,
+        label: 'Nova Operação',
+        tooltip: 'Nova Operação',
+        filled: true,
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => showInvestmentOperationModal(context, widget.store),
+      ),
+      _CompactActionBtn(
+        icon: Icons.add_box_outlined,
+        label: 'Novo Ativo',
+        tooltip: 'Novo Ativo',
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => showInvestmentAssetModal(context, widget.store),
+      ),
+      _CompactActionBtn(
+        icon: Icons.upload_file,
+        label: 'Importar B3',
+        tooltip: 'Importar B3',
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => showB3ImportModal(context, widget.store),
+      ),
+      _CompactActionBtn(
+        icon: Icons.refresh,
+        label: 'Cotações',
+        tooltip: 'Atualizar Cotações',
+        loading: _refreshing,
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: _refreshing ? null : _refreshQuotes,
+      ),
+      _CompactActionBtn(
+        icon: Icons.picture_as_pdf_outlined,
+        label: 'PDF',
+        tooltip: 'Exportar PDF',
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => PdfReportGenerator.exportInvestmentPositionPdf(
+          context,
+          widget.store,
+          summary,
+        ),
+      ),
+      _CompactActionBtn(
+        icon: Icons.table_view_outlined,
+        label: 'CSV',
+        tooltip: 'Exportar CSV',
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => _showExportCsvDialog(summary),
+      ),
+    ];
+
+    final kpiPatrimony = _KpiChip(
+      colors: colors,
+      compact: isCompactKpi,
+      label: isCompactKpi ? 'Patrimônio' : 'Patrimônio (Caixa + Ativos)',
+      value: formatCurrency(totalPatrimony, baseCur),
+      sub: 'Caixa: ${formatCurrency(cashBalance, baseCur)}',
+      accent: colors.accent,
+    );
+    final kpiApplied = _KpiChip(
+      colors: colors,
+      compact: isCompactKpi,
+      label: isCompactKpi ? 'Aplicado' : 'Aplicado (Custo)',
+      value: formatCurrency(summary.totalCostBasisCents, baseCur),
+      sub: 'Atual: ${formatCurrency(summary.totalMarketValueNetCents, baseCur)}',
+      accent: colors.textPrimary,
+    );
+    final kpiRentability = _KpiChip(
+      colors: colors,
+      compact: isCompactKpi,
+      label: isCompactKpi ? 'Rentabilidade' : 'Rentabilidade Aberta',
+      value: formatCurrency(summary.totalUnrealizedPnlCents, baseCur),
+      sub:
+          '${summary.totalUnrealizedPnlPct >= 0 ? "+" : ""}${summary.totalUnrealizedPnlPct.toStringAsFixed(2)}%',
+      accent:
+          summary.totalUnrealizedPnlCents >= 0 ? colors.income : colors.expense,
+    );
+    final kpiRealized = _KpiChip(
+      colors: colors,
+      compact: isCompactKpi,
+      label: isCompactKpi ? 'Realiz. + Prov.' : 'Realizado + Proventos',
+      value: formatCurrency(
+        summary.totalRealizedPnlCents + summary.totalDividendsCents,
+        baseCur,
+      ),
+      sub:
+          'R: ${formatCurrency(summary.totalRealizedPnlCents, baseCur)} · P: ${formatCurrency(summary.totalDividendsCents, baseCur)}',
+      accent: colors.income,
+    );
+
     return Column(
       children: [
-        // 1. Cabeçalho Executivo compacto no padrão AllTransactionsView
+        // 1. Cabeçalho Executivo compacto e responsivo
         Padding(
           padding: EdgeInsets.fromLTRB(
             isMobile ? 10 : 16,
-            isMobile ? 8 : 14,
+            isMobile ? 6 : 12,
             isMobile ? 10 : 16,
-            isMobile ? 4 : 8,
+            isMobile ? 4 : 6,
           ),
           child: GlassCard(
             padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 16,
-              vertical: isMobile ? 10 : 12,
+              horizontal: isMobile ? 10 : 14,
+              vertical: isMobile ? 8 : 10,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.candlestick_chart_rounded,
-                      size: isMobile ? 24 : 28,
-                      color: colors.income,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Row(
+                if (isCompactHeader) ...[
+                  titleRow,
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: actionButtons,
+                  ),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: titleRow),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Flexible(
-                            child: Text(
-                              'Investimentos',
-                              style: TextStyle(
-                                fontSize: isMobile ? 17 : 20,
-                                fontWeight: FontWeight.w900,
-                                color: colors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colors.accent.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Carteira',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: colors.accent,
-                              ),
-                            ),
-                          ),
+                          for (int i = 0; i < actionButtons.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 6),
+                            actionButtons[i],
+                          ],
                         ],
                       ),
-                    ),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                    ],
+                  ),
+                if (_summaryExpanded) ...[
+                  SizedBox(height: isCompactKpi ? 6 : 10),
+                  if (isCompactKpi)
+                    Column(
                       children: [
-                        _CompactActionBtn(
-                          icon: Icons.add,
-                          label: 'Nova Operação',
-                          filled: true,
-                          colors: colors,
-                          onPressed: () => showInvestmentOperationModal(
-                              context, widget.store),
+                        Row(
+                          children: [
+                            Expanded(child: kpiPatrimony),
+                            const SizedBox(width: 6),
+                            Expanded(child: kpiApplied),
+                          ],
                         ),
-                        _CompactActionBtn(
-                          icon: Icons.add_box_outlined,
-                          label: 'Novo Ativo',
-                          colors: colors,
-                          onPressed: () =>
-                              showInvestmentAssetModal(context, widget.store),
-                        ),
-                        _CompactActionBtn(
-                          icon: Icons.upload_file,
-                          label: 'Importar B3',
-                          colors: colors,
-                          onPressed: () =>
-                              showB3ImportModal(context, widget.store),
-                        ),
-                        _CompactActionBtn(
-                          icon: Icons.refresh,
-                          label: 'Cotações',
-                          loading: _refreshing,
-                          colors: colors,
-                          onPressed: _refreshing ? null : _refreshQuotes,
-                        ),
-                        _CompactActionBtn(
-                          icon: Icons.picture_as_pdf_outlined,
-                          label: 'PDF',
-                          colors: colors,
-                          onPressed: () =>
-                              PdfReportGenerator.exportInvestmentPositionPdf(
-                            context,
-                            widget.store,
-                            summary,
-                          ),
-                        ),
-                        _CompactActionBtn(
-                          icon: Icons.table_view_outlined,
-                          label: 'CSV',
-                          colors: colors,
-                          onPressed: () => _exportCsv(summary),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(child: kpiRentability),
+                            const SizedBox(width: 6),
+                            Expanded(child: kpiRealized),
+                          ],
                         ),
                       ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(child: kpiPatrimony),
+                        const SizedBox(width: 8),
+                        Expanded(child: kpiApplied),
+                        const SizedBox(width: 8),
+                        Expanded(child: kpiRentability),
+                        const SizedBox(width: 8),
+                        Expanded(child: kpiRealized),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Faixa compacta de KPIs
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _KpiChip(
-                      colors: colors,
-                      label: 'Patrimônio (Caixa + Ativos)',
-                      value: formatCurrency(totalPatrimony, baseCur),
-                      sub: 'Caixa livre: ${formatCurrency(cashBalance, baseCur)}',
-                      accent: colors.accent,
-                    ),
-                    _KpiChip(
-                      colors: colors,
-                      label: 'Aplicado (Custo)',
-                      value:
-                          formatCurrency(summary.totalCostBasisCents, baseCur),
-                      sub:
-                          'Atual: ${formatCurrency(summary.totalMarketValueNetCents, baseCur)}',
-                      accent: colors.textPrimary,
-                    ),
-                    _KpiChip(
-                      colors: colors,
-                      label: 'Rentabilidade Aberta',
-                      value: formatCurrency(
-                          summary.totalUnrealizedPnlCents, baseCur),
-                      sub:
-                          '${summary.totalUnrealizedPnlPct >= 0 ? "+" : ""}${summary.totalUnrealizedPnlPct.toStringAsFixed(2)}%',
-                      accent: summary.totalUnrealizedPnlCents >= 0
-                          ? colors.income
-                          : colors.expense,
-                    ),
-                    _KpiChip(
-                      colors: colors,
-                      label: 'Realizado + Proventos',
-                      value: formatCurrency(
-                        summary.totalRealizedPnlCents +
-                            summary.totalDividendsCents,
-                        baseCur,
-                      ),
-                      sub:
-                          'Realiz.: ${formatCurrency(summary.totalRealizedPnlCents, baseCur)} · Prov.: ${formatCurrency(summary.totalDividendsCents, baseCur)}',
-                      accent: colors.income,
-                    ),
-                  ],
-                ),
+                ],
               ],
             ),
           ),
@@ -484,10 +695,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
             labelStyle:
                 const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
             tabs: const [
-              Tab(height: 36, text: 'Posição Atual'),
-              Tab(height: 36, text: 'Operações'),
-              Tab(height: 36, text: 'Renda Fixa & Tesouro'),
-              Tab(height: 36, text: 'Análise & Alocação'),
+              Tab(height: 34, text: 'Posição Atual'),
+              Tab(height: 34, text: 'Operações'),
+              Tab(height: 34, text: 'Renda Fixa & Tesouro'),
+              Tab(height: 34, text: 'Análise & Alocação'),
             ],
           ),
         ),
@@ -497,7 +708,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
             controller: _tabCtrl,
             children: [
               _buildPositionsTab(
-                  colors, isMobile, filteredPositions, investAccounts),
+                  colors, screenWidth, isMobile, filteredPositions, investAccounts),
               _buildOperationsTab(colors, isMobile),
               _buildFixedIncomeTab(colors, summary, isMobile),
               _buildAnalyticsTab(colors, summary, baseCur),
@@ -510,6 +721,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
 
   Widget _buildPositionsTab(
     OpenMoneyColors colors,
+    double screenWidth,
     bool isMobile,
     List<AssetPositionSummary> positions,
     List<Account> investAccounts,
@@ -526,147 +738,286 @@ class _InvestmentsViewState extends State<InvestmentsView>
       (8, 'Rentabilidade'),
       (9, 'Proventos'),
     ];
+    final filtersExpanded = _filtersExpandedOverride ?? !isMobile;
+    final activeFilterCount = (_classFilter != null ? 1 : 0) +
+        (_accountFilter != null ? 1 : 0) +
+        (!_hideZeroPositions ? 1 : 0) +
+        (_showInactive ? 1 : 0);
+
+    final accountDropdown = investAccounts.length > 1
+        ? SizedBox(
+            height: 34,
+            child: DropdownButtonFormField<String?>(
+              initialValue: _accountFilter,
+              isExpanded: true,
+              style: TextStyle(fontSize: 12, color: colors.textPrimary),
+              decoration: const InputDecoration(
+                labelText: 'Corretora',
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(
+                    'Todas as corretoras',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                ...investAccounts.map((a) => DropdownMenuItem<String?>(
+                      value: a.id,
+                      child: Text(
+                        a.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )),
+              ],
+              onChanged: (v) => setState(() => _accountFilter = v),
+            ),
+          )
+        : null;
+
+    final sortDropdown = SizedBox(
+      height: 34,
+      child: DropdownButtonFormField<int>(
+        initialValue: _sortColumnIndex,
+        isExpanded: true,
+        style: TextStyle(fontSize: 12, color: colors.textPrimary),
+        decoration: const InputDecoration(
+          labelText: 'Ordenar por',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          border: OutlineInputBorder(),
+        ),
+        items: sortOptions
+            .map((opt) => DropdownMenuItem<int>(
+                  value: opt.$1,
+                  child: Text(
+                    opt.$2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) _onSort(v, _sortAscending);
+        },
+      ),
+    );
 
     return Column(
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(
             isMobile ? 10 : 16,
-            8,
-            isMobile ? 10 : 16,
             6,
+            isMobile ? 10 : 16,
+            4,
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: isMobile ? double.infinity : 200,
-                height: 34,
-                child: TextField(
-                  style: const TextStyle(fontSize: 12.5),
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar ticker ou nome...',
-                    prefixIcon: Icon(Icons.search, size: 16),
-                    isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (v) => setState(() => _search = v),
-                ),
-              ),
-              if (investAccounts.length > 1)
-                SizedBox(
-                  width: isMobile ? double.infinity : 200,
-                  height: 34,
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _accountFilter,
-                    isExpanded: true,
-                    style: TextStyle(fontSize: 12, color: colors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Corretora',
-                      isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      border: OutlineInputBorder(),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 34,
+                      child: TextField(
+                        style: const TextStyle(fontSize: 12.5),
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar ticker ou nome...',
+                          prefixIcon: Icon(Icons.search, size: 16),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) => setState(() => _search = v),
+                      ),
                     ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          'Todas as corretoras',
-                          overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: filtersExpanded
+                        ? 'Ocultar filtros'
+                        : 'Mostrar filtros',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => setState(
+                          () => _filtersExpandedOverride = !filtersExpanded),
+                      child: Container(
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: (filtersExpanded || activeFilterCount > 0)
+                              ? colors.accent.withValues(alpha: 0.12)
+                              : colors.surfaceCard,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: (filtersExpanded || activeFilterCount > 0)
+                                ? colors.accent
+                                : colors.borderGlass,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 15,
+                              color: (filtersExpanded || activeFilterCount > 0)
+                                  ? colors.accent
+                                  : colors.textPrimary,
+                            ),
+                            if (screenWidth >= 400) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                'Filtros',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: (filtersExpanded ||
+                                          activeFilterCount > 0)
+                                      ? colors.accent
+                                      : colors.textPrimary,
+                                ),
+                              ),
+                            ],
+                            if (activeFilterCount > 0) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: colors.accent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$activeFilterCount',
+                                  style: const TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 2),
+                            Icon(
+                              filtersExpanded
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              size: 16,
+                              color: (filtersExpanded || activeFilterCount > 0)
+                                  ? colors.accent
+                                  : colors.textSecondary,
+                            ),
+                          ],
                         ),
                       ),
-                      ...investAccounts.map((a) => DropdownMenuItem<String?>(
-                            value: a.id,
-                            child: Text(
-                              a.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          )),
-                    ],
-                    onChanged: (v) => setState(() => _accountFilter = v),
+                    ),
                   ),
-                ),
-              SizedBox(
-                width: 175,
-                height: 34,
-                child: DropdownButtonFormField<int>(
-                  initialValue: _sortColumnIndex,
-                  isExpanded: true,
-                  style: TextStyle(fontSize: 12, color: colors.textPrimary),
-                  decoration: const InputDecoration(
-                    labelText: 'Ordenar por',
-                    isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: sortOptions
-                      .map((opt) => DropdownMenuItem<int>(
-                            value: opt.$1,
-                            child: Text(
-                              opt.$2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) _onSort(v, _sortAscending);
-                  },
-                ),
-              ),
-              Tooltip(
-                message: _sortAscending ? 'Ordem crescente' : 'Ordem decrescente',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => _onSort(_sortColumnIndex, !_sortAscending),
-                  child: Container(
-                    height: 34,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceCard,
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: _sortAscending
+                        ? 'Ordem crescente'
+                        : 'Ordem decrescente',
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: colors.borderGlass),
-                    ),
-                    child: Icon(
-                      _sortAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 16,
-                      color: colors.textPrimary,
+                      onTap: () => _onSort(_sortColumnIndex, !_sortAscending),
+                      child: Container(
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceCard,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: colors.borderGlass),
+                        ),
+                        child: Icon(
+                          _sortAscending
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 16,
+                          color: colors.textPrimary,
+                        ),
+                      ),
                     ),
                   ),
+                ],
+              ),
+              if (filtersExpanded) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceCard,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: colors.borderGlass),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isMobile)
+                        Row(
+                          children: [
+                            if (accountDropdown != null) ...[
+                              Expanded(child: accountDropdown),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(child: sortDropdown),
+                          ],
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            if (accountDropdown != null)
+                              SizedBox(width: 200, child: accountDropdown),
+                            SizedBox(width: 175, child: sortDropdown),
+                          ],
+                        ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 5,
+                        children: [
+                          _CompactFilterChip(
+                            label: 'Todas',
+                            selected: _classFilter == null,
+                            colors: colors,
+                            onSelected: (_) =>
+                                setState(() => _classFilter = null),
+                          ),
+                          ...InvestAssetClass.values.map((c) =>
+                              _CompactFilterChip(
+                                label: c.label,
+                                selected: _classFilter == c,
+                                colors: colors,
+                                onSelected: (_) => setState(() =>
+                                    _classFilter = _classFilter == c ? null : c),
+                              )),
+                          _CompactFilterChip(
+                            label: 'Ocultar zerados',
+                            selected: _hideZeroPositions,
+                            colors: colors,
+                            onSelected: (v) =>
+                                setState(() => _hideZeroPositions = v),
+                          ),
+                          _CompactFilterChip(
+                            label: 'Mostrar inativos',
+                            selected: _showInactive,
+                            colors: colors,
+                            onSelected: (v) =>
+                                setState(() => _showInactive = v),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              _CompactFilterChip(
-                label: 'Todas',
-                selected: _classFilter == null,
-                colors: colors,
-                onSelected: (_) => setState(() => _classFilter = null),
-              ),
-              ...InvestAssetClass.values.map((c) => _CompactFilterChip(
-                    label: c.label,
-                    selected: _classFilter == c,
-                    colors: colors,
-                    onSelected: (_) => setState(
-                        () => _classFilter = _classFilter == c ? null : c),
-                  )),
-              _CompactFilterChip(
-                label: 'Ocultar zerados',
-                selected: _hideZeroPositions,
-                colors: colors,
-                onSelected: (v) => setState(() => _hideZeroPositions = v),
-              ),
-              _CompactFilterChip(
-                label: 'Mostrar inativos',
-                selected: _showInactive,
-                colors: colors,
-                onSelected: (v) => setState(() => _showInactive = v),
-              ),
+              ],
             ],
           ),
         ),
@@ -1135,6 +1486,9 @@ class _InvestmentsViewState extends State<InvestmentsView>
                 IconButton(
                   tooltip: 'Editar operação',
                   visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 30, minHeight: 30),
+                  padding: const EdgeInsets.all(4),
                   icon: const Icon(Icons.edit_outlined, size: 17),
                   onPressed: () => showInvestmentOperationModal(
                     context,
@@ -1145,6 +1499,9 @@ class _InvestmentsViewState extends State<InvestmentsView>
                 IconButton(
                   tooltip: 'Excluir operação',
                   visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 30, minHeight: 30),
+                  padding: const EdgeInsets.all(4),
                   icon: Icon(Icons.delete_outline,
                       size: 17, color: colors.expense),
                   onPressed: () => confirmDeleteInvestOperation(
@@ -1265,8 +1622,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
         children: [
           GlassCard(
             padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: 340,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1337,22 +1694,66 @@ class _InvestmentsViewState extends State<InvestmentsView>
 class _CompactActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? tooltip;
   final bool filled;
   final bool loading;
+  final bool iconOnly;
   final OpenMoneyColors colors;
   final VoidCallback? onPressed;
 
   const _CompactActionBtn({
     required this.icon,
     required this.label,
+    this.tooltip,
     this.filled = false,
     this.loading = false,
+    this.iconOnly = false,
     required this.colors,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tip = tooltip ?? label;
+    final iconWidget = loading
+        ? SizedBox(
+            width: 13,
+            height: 13,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: filled ? Colors.white : colors.accent,
+            ),
+          )
+        : Icon(
+            icon,
+            size: 15,
+            color: filled ? Colors.white : colors.textPrimary,
+          );
+
+    if (iconOnly) {
+      return Tooltip(
+        message: tip,
+        child: Material(
+          color: filled ? colors.accent : colors.surfaceCard,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: filled ? null : Border.all(color: colors.borderGlass),
+              ),
+              alignment: Alignment.center,
+              child: iconWidget,
+            ),
+          ),
+        ),
+      );
+    }
+
     final style = filled
         ? ElevatedButton.styleFrom(
             backgroundColor: colors.accent,
@@ -1376,28 +1777,21 @@ class _CompactActionBtn extends StatelessWidget {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           );
 
-    final iconWidget = loading
-        ? const SizedBox(
-            width: 13,
-            height: 13,
-            child: CircularProgressIndicator(strokeWidth: 2),
+    final btn = filled
+        ? ElevatedButton.icon(
+            onPressed: onPressed,
+            style: style,
+            icon: iconWidget,
+            label: Text(label),
           )
-        : Icon(icon, size: 15);
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            style: style,
+            icon: iconWidget,
+            label: Text(label),
+          );
 
-    if (filled) {
-      return ElevatedButton.icon(
-        onPressed: onPressed,
-        style: style,
-        icon: iconWidget,
-        label: Text(label),
-      );
-    }
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      style: style,
-      icon: iconWidget,
-      label: Text(label),
-    );
+    return Tooltip(message: tip, child: btn);
   }
 }
 
@@ -1442,6 +1836,7 @@ class _CompactFilterChip extends StatelessWidget {
 
 class _KpiChip extends StatelessWidget {
   final OpenMoneyColors colors;
+  final bool compact;
   final String label;
   final String value;
   final String sub;
@@ -1449,6 +1844,7 @@ class _KpiChip extends StatelessWidget {
 
   const _KpiChip({
     required this.colors,
+    this.compact = false,
     required this.label,
     required this.value,
     required this.sub,
@@ -1458,8 +1854,10 @@ class _KpiChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 175),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 11,
+        vertical: compact ? 5 : 7,
+      ),
       decoration: BoxDecoration(
         color: colors.surfaceCard,
         borderRadius: BorderRadius.circular(8),
@@ -1467,21 +1865,39 @@ class _KpiChip extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style: TextStyle(fontSize: 10.5, color: colors.textSecondary)),
-          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: compact ? 9.5 : 10.5,
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 1),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: compact ? 12.5 : 14,
               fontWeight: FontWeight.w800,
               color: accent,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           const SizedBox(height: 1),
-          Text(sub, style: TextStyle(fontSize: 10, color: colors.textMuted)),
+          Text(
+            sub,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: compact ? 9 : 10,
+              color: colors.textMuted,
+            ),
+          ),
         ],
       ),
     );

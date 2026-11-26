@@ -1476,16 +1476,16 @@ class PdfReportGenerator {
     );
 
     const cols = [
-      ('Ativo', 75.0),
-      ('Classe', 65.0),
-      ('Qtde', 65.0),
-      ('Valor Compra', 85.0),
-      ('PM Compra', 75.0),
-      ('PM Venda', 75.0),
-      ('Preço Atual', 75.0),
-      ('Valor Atual', 85.0),
-      ('Rentab.', 95.0),
-      ('Proventos', 75.0),
+      ('Ativo', 135.0, 24),
+      ('Classe', 58.0, 10),
+      ('Qtde', 58.0, 11),
+      ('Valor Compra', 76.0, 15),
+      ('PM Compra', 68.0, 13),
+      ('PM Venda', 66.0, 13),
+      ('Preço Atual', 68.0, 13),
+      ('Valor Atual', 76.0, 15),
+      ('Rentab.', 112.0, 22),
+      ('Proventos', 68.0, 13),
     ];
 
     double y = 88.0;
@@ -1531,6 +1531,7 @@ class PdfReportGenerator {
           r: 0.15,
           g: 0.15,
           b: 0.18,
+          maxChars: cols[i].$3,
         );
         x += cols[i].$2;
       }
