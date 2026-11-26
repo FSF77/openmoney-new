@@ -26,8 +26,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
   bool _showInactive = false;
   bool _refreshing = false;
 
-  int _sortColumnIndex = 7; // Valor Atual (padrão decrescente)
-  bool _sortAscending = false;
+  int _sortColumnIndex = 0; // Ativo (padrão crescente A -> Z)
+  bool _sortAscending = true;
+  final ScrollController _tableHScrollCtrl = ScrollController();
+  final ScrollController _tableVScrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -38,6 +40,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
   @override
   void dispose() {
     _tabCtrl.dispose();
+    _tableHScrollCtrl.dispose();
+    _tableVScrollCtrl.dispose();
     super.dispose();
   }
 
@@ -708,14 +712,32 @@ class _InvestmentsViewState extends State<InvestmentsView>
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                       child: GlassCard(
                         padding: EdgeInsets.zero,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ConstrainedBox(
-                              constraints:
-                                  BoxConstraints(minWidth: availW - 32),
-                              child: DataTable(
+                        child: Scrollbar(
+                          controller: _tableVScrollCtrl,
+                          thumbVisibility: true,
+                          interactive: true,
+                          notificationPredicate: (n) =>
+                              n.metrics.axis == Axis.vertical,
+                          child: Scrollbar(
+                            controller: _tableHScrollCtrl,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            interactive: true,
+                            notificationPredicate: (n) =>
+                                n.metrics.axis == Axis.horizontal,
+                            child: SingleChildScrollView(
+                              controller: _tableHScrollCtrl,
+                              scrollDirection: Axis.horizontal,
+                              physics: const ClampingScrollPhysics(),
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: ConstrainedBox(
+                                constraints:
+                                    BoxConstraints(minWidth: availW - 32),
+                                child: SingleChildScrollView(
+                                  controller: _tableVScrollCtrl,
+                                  scrollDirection: Axis.vertical,
+                                  physics: const ClampingScrollPhysics(),
+                                  child: DataTable(
                                 sortColumnIndex: _sortColumnIndex,
                                 sortAscending: _sortAscending,
                                 columnSpacing: 14,
@@ -944,6 +966,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
                                     )),
                                   ]);
                                 }).toList(),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
