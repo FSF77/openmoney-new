@@ -97,80 +97,275 @@ class InvestmentQuoteService {
     return raw;
   }
 
-  static Future<String?> _httpGetText(Uri uri) async {
+  static const String _tesouroTransparenteCsvUrl =
+      'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
+
+  static String _normalizeAccents(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõö]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c');
+  }
+
+  /// Gera chave normalizada `<familia>:<ano>` para casar títulos do Tesouro Direto
+  /// mesmo quando o usuário inclui a taxa contratada no nome (ex: `TESOURO IPCA+ 2029 / IPCA + 7,89%`).
+  static String? tesouroBondKeyFromText(String text, {String? maturityDateIso}) {
+    final norm = _normalizeAccents(text);
+    final hasJuros = norm.contains('juros') || norm.contains('semestrais');
+
+    String? family;
+    if (norm.contains('renda+') ||
+        norm.contains('renda mais') ||
+        norm.contains('aposentadoria')) {
+      family = 'renda_mais';
+    } else if (norm.contains('educa+') || norm.contains('educa mais')) {
+      family = 'educa_mais';
+    } else if (norm.contains('igpm')) {
+      family = hasJuros ? 'igpm_juros' : 'igpm';
+    } else if (norm.contains('ipca')) {
+      family = hasJuros ? 'ipca_juros' : 'ipca';
+    } else if (norm.contains('selic')) {
+      family = 'selic';
+    } else if (norm.contains('prefixado') || norm.contains('pre-fixado') || norm.contains('pre fixado')) {
+      family = hasJuros ? 'prefixado_juros' : 'prefixado';
+    }
+    if (family == null) return null;
+
+    String? year;
+    final yearMatch = RegExp(r'\b(20\d{2})\b').firstMatch(norm);
+    if (yearMatch != null) {
+      year = yearMatch.group(1);
+    } else if (maturityDateIso != null && maturityDateIso.length >= 4) {
+      final m = RegExp(r'(20\d{2})').firstMatch(maturityDateIso);
+      year = m?.group(1);
+    }
+    if (year == null) return null;
+    return '$family:$year';
+  }
+
+  static String? tesouroBondKeyForAsset(InvestAsset asset) {
+    return tesouroBondKeyFromText(
+      '${asset.ticker} ${asset.name} ${asset.subType ?? ''}',
+      maturityDateIso: asset.maturityDate,
+    );
+  }
+
+  /// Faz parse do CSV oficial do Tesouro Transparente (`PrecoTaxaTesouroDireto.csv`),
+  /// retornando o PU de resgate (`PU Venda Manha`) mais recente por chave `<familia>:<ano>`.
+  static Map<String, ({double puVenda, String dataBaseIso})>
+      parseTesouroTransparenteCsv(String? body) {
+    final out = <String, ({double puVenda, String dataBaseIso})>{};
+    if (body == null || body.isEmpty) return out;
+    final lines = body.split(RegExp(r'\r?\n'));
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty || i == 0 && line.toLowerCase().contains('tipo titulo')) {
+        continue;
+      }
+      final cols = line.split(';');
+      if (cols.length < 7) continue;
+
+      final tipo = cols[0].trim();
+      final vencParts = cols[1].trim().split('/');
+      final baseParts = cols[2].trim().split('/');
+      if (vencParts.length != 3 || baseParts.length != 3) continue;
+
+      final vencYear = int.tryParse(vencParts[2]);
+      if (vencYear == null) continue;
+      final dataBaseIso =
+          '${baseParts[2].padLeft(4, '0')}-${baseParts[1].padLeft(2, '0')}-${baseParts[0].padLeft(2, '0')}';
+
+      double? pu = double.tryParse(cols[6].trim().replaceAll(',', '.'));
+      if ((pu == null || pu <= 0) && cols.length >= 8) {
+        pu = double.tryParse(cols[7].trim().replaceAll(',', '.'));
+      }
+      if (pu == null || pu <= 0) continue;
+
+      final baseKey = tesouroBondKeyFromText(
+        tipo,
+        maturityDateIso: '$vencYear-01-01',
+      );
+      if (baseKey == null) continue;
+
+      void putKey(String key) {
+        final prev = out[key];
+        if (prev == null || dataBaseIso.compareTo(prev.dataBaseIso) > 0) {
+          out[key] = (puVenda: pu!, dataBaseIso: dataBaseIso);
+        }
+      }
+
+      putKey(baseKey);
+      final family = baseKey.split(':').first;
+      if (family == 'renda_mais' && vencYear > 2020) {
+        putKey('renda_mais:${vencYear - 19}');
+      } else if (family == 'educa_mais' && vencYear > 2010) {
+        putKey('educa_mais:${vencYear - 4}');
+      }
+    }
+    return out;
+  }
+
+  static Future<String?> _httpGetText(
+    Uri uri, {
+    Map<String, String>? headers,
+    int? maxBytes,
+  }) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 10);
       final req = await client.getUrl(uri);
       req.headers.set('User-Agent', 'OpenMoney-App/1.0');
       req.headers.set('Accept', 'application/json');
+      if (headers != null) {
+        headers.forEach((k, v) => req.headers.set(k, v));
+      }
       final res = await req.close();
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return null;
       }
+      if (maxBytes != null) {
+        final buf = <int>[];
+        await for (final chunk in res) {
+          final remaining = maxBytes - buf.length;
+          if (remaining <= 0) break;
+          if (chunk.length <= remaining) {
+            buf.addAll(chunk);
+          } else {
+            buf.addAll(chunk.sublist(0, remaining));
+            break;
+          }
+        }
+        client.close(force: true);
+        return utf8.decode(buf, allowMalformed: true);
+      }
       return await res.transform(utf8.decoder).join();
     } catch (_) {
       return null;
+    } finally {
+      client.close(force: true);
     }
   }
 
-  /// Busca cotações atualizadas para ativos de Renda Variável e Criptomoedas.
+  /// Busca cotações atualizadas para ativos de Renda Variável, Criptomoedas e Tesouro Direto.
   /// Respeita ativos com `manualPrice == true` (não são consultados).
   static Future<Map<String, QuoteFetchResult>> fetchQuotes(
     List<InvestAsset> assets,
   ) async {
-    final targets = assets
+    final varTargets = assets
         .where((a) => !a.manualPrice && a.assetClass.isVariableIncome)
         .toList();
-    if (targets.isEmpty) return {};
+    final tesouroTargets = assets
+        .where((a) => !a.manualPrice && a.assetClass == InvestAssetClass.tesouro)
+        .toList();
+    if (varTargets.isEmpty && tesouroTargets.isEmpty) return {};
 
     final symbolToAssetIds = <String, List<String>>{};
-    for (final a in targets) {
+    for (final a in varTargets) {
       final sym = yahooSymbolFor(a);
       if (sym.isEmpty) continue;
       symbolToAssetIds.putIfAbsent(sym, () => []).add(a.id);
     }
-    if (symbolToAssetIds.isEmpty) return {};
 
     final nowIso = DateTime.now().toIso8601String();
     final results = <String, QuoteFetchResult>{};
 
     if (kIsWeb) {
-      final syms = symbolToAssetIds.keys.join(',');
-      final uri = Uri.parse(
-        '${_workerBaseUrl()}/api/market/quotes?symbols=${Uri.encodeQueryComponent(syms)}',
-      );
-      final body = await _httpGetText(uri);
-      if (body != null) {
-        try {
-          final decoded = jsonDecode(body);
-          if (decoded is Map && decoded['quotes'] is Map) {
-            final quotes = decoded['quotes'] as Map;
-            quotes.forEach((sym, val) {
-              if (val is Map) {
-                final price = (val['price'] as num?)?.toDouble();
-                if (price != null && price > 0) {
-                  final cents = (price * 100.0).round();
-                  final src = val['source']?.toString() ?? 'Yahoo Finance';
-                  final upd = val['updatedAt']?.toString() ?? nowIso;
-                  for (final aid in symbolToAssetIds[sym.toString()] ?? const []) {
-                    results[aid] = QuoteFetchResult(
-                      priceCents: cents,
-                      source: src,
-                      updatedAt: upd,
+      if (symbolToAssetIds.isNotEmpty) {
+        final syms = symbolToAssetIds.keys.join(',');
+        final uri = Uri.parse(
+          '${_workerBaseUrl()}/api/market/quotes?symbols=${Uri.encodeQueryComponent(syms)}',
+        );
+        final body = await _httpGetText(uri);
+        if (body != null) {
+          try {
+            final decoded = jsonDecode(body);
+            if (decoded is Map && decoded['quotes'] is Map) {
+              final quotes = decoded['quotes'] as Map;
+              quotes.forEach((sym, val) {
+                if (val is Map) {
+                  final price = (val['price'] as num?)?.toDouble();
+                  if (price != null && price > 0) {
+                    final cents = (price * 100.0).round();
+                    final src = val['source']?.toString() ?? 'Yahoo Finance';
+                    final upd = val['updatedAt']?.toString() ?? nowIso;
+                    for (final aid
+                        in symbolToAssetIds[sym.toString()] ?? const []) {
+                      results[aid] = QuoteFetchResult(
+                        priceCents: cents,
+                        source: src,
+                        updatedAt: upd,
+                      );
+                    }
+                  }
+                }
+              });
+            }
+          } catch (_) {}
+        }
+      }
+      if (tesouroTargets.isNotEmpty) {
+        final uri = Uri.parse('${_workerBaseUrl()}/api/market/tesouro');
+        final body = await _httpGetText(uri);
+        if (body != null) {
+          try {
+            final decoded = jsonDecode(body);
+            if (decoded is Map && decoded['bonds'] is Map) {
+              final bonds = decoded['bonds'] as Map;
+              for (final a in tesouroTargets) {
+                final key = tesouroBondKeyForAsset(a);
+                if (key == null) continue;
+                final entry = bonds[key];
+                if (entry is Map) {
+                  final pu = (entry['puVenda'] as num?)?.toDouble();
+                  if (pu != null && pu > 0) {
+                    results[a.id] = QuoteFetchResult(
+                      priceCents: (pu * 100.0).round(),
+                      source: 'Tesouro Direto',
+                      updatedAt: entry['dataBase']?.toString() ?? nowIso,
                     );
                   }
                 }
               }
-            });
-          }
-        } catch (_) {}
+            }
+          } catch (_) {}
+        }
       }
       return results;
     }
 
+    // Native: 0) Tesouro Direto (PU oficial de resgate do Tesouro Transparente)
+    Future<void>? tesouroFuture;
+    if (tesouroTargets.isNotEmpty) {
+      tesouroFuture = _httpGetText(
+        Uri.parse(_tesouroTransparenteCsvUrl),
+        maxBytes: 24576,
+        headers: const {
+          'Range': 'bytes=0-24575',
+          'Accept': 'text/csv,text/plain,*/*',
+        },
+      ).then((csvBody) {
+        final bonds = parseTesouroTransparenteCsv(csvBody);
+        for (final a in tesouroTargets) {
+          final key = tesouroBondKeyForAsset(a);
+          if (key == null) continue;
+          final entry = bonds[key];
+          if (entry != null && entry.puVenda > 0) {
+            results[a.id] = QuoteFetchResult(
+              priceCents: (entry.puVenda * 100.0).round(),
+              source: 'Tesouro Direto',
+              updatedAt: entry.dataBaseIso,
+            );
+          }
+        }
+      });
+    }
+
     // Native: 1) Criptomoedas via Binance -> CoinGecko -> AwesomeAPI -> Yahoo
-    final cryptoTargets = targets
+    final cryptoTargets = varTargets
         .where((a) => a.assetClass == InvestAssetClass.crypto)
         .toList();
     if (cryptoTargets.isNotEmpty) {
@@ -213,6 +408,10 @@ class InvestmentQuoteService {
           }
         }
       }));
+    }
+
+    if (tesouroFuture != null) {
+      await tesouroFuture;
     }
 
     return results;

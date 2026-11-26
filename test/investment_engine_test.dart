@@ -737,5 +737,83 @@ void main() {
       expect(pos.currentGrossValueCents, greaterThan(501100));
       expect(pos.currentGrossValueCents, lessThan(501200));
     });
+
+    test('tesouroBondKeyForAsset normaliza títulos com taxa e parseTesouroTransparenteCsv extrai PU Venda', () {
+      InvestAsset makeTesouro(String ticker, {String name = '', String? mat}) =>
+          InvestAsset(
+            ticker: ticker,
+            name: name.isEmpty ? ticker : name,
+            assetClass: InvestAssetClass.tesouro,
+            accountId: 'inv1',
+            maturityDate: mat,
+          );
+
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('TESOURO IPCA+ 2029 / IPCA + 7,89%'),
+        ),
+        'ipca:2029',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('TESOURO IPCA+ 2040 / IPCA + 6,91%'),
+        ),
+        'ipca:2040',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('TESOURO IPCA+ 2040 / IPCA + 7,11%'),
+        ),
+        'ipca:2040',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('Tesouro Direto Prefixado 2032'),
+        ),
+        'prefixado:2032',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('Tesouro Direto IPCA+ 2050'),
+        ),
+        'ipca:2050',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('Tesouro IPCA+ com Juros Semestrais 2035'),
+        ),
+        'ipca_juros:2035',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('Tesouro Selic 2029'),
+        ),
+        'selic:2029',
+      );
+      expect(
+        InvestmentQuoteService.tesouroBondKeyForAsset(
+          makeTesouro('Tesouro Renda+ 2030'),
+        ),
+        'renda_mais:2030',
+      );
+
+      const csvSample =
+          'Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Compra Manha;PU Venda Manha;PU Base Manha\n'
+          'Tesouro IPCA+;15/05/2029;24/11/2026;7,50;7,62;4000,00;3980,00;3980,00\n'
+          'Tesouro IPCA+;15/05/2029;25/11/2026;7,45;7,57;4010,85;3998,28;3998,28\n'
+          'Tesouro Prefixado;01/01/2032;25/11/2026;15,27;15,39;486,69;483,85;483,85\n'
+          'Tesouro IPCA+;15/08/2050;25/11/2026;7,57;7,69;855,83;833,28;833,28\n'
+          'Tesouro Renda+ Aposentadoria Extra;15/12/2049;25/11/2026;7,40;7,52;150,10;145,20;145,20\n'
+          'Linha truncada pelo Range';
+
+      final parsed =
+          InvestmentQuoteService.parseTesouroTransparenteCsv(csvSample);
+      expect(parsed['ipca:2029']?.puVenda, closeTo(3998.28, 1e-6));
+      expect(parsed['ipca:2029']?.dataBaseIso, '2026-11-25');
+      expect(parsed['prefixado:2032']?.puVenda, closeTo(483.85, 1e-6));
+      expect(parsed['ipca:2050']?.puVenda, closeTo(833.28, 1e-6));
+      expect(parsed['renda_mais:2049']?.puVenda, closeTo(145.20, 1e-6));
+      expect(parsed['renda_mais:2030']?.puVenda, closeTo(145.20, 1e-6));
+    });
   });
 }

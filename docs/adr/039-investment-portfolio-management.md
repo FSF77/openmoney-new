@@ -82,9 +82,10 @@ Implementado em `lib/store/money_store.dart`, `lib/services/cash_flow_engine.dar
 ### 2.4. Cotações Online, Indicadores BCB e Proxy Cloudflare
 Implementado em `lib/services/investment_quote_service.dart` e `functions/api/[[route]].js`:
 - **Criptomoedas (`BTC`, `USDC`, `ETH`, `SOL`, etc.):** cadeia automática com fallback progressivo: **Binance → Coinbase Spot → Mercado Bitcoin (BRL) → CoinGecko → AwesomeAPI → Yahoo Finance**, além de normalização de nomes comuns (`BITCOIN → BTC`, `USD COIN → USDC`).
-- **Ações, FIIs, ETFs e BDRs:** consulta Yahoo Finance (sufixo `.SA` automático para ativos B3 em BRL).
+- **Ações, FIIs, ETFs, BDRs:** consulta Yahoo Finance (sufixo `.SA` automático para ativos B3 em BRL).
+- **Tesouro Direto (PU Oficial de Resgate / Marcação a Mercado):** consulta o CSV oficial do **Tesouro Transparente (Gov.br)** (`PrecoTaxaTesouroDireto.csv`, com leitura parcial via `Range: bytes=0-65535`) extraindo o `PU Venda Manha` mais recente por família (`ipca`, `ipca_juros`, `prefixado`, `prefixado_juros`, `selic`, `renda_mais`, `educa_mais`, `igpm`) e ano de vencimento. `tesouroBondKeyFromText` normaliza o nome do ativo mesmo quando o usuário inclui a taxa contratada no cadastro (ex: `TESOURO IPCA+ 2029 / IPCA + 7,89%`).
 - **Indicadores Renda Fixa:** séries oficiais do Banco Central: BCB SGS `4389` (CDI anualizado), `432` (Meta Selic), `13522` (IPCA 12m) e `12` (série histórica diária do CDI a partir do aporte mais antigo em Renda Fixa, limitada a 9 anos, com merge incremental no banco local).
-- **Proxy sem CORS na Web:** endpoints `GET /api/market/quotes` (cache de borda 5 min) e `GET /api/market/indicators?cdiFrom=YYYY-MM-DD` (cache de borda 1 h) no Cloudflare Worker.
+- **Proxy sem CORS na Web:** endpoints `GET /api/market/quotes` (cache de borda 5 min), `GET /api/market/indicators?cdiFrom=YYYY-MM-DD` (cache de borda 1 h) e `GET /api/market/tesouro` (cache de borda 30 min) no Cloudflare Worker.
 - **Proteção de Preço Manual:** ativos com `manualPrice == true` exibem badge `M`, não são sobrescritos pela atualização automática e podem ser revertidos para o modo automático com 1 clique.
 
 ### 2.5. Importação B3 Multi-Aba em Dart Puro (`B3ImportService`)

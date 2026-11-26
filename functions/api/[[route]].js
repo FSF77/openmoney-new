@@ -3978,6 +3978,106 @@ export async function onRequest(context) {
     return res;
   }
 
+  if (path === "/api/market/tesouro" && request.method === "GET") {
+    const csvUrl =
+      "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv";
+    const normAccents = (s) =>
+      String(s || "")
+        .toLowerCase()
+        .replace(/[áàâãä]/g, "a")
+        .replace(/[éèêë]/g, "e")
+        .replace(/[íìîï]/g, "i")
+        .replace(/[óòôõö]/g, "o")
+        .replace(/[úùûü]/g, "u")
+        .replace(/ç/g, "c");
+    const bonds = {};
+    try {
+      const r = await fetch(csvUrl, {
+        headers: {
+          "User-Agent": "OpenMoney-Worker/1.0",
+          Range: "bytes=0-24575",
+          Accept: "text/csv,text/plain,*/*",
+        },
+      });
+      if (r.ok && r.body) {
+        const maxBytes = 24576;
+        const reader = r.body.getReader();
+        const chunks = [];
+        let total = 0;
+        while (total < maxBytes) {
+          const { done, value } = await reader.read();
+          if (done || !value) break;
+          const remain = maxBytes - total;
+          if (value.byteLength <= remain) {
+            chunks.push(value);
+            total += value.byteLength;
+          } else {
+            chunks.push(value.subarray(0, remain));
+            total += remain;
+            break;
+          }
+        }
+        try {
+          await reader.cancel();
+        } catch (_) {}
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const c of chunks) {
+          merged.set(c, offset);
+          offset += c.byteLength;
+        }
+        const text = new TextDecoder("utf-8", { fatal: false }).decode(merged);
+        const lines = text.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line || (i === 0 && line.toLowerCase().includes("tipo titulo"))) continue;
+          const cols = line.split(";");
+          if (cols.length < 7) continue;
+          const tipoNorm = normAccents(cols[0].trim());
+          const hasJuros = tipoNorm.includes("juros") || tipoNorm.includes("semestrais");
+          let family = null;
+          if (tipoNorm.includes("renda")) family = "renda_mais";
+          else if (tipoNorm.includes("educa")) family = "educa_mais";
+          else if (tipoNorm.includes("igpm")) family = hasJuros ? "igpm_juros" : "igpm";
+          else if (tipoNorm.includes("ipca")) family = hasJuros ? "ipca_juros" : "ipca";
+          else if (tipoNorm.includes("selic")) family = "selic";
+          else if (tipoNorm.includes("prefixado")) family = hasJuros ? "prefixado_juros" : "prefixado";
+          if (!family) continue;
+          const vencParts = cols[1].trim().split("/");
+          const baseParts = cols[2].trim().split("/");
+          if (vencParts.length !== 3 || baseParts.length !== 3) continue;
+          const vencYear = Number(vencParts[2]);
+          if (!Number.isFinite(vencYear)) continue;
+          const dataBase = `${baseParts[2].padStart(4, "0")}-${baseParts[1].padStart(2, "0")}-${baseParts[0].padStart(2, "0")}`;
+          let puVenda = Number(cols[6].trim().replace(",", "."));
+          if ((!Number.isFinite(puVenda) || puVenda <= 0) && cols.length >= 8) {
+            puVenda = Number(cols[7].trim().replace(",", "."));
+          }
+          if (!Number.isFinite(puVenda) || puVenda <= 0) continue;
+          const putKey = (k) => {
+            const prev = bonds[k];
+            if (!prev || dataBase > prev.dataBase) {
+              bonds[k] = { puVenda, dataBase };
+            }
+          };
+          putKey(`${family}:${vencYear}`);
+          if (family === "renda_mais" && vencYear > 2020) {
+            putKey(`renda_mais:${vencYear - 19}`);
+          } else if (family === "educa_mais" && vencYear > 2010) {
+            putKey(`educa_mais:${vencYear - 4}`);
+          }
+        }
+      }
+    } catch (_) {}
+    const res = jsonResponse(
+      { bonds, updatedAt: new Date().toISOString() },
+      200,
+      origin
+    );
+    res.headers.set("Cache-Control", "public, max-age=1800");
+    return res;
+  }
+
   // ==========================================================================
   // 0.1 GET /api/openapi.json (OpenAPI 3.0 para ChatGPT Custom Actions / Gemini)
   // ==========================================================================

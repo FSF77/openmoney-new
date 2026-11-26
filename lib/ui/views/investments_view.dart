@@ -51,7 +51,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
     setState(() => _refreshing = true);
     try {
       final manualCount = widget.store.db.investAssets
-          .where((a) => a.manualPrice && a.assetClass.isVariableIncome)
+          .where((a) =>
+              a.manualPrice &&
+              (a.assetClass.isVariableIncome ||
+                  a.assetClass == InvestAssetClass.tesouro))
           .length;
       final count = await widget.store.refreshInvestmentQuotes();
       if (mounted) {

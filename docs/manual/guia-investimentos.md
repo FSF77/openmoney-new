@@ -76,6 +76,7 @@ Se você já transferia dinheiro da Conta Corrente (ex: *Nubank*) para a Conta I
 
 - **Atualização automática (botão `Cotações`):**
   - **Ações, FIIs, ETFs, BDRs:** Yahoo Finance (B3 `.SA` e exterior).
+  - **Tesouro Direto (Marcação a Mercado):** busca automática do **PU de Resgate oficial (`PU Venda`)** no **Tesouro Transparente (Gov.br)**. Você pode cadastrar múltiplos títulos com suas taxas no nome (ex: `TESOURO IPCA+ 2029 / IPCA + 7,89%`, `TESOURO IPCA+ 2040 / IPCA + 6,91%`, `Tesouro Prefixado 2032`, `Tesouro Selic 2029`) — basta conter o **tipo** (`IPCA+`, `Prefixado`, `Selic`, `Renda+`, `Educa+`, com ou sem `Juros Semestrais`) e o **ano** (no nome ou no campo Vencimento) para atualizar automaticamente.
   - **Criptomoedas (`BTC`, `USDC`, `ETH`, etc.):** cadeia automática **Binance → Coinbase → Mercado Bitcoin → CoinGecko → AwesomeAPI → Yahoo Finance**.
   - **Indicadores Renda Fixa:** **CDI**, **Selic**, **IPCA** e a **série histórica diária oficial do CDI** (BCB SGS `12`), além do **calendário bancário oficial ANBIMA** embutido (descontando fins de semana e feriados nacionais como Carnaval, Sexta-Feira Santa, Corpus Christi e 20/11). Com isso, CDBs pós-fixados acompanham automaticamente as mudanças da taxa do CDI dia a dia, e CDBs pré-fixados/IPCA+ contam os dias úteis bancários exatos.
 - **Saldo Bruto como padrão (com Líquido e IR complementar):**
