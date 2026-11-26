@@ -435,22 +435,74 @@ class InvestmentQuoteService {
     }
   }
 
-  /// Busca indicadores oficiais do BCB (Selic, CDI, IPCA 12m).
-  static Future<MarketIndicators?> fetchIndicators() async {
-    final nowIso = DateTime.now().toIso8601String();
+  /// Faz parse da série diária SGS 12 do Banco Central (`dd/MM/yyyy` -> `YYYY-MM-DD`).
+  static Map<String, double> parseBcbDailySeriesJson(String? body) {
+    if (body == null || body.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! List) return {};
+      final out = <String, double>{};
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final rawDate = item['data']?.toString().trim() ?? '';
+        final parts = rawDate.split('/');
+        if (parts.length != 3) continue;
+        final iso =
+            '${parts[2].padLeft(4, '0')}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+        final rawVal = item['valor']?.toString().replaceAll(',', '.').trim();
+        final val = double.tryParse(rawVal ?? '');
+        if (val != null) {
+          out[iso] = val;
+        }
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Busca indicadores oficiais do BCB (Selic, CDI, IPCA 12m e série diária do CDI).
+  static Future<MarketIndicators?> fetchIndicators({String? cdiFromIso}) async {
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final minDate = DateTime(now.year - 9, now.month, now.day);
+    var startDate = DateTime(now.year - 3, now.month, now.day);
+    if (cdiFromIso != null && cdiFromIso.length >= 10) {
+      final parsed = DateTime.tryParse(cdiFromIso.substring(0, 10));
+      if (parsed != null) {
+        startDate = parsed.isBefore(minDate) ? minDate : parsed;
+      }
+    }
+    if (startDate.isAfter(now)) startDate = now;
+    final startIso =
+        '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
+
     if (kIsWeb) {
-      final uri = Uri.parse('${_workerBaseUrl()}/api/market/indicators');
+      final uri = Uri.parse(
+        '${_workerBaseUrl()}/api/market/indicators?cdiFrom=$startIso',
+      );
       final body = await _httpGetText(uri);
       if (body == null) return null;
       try {
         final decoded = jsonDecode(body);
         if (decoded is Map<String, dynamic>) {
+          final rawSeries = decoded['cdiDailySeries'];
+          final parsedSeries = <String, double>{};
+          if (rawSeries is Map) {
+            for (final e in rawSeries.entries) {
+              final v = (e.value as num?)?.toDouble();
+              if (v != null && e.key != null) {
+                parsedSeries[e.key.toString()] = v;
+              }
+            }
+          }
           return MarketIndicators(
             cdiAnnual: (decoded['cdiAnnual'] as num?)?.toDouble() ?? 11.15,
             selicAnnual: (decoded['selicAnnual'] as num?)?.toDouble() ?? 11.25,
             ipca12m: (decoded['ipca12m'] as num?)?.toDouble() ?? 4.50,
             updatedAt: decoded['updatedAt']?.toString() ?? nowIso,
             manual: false,
+            cdiDailySeries: parsedSeries,
           );
         }
       } catch (_) {}
@@ -473,13 +525,26 @@ class InvestmentQuoteService {
       return null;
     }
 
+    String fmtBr(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+    final cdiSeriesFuture = _httpGetText(
+      Uri.parse(
+        'https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${fmtBr(startDate)}&dataFinal=${fmtBr(now)}',
+      ),
+    ).then(parseBcbDailySeriesJson);
+
     final results = await Future.wait([
       fetchSgs(4389), // CDI anualizado
       fetchSgs(432), // Meta Selic
       fetchSgs(13522), // IPCA 12 meses
     ]);
+    final cdiSeries = await cdiSeriesFuture;
 
-    if (results[0] == null && results[1] == null && results[2] == null) {
+    if (results[0] == null &&
+        results[1] == null &&
+        results[2] == null &&
+        cdiSeries.isEmpty) {
       return null;
     }
 
@@ -489,6 +554,7 @@ class InvestmentQuoteService {
       ipca12m: results[2] ?? 4.50,
       updatedAt: nowIso,
       manual: false,
+      cdiDailySeries: cdiSeries,
     );
   }
 }

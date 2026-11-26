@@ -7931,12 +7931,12 @@ class MoneyStore extends ChangeNotifier {
     );
   }
 
-  /// Valor atualizado líquido da carteira na moeda base (ou da conta especificada).
+  /// Valor atualizado bruto da carteira na moeda base (ou da conta especificada).
   int portfolioMarketValue({String? accountId, String? targetCurrency}) {
     return portfolioSummary(
       accountId: accountId,
       targetCurrency: targetCurrency,
-    ).totalMarketValueNetCents;
+    ).totalMarketValueGrossCents;
   }
 
   /// Caixa livre somado nas contas de Investimento (ou em uma conta específica).
@@ -8377,9 +8377,31 @@ class MoneyStore extends ChangeNotifier {
         updated++;
       }
     }
-    final indicators = await InvestmentQuoteService.fetchIndicators();
+    String? oldestFixedIncomeIso;
+    final fixedAssetIds = db.investAssets
+        .where((a) => a.isFixedIncome)
+        .map((a) => a.id)
+        .toSet();
+    if (fixedAssetIds.isNotEmpty) {
+      for (final op in db.investOps) {
+        if (!fixedAssetIds.contains(op.assetId) || op.date.length < 10) {
+          continue;
+        }
+        if (oldestFixedIncomeIso == null ||
+            op.date.compareTo(oldestFixedIncomeIso) < 0) {
+          oldestFixedIncomeIso = op.date;
+        }
+      }
+    }
+    final indicators = await InvestmentQuoteService.fetchIndicators(
+      cdiFromIso: oldestFixedIncomeIso,
+    );
     if (indicators != null && !(db.investIndicators?.manual ?? false)) {
-      db.investIndicators = indicators;
+      final mergedSeries = <String, double>{
+        ...?db.investIndicators?.cdiDailySeries,
+        ...indicators.cdiDailySeries,
+      };
+      db.investIndicators = indicators.copyWith(cdiDailySeries: mergedSeries);
     }
     if (updated > 0 || indicators != null) {
       save();

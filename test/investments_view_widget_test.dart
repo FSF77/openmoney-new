@@ -128,6 +128,6 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Exportar Investimentos (CSV)'), findsOneWidget);
     expect(find.text('Posição Consolidada'), findsOneWidget);
-    expect(find.text('Operações Detalhadas (com data)'), findsOneWidget);
+    expect(find.text('Operações Detalhadas'), findsOneWidget);
   });
 }

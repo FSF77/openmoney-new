@@ -527,6 +527,7 @@ class MarketIndicators {
   double ipca12m;
   String updatedAt;
   bool manual;
+  Map<String, double> cdiDailySeries;
 
   MarketIndicators({
     this.cdiAnnual = 11.15,
@@ -534,15 +535,27 @@ class MarketIndicators {
     this.ipca12m = 4.50,
     this.updatedAt = '',
     this.manual = false,
-  });
+    Map<String, double>? cdiDailySeries,
+  }) : cdiDailySeries = cdiDailySeries ?? const {};
 
   factory MarketIndicators.fromJson(Map<String, dynamic> json) {
+    final rawSeries = json['cdiDailySeries'];
+    final parsedSeries = <String, double>{};
+    if (rawSeries is Map) {
+      for (final e in rawSeries.entries) {
+        final v = (e.value as num?)?.toDouble();
+        if (v != null && e.key != null) {
+          parsedSeries[e.key.toString()] = v;
+        }
+      }
+    }
     return MarketIndicators(
       cdiAnnual: (json['cdiAnnual'] as num?)?.toDouble() ?? 11.15,
       selicAnnual: (json['selicAnnual'] as num?)?.toDouble() ?? 11.25,
       ipca12m: (json['ipca12m'] as num?)?.toDouble() ?? 4.50,
       updatedAt: json['updatedAt'] as String? ?? '',
       manual: json['manual'] as bool? ?? false,
+      cdiDailySeries: parsedSeries,
     );
   }
 
@@ -552,6 +565,7 @@ class MarketIndicators {
         'ipca12m': ipca12m,
         'updatedAt': updatedAt,
         if (manual) 'manual': manual,
+        if (cdiDailySeries.isNotEmpty) 'cdiDailySeries': cdiDailySeries,
       };
 
   MarketIndicators copyWith({
@@ -560,6 +574,7 @@ class MarketIndicators {
     double? ipca12m,
     String? updatedAt,
     bool? manual,
+    Map<String, double>? cdiDailySeries,
   }) {
     return MarketIndicators(
       cdiAnnual: cdiAnnual ?? this.cdiAnnual,
@@ -567,6 +582,7 @@ class MarketIndicators {
       ipca12m: ipca12m ?? this.ipca12m,
       updatedAt: updatedAt ?? this.updatedAt,
       manual: manual ?? this.manual,
+      cdiDailySeries: cdiDailySeries ?? this.cdiDailySeries,
     );
   }
 }

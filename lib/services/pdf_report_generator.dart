@@ -1462,7 +1462,8 @@ class PdfReportGenerator {
     // Resumo consolidado
     doc.drawText(
       'Aplicado: ${formatCurrency(summary.totalCostBasisCents, baseCur)}   |   '
-      'Atualizado Líquido: ${formatCurrency(summary.totalMarketValueNetCents, baseCur)}   |   '
+      'Atualizado Bruto: ${formatCurrency(summary.totalMarketValueGrossCents, baseCur)}   |   '
+      '${summary.totalEstimatedTaxCents > 0 ? "IR Est.: ${formatCurrency(summary.totalEstimatedTaxCents, baseCur)}   |   " : ""}'
       'Rentabilidade: ${formatCurrency(summary.totalUnrealizedPnlCents, baseCur)} (${summary.totalUnrealizedPnlPct.toStringAsFixed(2)}%)   |   '
       'Realizado: ${formatCurrency(summary.totalRealizedPnlCents, baseCur)}   |   '
       'Proventos: ${formatCurrency(summary.totalDividendsCents, baseCur)}',
@@ -1517,7 +1518,7 @@ class PdfReportGenerator {
         formatCurrency(p.avgBuyPriceCents, cur),
         p.avgSellPriceCents > 0 ? formatCurrency(p.avgSellPriceCents, cur) : '-',
         formatCurrency(p.currentUnitPriceCents, cur),
-        formatCurrency(p.currentNetValueCents, cur),
+        formatCurrency(p.currentGrossValueCents, cur),
         '${formatCurrency(p.unrealizedPnlCents, cur)} (${p.unrealizedPnlPct.toStringAsFixed(1)}%)',
         formatCurrency(p.totalDividendsCents, cur),
       ];

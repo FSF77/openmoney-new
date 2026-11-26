@@ -32,7 +32,7 @@ Definido em `lib/models/investment_models.dart` e `lib/models/openmoney_models.d
 - **`InvestOperation`:**
   - `id`, `assetId`, `accountId` (corretora de custódia efetiva da operação), `type` (`buy`, `sell`, `dividend`, `jcp`, `fiiYield`, `amortization`, `split`, `inplit`, `bonus`, `initialPosition`), `date` (`YYYY-MM-DD`), `quantity`, `unitPriceCents`, `feesCents`, `taxCents` (IR retido na fonte), `totalCents`, `linkedTxId`, `linkedTaxTxId`, `memo`, `createdAt`.
 - **`MarketIndicators`:**
-  - `cdiAnnual`, `selicAnnual`, `ipca12m`, `updatedAt`, `manual`.
+  - `cdiAnnual`, `selicAnnual`, `ipca12m`, `updatedAt`, `manual`, `cdiDailySeries` (`Map<String, double>`, série histórica diária da taxa CDI em `%` por `YYYY-MM-DD`, BCB SGS `12`).
 - **`Transaction.investOpId`:**
   - Chave estrangeira opcional ligando transações de caixa geradas pela carteira à operação de origem.
 
@@ -48,9 +48,11 @@ Implementado como motor puro e determinístico em `lib/services/investment_engin
   - `split` / `inplit`: multiplica/divide `currentQty` pelo fator e ajusta `avgBuyPriceCents` mantendo o custo total intacto.
   - `bonus`: adiciona cotas e eventual custo atribuído.
   - `dividend` / `jcp` / `fiiYield`: acumulam em `totalDividendsCents` e alimentam `yieldOnCostPct` e `totalReturnCents`.
-- **Renda Fixa & Tesouro Direto (Lotes FIFO + Tabela Regressiva):**
+- **Renda Fixa & Tesouro Direto (Lotes FIFO + Calendário ANBIMA + CDI Diário + Tabela Regressiva):**
   - Mantém lotes abertos (`rfLots`) com a data exata de cada aporte (não exigindo cadastrar um ativo novo para cada compra no mesmo título).
-  - Quando não há preço manual, projeta o valor bruto atualizado via juros compostos em dias úteis aproximados (`calendarDays * 252 / 365`) usando `MarketIndicators` (CDI, Selic, IPCA ou Prefixado).
+  - **Calendário Oficial ANBIMA (100% offline):** calcula feriados bancários nacionais fixos (`01/01`, `21/04`, `01/05`, `07/09`, `12/10`, `02/11`, `15/11`, `20/11` a partir de 2024 e `25/12`) e móveis derivados da Páscoa (Segunda e Terça de Carnaval, Sexta-Feira Santa e Corpus Christi), contando exatamente os dias úteis bancários em base `252` (`businessDaysAnbima`).
+  - **Histórico Diário do CDI (BCB SGS `12`):** para títulos indexados ao CDI, quando `MarketIndicators.cdiDailySeries` possui os dias úteis do período, o motor acumula dia a dia o fator real publicado pelo Banco Central (`1 + (cdiDia / 100) * (%CDI / 100)`), refletindo mudanças históricas da Selic/CDI; caso algum dia útil ainda não esteja na série, aplica fallback proporcional diário sobre `cdiAnnual`. Demais indexadores (`prefixado`, `ipca`, `selic`) usam capitalização composta pela contagem exata de dias úteis ANBIMA.
+  - **Saldo Bruto como Principal:** a UI, o `portfolioMarketValue`, a rentabilidade aberta (`unrealizedPnlCents`) e o patrimônio consolidado adotam o **Valor Atual Bruto** (`currentGrossValueCents`), espelhando o saldo exibido pelos bancos/corretoras; `estimatedTaxCents` e `currentNetValueCents` são mantidos e exibidos de forma complementar (subtítulo, aba Renda Fixa e CSV).
   - `estimateSellIr(...)` calcula o IR sugerido no resgate em ordem **FIFO** aplicando a **Tabela Regressiva de IR** em dias corridos por lote sobre o lucro positivo:
     - Até 180 dias: **22,5%**
     - De 181 a 360 dias: **20,0%**
@@ -81,8 +83,8 @@ Implementado em `lib/store/money_store.dart`, `lib/services/cash_flow_engine.dar
 Implementado em `lib/services/investment_quote_service.dart` e `functions/api/[[route]].js`:
 - **Criptomoedas (`BTC`, `USDC`, `ETH`, `SOL`, etc.):** cadeia automática com fallback progressivo: **Binance → Coinbase Spot → Mercado Bitcoin (BRL) → CoinGecko → AwesomeAPI → Yahoo Finance**, além de normalização de nomes comuns (`BITCOIN → BTC`, `USD COIN → USDC`).
 - **Ações, FIIs, ETFs e BDRs:** consulta Yahoo Finance (sufixo `.SA` automático para ativos B3 em BRL).
-- **Indicadores Renda Fixa:** séries oficiais do Banco Central (BCB SGS `4389` CDI, `432` Selic, `13522` IPCA 12m).
-- **Proxy sem CORS na Web:** endpoints `GET /api/market/quotes` (cache de borda 5 min) e `GET /api/market/indicators` (cache de borda 1 h) no Cloudflare Worker.
+- **Indicadores Renda Fixa:** séries oficiais do Banco Central: BCB SGS `4389` (CDI anualizado), `432` (Meta Selic), `13522` (IPCA 12m) e `12` (série histórica diária do CDI a partir do aporte mais antigo em Renda Fixa, limitada a 9 anos, com merge incremental no banco local).
+- **Proxy sem CORS na Web:** endpoints `GET /api/market/quotes` (cache de borda 5 min) e `GET /api/market/indicators?cdiFrom=YYYY-MM-DD` (cache de borda 1 h) no Cloudflare Worker.
 - **Proteção de Preço Manual:** ativos com `manualPrice == true` exibem badge `M`, não são sobrescritos pela atualização automática e podem ser revertidos para o modo automático com 1 clique.
 
 ### 2.5. Importação B3 Multi-Aba em Dart Puro (`B3ImportService`)
@@ -94,15 +96,8 @@ Implementado em `lib/services/b3_import_service.dart` usando `package:archive`:
 ### 2.6. Interface Multiplataforma, UX e Relatórios
 Implementado em `lib/ui/views/investments_view.dart`, `lib/ui/modals/investment_modals.dart`, `lib/ui/app_shell.dart` e `lib/services/pdf_report_generator.dart`:
 - **Navegação:** item **Investimentos** (`NavModule.investments`) posicionado logo abaixo de **Lançamentos** na barra lateral recolhida e expandida.
-- **Responsividade (`LayoutBuilder`):** abaixo de `960px` alterna para grade adaptativa de cards (2 colunas `>= 620px`, 1 coluna `< 620px`); a partir de `960px` exibe `DataTable` completa ocupando toda a largura útil.
-- **Modais Inteligentes:**
-  - `Total da Operação ↔ Preço Unitário` editável bidirecionalmente com parsing `double` de alta precisão.
-  - Quantidade disponível em custódia pré-preenchida e editável na **Venda**.
-  - `DateInputFormatter` (`DD/MM/AAAA`) nos campos de data.
-  - Seletor `CategorySelectFormField` para categoria do IR; dropdowns com `isExpanded: true` e `TextOverflow.ellipsis` sem overflow.
-  - Clique no ativo abre `showAssetOperationsModal` (extrato do título com edição e exclusão de operações).
-  - Edição do ativo permite **Inativar (arquivar)** ou **Excluir Ativo** (com opção de remover lançamentos vinculados no caixa).
-- **Relatórios e Exportação:** 4 abas (**Posição Atual**, **Operações**, **Renda Fixa & Tesouro**, **Análise & Alocação** com `fl_chart`), exportação **PDF A4 Paisagem** (`exportInvestmentPositionPdf`) e **CSV completo** com 24 colunas (incluindo `Corretora / Conta`).
+- **Responsividade (`LayoutBuilder`) e Padrão Visual:** cabeçalho executivo compacto (`GlassCard`) alinhado a `AllTransactionsView`; abaixo de `1100px`, os 6 botões de ação usam ícones compactos com `Tooltip`; abaixo de `900px`, os 4 KPIs se reorganizam em grade `2×2` recolhível; abaixo de `720px`, a barra de filtros inicia recolhida com botão toggle e contador; abaixo de `960px`, a lista de posições usa grade adaptativa de cards; a partir de `960px`, exibe `DataTable` completa com ordenação clicável em todas as colunas (padrão inicial: **Ativo A → Z**) e barras de rolagem horizontal/vertical sempre visíveis (`Scrollbar(thumbVisibility: true)`).
+- **Relatórios e Exportação:** 4 abas (**Posição Atual**, **Operações**, **Renda Fixa & Tesouro**, **Análise & Alocação** com `fl_chart`), exportação **PDF A4 Paisagem** (`exportInvestmentPositionPdf` com larguras ajustadas e `maxChars` por coluna) e diálogo **CSV** com 2 modos (ambos em UTF-8 BOM `\uFEFF`, `;`, `\r\n` para macOS/Windows): **Posição Consolidada** (24 colunas) e **Operações Detalhadas** (20 colunas cronológicas com data).
 
 ### 2.7. Cloud Sync v2 e Documentação
 - `SyncEngine` (`lib/services/sync_engine.dart`) e `applySyncChangesToSnapshot` (`functions/api/[[route]].js`) sincronizam granularmente `investAssets/<id>`, `investOps/<id>` e `meta/investIndicators`.

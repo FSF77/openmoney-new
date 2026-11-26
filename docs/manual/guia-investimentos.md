@@ -26,6 +26,17 @@ Se você já possuía uma conta do tipo `Investimento` com transferências antig
 2. Clique em **+ Nova Operação**, escolha **Posição Inicial**, informe **Data** (digite apenas os números que as `/` são inseridas automaticamente), **Quantidade** e **Preço Unitário** (ou **Total da Operação**).
 3. Marque **"Converter saldo da conta Investimento (Transferência -)"** caso o valor já esteja somado no saldo antigo da conta.
 
+#### Opção C: Migração limpa quando a conta já tem saldo histórico (sem mexer no passado)
+Se você já transferia dinheiro da Conta Corrente (ex: *Nubank*) para a Conta Investimento (*Nubank Investimentos*) antes deste módulo existir, o extrato da conta de investimentos já acumula esse saldo histórico (inclusive eventuais rendimentos lançados no passado):
+1. No extrato da conta de investimentos, faça **1 único lançamento de ajuste negativo** na data de hoje no valor já aplicado (ex: `-R$ 200.000,00`), deixando no extrato apenas o **caixa livre real** parado hoje (geralmente `R$ 0,00`).
+2. **Importante:** use para esse ajuste uma categoria com **"Incluir em relatórios" DESMARCADO** (ex: `Investimentos (-) › Ajuste de Carteira`), para não distorcer despesas ou gráficos do mês.
+3. Em seguida, cadastre todos os seus títulos antigos como **Posição Inicial** com **"Movimentar caixa da conta selecionada" DESMARCADO**. Ao final, `Caixa Livre + Carteira Atualizada` refletirá exatamente o seu patrimônio real sem duplicação.
+
+### Rotina do dia a dia (daqui para frente)
+1. **Antes ou no momento de aplicar:** faça uma **Transferência** da sua Conta Corrente (ex: *Nubank*) para a Conta Investimento (*Nubank Investimentos*).
+2. **Ao comprar o ativo:** lance a **Compra** na tela de **Investimentos** selecionando a conta *Nubank Investimentos* e deixando **"Movimentar caixa da conta selecionada" MARCADO**. O dinheiro sai do caixa livre da corretora e passa a compor sua carteira de ativos.
+3. **Ao resgatar ou receber proventos:** lance a **Venda** ou **Dividendo/JCP/Rendimento** com **"Movimentar caixa" MARCADO** para creditar o valor na conta da corretora; quando enviar de volta ao banco, faça uma **Transferência** da corretora para a conta corrente.
+
 ---
 
 ## 2. Operações do Dia a Dia e Exemplos Práticos
@@ -56,30 +67,36 @@ Se você já possuía uma conta do tipo `Investimento` com transferências antig
 ## 3. Multi-Corretora, Detalhes, Inativação e Exclusão
 
 - **Mesmo ativo em mais de uma corretora:** a custódia fica vinculada à **operação**. Você pode comprar `PETR4` na XP e também na Rico usando o seletor **"Conta / Corretora de Custódia"** em cada operação. O filtro por corretora mostra a posição individual de cada conta, enquanto a visão geral consolida seu Preço Médio unificado.
-- **Ver e editar movimentações de um ativo:** clique diretamente sobre o nome/código do ativo na tabela **Posição Atual** (ou no card no mobile) para abrir o histórico completo do título, com botões para **Editar** ou **Excluir** qualquer operação.
+- **Ver e editar movimentações de um ativo:** clique diretamente sobre o nome/código do ativo na tabela **Posição Atual** (ou no card no mobile) para abrir o histórico completo do título, com botões para **Editar** ou **Excluir** qualquer operação (sempre com confirmação).
 - **Inativar ou Excluir um ativo:** abra **Editar Ativo** para ativar **"Ativo inativo (arquivado)"** (oculta da lista principal e de novos lançamentos, preservando o histórico; pode ser exibido pelo filtro **"Mostrar inativos"**) ou clique em **Excluir Ativo** (com opção de remover também os lançamentos vinculados no caixa).
 
 ---
 
-## 4. Cotações Automáticas, Preço Manual e Relatórios
+## 4. Cotações Automáticas, Preço Manual, ANBIMA e Relatórios
 
 - **Atualização automática (botão `Cotações`):**
   - **Ações, FIIs, ETFs, BDRs:** Yahoo Finance (B3 `.SA` e exterior).
   - **Criptomoedas (`BTC`, `USDC`, `ETH`, etc.):** cadeia automática **Binance → Coinbase → Mercado Bitcoin → CoinGecko → AwesomeAPI → Yahoo Finance**.
-  - **Indicadores Renda Fixa:** **CDI**, **Selic** e **IPCA** oficiais do Banco Central (BCB SGS).
+  - **Indicadores Renda Fixa:** **CDI**, **Selic**, **IPCA** e a **série histórica diária oficial do CDI** (BCB SGS `12`), além do **calendário bancário oficial ANBIMA** embutido (descontando fins de semana e feriados nacionais como Carnaval, Sexta-Feira Santa, Corpus Christi e 20/11). Com isso, CDBs pós-fixados acompanham automaticamente as mudanças da taxa do CDI dia a dia, e CDBs pré-fixados/IPCA+ contam os dias úteis bancários exatos.
+- **Saldo Bruto como padrão (com Líquido e IR complementar):**
+  - Assim como os bancos e corretoras, a coluna **Valor Atual**, os cards de resumo e o patrimônio total exibem o **Valor Bruto** atualizado do ativo.
+  - Quando há IR estimado (ex: CDBs e Tesouro Direto), o **Valor Líquido Estimado** e o **IR Estimado** aparecem logo abaixo como informação complementar e na aba **Renda Fixa & Tesouro**.
 - **Edição manual de preço:** clique sobre o preço na coluna **Preço Atual** para editar manualmente (exibe badge **`M`**). Para reativar a atualização automática, clique no preço e selecione **"Voltar p/ Automático"**.
+- **Ordenação, Filtros e Responsividade:**
+  - A tabela sempre abre ordenada por **Ativo (A → Z)** e permite clicar em qualquer coluna (ou usar o seletor **Ordenar por**) para ordenar por Ativo, Classe, Quantidade, Valores, Rentabilidade ou Proventos.
+  - Em telas menores e dispositivos móveis, os 6 botões superiores aparecem como ícones compactos com `Tooltip`, os cartões de resumo se organizam lado a lado em grade **2×2** recolhível e a barra de filtros pode ser ocultada/expandida com 1 toque.
 - **Relatórios e Exportação:**
-  - **Posição Atual:** exibe Ativo, Classe, Qtde, Valor Compra (Aplicado), PM Compra, PM Venda, Preço Atualizado, Valor Atual, Rentabilidade (R$ e %) e Proventos.
-  - **Renda Fixa & Tesouro:** exibe indexador, vencimento, dias corridos, bruto atual, IR estimado e valor líquido.
+  - **Posição Atual:** exibe Ativo, Classe, Qtde, Valor Compra (Aplicado), PM Compra, PM Venda, Preço Atualizado, Valor Atual Bruto (com Líquido estimado em Renda Fixa), Rentabilidade (R$ e %) e Proventos.
+  - **Renda Fixa & Tesouro:** exibe indexador, vencimento, dias corridos, valor bruto atual, valor líquido estimado, IR estimado e valor aplicado.
   - **Análise & Alocação:** gráfico de alocação por classe (`fl_chart`).
-  - **Exportação:** botões **PDF** (relatório A4 Paisagem) e **CSV** completo (incluindo coluna **`Corretora / Conta`** e todas as métricas).
+  - **Exportação:** botão **PDF** (relatório A4 Paisagem) e botão **CSV** com opção de escolher entre **Posição Consolidada** (resumo atual por ativo) ou **Operações Detalhadas** (histórico cronológico completo de todas as compras, vendas, proventos, taxas e IR), ambos compatíveis com Excel no macOS e Windows (UTF-8 BOM).
 
 ---
 
 ## 5. Perguntas Frequentes (FAQ)
 
 - **Como o saldo da minha conta de Investimentos aparece no Dashboard e no menu lateral?**  
-  O saldo exibido é **`Caixa Livre + Valor Atualizado dos Ativos`**. Sempre que as cotações sobem/caem ou são editadas manualmente, o saldo total da conta e o **Patrimônio Líquido Total** são atualizados na hora.
+  O saldo exibido é **`Caixa Livre + Valor Atualizado Bruto dos Ativos`**. Sempre que as cotações sobem/caem ou são editadas manualmente, o saldo total da conta e o **Patrimônio Líquido Total** são atualizados na hora.
 - **Preciso criar um ativo de Renda Fixa novo a cada aporte?**  
   Se for o **mesmo título** (ex: vários aportes no mesmo *Tesouro Selic 2029* ou *CDB Liquidez Diária 100% CDI*), **não precisa** — lance todas as compras no mesmo ativo, pois o motor controla lote a lote com a data de cada aporte. Crie ativos separados apenas para títulos com emissor, taxa, indexador ou vencimento diferentes.
 - **A venda altera meu Preço Médio de Compra?**  
@@ -89,6 +106,6 @@ Se você já possuía uma conta do tipo `Investimento` com transferências antig
 
 ## 6. Detalhes Técnicos (Desenvolvedores)
 
-- **Schema `v: 7` (`openmoney.json`):** campos opcionais `investAssets`, `investOps`, `investIndicators` no objeto `Database`, e `investOpId` em `Transaction` (omitidos quando vazios/nulos). Ver [Dicionário de Dados](../architecture/dicionario-de-dados.md) e [ADR 039](../adr/039-investment-portfolio-management.md).
+- **Schema `v: 7` (`openmoney.json`):** campos opcionais `investAssets`, `investOps`, `investIndicators` (incluindo `cdiDailySeries`) no objeto `Database`, e `investOpId` em `Transaction` (omitidos quando vazios/nulos). Ver [Dicionário de Dados](../architecture/dicionario-de-dados.md) e [ADR 039](../adr/039-investment-portfolio-management.md).
 - **Cloud Sync v2:** coleções granulares `investAssets/<id>`, `investOps/<id>` e `meta/investIndicators` sincronizadas via WebSocket/D1 entre Desktop, Web e Mobile.
-- **Proxy CORS (Web):** endpoints `GET /api/market/quotes` e `GET /api/market/indicators` em Cloudflare Pages Functions (`functions/api/[[route]].js`).
+- **Proxy CORS (Web):** endpoints `GET /api/market/quotes` e `GET /api/market/indicators?cdiFrom=YYYY-MM-DD` em Cloudflare Pages Functions (`functions/api/[[route]].js`).

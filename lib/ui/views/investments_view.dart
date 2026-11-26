@@ -252,6 +252,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
         'Valor Total',
         'Movimentou Caixa',
         'Observação',
+        'Indexador',
+        'Vencimento',
+        'Fonte Cotação',
+        'Atualizado em',
       ],
       ...ops.map((op) {
         final asset = widget.store.investAssetById(op.assetId);
@@ -274,6 +278,12 @@ class _InvestmentsViewState extends State<InvestmentsView>
           formatInputCents(op.totalCents),
           (op.linkedTxId != null && op.linkedTxId!.isNotEmpty) ? 'Sim' : 'Não',
           op.memo,
+          asset?.indexerSummary ?? '',
+          (asset?.maturityDate != null && asset!.maturityDate!.isNotEmpty)
+              ? fmtDate(asset.maturityDate!)
+              : '',
+          asset?.priceSource ?? '',
+          asset?.priceUpdatedAt ?? '',
         ];
       }),
     ];
@@ -327,7 +337,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
               child: ListTile(
                 leading: Icon(Icons.receipt_long_outlined, color: colors.income),
                 title: const Text(
-                  'Operações Detalhadas (com data)',
+                  'Operações Detalhadas',
                   style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
                 ),
                 subtitle: const Text(
@@ -389,7 +399,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
           cmp = a.currentUnitPriceCents.compareTo(b.currentUnitPriceCents);
           break;
         case 7:
-          cmp = a.currentNetValueCents.compareTo(b.currentNetValueCents);
+          cmp = a.currentGrossValueCents.compareTo(b.currentGrossValueCents);
           break;
         case 8:
           cmp = a.unrealizedPnlCents.compareTo(b.unrealizedPnlCents);
@@ -398,7 +408,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
           cmp = a.totalDividendsCents.compareTo(b.totalDividendsCents);
           break;
         default:
-          cmp = a.currentNetValueCents.compareTo(b.currentNetValueCents);
+          cmp = a.currentGrossValueCents.compareTo(b.currentGrossValueCents);
       }
       if (cmp == 0) {
         cmp = a.asset.displayCode
@@ -423,7 +433,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
     final summary = widget.store.portfolioSummary(accountId: _accountFilter);
     final cashBalance =
         widget.store.investmentCashBalance(accountId: _accountFilter);
-    final totalPatrimony = cashBalance + summary.totalMarketValueNetCents;
+    final totalPatrimony = cashBalance + summary.totalMarketValueGrossCents;
 
     final filteredPositions = summary.positions.where((p) {
       if (!_showInactive && p.asset.inactive) return false;
@@ -573,7 +583,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
       compact: isCompactKpi,
       label: isCompactKpi ? 'Aplicado' : 'Aplicado (Custo)',
       value: formatCurrency(summary.totalCostBasisCents, baseCur),
-      sub: 'Atual: ${formatCurrency(summary.totalMarketValueNetCents, baseCur)}',
+      sub: 'Atual: ${formatCurrency(summary.totalMarketValueGrossCents, baseCur)}',
       accent: colors.textPrimary,
     );
     final kpiRentability = _KpiChip(
@@ -1256,11 +1266,27 @@ class _InvestmentsViewState extends State<InvestmentsView>
                                         ),
                                       ),
                                     ),
-                                    DataCell(Text(
-                                      formatCurrency(
-                                          p.currentNetValueCents, cur),
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700),
+                                    DataCell(Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          formatCurrency(
+                                              p.currentGrossValueCents, cur),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                        if (p.estimatedTaxCents > 0)
+                                          Text(
+                                            'Líq. ${formatCurrency(p.currentNetValueCents, cur)}',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              color: colors.textMuted,
+                                            ),
+                                          ),
+                                      ],
                                     )),
                                     DataCell(Column(
                                       crossAxisAlignment:
@@ -1373,7 +1399,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      formatCurrency(p.currentNetValueCents, cur),
+                      formatCurrency(p.currentGrossValueCents, cur),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13.5,
@@ -1418,6 +1444,12 @@ class _InvestmentsViewState extends State<InvestmentsView>
                         fontWeight: FontWeight.w700),
                   ),
                 ),
+                if (p.estimatedTaxCents > 0)
+                  Text(
+                    'Líq.: ${formatCurrency(p.currentNetValueCents, cur)} · IR est.: ${formatCurrency(p.estimatedTaxCents, cur)}',
+                    style: TextStyle(
+                        fontSize: 11, color: colors.textSecondary),
+                  ),
               ],
             ),
           ],
@@ -1570,7 +1602,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Líquido: ${formatCurrency(p.currentNetValueCents, cur)}',
+                    'Bruto: ${formatCurrency(p.currentGrossValueCents, cur)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
@@ -1579,7 +1611,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
                     ),
                   ),
                   Text(
-                    'Aplicado: ${formatCurrency(p.currentCostBasisCents, cur)} · IR: ${formatCurrency(p.estimatedTaxCents, cur)}',
+                    'Líq.: ${formatCurrency(p.currentNetValueCents, cur)} · IR: ${formatCurrency(p.estimatedTaxCents, cur)} · Aplic.: ${formatCurrency(p.currentCostBasisCents, cur)}',
                     style:
                         TextStyle(fontSize: 11, color: colors.textSecondary),
                   ),
@@ -1612,7 +1644,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
     ];
     final entries = summary.byClass.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final total = summary.totalMarketValueNetCents;
+    final total = summary.totalMarketValueGrossCents;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

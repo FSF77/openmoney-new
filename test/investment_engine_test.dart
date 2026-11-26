@@ -462,6 +462,11 @@ void main() {
             '{"ticker":{"last":"541990.00"}}'),
         closeTo(541990.00, 1e-6),
       );
+      final bcbSeries = InvestmentQuoteService.parseBcbDailySeriesJson(
+        '[{"data":"08/10/2026","valor":"0.055131"},{"data":"09/10/2026","valor":"0.055131"}]',
+      );
+      expect(bcbSeries['2026-10-08'], closeTo(0.055131, 1e-8));
+      expect(bcbSeries['2026-10-09'], closeTo(0.055131, 1e-8));
       final cg = InvestmentQuoteService.parseCoinGeckoPricesJson(
         '{"bitcoin":{"brl":540123.45,"usd":93500},"usd-coin":{"brl":5.79,"usd":1.0}}',
       );
@@ -631,6 +636,106 @@ void main() {
       expect(snap.cashNetWorth, 600000);
       expect(snap.investmentsNetWorth, 420000);
       expect(snap.netWorth, 1020000);
+    });
+
+    test('Calendário ANBIMA exclui fins de semana, feriados móveis e 20/11 >= 2024', () {
+      // Páscoa de 2026 é 05/04/2026: Carnaval 16-17/02, Sexta Santa 03/04, Corpus Christi 04/06
+      expect(InvestmentEngine.easterSunday(2026), DateTime(2026, 4, 5));
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2026, 2, 16)), isFalse);
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2026, 2, 17)), isFalse);
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2026, 4, 3)), isFalse);
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2026, 6, 4)), isFalse);
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2026, 11, 20)), isFalse);
+      // 20/11/2023 (segunda) ainda não era feriado nacional
+      expect(InvestmentEngine.isAnbimaBusinessDay(DateTime(2023, 11, 20)), isTrue);
+      // 29/12/2025 -> 26/11/2026 possui exatamente 227 dias úteis ANBIMA
+      expect(
+        InvestmentEngine.businessDaysAnbima(
+          DateTime(2025, 12, 29),
+          DateTime(2026, 11, 26),
+        ),
+        227,
+      );
+    });
+
+    test('CDB Prefixado 14,38% a.a. usa dias úteis ANBIMA e exibe bruto como principal', () {
+      final cdbPre = InvestAsset(
+        id: 'cdb_pre',
+        ticker: 'CDB PRE 14,38%',
+        name: 'CDB Prefixado',
+        assetClass: InvestAssetClass.fixedIncome,
+        subType: 'CDB',
+        accountId: 'inv1',
+        indexer: InvestFixedIncomeIndexer.prefixado,
+        ratePct: 14.38,
+      );
+      final ops = [
+        InvestOperation(
+          assetId: 'cdb_pre',
+          accountId: 'inv1',
+          type: InvestOpType.buy,
+          date: '2025-12-29',
+          quantity: 1,
+          unitPriceCents: 500000,
+          totalCents: 500000,
+        ),
+      ];
+      final pos = InvestmentEngine.computeAssetPosition(
+        cdbPre,
+        ops,
+        asOfDateIso: '2026-11-26',
+      );
+      // 332 dias corridos -> alíquota regressiva 20%
+      expect(pos.daysHeld, 332);
+      expect(pos.irRatePct, 20.0);
+      expect(pos.currentGrossValueCents, inInclusiveRange(564200, 564500));
+      expect(pos.estimatedTaxCents,
+          ((pos.currentGrossValueCents - 500000) * 0.20).round());
+      expect(pos.currentNetValueCents,
+          pos.currentGrossValueCents - pos.estimatedTaxCents);
+      expect(pos.unrealizedPnlCents, pos.currentGrossValueCents - 500000);
+    });
+
+    test('CDB Pós-fixado acumula histórico diário do CDI e usa fallback quando falta data', () {
+      final indicators = MarketIndicators(
+        cdiAnnual: 14.90,
+        cdiDailySeries: {
+          '2026-10-08': 0.055131,
+          '2026-10-09': 0.055131,
+          // 10 e 11 são sábado/domingo; 12/10 é feriado; 13/10 com taxa maior
+          '2026-10-13': 0.060000,
+        },
+      );
+      final cdbCdi = InvestAsset(
+        id: 'cdb_cdi',
+        ticker: 'CDB 100% CDI',
+        name: 'CDB Pós-fixado',
+        assetClass: InvestAssetClass.fixedIncome,
+        subType: 'CDB',
+        accountId: 'inv1',
+        indexer: InvestFixedIncomeIndexer.cdi,
+        ratePct: 100.0,
+      );
+      final ops = [
+        InvestOperation(
+          assetId: 'cdb_cdi',
+          accountId: 'inv1',
+          type: InvestOpType.buy,
+          date: '2026-10-08',
+          quantity: 1,
+          unitPriceCents: 500000,
+          totalCents: 500000,
+        ),
+      ];
+      // Até 15/10: 08, 09, 13 (da série) + 14 (fallback dia útil)
+      final pos = InvestmentEngine.computeAssetPosition(
+        cdbCdi,
+        ops,
+        indicators: indicators,
+        asOfDateIso: '2026-10-15',
+      );
+      expect(pos.currentGrossValueCents, greaterThan(501100));
+      expect(pos.currentGrossValueCents, lessThan(501200));
     });
   });
 }

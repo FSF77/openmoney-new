@@ -1589,9 +1589,16 @@ class _AssetOperationsDialog extends StatelessWidget {
                         value: formatCurrency(pos.currentUnitPriceCents, cur),
                       ),
                       _DetailStat(
-                        label: 'Valor Atual',
-                        value: formatCurrency(pos.currentNetValueCents, cur),
+                        label: pos.estimatedTaxCents > 0
+                            ? 'Valor Atual (Bruto)'
+                            : 'Valor Atual',
+                        value: formatCurrency(pos.currentGrossValueCents, cur),
                       ),
+                      if (pos.estimatedTaxCents > 0)
+                        _DetailStat(
+                          label: 'Líquido Est. (IR ${formatCurrency(pos.estimatedTaxCents, cur)})',
+                          value: formatCurrency(pos.currentNetValueCents, cur),
+                        ),
                       _DetailStat(
                         label: 'Rentabilidade',
                         value:

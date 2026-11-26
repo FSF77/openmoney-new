@@ -3922,17 +3922,54 @@ export async function onRequest(context) {
         return null;
       }
     };
-    const [cdi, selic, ipca] = await Promise.all([
+    const now = new Date();
+    const minStart = new Date(now.getFullYear() - 9, now.getMonth(), now.getDate());
+    let startDate = new Date(now.getFullYear() - 3, now.getMonth(), now.getDate());
+    const rawFrom = String(url.searchParams.get("cdiFrom") || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawFrom)) {
+      const parsed = new Date(`${rawFrom}T00:00:00Z`);
+      if (!Number.isNaN(parsed.getTime())) {
+        startDate = parsed < minStart ? minStart : parsed;
+      }
+    }
+    if (startDate > now) startDate = now;
+    const fmtBr = (d) =>
+      `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    const fetchCdiDailySeries = async () => {
+      try {
+        const r = await fetch(
+          `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${fmtBr(startDate)}&dataFinal=${fmtBr(now)}`,
+          { headers: { "User-Agent": "OpenMoney-Worker/1.0" } }
+        );
+        if (!r.ok) return {};
+        const arr = await r.json();
+        if (!Array.isArray(arr)) return {};
+        const out = {};
+        for (const item of arr) {
+          const parts = String(item?.data || "").trim().split("/");
+          if (parts.length !== 3) continue;
+          const iso = `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          const val = Number(String(item?.valor || "").replace(",", "."));
+          if (Number.isFinite(val)) out[iso] = val;
+        }
+        return out;
+      } catch (_) {
+        return {};
+      }
+    };
+    const [cdi, selic, ipca, cdiDailySeries] = await Promise.all([
       fetchSgs(4389),
       fetchSgs(432),
       fetchSgs(13522),
+      fetchCdiDailySeries(),
     ]);
     const res = jsonResponse(
       {
         cdiAnnual: cdi ?? 11.15,
         selicAnnual: selic ?? 11.25,
         ipca12m: ipca ?? 4.5,
-        updatedAt: new Date().toISOString(),
+        cdiDailySeries,
+        updatedAt: now.toISOString(),
       },
       200,
       origin

@@ -81,6 +81,111 @@ class PortfolioSummary {
 }
 
 class InvestmentEngine {
+  static final Map<int, Set<String>> _anbimaHolidaysCache = {};
+
+  static String _isoDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  /// Domingo de Páscoa pelo algoritmo gregoriano (Meeus/Jones/Butcher).
+  static DateTime easterSunday(int year) {
+    final a = year % 19;
+    final b = year ~/ 100;
+    final c = year % 100;
+    final d = b ~/ 4;
+    final e = b % 4;
+    final f = (b + 8) ~/ 25;
+    final g = (b - f + 1) ~/ 3;
+    final h = (19 * a + b - d - g + 15) % 30;
+    final i = c ~/ 4;
+    final k = c % 4;
+    final l = (32 + 2 * e + 2 * i - h - k) % 7;
+    final m = (a + 11 * h + 22 * l) ~/ 451;
+    final month = (h + l - 7 * m + 114) ~/ 31;
+    final day = ((h + l - 7 * m + 114) % 31) + 1;
+    return DateTime(year, month, day);
+  }
+
+  /// Feriados bancários nacionais oficiais da ANBIMA para o ano informado.
+  static Set<String> anbimaHolidaysForYear(int year) {
+    return _anbimaHolidaysCache.putIfAbsent(year, () {
+      final easter = easterSunday(year);
+      final holidays = <String>{
+        '$year-01-01', // Confraternização Universal
+        '$year-04-21', // Tiradentes
+        '$year-05-01', // Dia do Trabalho
+        '$year-09-07', // Independência do Brasil
+        '$year-10-12', // Nossa Senhora Aparecida
+        '$year-11-02', // Finados
+        '$year-11-15', // Proclamação da República
+        if (year >= 2024) '$year-11-20', // Consciência Negra (Lei 14.759/2023)
+        '$year-12-25', // Natal
+        _isoDate(easter.subtract(const Duration(days: 48))), // Segunda Carnaval
+        _isoDate(easter.subtract(const Duration(days: 47))), // Terça Carnaval
+        _isoDate(easter.subtract(const Duration(days: 2))), // Sexta-feira Santa
+        _isoDate(easter.add(const Duration(days: 60))), // Corpus Christi
+      };
+      return holidays;
+    });
+  }
+
+  /// Retorna true se a data for dia útil bancário segundo o calendário ANBIMA.
+  static bool isAnbimaBusinessDay(DateTime date) {
+    if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) {
+      return false;
+    }
+    return !anbimaHolidaysForYear(date.year).contains(_isoDate(date));
+  }
+
+  /// Conta os dias úteis bancários ANBIMA no intervalo [start, end).
+  static int businessDaysAnbima(DateTime start, DateTime end) {
+    var cur = DateTime(start.year, start.month, start.day);
+    final endNorm = DateTime(end.year, end.month, end.day);
+    if (!cur.isBefore(endNorm)) return 0;
+    int count = 0;
+    while (cur.isBefore(endNorm)) {
+      if (isAnbimaBusinessDay(cur)) count++;
+      cur = cur.add(const Duration(days: 1));
+    }
+    return count;
+  }
+
+  static double _compoundFixedIncomeLot({
+    required InvestAsset asset,
+    required DateTime lotDate,
+    required DateTime asOf,
+    required MarketIndicators indicators,
+  }) {
+    final start = DateTime(lotDate.year, lotDate.month, lotDate.day);
+    final end = DateTime(asOf.year, asOf.month, asOf.day);
+    if (!start.isBefore(end)) return 1.0;
+
+    final annualRate = _annualRateForFixedIncome(asset, indicators);
+    if ((asset.indexer ?? InvestFixedIncomeIndexer.cdi) ==
+            InvestFixedIncomeIndexer.cdi &&
+        indicators.cdiDailySeries.isNotEmpty) {
+      final pct = (asset.ratePct ?? 100.0) / 100.0;
+      final dailyFallback = pow(1.0 + max(-0.99, annualRate), 1.0 / 252.0);
+      double factor = 1.0;
+      var cur = start;
+      while (cur.isBefore(end)) {
+        final dailyRatePct = indicators.cdiDailySeries[_isoDate(cur)];
+        if (dailyRatePct != null) {
+          factor *= 1.0 + (dailyRatePct / 100.0) * pct;
+        } else if (isAnbimaBusinessDay(cur)) {
+          factor *= dailyFallback;
+        }
+        cur = cur.add(const Duration(days: 1));
+      }
+      return factor;
+    }
+
+    final bizDays = businessDaysAnbima(start, end);
+    return pow(1.0 + max(-0.99, annualRate), bizDays / 252.0).toDouble();
+  }
+
   static double regressiveIrRate(int daysHeld, {bool taxExempt = false}) {
     if (taxExempt) return 0.0;
     if (daysHeld <= 180) return 22.5;
@@ -273,20 +378,26 @@ class InvestmentEngine {
           currentUnitPriceCents = asset.currentPriceCents!;
           currentGrossValueCents = (currentQty * currentUnitPriceCents).round();
         } else {
-          final annualRate = _annualRateForFixedIncome(asset, effIndicators);
           double grossSum = 0.0;
           if (rfLots.isNotEmpty) {
             for (final lot in rfLots) {
               final lotDate = _parseDateSafe(lot.date);
-              final lotDays = max(0, asOf.difference(lotDate).inDays);
-              final bizDays = lotDays * (252.0 / 365.0);
-              final factor = pow(1.0 + max(-0.99, annualRate), bizDays / 252.0);
+              final factor = _compoundFixedIncomeLot(
+                asset: asset,
+                lotDate: lotDate,
+                asOf: asOf,
+                indicators: effIndicators,
+              );
               grossSum += lot.costCents * factor;
             }
           } else {
-            final bizDays = daysHeld * (252.0 / 365.0);
-            final factor = pow(1.0 + max(-0.99, annualRate), bizDays / 252.0);
-            grossSum = (currentCostBasisCents * factor).toDouble();
+            final factor = _compoundFixedIncomeLot(
+              asset: asset,
+              lotDate: oldestDate,
+              asOf: asOf,
+              indicators: effIndicators,
+            );
+            grossSum = currentCostBasisCents * factor;
           }
           currentGrossValueCents = grossSum.round();
           currentUnitPriceCents = (currentGrossValueCents / currentQty).round();
@@ -303,7 +414,7 @@ class InvestmentEngine {
 
     final currentNetValueCents = currentGrossValueCents - estimatedTaxCents;
     final unrealizedPnlCents = currentQty > 1e-8
-        ? (currentNetValueCents - currentCostBasisCents)
+        ? (currentGrossValueCents - currentCostBasisCents)
         : 0;
     final unrealizedPnlPct = currentCostBasisCents > 0
         ? (unrealizedPnlCents / currentCostBasisCents) * 100.0
@@ -392,15 +503,15 @@ class InvestmentEngine {
       positions.add(summary);
 
       totalCost += conv(summary.currentCostBasisCents, asset.currency);
-      totalGross += conv(summary.currentGrossValueCents, asset.currency);
+      final grossConv = conv(summary.currentGrossValueCents, asset.currency);
+      totalGross += grossConv;
       totalTax += conv(summary.estimatedTaxCents, asset.currency);
-      final netConv = conv(summary.currentNetValueCents, asset.currency);
-      totalNet += netConv;
+      totalNet += conv(summary.currentNetValueCents, asset.currency);
       totalRealized += conv(summary.realizedPnlCents, asset.currency);
       totalDivs += conv(summary.totalDividendsCents, asset.currency);
 
       if (summary.hasOpenPosition) {
-        byClass[asset.assetClass] = (byClass[asset.assetClass] ?? 0) + netConv;
+        byClass[asset.assetClass] = (byClass[asset.assetClass] ?? 0) + grossConv;
       }
     }
 
@@ -408,10 +519,10 @@ class InvestmentEngine {
       if (a.hasOpenPosition != b.hasOpenPosition) {
         return a.hasOpenPosition ? -1 : 1;
       }
-      return b.currentNetValueCents.compareTo(a.currentNetValueCents);
+      return b.currentGrossValueCents.compareTo(a.currentGrossValueCents);
     });
 
-    final totalUnrealized = totalNet - totalCost;
+    final totalUnrealized = totalGross - totalCost;
     final totalUnrealizedPct =
         totalCost > 0 ? (totalUnrealized / totalCost) * 100.0 : 0.0;
 
