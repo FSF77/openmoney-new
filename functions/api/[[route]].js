@@ -4845,7 +4845,13 @@ export async function onRequest(context) {
 
   if (path === "/api/market/fii-dividends" && request.method === "GET") {
     const rawTickers = String(url.searchParams.get("tickers") || "").trim();
+    const rawStockTickers = String(url.searchParams.get("stockTickers") || "").trim();
     const tickers = rawTickers
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0)
+      .slice(0, 30);
+    const stockTickers = rawStockTickers
       .split(",")
       .map((s) => s.trim().toUpperCase())
       .filter((s) => s.length > 0)
@@ -4857,8 +4863,21 @@ export async function onRequest(context) {
       if (parts.length !== 3) return null;
       return `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
     };
-    await Promise.all(
-      tickers.map(async (ticker) => {
+    const stockIsinMatches = (ticker, isin) => {
+      const normIsin = String(isin || "").trim().toUpperCase();
+      if (!normIsin) return true;
+      const m = ticker.split(".")[0].match(/^[A-Z]{4}(\d{1,2})[A-Z]?$/);
+      if (!m) return true;
+      const suffix = m[1];
+      if (suffix === "3") return normIsin.includes("ACNOR");
+      if (suffix === "4") return normIsin.includes("ACNPR");
+      if (suffix === "5") return normIsin.includes("ACNPA") || normIsin.includes("ACNPR");
+      if (suffix === "6") return normIsin.includes("ACNPB") || normIsin.includes("ACNPR");
+      if (suffix === "11") return normIsin.includes("CDAM") || normIsin.includes("UNT");
+      return true;
+    };
+    await Promise.all([
+      ...tickers.map(async (ticker) => {
         try {
           const clean = ticker.split(".")[0];
           const m = clean.match(/^([A-Z]{4})\d{1,2}[A-Z]?$/);
@@ -4893,8 +4912,45 @@ export async function onRequest(context) {
           events.sort((a, b) => b.paymentDateIso.localeCompare(a.paymentDateIso));
           if (events.length > 0) dividends[ticker] = events;
         } catch (_) {}
-      })
-    );
+      }),
+      ...stockTickers.map(async (ticker) => {
+        try {
+          const clean = ticker.split(".")[0];
+          const m = clean.match(/^([A-Z]{4})\d{1,2}[A-Z]?$/);
+          const code = m ? m[1] : clean.slice(0, 4);
+          if (!code) return;
+          const b64 = btoa(JSON.stringify({ issuingCompany: code, language: "pt-br" }));
+          const r = await fetch(
+            `https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedSupplementCompany/${b64}`,
+            { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" } }
+          );
+          if (!r.ok) return;
+          const json = await r.json();
+          const company = Array.isArray(json) ? json[0] : json;
+          const list = Array.isArray(company?.cashDividends) ? company.cashDividends : [];
+          const events = [];
+          for (const item of list) {
+            const isin = String(item?.isinCode || item?.assetIssued || "").trim().toUpperCase();
+            if (!stockIsinMatches(ticker, isin)) continue;
+            const payIso = parseBrToIso(item?.paymentDate);
+            const comIso = parseBrToIso(item?.lastDatePrior) || parseBrToIso(item?.approvedOn) || payIso;
+            const rate = Number(String(item?.rate || "").replace(/\./g, "").replace(",", "."));
+            if (!payIso || !comIso || !Number.isFinite(rate) || rate <= 0) continue;
+            events.push({
+              ticker,
+              paymentDateIso: payIso,
+              lastDatePriorIso: comIso,
+              ratePerQuota: rate,
+              label: String(item?.label || "DIVIDENDO").trim(),
+              relatedTo: String(item?.relatedTo || "").trim(),
+              isinCode: isin,
+            });
+          }
+          events.sort((a, b) => b.paymentDateIso.localeCompare(a.paymentDateIso));
+          if (events.length > 0) dividends[ticker] = events;
+        } catch (_) {}
+      }),
+    ]);
     const res = jsonResponse(
       { dividends, updatedAt: new Date().toISOString() },
       200,

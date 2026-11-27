@@ -553,8 +553,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
       ),
       _CompactActionBtn(
         icon: Icons.event_repeat_rounded,
-        label: 'Proventos FII',
-        tooltip: 'Agendar Dividendos FII (B3)',
+        label: 'Proventos B3',
+        tooltip: 'Agendar Proventos B3 (FIIs e Ações)',
         iconOnly: useIconOnlyActions,
         colors: colors,
         onPressed: () => showFiiDividendScheduleModal(context, widget.store),

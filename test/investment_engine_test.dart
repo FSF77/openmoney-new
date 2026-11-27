@@ -946,5 +946,119 @@ void main() {
       expect(res2.scheduledCount, 0);
       expect(res2.skippedCount, 1);
     });
+
+    test('parseB3StockDividendsJson filtra ISIN da ação e agenda Dividendo + JCP (15% IR) na mesma data', () async {
+      const sampleStockJson = '''
+      [
+        {
+          "code": "PETR",
+          "cashDividends": [
+            {
+              "assetIssued": "BRPETRACNOR9",
+              "paymentDate": "21/12/2026",
+              "rate": "0,50000000000",
+              "relatedTo": "Anual/2026",
+              "approvedOn": "06/08/2026",
+              "isinCode": "BRPETRACNOR9",
+              "label": "DIVIDENDO",
+              "lastDatePrior": "21/08/2026"
+            },
+            {
+              "assetIssued": "BRPETRACNPR6",
+              "paymentDate": "21/12/2026",
+              "rate": "0,50000000000",
+              "relatedTo": "Anual/2026",
+              "approvedOn": "06/08/2026",
+              "isinCode": "BRPETRACNPR6",
+              "label": "DIVIDENDO",
+              "lastDatePrior": "21/08/2026"
+            },
+            {
+              "assetIssued": "BRPETRACNPR6",
+              "paymentDate": "21/12/2026",
+              "rate": "0,20000000000",
+              "relatedTo": "Anual/2026",
+              "approvedOn": "06/08/2026",
+              "isinCode": "BRPETRACNPR6",
+              "label": "JRS CAP PROPRIO",
+              "lastDatePrior": "21/08/2026"
+            }
+          ]
+        }
+      ]
+      ''';
+      final parsedPetr4 = InvestmentQuoteService.parseB3StockDividendsJson(
+        'PETR4',
+        sampleStockJson,
+      );
+      expect(parsedPetr4.length, 2); // Apenas BRPETRACNPR6 (PN), ignora ACNOR (ON)
+      expect(parsedPetr4.where((e) => e.isDividend).length, 1);
+      expect(parsedPetr4.where((e) => e.isJcp).length, 1);
+
+      final store = MoneyStore(autoBoot: false);
+      store.db = Database(
+        accounts: [
+          Account(id: 'xp', name: 'XP', type: 'Investimento', opening: 0),
+        ],
+      );
+      final petr4 = InvestAsset(
+        id: 'petr4',
+        ticker: 'PETR4',
+        name: 'Petrobras PN',
+        assetClass: InvestAssetClass.stock,
+        accountId: 'xp',
+      );
+      store.addOrUpdateInvestAsset(petr4);
+      store.addInvestOperation(
+        InvestOperation(
+          id: 'buy_petr4',
+          assetId: 'petr4',
+          accountId: 'xp',
+          type: InvestOpType.buy,
+          date: '2026-08-10',
+          quantity: 100,
+          unitPriceCents: 3800,
+          totalCents: 380000,
+        ),
+        affectAccountCash: false,
+      );
+
+      final futurePay = DateTime.now().add(const Duration(days: 10));
+      final futurePayIso =
+          '${futurePay.year}-${futurePay.month.toString().padLeft(2, '0')}-${futurePay.day.toString().padLeft(2, '0')}';
+
+      final res = await store.syncAndScheduleFiiDividends(
+        preloadedEvents: {
+          'petr4': [
+            FiiDividendEvent(
+              ticker: 'PETR4',
+              paymentDateIso: futurePayIso,
+              lastDatePriorIso: '2026-08-21',
+              ratePerQuota: 0.50,
+              label: 'DIVIDENDO',
+              relatedTo: 'Anual/2026',
+              isinCode: 'BRPETRACNPR6',
+            ),
+            FiiDividendEvent(
+              ticker: 'PETR4',
+              paymentDateIso: futurePayIso,
+              lastDatePriorIso: '2026-08-21',
+              ratePerQuota: 0.20,
+              label: 'JRS CAP PROPRIO',
+              relatedTo: 'Anual/2026',
+              isinCode: 'BRPETRACNPR6',
+            ),
+          ],
+        },
+      );
+      expect(res.scheduledCount, 2);
+      final divOp = store.db.investOps
+          .firstWhere((o) => o.type == InvestOpType.dividend);
+      final jcpOp =
+          store.db.investOps.firstWhere((o) => o.type == InvestOpType.jcp);
+      expect(divOp.totalCents, 5000); // 100 * 0,50
+      expect(jcpOp.taxCents, 300); // 15% de R$ 20,00 = R$ 3,00
+      expect(jcpOp.totalCents, 1700); // R$ 17,00 líquido na conta
+    });
   });
 }

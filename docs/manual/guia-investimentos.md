@@ -58,9 +58,9 @@ Se você já transferia dinheiro da Conta Corrente (ex: *Nubank*) para a Conta I
   4. Ao salvar com movimentação de caixa ativa, o OpenMoney gera o crédito bruto (`Transferência (+)`) e o débito do IR (`IR Resgate <Ativo>`), resultando no valor líquido exato na conta destino.
 - Títulos isentos (**LCI**, **LCA**, **CRI**, **CRA**) têm IR zerado automaticamente.
 
-### Exemplo 4: Proventos e Agendamento Automático de Dividendos de FIIs (B3)
-- Lance manualmente como **Dividendo**, **JCP** ou **Rendimento**, ou clique em **Proventos FII** no cabeçalho da tela de Investimentos.
-- Em **Proventos FII**, o OpenMoney consulta automaticamente na **B3** os rendimentos anunciados para todos os seus FIIs ativos, multiplica pelas cotas que você possuía na **Data-Com** em cada corretora e agenda o lançamento pendente na **Agenda** para a data de pagamento (sem duplicar proventos já lançados).
+### Exemplo 4: Proventos e Agendamento Automático B3 (FIIs e Ações)
+- Lance manualmente como **Dividendo**, **JCP** ou **Rendimento**, ou clique em **Proventos B3** no cabeçalho da tela de Investimentos.
+- Em **Proventos B3**, o OpenMoney consulta automaticamente na **B3** os dividendos, JCP e rendimentos anunciados para todos os seus **FIIs e Ações B3 ativos**, multiplica pela quantidade que você possuía na **Data-Com** em cada corretora (aplicando automaticamente o desconto de **15% de IR na fonte** no caso de JCP) e agenda o lançamento pendente na **Agenda** para a data de pagamento (sem duplicar proventos já lançados).
 - A categoria padrão é **`Investimentos (+) › Dividendos`** (customizável diretamente no modal de agendamento ou nos lançamentos de proventos).
 
 ---

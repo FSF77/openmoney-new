@@ -1825,6 +1825,13 @@ Future<void> showFiiDividendScheduleModal(
   final fiiCount = store.db.investAssets
       .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
       .length;
+  final stockCount = store.db.investAssets
+      .where((a) =>
+          !a.inactive &&
+          a.assetClass == InvestAssetClass.stock &&
+          a.currency.toUpperCase() == 'BRL')
+      .length;
+  final totalEligible = fiiCount + stockCount;
   var selectedCat = store.investDividendCategory;
   var loading = false;
   ({int scheduledCount, int skippedCount, List<String> details})? result;
@@ -1840,7 +1847,7 @@ Future<void> showFiiDividendScheduleModal(
             const SizedBox(width: 8),
             const Expanded(
               child: Text(
-                'Agendar Dividendos de FIIs (B3)',
+                'Agendar Proventos B3 (FIIs e Ações)',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
               ),
             ),
@@ -1854,9 +1861,9 @@ Future<void> showFiiDividendScheduleModal(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  fiiCount == 0
-                      ? 'Nenhum FII ativo cadastrado na carteira.'
-                      : 'Consulta os proventos anunciados na B3 para $fiiCount FII(s) ativo(s), multiplica pelas cotas em custódia na Data-Com e agenda na conta da corretora.',
+                  totalEligible == 0
+                      ? 'Nenhum FII ou Ação B3 ativo cadastrado na carteira.'
+                      : 'Consulta dividendos, JCP e rendimentos anunciados na B3 para $fiiCount FII(s) e $stockCount Ação(ões) ativa(s), multiplica pela custódia na Data-Com e agenda na conta da corretora (JCP já com desconto automático de 15% de IR).',
                   style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
                 ),
                 const SizedBox(height: 12),
@@ -1864,7 +1871,7 @@ Future<void> showFiiDividendScheduleModal(
                   store: store,
                   categoryType: 'Receita',
                   currentSelection: selectedCat,
-                  labelText: 'Categoria dos Dividendos FII',
+                  labelText: 'Categoria dos Proventos',
                   allowTransfers: false,
                   onChanged: (v) {
                     if (v.trim().isNotEmpty) {
@@ -1926,7 +1933,7 @@ Future<void> showFiiDividendScheduleModal(
             child: const Text('Fechar'),
           ),
           ElevatedButton.icon(
-            onPressed: (loading || fiiCount == 0)
+            onPressed: (loading || totalEligible == 0)
                 ? null
                 : () async {
                     setDlgState(() => loading = true);

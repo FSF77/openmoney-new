@@ -8535,7 +8535,8 @@ class MoneyStore extends ChangeNotifier {
     return updated;
   }
 
-  /// Consulta dividendos anunciados na B3 para FIIs ativos, calcula `cotas na Data-Com × valor/cota`
+  /// Consulta proventos anunciados na B3 para FIIs e Ações ativos (Dividendos, JCP e Rendimentos),
+  /// calcula `cotas na Data-Com × valor/cota` (aplicando 15% IR na fonte para JCP)
   /// e agenda os proventos ainda não registrados na categoria configurada.
   Future<({int scheduledCount, int skippedCount, List<String> details})>
       syncAndScheduleFiiDividends({
@@ -8548,26 +8549,29 @@ class MoneyStore extends ChangeNotifier {
     }
     ensureCategoryPath(investDividendCategory, type: 'Receita');
 
-    final fiiAssets = db.investAssets
-        .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
+    final eligibleAssets = db.investAssets
+        .where((a) =>
+            !a.inactive &&
+            (a.assetClass == InvestAssetClass.fii ||
+                (a.assetClass == InvestAssetClass.stock &&
+                    a.currency.toUpperCase() == 'BRL')))
         .toList();
-    if (fiiAssets.isEmpty) {
+    if (eligibleAssets.isEmpty) {
       return (scheduledCount: 0, skippedCount: 0, details: const <String>[]);
     }
 
-    final eventsByAsset =
-        preloadedEvents ?? await InvestmentQuoteService.fetchFiiDividends(fiiAssets);
+    final eventsByAsset = preloadedEvents ??
+        await InvestmentQuoteService.fetchFiiDividends(eligibleAssets);
 
     final minPayDate = DateTime.now().subtract(Duration(days: lookbackDays));
     final minPayIso =
         '${minPayDate.year}-${minPayDate.month.toString().padLeft(2, '0')}-${minPayDate.day.toString().padLeft(2, '0')}';
-    final today = todayISO();
 
     int scheduled = 0;
     int skipped = 0;
     final details = <String>[];
 
-    for (final asset in fiiAssets) {
+    for (final asset in eligibleAssets) {
       final events = eventsByAsset[asset.id] ?? const <FiiDividendEvent>[];
       for (final ev in events) {
         if (ev.paymentDateIso.compareTo(minPayIso) < 0) continue;
@@ -8579,31 +8583,45 @@ class MoneyStore extends ChangeNotifier {
         );
         if (qtyByAcc.isEmpty) continue;
 
-        final opType = ev.isAmortization
-            ? InvestOpType.amortization
-            : InvestOpType.fiiYield;
+        final InvestOpType opType;
+        if (ev.isAmortization) {
+          opType = InvestOpType.amortization;
+        } else if (ev.isJcp) {
+          opType = InvestOpType.jcp;
+        } else if (asset.assetClass == InvestAssetClass.stock || ev.isDividend) {
+          opType = InvestOpType.dividend;
+        } else {
+          opType = InvestOpType.fiiYield;
+        }
 
         for (final entry in qtyByAcc.entries) {
           final accId = entry.key;
           final qty = entry.value;
-          final totalCents = (qty * ev.ratePerQuota * 100.0).round();
-          if (totalCents <= 0) continue;
+          final grossCents = (qty * ev.ratePerQuota * 100.0).round();
+          if (grossCents <= 0) continue;
+
+          final irCents = opType == InvestOpType.jcp
+              ? (grossCents * 0.15).round()
+              : 0;
+          final netCents = grossCents > irCents ? grossCents - irCents : 0;
+          if (netCents <= 0) continue;
 
           final alreadyExists = db.investOps.any((o) =>
               o.assetId == asset.id &&
               o.accountId == accId &&
               o.date == ev.paymentDateIso &&
-              (o.type == InvestOpType.fiiYield ||
-                  o.type == InvestOpType.dividend ||
-                  o.type == InvestOpType.amortization));
+              o.type == opType);
           if (alreadyExists) {
             skipped++;
             continue;
           }
 
           final rateCents = (ev.ratePerQuota * 100.0).round();
+          final irNote = irCents > 0
+              ? ' · Bruto ${formatCurrency(grossCents, asset.currency)} - IR 15% ${formatCurrency(irCents, asset.currency)}'
+              : '';
           final memo =
-              'B3 FII ${ev.relatedTo.isNotEmpty ? "(${ev.relatedTo}) " : ""}· Data-Com ${fmtDate(ev.lastDatePriorIso)} · ${formatInvestQty(qty, InvestAssetClass.fii)} cotas × ${formatCurrency(rateCents, asset.currency)}';
+              'B3 ${opType.label} ${ev.relatedTo.isNotEmpty ? "(${ev.relatedTo}) " : ""}· Data-Com ${fmtDate(ev.lastDatePriorIso)} · ${formatInvestQty(qty, asset.assetClass)} × ${formatCurrency(rateCents, asset.currency)}$irNote';
           addInvestOperation(
             InvestOperation(
               assetId: asset.id,
@@ -8612,16 +8630,17 @@ class MoneyStore extends ChangeNotifier {
               date: ev.paymentDateIso,
               quantity: qty,
               unitPriceCents: rateCents,
-              totalCents: totalCents,
+              taxCents: irCents,
+              totalCents: netCents,
               memo: memo,
             ),
             affectAccountCash: true,
             dividendCategory: investDividendCategory,
-            forceReconciled: ev.paymentDateIso.compareTo(today) <= 0 ? false : false,
+            forceReconciled: false,
           );
           scheduled++;
           details.add(
-            '${asset.displayCode} · ${fmtDate(ev.paymentDateIso)} · ${formatCurrency(totalCents, asset.currency)}',
+            '${asset.displayCode} (${opType.label}) · ${fmtDate(ev.paymentDateIso)} · ${formatCurrency(netCents, asset.currency)}',
           );
         }
       }

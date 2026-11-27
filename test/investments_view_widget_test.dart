@@ -94,7 +94,7 @@ void main() {
     expect(find.byTooltip('Novo Ativo'), findsOneWidget);
     expect(find.byTooltip('Importar B3'), findsOneWidget);
     expect(find.byTooltip('Atualizar Cotações'), findsOneWidget);
-    expect(find.byTooltip('Agendar Dividendos FII (B3)'), findsOneWidget);
+    expect(find.byTooltip('Agendar Proventos B3 (FIIs e Ações)'), findsOneWidget);
     expect(find.byTooltip('Exportar PDF'), findsOneWidget);
     expect(find.byTooltip('Exportar CSV'), findsOneWidget);
 

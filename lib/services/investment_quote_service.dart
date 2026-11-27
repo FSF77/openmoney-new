@@ -36,6 +36,9 @@ class FiiDividendEvent {
   });
 
   bool get isAmortization => label.toUpperCase().contains('AMORT');
+  bool get isJcp =>
+      label.toUpperCase().contains('JCP') || label.toUpperCase().contains('JRS');
+  bool get isDividend => label.toUpperCase().contains('DIVIDEND');
 }
 
 class InvestmentQuoteService {
@@ -845,20 +848,98 @@ class InvestmentQuoteService {
     }
   }
 
-  /// Busca dividendos/rendimentos anunciados na B3 para os FIIs informados.
+  /// Verifica se o ISIN da B3 corresponde à classe do ticker da ação (`3`=ON, `4/5/6`=PN, `11`=Unit).
+  static bool stockIsinMatchesTicker(String ticker, String isin) {
+    final normIsin = isin.trim().toUpperCase();
+    if (normIsin.isEmpty) return true;
+    final clean = ticker.trim().toUpperCase().split('.').first;
+    final m = RegExp(r'^[A-Z]{4}(\d{1,2})[A-Z]?$').firstMatch(clean);
+    if (m == null) return true;
+    final suffix = m.group(1)!;
+    if (suffix == '3') return normIsin.contains('ACNOR');
+    if (suffix == '4') return normIsin.contains('ACNPR');
+    if (suffix == '5') return normIsin.contains('ACNPA') || normIsin.contains('ACNPR');
+    if (suffix == '6') return normIsin.contains('ACNPB') || normIsin.contains('ACNPR');
+    if (suffix == '11') return normIsin.contains('CDAM') || normIsin.contains('UNT');
+    return true;
+  }
+
+  /// Faz parse do JSON público de proventos de Ações da B3 (`GetListedSupplementCompany`).
+  static List<FiiDividendEvent> parseB3StockDividendsJson(
+    String ticker,
+    String? body,
+  ) {
+    if (body == null || body.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(body);
+      final Map? company = decoded is List && decoded.isNotEmpty && decoded.first is Map
+          ? decoded.first as Map
+          : (decoded is Map ? decoded : null);
+      if (company == null) return const [];
+      final list = company['cashDividends'];
+      if (list is! List) return const [];
+
+      final out = <FiiDividendEvent>[];
+      for (final item in list) {
+        if (item is! Map) continue;
+        final isin = (item['isinCode'] ?? item['assetIssued'] ?? '')
+            .toString()
+            .trim()
+            .toUpperCase();
+        if (!stockIsinMatchesTicker(ticker, isin)) continue;
+
+        final payIso = _parseBrDateToIso(item['paymentDate']?.toString());
+        final comIso = _parseBrDateToIso(item['lastDatePrior']?.toString()) ??
+            _parseBrDateToIso(item['approvedOn']?.toString()) ??
+            payIso;
+        final rawRate =
+            item['rate']?.toString().replaceAll('.', '').replaceAll(',', '.').trim();
+        final rate = double.tryParse(rawRate ?? '');
+        if (payIso == null || comIso == null || rate == null || rate <= 0) {
+          continue;
+        }
+        out.add(FiiDividendEvent(
+          ticker: ticker.trim().toUpperCase(),
+          paymentDateIso: payIso,
+          lastDatePriorIso: comIso,
+          ratePerQuota: rate,
+          label: item['label']?.toString().trim() ?? 'DIVIDENDO',
+          relatedTo: item['relatedTo']?.toString().trim() ?? '',
+          isinCode: isin,
+        ));
+      }
+      out.sort((a, b) => b.paymentDateIso.compareTo(a.paymentDateIso));
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Busca dividendos, JCP e rendimentos anunciados na B3 para FIIs e Ações.
   static Future<Map<String, List<FiiDividendEvent>>> fetchFiiDividends(
     List<InvestAsset> assets,
   ) async {
     final fiis = assets
         .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
         .toList();
-    if (fiis.isEmpty) return {};
+    final stocks = assets
+        .where((a) =>
+            !a.inactive &&
+            a.assetClass == InvestAssetClass.stock &&
+            a.currency.toUpperCase() == 'BRL')
+        .toList();
+    if (fiis.isEmpty && stocks.isEmpty) return {};
 
     final results = <String, List<FiiDividendEvent>>{};
     if (kIsWeb) {
-      final tickers = fiis.map((a) => a.ticker.trim().toUpperCase()).toSet().join(',');
+      final fiiTickers =
+          fiis.map((a) => a.ticker.trim().toUpperCase()).toSet().join(',');
+      final stockTickers =
+          stocks.map((a) => a.ticker.trim().toUpperCase()).toSet().join(',');
       final uri = Uri.parse(
-        '${_workerBaseUrl()}/api/market/fii-dividends?tickers=${Uri.encodeQueryComponent(tickers)}',
+        '${_workerBaseUrl()}/api/market/fii-dividends'
+        '?tickers=${Uri.encodeQueryComponent(fiiTickers)}'
+        '&stockTickers=${Uri.encodeQueryComponent(stockTickers)}',
       );
       final body = await _httpGetText(uri);
       if (body != null) {
@@ -866,7 +947,7 @@ class InvestmentQuoteService {
           final decoded = jsonDecode(body);
           if (decoded is Map && decoded['dividends'] is Map) {
             final divs = decoded['dividends'] as Map;
-            for (final a in fiis) {
+            for (final a in [...fiis, ...stocks]) {
               final rawList = divs[a.ticker.trim().toUpperCase()];
               if (rawList is List) {
                 results[a.id] = rawList
@@ -906,6 +987,27 @@ class InvestmentQuoteService {
         );
         final body = await _httpGetText(uri);
         final events = parseB3FiiDividendsJson(asset.ticker, body);
+        if (events.isNotEmpty) {
+          results[asset.id] = events;
+        }
+      }));
+    }
+
+    for (var i = 0; i < stocks.length; i += chunkSize) {
+      final chunk = stocks.sublist(
+        i,
+        i + chunkSize > stocks.length ? stocks.length : i + chunkSize,
+      );
+      await Future.wait(chunk.map((asset) async {
+        final code = fiiIdentifierCode(asset.ticker);
+        if (code.isEmpty) return;
+        final payload = jsonEncode({'issuingCompany': code, 'language': 'pt-br'});
+        final b64 = base64Encode(utf8.encode(payload));
+        final uri = Uri.parse(
+          'https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedSupplementCompany/$b64',
+        );
+        final body = await _httpGetText(uri);
+        final events = parseB3StockDividendsJson(asset.ticker, body);
         if (events.isNotEmpty) {
           results[asset.id] = events;
         }
