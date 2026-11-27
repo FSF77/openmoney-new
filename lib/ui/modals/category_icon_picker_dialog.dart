@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/category_icon_registry.dart';
@@ -50,6 +51,7 @@ class _CategoryIconPickerDialog extends StatefulWidget {
 
 class _CategoryIconPickerDialogState extends State<_CategoryIconPickerDialog> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _groupScrollCtrl = ScrollController();
   String _search = '';
   String _selectedGroup = 'Todos';
   String? _selectedIcon;
@@ -65,7 +67,19 @@ class _CategoryIconPickerDialogState extends State<_CategoryIconPickerDialog> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _groupScrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _scrollGroupsBy(double delta) {
+    if (!_groupScrollCtrl.hasClients) return;
+    final target = (_groupScrollCtrl.offset + delta)
+        .clamp(0.0, _groupScrollCtrl.position.maxScrollExtent);
+    _groupScrollCtrl.animateTo(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -302,26 +316,83 @@ class _CategoryIconPickerDialogState extends State<_CategoryIconPickerDialog> {
             ),
             const SizedBox(height: 8),
 
-            // Chips de Grupo
-            SizedBox(
-              height: 32,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: CategoryIconRegistry.groups.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 6),
-                itemBuilder: (ctx, i) {
-                  final grp = CategoryIconRegistry.groups[i];
+            // Chips de Grupo (Wrap em telas largas; rolagem com setas + drag em telas estreitas)
+            if (dialogWidth >= 420)
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: CategoryIconRegistry.groups.map((grp) {
                   final selected = _selectedGroup == grp;
                   return ChoiceChip(
                     label: Text(grp, style: const TextStyle(fontSize: 11.5)),
                     selected: selected,
                     visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     onSelected: (_) => setState(() => _selectedGroup = grp),
                   );
-                },
+                }).toList(),
+              )
+            else
+              SizedBox(
+                height: 32,
+                child: Row(
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 26, minHeight: 28),
+                      tooltip: 'Grupos anteriores',
+                      icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                      onPressed: () => _scrollGroupsBy(-140),
+                    ),
+                    Expanded(
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: {
+                            PointerDeviceKind.touch,
+                            PointerDeviceKind.mouse,
+                            PointerDeviceKind.trackpad,
+                          },
+                        ),
+                        child: ListView.separated(
+                          controller: _groupScrollCtrl,
+                          scrollDirection: Axis.horizontal,
+                          itemCount: CategoryIconRegistry.groups.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 6),
+                          itemBuilder: (ctx, i) {
+                            final grp = CategoryIconRegistry.groups[i];
+                            final selected = _selectedGroup == grp;
+                            return ChoiceChip(
+                              label: Text(
+                                grp,
+                                style: const TextStyle(fontSize: 11.5),
+                              ),
+                              selected: selected,
+                              visualDensity: VisualDensity.compact,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 6),
+                              onSelected: (_) =>
+                                  setState(() => _selectedGroup = grp),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 26, minHeight: 28),
+                      tooltip: 'Próximos grupos',
+                      icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                      onPressed: () => _scrollGroupsBy(140),
+                    ),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 10),
 
             // Grid de Ícones
