@@ -552,6 +552,14 @@ class _InvestmentsViewState extends State<InvestmentsView>
         onPressed: _refreshing ? null : _refreshQuotes,
       ),
       _CompactActionBtn(
+        icon: Icons.event_repeat_rounded,
+        label: 'Proventos FII',
+        tooltip: 'Agendar Dividendos FII (B3)',
+        iconOnly: useIconOnlyActions,
+        colors: colors,
+        onPressed: () => showFiiDividendScheduleModal(context, widget.store),
+      ),
+      _CompactActionBtn(
         icon: Icons.picture_as_pdf_outlined,
         label: 'PDF',
         tooltip: 'Exportar PDF',

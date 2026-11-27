@@ -540,6 +540,57 @@ class InvestmentEngine {
     );
   }
 
+  /// Calcula a quantidade em custódia por conta/corretora até `asOfDateIso` (inclusive),
+  /// usada para apurar proventos com base na Data-Com.
+  static Map<String, double> openQtyByAccountOnDate({
+    required String assetId,
+    required List<InvestOperation> ops,
+    required String asOfDateIso,
+  }) {
+    final sorted = ops
+        .where((op) =>
+            op.assetId == assetId &&
+            op.date.isNotEmpty &&
+            op.date.compareTo(asOfDateIso) <= 0)
+        .toList()
+      ..sort((a, b) {
+        final d = a.date.compareTo(b.date);
+        return d != 0 ? d : a.createdAt.compareTo(b.createdAt);
+      });
+
+    final byAcc = <String, double>{};
+    for (final op in sorted) {
+      final cur = byAcc[op.accountId] ?? 0.0;
+      switch (op.type) {
+        case InvestOpType.buy:
+        case InvestOpType.initialPosition:
+        case InvestOpType.bonus:
+          if (op.quantity > 0) byAcc[op.accountId] = cur + op.quantity;
+          break;
+        case InvestOpType.sell:
+          if (op.quantity > 0) byAcc[op.accountId] = max(0.0, cur - op.quantity);
+          break;
+        case InvestOpType.split:
+          if (op.quantity > 0 && cur > 1e-8) {
+            byAcc[op.accountId] = cur * op.quantity;
+          }
+          break;
+        case InvestOpType.inplit:
+          if (op.quantity > 0 && cur > 1e-8) {
+            byAcc[op.accountId] = cur / op.quantity;
+          }
+          break;
+        case InvestOpType.dividend:
+        case InvestOpType.jcp:
+        case InvestOpType.fiiYield:
+        case InvestOpType.amortization:
+          break;
+      }
+    }
+    byAcc.removeWhere((_, q) => q <= 1e-8);
+    return byAcc;
+  }
+
   /// Estima o IR Retido na Fonte (Tabela Regressiva de Renda Fixa) para uma venda,
   /// usando contagem de dias corridos por lote em ordem FIFO a partir de cada aporte.
   static ({int irCents, double effectiveRatePct, int oldestDaysHeld}) estimateSellIr({

@@ -2195,6 +2195,107 @@ const MCP_TOOLS = [
       },
     },
   },
+  {
+    name: "openmoney_get_investments_overview",
+    description:
+      "Retorna o resumo consolidado da carteira de investimentos (valor aplicado, valor bruto atualizado, IR estimado, valor líquido, rentabilidade, lucro realizado, proventos, caixa livre em corretoras), alocação por classe/corretora e insights automáticos (concentração, maiores altas/baixas, vencimentos próximos de Renda Fixa e alertas de queda de alíquota na tabela regressiva de IR).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: {
+          type: "string",
+          description: "ID ou nome da corretora/conta de investimento para filtrar (opcional)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_list_investment_positions",
+    description:
+      "Lista as posições da carteira de investimentos com quantidade, PM de compra, PM de venda, preço atual, valor bruto/líquido, rentabilidade e proventos.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        assetClass: {
+          type: "string",
+          description: "Filtrar por classe: stock, fii, etf, bdr, fixedIncome, tesouro, crypto, other",
+        },
+        accountId: {
+          type: "string",
+          description: "ID ou nome da corretora/conta para filtrar",
+        },
+        search: {
+          type: "string",
+          description: "Busca por ticker ou nome do ativo",
+        },
+        includeZero: {
+          type: "boolean",
+          description: "Se true, inclui posições já encerradas (padrão: false)",
+        },
+      },
+    },
+  },
+  {
+    name: "openmoney_list_investment_operations",
+    description:
+      "Lista o histórico de operações de investimentos (compras, vendas, dividendos, JCP, rendimentos de FIIs, amortizações, posição inicial) com filtros.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ticker: {
+          type: "string",
+          description: "Filtrar por ticker/nome do ativo",
+        },
+        type: {
+          type: "string",
+          description: "Tipo: buy, sell, dividend, jcp, fiiYield, amortization, split, inplit, bonus, initialPosition",
+        },
+        accountId: {
+          type: "string",
+          description: "ID ou nome da corretora/conta",
+        },
+        startDate: { type: "string", description: "Data inicial YYYY-MM-DD" },
+        endDate: { type: "string", description: "Data final YYYY-MM-DD" },
+        limit: { type: "number", description: "Limite de operações (padrão: 35, máx: 100)" },
+      },
+    },
+  },
+  {
+    name: "openmoney_create_investment_operation",
+    description:
+      "Registra uma nova operação na carteira de investimentos (compra, venda, dividendo, JCP ou rendimento de FII) para um ativo existente, opcionalmente movimentando o caixa da conta.",
+    inputSchema: {
+      type: "object",
+      required: ["asset", "type", "quantity", "unitPrice"],
+      properties: {
+        asset: {
+          type: "string",
+          description: "Ticker, nome ou ID do ativo cadastrado",
+        },
+        type: {
+          type: "string",
+          description: "Tipo da operação: buy, sell, dividend, jcp, fiiYield, amortization",
+        },
+        accountId: {
+          type: "string",
+          description: "ID ou nome da conta/corretora (opcional; usa a conta padrão do ativo)",
+        },
+        date: {
+          type: "string",
+          description: "Data YYYY-MM-DD (padrão: hoje)",
+        },
+        quantity: { type: "number", description: "Quantidade de cotas/títulos/moedas" },
+        unitPrice: { type: "number", description: "Preço unitário em reais (ex: 38.50)" },
+        fees: { type: "number", description: "Taxas/corretagem em reais (opcional)" },
+        tax: { type: "number", description: "IR retido na fonte em reais, se houver (opcional)" },
+        affectAccountCash: {
+          type: "boolean",
+          description: "Se true (padrão), cria o lançamento correspondente no caixa da conta",
+        },
+        memo: { type: "string", description: "Observação opcional" },
+      },
+    },
+  },
 ];
 
 function addMonthsYMJs(ym, delta) {
@@ -2267,6 +2368,373 @@ function computeAccountBalancesJs(db, targetMonth) {
   return { realBalances, predBalances, allAccounts, txs };
 }
 
+const INVEST_CLASS_LABELS_JS = {
+  stock: "Ações",
+  fii: "FIIs",
+  etf: "ETFs",
+  bdr: "BDRs",
+  fixedIncome: "Renda Fixa",
+  tesouro: "Tesouro Direto",
+  crypto: "Criptomoedas",
+  other: "Outros",
+};
+
+const INVEST_OP_LABELS_JS = {
+  buy: "Compra",
+  sell: "Venda",
+  dividend: "Dividendo",
+  jcp: "JCP",
+  fiiYield: "Rendimento",
+  amortization: "Amortização",
+  split: "Desdobramento",
+  inplit: "Grupamento",
+  bonus: "Bonificação",
+  initialPosition: "Posição Inicial",
+};
+
+function easterSundayJs(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function anbimaHolidaysForYearJs(year) {
+  const fmt = (dt) => dt.toISOString().slice(0, 10);
+  const addDays = (dt, n) => new Date(dt.getTime() + n * 86400000);
+  const easter = easterSundayJs(year);
+  const set = new Set([
+    `${year}-01-01`,
+    `${year}-04-21`,
+    `${year}-05-01`,
+    `${year}-09-07`,
+    `${year}-10-12`,
+    `${year}-11-02`,
+    `${year}-11-15`,
+    `${year}-12-25`,
+    fmt(addDays(easter, -48)),
+    fmt(addDays(easter, -47)),
+    fmt(addDays(easter, -2)),
+    fmt(addDays(easter, 60)),
+  ]);
+  if (year >= 2024) set.add(`${year}-11-20`);
+  return set;
+}
+
+function isAnbimaBusinessDayJs(dt, cache) {
+  const wd = dt.getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  const y = dt.getUTCFullYear();
+  if (!cache.has(y)) cache.set(y, anbimaHolidaysForYearJs(y));
+  return !cache.get(y).has(dt.toISOString().slice(0, 10));
+}
+
+function businessDaysAnbimaJs(startIso, endIso, cache) {
+  const s = new Date(`${startIso}T00:00:00Z`);
+  const e = new Date(`${endIso}T00:00:00Z`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || s >= e) return 0;
+  let count = 0;
+  for (let t = s.getTime(); t < e.getTime(); t += 86400000) {
+    if (isAnbimaBusinessDayJs(new Date(t), cache)) count++;
+  }
+  return count;
+}
+
+function regressiveIrRateJs(daysHeld, taxExempt) {
+  if (taxExempt) return 0;
+  if (daysHeld <= 180) return 22.5;
+  if (daysHeld <= 360) return 20.0;
+  if (daysHeld <= 720) return 17.5;
+  return 15.0;
+}
+
+function computePortfolioJs(db, { accountFilterId = null } = {}) {
+  const assets = Array.isArray(db.investAssets) ? db.investAssets : [];
+  const allOps = Array.isArray(db.investOps) ? db.investOps : [];
+  const ind = db.investIndicators || {
+    cdiAnnual: 11.15,
+    selicAnnual: 11.25,
+    ipca12m: 4.5,
+    cdiDailySeries: {},
+  };
+  const cdiSeries = ind.cdiDailySeries || {};
+  const rates = db.rates || {};
+  const baseCur = db.baseCurrency || "BRL";
+  const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+  const asOfIso = brNow.toISOString().slice(0, 10);
+  const holidayCache = new Map();
+
+  const conv = (cents, cur) => {
+    const c = String(cur || baseCur).toUpperCase();
+    const b = String(baseCur).toUpperCase();
+    if (c === b) return cents;
+    const fromRate = c === "BRL" ? 1 : Number(rates[c]?.rate || rates[c] || 1);
+    const toRate = b === "BRL" ? 1 : Number(rates[b]?.rate || rates[b] || 1);
+    if (!fromRate || !toRate) return cents;
+    return Math.round((cents * fromRate) / toRate);
+  };
+
+  const opsByAsset = new Map();
+  const assetsWithAnyOp = new Set();
+  for (const op of allOps) {
+    assetsWithAnyOp.add(op.assetId);
+    if (accountFilterId && op.accountId !== accountFilterId) continue;
+    if (!opsByAsset.has(op.assetId)) opsByAsset.set(op.assetId, []);
+    opsByAsset.get(op.assetId).push(op);
+  }
+
+  const positions = [];
+  let totalCost = 0;
+  let totalGross = 0;
+  let totalTax = 0;
+  let totalNet = 0;
+  let totalRealized = 0;
+  let totalDivs = 0;
+  const byClass = {};
+  const byAccount = {};
+
+  for (const asset of assets) {
+    const ops = [...(opsByAsset.get(asset.id) || [])].sort((a, b) => {
+      const dc = String(a.date || "").localeCompare(String(b.date || ""));
+      return dc !== 0 ? dc : Number(a.createdAt || 0) - Number(b.createdAt || 0);
+    });
+    if (accountFilterId) {
+      const isEmptyOwned = !assetsWithAnyOp.has(asset.id) && asset.accountId === accountFilterId;
+      if (ops.length === 0 && !isEmptyOwned) continue;
+    }
+
+    let currentQty = 0;
+    let currentCost = 0;
+    let avgBuy = 0;
+    let totalSoldQty = 0;
+    let totalSoldNet = 0;
+    let avgSell = 0;
+    let realizedPnl = 0;
+    let totalDivsAsset = 0;
+    const rfLots = [];
+    const isFixed = asset.assetClass === "fixedIncome" || asset.assetClass === "tesouro";
+
+    for (const op of ops) {
+      const qty = Number(op.quantity || 0);
+      const unit = Number(op.unitPriceCents || 0);
+      const fees = Number(op.feesCents || 0);
+      const tax = Number(op.taxCents || 0);
+      const tot = Number(op.totalCents || 0);
+      switch (op.type) {
+        case "buy":
+        case "initialPosition": {
+          if (qty <= 0) break;
+          const opCost = tot > 0 ? tot : Math.round(qty * unit) + fees;
+          currentQty += qty;
+          currentCost += opCost;
+          if (currentQty > 1e-8) avgBuy = Math.round(currentCost / currentQty);
+          if (isFixed) rfLots.push({ date: op.date || asOfIso, costCents: opCost });
+          break;
+        }
+        case "sell": {
+          if (qty <= 0) break;
+          const netProc = tot > 0 ? tot : Math.max(0, Math.round(qty * unit) - fees);
+          const soldQty = Math.min(qty, currentQty);
+          const costSold = Math.round(soldQty * avgBuy);
+          realizedPnl += netProc - tax - costSold;
+          currentQty = Math.max(0, currentQty - soldQty);
+          currentCost = Math.max(0, currentCost - costSold);
+          totalSoldQty += qty;
+          totalSoldNet += netProc;
+          if (totalSoldQty > 1e-8) avgSell = Math.round(totalSoldNet / totalSoldQty);
+          if (currentQty <= 1e-8) {
+            currentQty = 0;
+            currentCost = 0;
+            rfLots.length = 0;
+          } else if (isFixed && rfLots.length > 0) {
+            let rem = costSold;
+            while (rem > 0 && rfLots.length > 0) {
+              if (rfLots[0].costCents <= rem) {
+                rem -= rfLots[0].costCents;
+                rfLots.shift();
+              } else {
+                rfLots[0].costCents -= rem;
+                rem = 0;
+              }
+            }
+          }
+          break;
+        }
+        case "amortization":
+          currentCost = Math.max(0, currentCost - tot);
+          if (currentQty > 1e-8) avgBuy = Math.round(currentCost / currentQty);
+          break;
+        case "dividend":
+        case "jcp":
+        case "fiiYield":
+          totalDivsAsset += tot;
+          break;
+        case "split":
+          if (qty > 0 && currentQty > 1e-8) {
+            currentQty *= qty;
+            avgBuy = Math.round(currentCost / currentQty);
+          }
+          break;
+        case "inplit":
+          if (qty > 0 && currentQty > 1e-8) {
+            currentQty /= qty;
+            avgBuy = Math.round(currentCost / currentQty);
+          }
+          break;
+        case "bonus":
+          if (qty > 0) {
+            currentQty += qty;
+            currentCost += tot;
+            if (currentQty > 1e-8) avgBuy = Math.round(currentCost / currentQty);
+          }
+          break;
+      }
+    }
+
+    let unitPrice = asset.currentPriceCents != null ? Number(asset.currentPriceCents) : avgBuy;
+    let grossVal = 0;
+    let estTax = 0;
+    let daysHeld = 0;
+    let irRate = 0;
+
+    if (currentQty > 1e-8) {
+      if (isFixed) {
+        const oldestIso = rfLots.length > 0 ? rfLots[0].date : (ops[0]?.date || asOfIso);
+        const d1 = new Date(`${oldestIso}T00:00:00Z`);
+        const d2 = new Date(`${asOfIso}T00:00:00Z`);
+        daysHeld = Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / 86400000));
+        irRate = regressiveIrRateJs(daysHeld, Boolean(asset.taxExempt));
+
+        if ((asset.manualPrice && asset.currentPriceCents != null) ||
+            (asset.currentPriceCents != null && !asset.manualPrice && asset.assetClass === "tesouro")) {
+          unitPrice = Number(asset.currentPriceCents);
+          grossVal = Math.round(currentQty * unitPrice);
+        } else {
+          const idx = asset.indexer || "cdi";
+          const rPct = Number(asset.ratePct ?? (idx === "cdi" ? 100 : idx === "prefixado" ? 10 : 0));
+          let annual = 0;
+          if (idx === "cdi") annual = (Number(ind.cdiAnnual || 11.15) / 100) * (rPct / 100);
+          else if (idx === "selic") annual = (Number(ind.selicAnnual || 11.25) + rPct) / 100;
+          else if (idx === "ipca") annual = (1 + Number(ind.ipca12m || 4.5) / 100) * (1 + rPct / 100) - 1;
+          else annual = rPct / 100;
+
+          const calcFactor = (lotIso) => {
+            if (idx === "cdi" && Object.keys(cdiSeries).length > 0) {
+              const s = new Date(`${lotIso}T00:00:00Z`);
+              const e = new Date(`${asOfIso}T00:00:00Z`);
+              if (s >= e) return 1;
+              const pct = rPct / 100;
+              const fallback = Math.pow(1 + Math.max(-0.99, annual), 1 / 252);
+              let fac = 1;
+              for (let t = s.getTime(); t < e.getTime(); t += 86400000) {
+                const dt = new Date(t);
+                const iso = dt.toISOString().slice(0, 10);
+                if (cdiSeries[iso] != null) {
+                  fac *= 1 + (Number(cdiSeries[iso]) / 100) * pct;
+                } else if (isAnbimaBusinessDayJs(dt, holidayCache)) {
+                  fac *= fallback;
+                }
+              }
+              return fac;
+            }
+            const bd = businessDaysAnbimaJs(lotIso, asOfIso, holidayCache);
+            return Math.pow(1 + Math.max(-0.99, annual), bd / 252);
+          };
+
+          let sumGross = 0;
+          if (rfLots.length > 0) {
+            for (const lot of rfLots) sumGross += lot.costCents * calcFactor(lot.date);
+          } else {
+            sumGross = currentCost * calcFactor(oldestIso);
+          }
+          grossVal = Math.round(sumGross);
+          unitPrice = Math.round(grossVal / currentQty);
+        }
+
+        const grossProfit = grossVal - currentCost;
+        if (grossProfit > 0 && irRate > 0) {
+          estTax = Math.round(grossProfit * (irRate / 100));
+        }
+      } else {
+        grossVal = Math.round(currentQty * unitPrice);
+      }
+    }
+
+    const netVal = grossVal - estTax;
+    const unrealizedPnl = currentQty > 1e-8 ? grossVal - currentCost : 0;
+    const unrealizedPct = currentCost > 0 ? (unrealizedPnl / currentCost) * 100 : 0;
+    const yocPct = currentCost > 0 ? (totalDivsAsset / currentCost) * 100 : 0;
+
+    positions.push({
+      asset,
+      hasOpenPosition: currentQty > 1e-8,
+      currentQty,
+      currentCostBasisCents: currentCost,
+      avgBuyPriceCents: avgBuy,
+      avgSellPriceCents: avgSell,
+      currentUnitPriceCents: unitPrice,
+      currentGrossValueCents: grossVal,
+      estimatedTaxCents: estTax,
+      currentNetValueCents: netVal,
+      unrealizedPnlCents: unrealizedPnl,
+      unrealizedPnlPct: unrealizedPct,
+      realizedPnlCents: realizedPnl,
+      totalDividendsCents: totalDivsAsset,
+      yieldOnCostPct: yocPct,
+      daysHeld,
+      irRatePct: irRate,
+    });
+
+    const cur = asset.currency || baseCur;
+    const grossConv = conv(grossVal, cur);
+    totalCost += conv(currentCost, cur);
+    totalGross += grossConv;
+    totalTax += conv(estTax, cur);
+    totalNet += conv(netVal, cur);
+    totalRealized += conv(realizedPnl, cur);
+    totalDivs += conv(totalDivsAsset, cur);
+
+    if (currentQty > 1e-8) {
+      byClass[asset.assetClass] = (byClass[asset.assetClass] || 0) + grossConv;
+      const accKey = accountFilterId || asset.accountId || "outros";
+      byAccount[accKey] = (byAccount[accKey] || 0) + grossConv;
+    }
+  }
+
+  positions.sort((a, b) => {
+    if (a.hasOpenPosition !== b.hasOpenPosition) return a.hasOpenPosition ? -1 : 1;
+    return b.currentGrossValueCents - a.currentGrossValueCents;
+  });
+
+  const totalUnrealized = totalGross - totalCost;
+  const totalUnrealizedPct = totalCost > 0 ? (totalUnrealized / totalCost) * 100 : 0;
+  return {
+    positions,
+    totalCostBasisCents: totalCost,
+    totalMarketValueGrossCents: totalGross,
+    totalEstimatedTaxCents: totalTax,
+    totalMarketValueNetCents: totalNet,
+    totalUnrealizedPnlCents: totalUnrealized,
+    totalUnrealizedPnlPct: totalUnrealizedPct,
+    totalRealizedPnlCents: totalRealized,
+    totalDividendsCents: totalDivs,
+    byClass,
+    byAccount,
+    asOfIso,
+  };
+}
+
 async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
   if (name === "openmoney_get_financial_overview" || name === "openmoney_list_accounts") {
     const { db } = await loadDecryptedUserDatabase(env, userId);
@@ -2323,15 +2791,21 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     }
     const monthNet = monthIncome + monthExpense;
 
+    const portfolio = computePortfolioJs(db);
+    const baseCur = db.baseCurrency || "BRL";
+    const consolidatedNetWorth = totalRealNetWorth + portfolio.totalMarketValueGrossCents;
+
     return (
       `### Resumo Financeiro OpenMoney (${targetMonth})\n\n` +
       `> **Nota de Saldo:** Quando o usuário perguntar o **saldo atual / saldo do dia** de uma conta, utilize SEMPRE o **Saldo Atual do Dia (Conciliado)**, que soma apenas o saldo inicial e as transações já conciliadas (\`rec: true\`). O **Saldo Previsto no Mês** inclui também lançamentos pendentes (não conciliados) até o fim de ${targetMonth}.\n\n` +
-      `- **Patrimônio Líquido Atual (Conciliado):** ${formatCurrencyCents(totalRealNetWorth, db.baseCurrency || "BRL")}\n` +
-      `- **Patrimônio Líquido Previsto no Mês (com pendentes):** ${formatCurrencyCents(totalPredNetWorth, db.baseCurrency || "BRL")}\n\n` +
+      `- **Caixa Líquido Atual (Conciliado):** ${formatCurrencyCents(totalRealNetWorth, baseCur)}\n` +
+      `- **Carteira de Investimentos (Bruto):** ${formatCurrencyCents(portfolio.totalMarketValueGrossCents, baseCur)}\n` +
+      `- **Patrimônio Consolidado (Caixa + Investimentos):** ${formatCurrencyCents(consolidatedNetWorth, baseCur)}\n` +
+      `- **Caixa Previsto no Mês (com pendentes):** ${formatCurrencyCents(totalPredNetWorth, baseCur)}\n\n` +
       `#### Movimentação do Mês (${targetMonth}):\n` +
-      `- **Receitas do Mês:** ${formatCurrencyCents(monthIncome, db.baseCurrency || "BRL")} (Conciliadas: ${formatCurrencyCents(monthReconciledIncome, db.baseCurrency || "BRL")})\n` +
-      `- **Despesas do Mês:** ${formatCurrencyCents(monthExpense, db.baseCurrency || "BRL")} (Conciliadas: ${formatCurrencyCents(monthReconciledExpense, db.baseCurrency || "BRL")})\n` +
-      `- **Resultado do Mês:** ${formatCurrencyCents(monthNet, db.baseCurrency || "BRL")} (${monthNet >= 0 ? "Superávit" : "Déficit"})\n\n` +
+      `- **Receitas do Mês:** ${formatCurrencyCents(monthIncome, baseCur)} (Conciliadas: ${formatCurrencyCents(monthReconciledIncome, baseCur)})\n` +
+      `- **Despesas do Mês:** ${formatCurrencyCents(monthExpense, baseCur)} (Conciliadas: ${formatCurrencyCents(monthReconciledExpense, baseCur)})\n` +
+      `- **Resultado do Mês:** ${formatCurrencyCents(monthNet, baseCur)} (${monthNet >= 0 ? "Superávit" : "Déficit"})\n\n` +
       `#### Contas & Cartões Ativos:\n${accountsSummary || "Nenhuma conta cadastrada."}`
     );
   }
@@ -2905,6 +3379,297 @@ async function executeMcpTool(name, args, userId, permissions, env, tokenId) {
     return report;
   }
 
+  if (name === "openmoney_get_investments_overview") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const baseCur = db.baseCurrency || "BRL";
+    let accountFilterId = null;
+    if (args.accountId) {
+      const q = String(args.accountId).toLowerCase();
+      const matched = accounts.find(
+        (a) => a.id === args.accountId || a.name.toLowerCase().includes(q)
+      );
+      if (!matched) return `Conta/corretora não encontrada: "${args.accountId}".`;
+      accountFilterId = matched.id;
+    }
+
+    const portfolio = computePortfolioJs(db, { accountFilterId });
+    const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+    const { realBalances } = computeAccountBalancesJs(db, brNow.toISOString().slice(0, 7));
+    let investCash = 0;
+    for (const a of accounts) {
+      if (accountFilterId) {
+        if (a.id === accountFilterId) investCash += realBalances[a.id] || 0;
+      } else if (a.type === "Investimento" && !a.inactive) {
+        investCash += realBalances[a.id] || 0;
+      }
+    }
+
+    const openPos = portfolio.positions.filter((p) => p.hasOpenPosition && !p.asset.inactive);
+    let report = `### Visão Geral da Carteira de Investimentos (${portfolio.asOfIso})\n\n`;
+    report += `- **Patrimônio em Investimentos (Caixa + Carteira Bruta):** ${formatCurrencyCents(investCash + portfolio.totalMarketValueGrossCents, baseCur)}\n`;
+    report += `- **Caixa Livre em Corretoras:** ${formatCurrencyCents(investCash, baseCur)}\n`;
+    report += `- **Aplicado (Custo):** ${formatCurrencyCents(portfolio.totalCostBasisCents, baseCur)}\n`;
+    report += `- **Valor Atual Bruto:** ${formatCurrencyCents(portfolio.totalMarketValueGrossCents, baseCur)}\n`;
+    report += `- **IR Estimado (Renda Fixa):** ${formatCurrencyCents(portfolio.totalEstimatedTaxCents, baseCur)} | **Líquido Estimado:** ${formatCurrencyCents(portfolio.totalMarketValueNetCents, baseCur)}\n`;
+    report += `- **Rentabilidade Aberta (Bruta):** ${formatCurrencyCents(portfolio.totalUnrealizedPnlCents, baseCur)} (${portfolio.totalUnrealizedPnlPct.toFixed(2)}%)\n`;
+    report += `- **Lucro Realizado + Proventos:** ${formatCurrencyCents(portfolio.totalRealizedPnlCents + portfolio.totalDividendsCents, baseCur)} (Realiz.: ${formatCurrencyCents(portfolio.totalRealizedPnlCents, baseCur)} | Prov.: ${formatCurrencyCents(portfolio.totalDividendsCents, baseCur)})\n\n`;
+
+    const classEntries = Object.entries(portfolio.byClass).sort((a, b) => b[1] - a[1]);
+    if (classEntries.length > 0 && portfolio.totalMarketValueGrossCents > 0) {
+      report += `#### Alocação por Classe:\n`;
+      for (const [cls, val] of classEntries) {
+        const pct = (val / portfolio.totalMarketValueGrossCents) * 100;
+        report += `- **${INVEST_CLASS_LABELS_JS[cls] || cls}:** ${formatCurrencyCents(val, baseCur)} (${pct.toFixed(1)}%)\n`;
+      }
+      report += `\n`;
+    }
+
+    // Insights automáticos
+    const insights = [];
+    if (openPos.length > 0 && portfolio.totalMarketValueGrossCents > 0) {
+      const top = openPos[0];
+      const topPct = (top.currentGrossValueCents / portfolio.totalMarketValueGrossCents) * 100;
+      if (topPct >= 25) {
+        insights.push(`**Concentração elevada:** \`${top.asset.ticker}\` representa **${topPct.toFixed(1)}%** da carteira.`);
+      }
+      const byPnl = [...openPos].sort((a, b) => b.unrealizedPnlPct - a.unrealizedPnlPct);
+      const best = byPnl[0];
+      const worst = byPnl[byPnl.length - 1];
+      if (best && best.unrealizedPnlPct > 0) {
+        insights.push(`**Maior alta:** \`${best.asset.ticker}\` com **+${best.unrealizedPnlPct.toFixed(2)}%** (${formatCurrencyCents(best.unrealizedPnlCents, best.asset.currency || baseCur)}).`);
+      }
+      if (worst && worst.unrealizedPnlPct < 0) {
+        insights.push(`**Maior queda:** \`${worst.asset.ticker}\` com **${worst.unrealizedPnlPct.toFixed(2)}%** (${formatCurrencyCents(worst.unrealizedPnlCents, worst.asset.currency || baseCur)}).`);
+      }
+      for (const p of openPos) {
+        if (p.asset.maturityDate) {
+          const dMat = new Date(`${p.asset.maturityDate}T00:00:00Z`);
+          const dNow = new Date(`${portfolio.asOfIso}T00:00:00Z`);
+          const diffDays = Math.ceil((dMat.getTime() - dNow.getTime()) / 86400000);
+          if (diffDays >= 0 && diffDays <= 90) {
+            insights.push(`**Vencimento próximo:** \`${p.asset.ticker}\` vence em **${diffDays} dia(s)** (${p.asset.maturityDate}).`);
+          }
+        }
+        if ((p.asset.assetClass === "fixedIncome" || p.asset.assetClass === "tesouro") && !p.asset.taxExempt) {
+          for (const threshold of [181, 361, 721]) {
+            const rem = threshold - p.daysHeld;
+            if (rem > 0 && rem <= 30) {
+              const nextRate = threshold === 181 ? "20,0%" : threshold === 361 ? "17,5%" : "15,0%";
+              insights.push(`**Alíquota IR vai cair:** \`${p.asset.ticker}\` cai de ${p.irRatePct.toFixed(1)}% para **${nextRate}** em **${rem} dia(s)**.`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (insights.length > 0) {
+      report += `#### Insights Automáticos:\n${insights.map((i) => `- ${i}`).join("\n")}\n`;
+    }
+    return report;
+  }
+
+  if (name === "openmoney_list_investment_positions") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const baseCur = db.baseCurrency || "BRL";
+    let accountFilterId = null;
+    if (args.accountId) {
+      const q = String(args.accountId).toLowerCase();
+      const matched = accounts.find(
+        (a) => a.id === args.accountId || a.name.toLowerCase().includes(q)
+      );
+      if (!matched) return `Conta/corretora não encontrada: "${args.accountId}".`;
+      accountFilterId = matched.id;
+    }
+
+    const portfolio = computePortfolioJs(db, { accountFilterId });
+    let list = portfolio.positions.filter((p) => !p.asset.inactive);
+    if (!args.includeZero) list = list.filter((p) => p.hasOpenPosition);
+    if (args.assetClass) {
+      const cls = String(args.assetClass).toLowerCase();
+      list = list.filter((p) => String(p.asset.assetClass || "").toLowerCase() === cls);
+    }
+    if (args.search) {
+      const q = String(args.search).toLowerCase();
+      list = list.filter(
+        (p) =>
+          String(p.asset.ticker || "").toLowerCase().includes(q) ||
+          String(p.asset.name || "").toLowerCase().includes(q)
+      );
+    }
+    if (list.length === 0) return "Nenhuma posição encontrada com os filtros informados.";
+
+    const lines = list.map((p) => {
+      const cur = p.asset.currency || baseCur;
+      const irInfo = p.estimatedTaxCents > 0
+        ? ` | Líq.: ${formatCurrencyCents(p.currentNetValueCents, cur)} (IR ${p.irRatePct.toFixed(1)}%)`
+        : "";
+      return `- **${p.asset.ticker}** (${INVEST_CLASS_LABELS_JS[p.asset.assetClass] || p.asset.assetClass}) | Qtde: ${p.currentQty} | PM Compra: ${formatCurrencyCents(p.avgBuyPriceCents, cur)} | Preço: ${formatCurrencyCents(p.currentUnitPriceCents, cur)} | Bruto: **${formatCurrencyCents(p.currentGrossValueCents, cur)}**${irInfo} | Rentab.: ${formatCurrencyCents(p.unrealizedPnlCents, cur)} (${p.unrealizedPnlPct.toFixed(2)}%) | Prov.: ${formatCurrencyCents(p.totalDividendsCents, cur)}`;
+    });
+    return `### Posições da Carteira (${list.length}):\n\n${lines.join("\n")}`;
+  }
+
+  if (name === "openmoney_list_investment_operations") {
+    const { db } = await loadDecryptedUserDatabase(env, userId);
+    const assets = Array.isArray(db.investAssets) ? db.investAssets : [];
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const assetMap = new Map(assets.map((a) => [a.id, a]));
+    const accMap = new Map(accounts.map((a) => [a.id, a]));
+    let ops = Array.isArray(db.investOps) ? [...db.investOps] : [];
+
+    if (args.ticker) {
+      const q = String(args.ticker).toLowerCase();
+      ops = ops.filter((op) => {
+        const a = assetMap.get(op.assetId);
+        return a && (String(a.ticker || "").toLowerCase().includes(q) || String(a.name || "").toLowerCase().includes(q));
+      });
+    }
+    if (args.type) {
+      const tp = String(args.type).toLowerCase();
+      ops = ops.filter((op) => String(op.type || "").toLowerCase() === tp);
+    }
+    if (args.accountId) {
+      const q = String(args.accountId).toLowerCase();
+      ops = ops.filter((op) => {
+        if (op.accountId === args.accountId) return true;
+        const acc = accMap.get(op.accountId);
+        return acc && acc.name.toLowerCase().includes(q);
+      });
+    }
+    if (args.startDate) ops = ops.filter((op) => op.date && op.date >= args.startDate);
+    if (args.endDate) ops = ops.filter((op) => op.date && op.date <= args.endDate);
+
+    ops.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const limit = Math.min(Math.max(1, Number(args.limit || 35)), 100);
+    const sliced = ops.slice(0, limit);
+    if (sliced.length === 0) return "Nenhuma operação encontrada com os filtros informados.";
+
+    const lines = sliced.map((op) => {
+      const a = assetMap.get(op.assetId);
+      const acc = accMap.get(op.accountId);
+      const cur = a?.currency || db.baseCurrency || "BRL";
+      const taxStr = op.taxCents > 0 ? ` | IR: ${formatCurrencyCents(op.taxCents, cur)}` : "";
+      const memoStr = op.memo ? ` — "${op.memo}"` : "";
+      return `- **${op.date}** | ${INVEST_OP_LABELS_JS[op.type] || op.type} | **${a?.ticker || op.assetId}** | Qtde: ${op.quantity} × ${formatCurrencyCents(op.unitPriceCents, cur)} = **${formatCurrencyCents(op.totalCents, cur)}**${taxStr} | ${acc?.name || op.accountId}${memoStr}`;
+    });
+    return `### Operações de Investimentos (${sliced.length} de ${ops.length}):\n\n${lines.join("\n")}`;
+  }
+
+  if (name === "openmoney_create_investment_operation") {
+    if (permissions === "read_only") {
+      throw new Error("Token de acesso possui permissão apenas de leitura (read_only).");
+    }
+    const { db, preferences } = await loadDecryptedUserDatabase(env, userId);
+    const assets = Array.isArray(db.investAssets) ? db.investAssets : [];
+    const accounts = Array.isArray(db.accounts) ? db.accounts : [];
+    const qAsset = String(args.asset || "").trim().toLowerCase();
+    const asset = assets.find(
+      (a) =>
+        a.id === args.asset ||
+        String(a.ticker || "").toLowerCase() === qAsset ||
+        String(a.name || "").toLowerCase().includes(qAsset)
+    );
+    if (!asset) throw new Error(`Ativo não encontrado: "${args.asset}".`);
+
+    const targetAcc = args.accountId
+      ? accounts.find(
+          (a) =>
+            a.id === args.accountId ||
+            a.name.toLowerCase() === String(args.accountId).toLowerCase()
+        )
+      : accounts.find((a) => a.id === asset.accountId);
+    if (!targetAcc) throw new Error("Conta/corretora não encontrada.");
+
+    const opType = String(args.type || "buy").trim();
+    const qty = Number(args.quantity || 0);
+    const unitCents = Math.round(Number(args.unitPrice || 0) * 100);
+    const feesCents = Math.round(Number(args.fees || 0) * 100);
+    const taxCents = Math.round(Number(args.tax || 0) * 100);
+    if (qty <= 0 || unitCents < 0) throw new Error("Quantidade e preço unitário inválidos.");
+
+    const date = (args.date || new Date().toISOString().slice(0, 10)).trim();
+    const memo = String(args.memo || "").trim();
+    const totalCents =
+      opType === "buy"
+        ? Math.round(qty * unitCents) + feesCents
+        : opType === "sell"
+        ? Math.max(0, Math.round(qty * unitCents) - feesCents)
+        : Math.round(qty * unitCents);
+
+    const opId = "inv_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+    const op = {
+      id: opId,
+      assetId: asset.id,
+      accountId: targetAcc.id,
+      type: opType,
+      date,
+      quantity: qty,
+      unitPriceCents: unitCents,
+      ...(feesCents ? { feesCents } : {}),
+      ...(taxCents ? { taxCents } : {}),
+      totalCents,
+      ...(memo ? { memo } : {}),
+      createdAt: Date.now() / 1000,
+    };
+
+    if (!Array.isArray(db.investOps)) db.investOps = [];
+    if (!Array.isArray(db.txs)) db.txs = [];
+    const syncChanges = [];
+    const affectCash = args.affectAccountCash !== false;
+    const isIncome = opType === "dividend" || opType === "jcp" || opType === "fiiYield";
+    const isOut = opType === "buy";
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (affectCash && totalCents > 0 && (isOut || isIncome || opType === "sell" || opType === "amortization")) {
+      const cat = isIncome
+        ? (preferences?.investDividendCategory || "Investimentos (+) › Dividendos")
+        : isOut
+        ? "Transferência (-)"
+        : "Transferência (+)";
+      const txId = "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+      const tx = {
+        id: txId,
+        acc: targetAcc.id,
+        date,
+        payee: `${INVEST_OP_LABELS_JS[opType] || opType} ${asset.ticker}`,
+        cat,
+        memo: memo || `Carteira: ${INVEST_OP_LABELS_JS[opType] || opType} de ${asset.ticker}`,
+        amt: isOut ? -Math.abs(totalCents) : Math.abs(totalCents),
+        rec: date <= today,
+        investOpId: opId,
+      };
+      db.txs.push(tx);
+      op.linkedTxId = txId;
+      syncChanges.push({ coll: "txs", id: tx.id, data: tx, deleted: false });
+
+      if (opType === "sell" && taxCents > 0) {
+        const irCat = preferences?.investIrCategory || "Investimentos (-) › IR";
+        const taxTxId = "tx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+        const taxTx = {
+          id: taxTxId,
+          acc: targetAcc.id,
+          date,
+          payee: `IR Resgate ${asset.ticker}`,
+          cat: irCat,
+          memo: `IR retido na fonte · Venda ${asset.ticker}`,
+          amt: -Math.abs(taxCents),
+          rec: date <= today,
+          investOpId: opId,
+        };
+        db.txs.push(taxTx);
+        op.linkedTaxTxId = taxTxId;
+        syncChanges.push({ coll: "txs", id: taxTx.id, data: taxTx, deleted: false });
+      }
+    }
+
+    db.investOps.push(op);
+    syncChanges.push({ coll: "investOps", id: op.id, data: op, deleted: false });
+    await saveDecryptedUserDatabase(env, userId, db, preferences, syncChanges);
+
+    return `Operação registrada: **${INVEST_OP_LABELS_JS[opType] || opType}** de **${qty} ${asset.ticker}** em **${date}** (${formatCurrencyCents(totalCents, asset.currency || db.baseCurrency || "BRL")}) na conta **${targetAcc.name}**.`;
+  }
+
   throw new Error(`Ferramenta desconhecida: ${name}`);
 }
 
@@ -2941,7 +3706,7 @@ async function handleJsonRpcRequest(body, auth, env, origin, sessionId = null) {
         protocolVersion: negotiatedVersion,
         serverInfo: {
           name: "openmoney-cloud",
-          version: "2.5.4",
+          version: "2.6.0",
         },
         capabilities: {
           tools: {
@@ -4075,6 +4840,67 @@ export async function onRequest(context) {
       origin
     );
     res.headers.set("Cache-Control", "public, max-age=1800");
+    return res;
+  }
+
+  if (path === "/api/market/fii-dividends" && request.method === "GET") {
+    const rawTickers = String(url.searchParams.get("tickers") || "").trim();
+    const tickers = rawTickers
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0)
+      .slice(0, 30);
+    const dividends = {};
+    const parseBrToIso = (raw) => {
+      const s = String(raw || "").trim();
+      const parts = s.split("/");
+      if (parts.length !== 3) return null;
+      return `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    };
+    await Promise.all(
+      tickers.map(async (ticker) => {
+        try {
+          const clean = ticker.split(".")[0];
+          const m = clean.match(/^([A-Z]{4})\d{1,2}[A-Z]?$/);
+          const code = m ? m[1] : clean.slice(0, 4);
+          if (!code) return;
+          const b64 = btoa(JSON.stringify({ typeFund: 7, identifierFund: code }));
+          const r = await fetch(
+            `https://sistemaswebb3-listados.b3.com.br/fundsProxy/fundsCall/GetListedSupplementFunds/${b64}`,
+            { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" } }
+          );
+          if (!r.ok) return;
+          const json = await r.json();
+          const list = Array.isArray(json?.cashDividends) ? json.cashDividends : [];
+          const events = [];
+          for (const item of list) {
+            const isin = String(item?.isinCode || item?.assetIssued || "").trim().toUpperCase();
+            if (isin.length >= 9 && !isin.includes("CTF") && isin.includes("R")) continue;
+            const payIso = parseBrToIso(item?.paymentDate);
+            const comIso = parseBrToIso(item?.lastDatePrior) || parseBrToIso(item?.approvedOn) || payIso;
+            const rate = Number(String(item?.rate || "").replace(/\./g, "").replace(",", "."));
+            if (!payIso || !comIso || !Number.isFinite(rate) || rate <= 0) continue;
+            events.push({
+              ticker,
+              paymentDateIso: payIso,
+              lastDatePriorIso: comIso,
+              ratePerQuota: rate,
+              label: String(item?.label || "RENDIMENTO").trim(),
+              relatedTo: String(item?.relatedTo || "").trim(),
+              isinCode: isin,
+            });
+          }
+          events.sort((a, b) => b.paymentDateIso.localeCompare(a.paymentDateIso));
+          if (events.length > 0) dividends[ticker] = events;
+        } catch (_) {}
+      })
+    );
+    const res = jsonResponse(
+      { dividends, updatedAt: new Date().toISOString() },
+      200,
+      origin
+    );
+    res.headers.set("Cache-Control", "public, max-age=3600");
     return res;
   }
 

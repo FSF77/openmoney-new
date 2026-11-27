@@ -16,6 +16,28 @@ class QuoteFetchResult {
   });
 }
 
+class FiiDividendEvent {
+  final String ticker;
+  final String paymentDateIso;
+  final String lastDatePriorIso;
+  final double ratePerQuota;
+  final String label;
+  final String relatedTo;
+  final String isinCode;
+
+  const FiiDividendEvent({
+    required this.ticker,
+    required this.paymentDateIso,
+    required this.lastDatePriorIso,
+    required this.ratePerQuota,
+    required this.label,
+    required this.relatedTo,
+    required this.isinCode,
+  });
+
+  bool get isAmortization => label.toUpperCase().contains('AMORT');
+}
+
 class InvestmentQuoteService {
   static String _workerBaseUrl() {
     final base = CloudSyncService.instance.apiBaseUrl.trim();
@@ -755,5 +777,140 @@ class InvestmentQuoteService {
       manual: false,
       cdiDailySeries: cdiSeries,
     );
+  }
+
+  /// Extrai o código base de 4 letras do FII (ex.: `BTLG11` -> `BTLG`).
+  static String fiiIdentifierCode(String ticker) {
+    final clean = ticker.trim().toUpperCase().split('.').first;
+    final m = RegExp(r'^([A-Z]{4})\d{1,2}[A-Z]?$').firstMatch(clean);
+    if (m != null) return m.group(1)!;
+    return clean.length >= 4 ? clean.substring(0, 4) : clean;
+  }
+
+  static String? _parseBrDateToIso(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return null;
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return s;
+    final parts = s.split('/');
+    if (parts.length != 3) return null;
+    final y = parts[2].trim().padLeft(4, '0');
+    final m = parts[1].trim().padLeft(2, '0');
+    final d = parts[0].trim().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  /// Faz parse do JSON público de proventos de FIIs da B3 (`GetListedSupplementFunds`).
+  static List<FiiDividendEvent> parseB3FiiDividendsJson(
+    String ticker,
+    String? body,
+  ) {
+    if (body == null || body.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return const [];
+      final list = decoded['cashDividends'];
+      if (list is! List) return const [];
+
+      final out = <FiiDividendEvent>[];
+      for (final item in list) {
+        if (item is! Map) continue;
+        final isin = (item['isinCode'] ?? item['assetIssued'] ?? '').toString().trim().toUpperCase();
+        // Ignora recibos de subscrição (ex.: BRBTLGR29M15) mantendo cota principal (CTF)
+        if (isin.length >= 9 && !isin.contains('CTF') && isin.contains('R')) {
+          continue;
+        }
+        final payIso = _parseBrDateToIso(item['paymentDate']?.toString());
+        final comIso = _parseBrDateToIso(item['lastDatePrior']?.toString()) ??
+            _parseBrDateToIso(item['approvedOn']?.toString()) ??
+            payIso;
+        final rawRate = item['rate']?.toString().replaceAll('.', '').replaceAll(',', '.').trim();
+        final rate = double.tryParse(rawRate ?? '');
+        if (payIso == null || comIso == null || rate == null || rate <= 0) {
+          continue;
+        }
+        out.add(FiiDividendEvent(
+          ticker: ticker.trim().toUpperCase(),
+          paymentDateIso: payIso,
+          lastDatePriorIso: comIso,
+          ratePerQuota: rate,
+          label: item['label']?.toString().trim() ?? 'RENDIMENTO',
+          relatedTo: item['relatedTo']?.toString().trim() ?? '',
+          isinCode: isin,
+        ));
+      }
+      out.sort((a, b) => b.paymentDateIso.compareTo(a.paymentDateIso));
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Busca dividendos/rendimentos anunciados na B3 para os FIIs informados.
+  static Future<Map<String, List<FiiDividendEvent>>> fetchFiiDividends(
+    List<InvestAsset> assets,
+  ) async {
+    final fiis = assets
+        .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
+        .toList();
+    if (fiis.isEmpty) return {};
+
+    final results = <String, List<FiiDividendEvent>>{};
+    if (kIsWeb) {
+      final tickers = fiis.map((a) => a.ticker.trim().toUpperCase()).toSet().join(',');
+      final uri = Uri.parse(
+        '${_workerBaseUrl()}/api/market/fii-dividends?tickers=${Uri.encodeQueryComponent(tickers)}',
+      );
+      final body = await _httpGetText(uri);
+      if (body != null) {
+        try {
+          final decoded = jsonDecode(body);
+          if (decoded is Map && decoded['dividends'] is Map) {
+            final divs = decoded['dividends'] as Map;
+            for (final a in fiis) {
+              final rawList = divs[a.ticker.trim().toUpperCase()];
+              if (rawList is List) {
+                results[a.id] = rawList
+                    .whereType<Map>()
+                    .map((m) => FiiDividendEvent(
+                          ticker: a.ticker.trim().toUpperCase(),
+                          paymentDateIso: m['paymentDateIso']?.toString() ?? '',
+                          lastDatePriorIso: m['lastDatePriorIso']?.toString() ?? '',
+                          ratePerQuota: (m['ratePerQuota'] as num?)?.toDouble() ?? 0.0,
+                          label: m['label']?.toString() ?? 'RENDIMENTO',
+                          relatedTo: m['relatedTo']?.toString() ?? '',
+                          isinCode: m['isinCode']?.toString() ?? '',
+                        ))
+                    .where((e) => e.paymentDateIso.isNotEmpty && e.ratePerQuota > 0)
+                    .toList();
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      return results;
+    }
+
+    const chunkSize = 5;
+    for (var i = 0; i < fiis.length; i += chunkSize) {
+      final chunk = fiis.sublist(
+        i,
+        i + chunkSize > fiis.length ? fiis.length : i + chunkSize,
+      );
+      await Future.wait(chunk.map((asset) async {
+        final code = fiiIdentifierCode(asset.ticker);
+        if (code.isEmpty) return;
+        final payload = jsonEncode({'typeFund': 7, 'identifierFund': code});
+        final b64 = base64Encode(utf8.encode(payload));
+        final uri = Uri.parse(
+          'https://sistemaswebb3-listados.b3.com.br/fundsProxy/fundsCall/GetListedSupplementFunds/$b64',
+        );
+        final body = await _httpGetText(uri);
+        final events = parseB3FiiDividendsJson(asset.ticker, body);
+        if (events.isNotEmpty) {
+          results[asset.id] = events;
+        }
+      }));
+    }
+    return results;
   }
 }

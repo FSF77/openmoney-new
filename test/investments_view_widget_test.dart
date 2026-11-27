@@ -89,11 +89,12 @@ void main() {
     expect(t.takeException(), isNull);
     expect(find.text('Investimentos'), findsOneWidget);
 
-    // Todos os 6 botões superiores com Tooltip presentes
+    // Todos os 7 botões superiores com Tooltip presentes
     expect(find.byTooltip('Nova Operação'), findsOneWidget);
     expect(find.byTooltip('Novo Ativo'), findsOneWidget);
     expect(find.byTooltip('Importar B3'), findsOneWidget);
     expect(find.byTooltip('Atualizar Cotações'), findsOneWidget);
+    expect(find.byTooltip('Agendar Dividendos FII (B3)'), findsOneWidget);
     expect(find.byTooltip('Exportar PDF'), findsOneWidget);
     expect(find.byTooltip('Exportar CSV'), findsOneWidget);
 

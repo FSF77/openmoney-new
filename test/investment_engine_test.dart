@@ -271,7 +271,7 @@ void main() {
       expect(linkedTx.cat, 'Transferência (-)');
       expect(isTransferTransaction(linkedTx), isTrue);
 
-      // Provento usa categoria configurável padrão 'Investimentos (-) › Rendimentos'
+      // Provento usa categoria configurável padrão 'Investimentos (+) › Dividendos'
       store.addInvestOperation(
         InvestOperation(
           assetId: 'vale3',
@@ -284,7 +284,7 @@ void main() {
         ),
         affectAccountCash: true,
       );
-      expect(store.db.txs.last.cat, 'Investimentos (-) › Rendimentos');
+      expect(store.db.txs.last.cat, 'Investimentos (+) › Dividendos');
       expect(store.balance(invAcc), 425000);
     });
 
@@ -814,6 +814,137 @@ void main() {
       expect(parsed['ipca:2050']?.puVenda, closeTo(833.28, 1e-6));
       expect(parsed['renda_mais:2049']?.puVenda, closeTo(145.20, 1e-6));
       expect(parsed['renda_mais:2030']?.puVenda, closeTo(145.20, 1e-6));
+    });
+
+    test('parseB3FiiDividendsJson, openQtyByAccountOnDate e syncAndScheduleFiiDividends sem duplicar', () async {
+      const sampleJson = '''
+      {
+        "cashDividends": [
+          {
+            "assetIssued": "BRBTLGCTF000",
+            "paymentDate": "25/11/2026",
+            "rate": "0,81000000000",
+            "relatedTo": "Outubro-2026/2026",
+            "approvedOn": "13/11/2026",
+            "isinCode": "BRBTLGCTF000",
+            "label": "RENDIMENTO",
+            "lastDatePrior": "13/11/2026"
+          },
+          {
+            "assetIssued": "BRBTLGR29M15",
+            "paymentDate": "25/11/2026",
+            "rate": "0,55738698200",
+            "relatedTo": "Outubro-2026/2026",
+            "approvedOn": "13/11/2026",
+            "isinCode": "BRBTLGR29M15",
+            "label": "RENDIMENTO",
+            "lastDatePrior": "13/11/2026"
+          }
+        ]
+      }
+      ''';
+      final events =
+          InvestmentQuoteService.parseB3FiiDividendsJson('BTLG11', sampleJson);
+      expect(events.length, 1); // Ignora recibo BRBTLGR29M15
+      expect(events.single.paymentDateIso, '2026-11-25');
+      expect(events.single.lastDatePriorIso, '2026-11-13');
+      expect(events.single.ratePerQuota, closeTo(0.81, 1e-6));
+
+      final store = MoneyStore(autoBoot: false);
+      store.db = Database(
+        accounts: [
+          Account(id: 'xp', name: 'XP', type: 'Investimento', opening: 0),
+        ],
+      );
+      final btlg = InvestAsset(
+        id: 'btlg',
+        ticker: 'BTLG11',
+        name: 'BTG Pactual Logística',
+        assetClass: InvestAssetClass.fii,
+        accountId: 'xp',
+      );
+      store.addOrUpdateInvestAsset(btlg);
+      store.addInvestOperation(
+        InvestOperation(
+          id: 'buy_before',
+          assetId: 'btlg',
+          accountId: 'xp',
+          type: InvestOpType.buy,
+          date: '2026-11-10',
+          quantity: 100,
+          unitPriceCents: 10000,
+          totalCents: 1000000,
+        ),
+        affectAccountCash: false,
+      );
+      // Compra após Data-Com (13/11) não deve entrar no cálculo do dividendo
+      store.addInvestOperation(
+        InvestOperation(
+          id: 'buy_after',
+          assetId: 'btlg',
+          accountId: 'xp',
+          type: InvestOpType.buy,
+          date: '2026-11-18',
+          quantity: 50,
+          unitPriceCents: 10000,
+          totalCents: 500000,
+        ),
+        affectAccountCash: false,
+      );
+
+      final qtyOnCom = InvestmentEngine.openQtyByAccountOnDate(
+        assetId: 'btlg',
+        ops: store.db.investOps,
+        asOfDateIso: '2026-11-13',
+      );
+      expect(qtyOnCom['xp'], 100);
+
+      final futurePay = DateTime.now().add(const Duration(days: 5));
+      final futurePayIso =
+          '${futurePay.year}-${futurePay.month.toString().padLeft(2, '0')}-${futurePay.day.toString().padLeft(2, '0')}';
+
+      final res1 = await store.syncAndScheduleFiiDividends(
+        preloadedEvents: {
+          'btlg': [
+            FiiDividendEvent(
+              ticker: 'BTLG11',
+              paymentDateIso: futurePayIso,
+              lastDatePriorIso: '2026-11-13',
+              ratePerQuota: 0.81,
+              label: 'RENDIMENTO',
+              relatedTo: 'Outubro-2026/2026',
+              isinCode: 'BRBTLGCTF000',
+            ),
+          ],
+        },
+      );
+      expect(res1.scheduledCount, 1);
+      expect(store.investDividendCategory, 'Investimentos (+) › Dividendos');
+      final divOp = store.db.investOps
+          .firstWhere((o) => o.type == InvestOpType.fiiYield);
+      expect(divOp.totalCents, 8100); // 100 cotas * 0,81
+      final divTx = store.db.txs.firstWhere((t) => t.id == divOp.linkedTxId);
+      expect(divTx.cat, 'Investimentos (+) › Dividendos');
+      expect(divTx.rec, isFalse);
+
+      // Segunda execução deduplica e não agenda novamente
+      final res2 = await store.syncAndScheduleFiiDividends(
+        preloadedEvents: {
+          'btlg': [
+            FiiDividendEvent(
+              ticker: 'BTLG11',
+              paymentDateIso: futurePayIso,
+              lastDatePriorIso: '2026-11-13',
+              ratePerQuota: 0.81,
+              label: 'RENDIMENTO',
+              relatedTo: 'Outubro-2026/2026',
+              isinCode: 'BRBTLGCTF000',
+            ),
+          ],
+        },
+      );
+      expect(res2.scheduledCount, 0);
+      expect(res2.skippedCount, 1);
     });
   });
 }

@@ -576,7 +576,7 @@ class MoneyStore extends ChangeNotifier {
   bool dashboardAccountsShowActive = true;
   bool dashboardAccountsShowZeroBalance = true;
   bool dashboardInvestmentsShowZeroBalance = true;
-  String investDividendCategory = 'Investimentos (-) › Rendimentos';
+  String investDividendCategory = 'Investimentos (+) › Dividendos';
   String investIrCategory = 'Investimentos (-) › IR';
   bool dashboardCardsShowZeroBalance = true;
   List<String> dashboardWidgetsOrder = [
@@ -8163,6 +8163,7 @@ class MoneyStore extends ChangeNotifier {
     bool affectAccountCash = true,
     String? dividendCategory,
     String? irCategory,
+    bool? forceReconciled,
   }) {
     InvestOperation finalOp = op;
     if (affectAccountCash &&
@@ -8179,6 +8180,9 @@ class MoneyStore extends ChangeNotifier {
           (dividendCategory != null && dividendCategory.trim().isNotEmpty)
               ? dividendCategory.trim()
               : investDividendCategory;
+      if (isIncome) {
+        ensureCategoryPath(effDivCat, type: 'Receita');
+      }
       final cat = isIncome
           ? effDivCat
           : (isOut ? 'Transferência (-)' : 'Transferência (+)');
@@ -8194,7 +8198,7 @@ class MoneyStore extends ChangeNotifier {
             ? op.memo
             : 'Carteira: ${op.type.label} de $ticker',
         amt: signedAmt,
-        rec: op.date.compareTo(todayISO()) <= 0,
+        rec: forceReconciled ?? (op.date.compareTo(todayISO()) <= 0),
         investOpId: op.id,
       );
       db.txs.add(tx);
@@ -8257,6 +8261,9 @@ class MoneyStore extends ChangeNotifier {
           (dividendCategory != null && dividendCategory.trim().isNotEmpty)
               ? dividendCategory.trim()
               : investDividendCategory;
+      if (isIncome) {
+        ensureCategoryPath(effDivCat, type: 'Receita');
+      }
       final cat = isIncome
           ? effDivCat
           : (isOut ? 'Transferência (-)' : 'Transferência (+)');
@@ -8526,6 +8533,105 @@ class MoneyStore extends ChangeNotifier {
       save();
     }
     return updated;
+  }
+
+  /// Consulta dividendos anunciados na B3 para FIIs ativos, calcula `cotas na Data-Com × valor/cota`
+  /// e agenda os proventos ainda não registrados na categoria configurada.
+  Future<({int scheduledCount, int skippedCount, List<String> details})>
+      syncAndScheduleFiiDividends({
+    String? dividendCategory,
+    int lookbackDays = 15,
+    Map<String, List<FiiDividendEvent>>? preloadedEvents,
+  }) async {
+    if (dividendCategory != null && dividendCategory.trim().isNotEmpty) {
+      setInvestDividendCategory(dividendCategory.trim());
+    }
+    ensureCategoryPath(investDividendCategory, type: 'Receita');
+
+    final fiiAssets = db.investAssets
+        .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
+        .toList();
+    if (fiiAssets.isEmpty) {
+      return (scheduledCount: 0, skippedCount: 0, details: const <String>[]);
+    }
+
+    final eventsByAsset =
+        preloadedEvents ?? await InvestmentQuoteService.fetchFiiDividends(fiiAssets);
+
+    final minPayDate = DateTime.now().subtract(Duration(days: lookbackDays));
+    final minPayIso =
+        '${minPayDate.year}-${minPayDate.month.toString().padLeft(2, '0')}-${minPayDate.day.toString().padLeft(2, '0')}';
+    final today = todayISO();
+
+    int scheduled = 0;
+    int skipped = 0;
+    final details = <String>[];
+
+    for (final asset in fiiAssets) {
+      final events = eventsByAsset[asset.id] ?? const <FiiDividendEvent>[];
+      for (final ev in events) {
+        if (ev.paymentDateIso.compareTo(minPayIso) < 0) continue;
+
+        final qtyByAcc = InvestmentEngine.openQtyByAccountOnDate(
+          assetId: asset.id,
+          ops: db.investOps,
+          asOfDateIso: ev.lastDatePriorIso,
+        );
+        if (qtyByAcc.isEmpty) continue;
+
+        final opType = ev.isAmortization
+            ? InvestOpType.amortization
+            : InvestOpType.fiiYield;
+
+        for (final entry in qtyByAcc.entries) {
+          final accId = entry.key;
+          final qty = entry.value;
+          final totalCents = (qty * ev.ratePerQuota * 100.0).round();
+          if (totalCents <= 0) continue;
+
+          final alreadyExists = db.investOps.any((o) =>
+              o.assetId == asset.id &&
+              o.accountId == accId &&
+              o.date == ev.paymentDateIso &&
+              (o.type == InvestOpType.fiiYield ||
+                  o.type == InvestOpType.dividend ||
+                  o.type == InvestOpType.amortization));
+          if (alreadyExists) {
+            skipped++;
+            continue;
+          }
+
+          final rateCents = (ev.ratePerQuota * 100.0).round();
+          final memo =
+              'B3 FII ${ev.relatedTo.isNotEmpty ? "(${ev.relatedTo}) " : ""}· Data-Com ${fmtDate(ev.lastDatePriorIso)} · ${formatInvestQty(qty, InvestAssetClass.fii)} cotas × ${formatCurrency(rateCents, asset.currency)}';
+          addInvestOperation(
+            InvestOperation(
+              assetId: asset.id,
+              accountId: accId,
+              type: opType,
+              date: ev.paymentDateIso,
+              quantity: qty,
+              unitPriceCents: rateCents,
+              totalCents: totalCents,
+              memo: memo,
+            ),
+            affectAccountCash: true,
+            dividendCategory: investDividendCategory,
+            forceReconciled: ev.paymentDateIso.compareTo(today) <= 0 ? false : false,
+          );
+          scheduled++;
+          details.add(
+            '${asset.displayCode} · ${fmtDate(ev.paymentDateIso)} · ${formatCurrency(totalCents, asset.currency)}',
+          );
+        }
+      }
+    }
+
+    return (
+      scheduledCount: scheduled,
+      skippedCount: skipped,
+      details: details,
+    );
   }
 
   @override

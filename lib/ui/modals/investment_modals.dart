@@ -1815,3 +1815,155 @@ Future<bool> confirmDeleteInvestOperation(
   }
   return false;
 }
+
+Future<void> showFiiDividendScheduleModal(
+  BuildContext context,
+  MoneyStore store,
+) async {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final colors = OpenMoneyColors(isDark);
+  final fiiCount = store.db.investAssets
+      .where((a) => !a.inactive && a.assetClass == InvestAssetClass.fii)
+      .length;
+  var selectedCat = store.investDividendCategory;
+  var loading = false;
+  ({int scheduledCount, int skippedCount, List<String> details})? result;
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlgState) => AlertDialog(
+        backgroundColor: colors.surfaceCard,
+        title: Row(
+          children: [
+            Icon(Icons.event_repeat_rounded, color: colors.income, size: 22),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Agendar Dividendos de FIIs (B3)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  fiiCount == 0
+                      ? 'Nenhum FII ativo cadastrado na carteira.'
+                      : 'Consulta os proventos anunciados na B3 para $fiiCount FII(s) ativo(s), multiplica pelas cotas em custódia na Data-Com e agenda na conta da corretora.',
+                  style: TextStyle(fontSize: 12.5, color: colors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                CategorySelectFormField(
+                  store: store,
+                  categoryType: 'Receita',
+                  currentSelection: selectedCat,
+                  labelText: 'Categoria dos Dividendos FII',
+                  allowTransfers: false,
+                  onChanged: (v) {
+                    if (v.trim().isNotEmpty) {
+                      setDlgState(() => selectedCat = v.trim());
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Os lançamentos entram como pendentes na Agenda até a data do pagamento, sem duplicar proventos já registrados.',
+                  style: TextStyle(fontSize: 11, color: colors.textMuted),
+                ),
+                if (result != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colors.income.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.borderGlass),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          result!.scheduledCount > 0
+                              ? '✓ ${result!.scheduledCount} provento(s) agendado(s) (${result!.skippedCount} já existente(s)).'
+                              : 'Nenhum novo provento pendente encontrado (${result!.skippedCount} já existente(s)).',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: result!.scheduledCount > 0
+                                ? colors.income
+                                : colors.textPrimary,
+                          ),
+                        ),
+                        if (result!.details.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          for (final d in result!.details.take(8))
+                            Text(
+                              '• $d',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: loading ? null : () => Navigator.of(ctx).pop(),
+            child: const Text('Fechar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: (loading || fiiCount == 0)
+                ? null
+                : () async {
+                    setDlgState(() => loading = true);
+                    try {
+                      final res = await store.syncAndScheduleFiiDividends(
+                        dividendCategory: selectedCat,
+                      );
+                      if (ctx.mounted) {
+                        setDlgState(() {
+                          result = res;
+                          loading = false;
+                        });
+                      }
+                    } catch (_) {
+                      if (ctx.mounted) {
+                        setDlgState(() => loading = false);
+                      }
+                    }
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.accent,
+              foregroundColor: Colors.white,
+            ),
+            icon: loading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.cloud_download_outlined, size: 16),
+            label: Text(loading ? 'Buscando...' : 'Buscar na B3 e Agendar'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
