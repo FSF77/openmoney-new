@@ -199,4 +199,4 @@ Para facilitar o reconhecimento rápido ao lançar ou conferir despesas e receit
 
 ### 7.3. Onde os ícones aparecem
 - **Telas de Inclusão:** Ao escolher uma categoria no **Novo Lançamento**, **Lançamento Rápido**, **Conciliação OFX**, **Previsões** ou **Investimentos**, o campo e a lista suspensa exibem a miniatura do ícone (e o logo do banco nas transferências).
-- **Telas de Lançamentos e Controle:** Os ícones aparecem ao lado da categoria no **Extrato da Conta**, em **Todos os Lançamentos** (Tabela Datagrid e Lista), em **Limite de Gastos**, **Vencimentos**, **Parcelamentos** e na **Pesquisa Global**.
+- **Telas de Lançamentos e Controle:** Os ícones aparecem ao lado da categoria no **Extrato da Conta**, em **Todos os Lançamentos** (Tabela Datagrid e Lista), na **Agenda**, no **Fluxo de Caixa**, nos **Relatórios**, nas **Previsões**, em **Limite de Gastos**, **Vencimentos**, **Parcelamentos** e na **Pesquisa Global**.

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cash_flow_engine.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
@@ -1065,6 +1066,15 @@ class _CashFlowViewState extends State<CashFlowView> {
                   else
                     const SizedBox(width: 14),
                   const SizedBox(width: 4),
+                  CategoryIconBadge(
+                    store: widget.store,
+                    categoryPath: group.name,
+                    fallbackType: isIncome ? 'Receita' : 'Despesa',
+                    size: 16,
+                    iconSize: 10,
+                    borderRadius: 4.5,
+                  ),
+                  const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       group.name,
@@ -1154,15 +1164,32 @@ class _CashFlowViewState extends State<CashFlowView> {
             _CashFlowRowItem(
               height: _rowHeight(24),
               left: Container(
-                padding: const EdgeInsets.only(left: 30, right: 12),
+                padding: const EdgeInsets.only(left: 26, right: 12),
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  sub.name,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: colors.textSecondary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    CategoryIconBadge(
+                      store: widget.store,
+                      categoryPath: subKey == CashFlowEngine.directSubKey
+                          ? group.name
+                          : '${group.name}$kCategorySep$subKey',
+                      fallbackType: isIncome ? 'Receita' : 'Despesa',
+                      size: 14,
+                      iconSize: 9,
+                      borderRadius: 3.5,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        sub.name,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: colors.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               right: Row(

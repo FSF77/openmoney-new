@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/agenda_models.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/agenda_engine.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/agenda_help_modal.dart';
@@ -1039,13 +1040,13 @@ class _AgendaViewState extends State<AgendaView> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 4,
-              height: 4,
-              decoration: BoxDecoration(
-                color: entry.isOverdue ? colors.expense : dotColor,
-                shape: BoxShape.circle,
-              ),
+            CategoryIconBadge(
+              store: widget.store,
+              categoryPath: entry.category,
+              fallbackType: entry.isIncome ? 'Receita' : 'Despesa',
+              size: 13,
+              iconSize: 8.5,
+              borderRadius: 3.5,
             ),
             const SizedBox(width: 3),
             Expanded(
@@ -1270,14 +1271,14 @@ class _AgendaViewState extends State<AgendaView> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: entry.isDone
-                    ? Colors.grey
-                    : (isIncome ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
-                shape: BoxShape.circle,
+            Opacity(
+              opacity: entry.isDone ? 0.55 : 1.0,
+              child: CategoryIconBadge(
+                store: widget.store,
+                categoryPath: entry.category,
+                fallbackType: isIncome ? 'Receita' : 'Despesa',
+                size: 26,
+                borderRadius: 7,
               ),
             ),
             const SizedBox(width: 10),

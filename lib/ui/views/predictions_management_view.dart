@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../models/prediction_models.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../modals/transaction_modal.dart';
@@ -273,7 +274,13 @@ class _PredictionsManagementViewState extends State<PredictionsManagementView> {
               // Linha 1: Ícone + Nome da Categoria (e métricas se tela larga)
               Row(
                 children: [
-                  Icon(Icons.label, size: 18, color: colors.accent),
+                  CategoryIconBadge(
+                    store: store,
+                    categoryPath: grp.category,
+                    fallbackType: 'Despesa',
+                    size: 24,
+                    borderRadius: 6,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(

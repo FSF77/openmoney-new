@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cash_flow_engine.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/account_multi_select_filter.dart';
@@ -571,6 +572,7 @@ class _ReportsViewState extends State<ReportsView> {
     required String periodKey,
     required bool isAnnual,
   }) {
+    final isIncomeSection = title.toLowerCase().contains('receita');
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -629,6 +631,16 @@ class _ReportsViewState extends State<ReportsView> {
                                 Expanded(
                                   child: Row(
                                     children: [
+                                      CategoryIconBadge(
+                                        store: widget.store,
+                                        categoryPath: g.name,
+                                        fallbackType: isIncomeSection
+                                            ? 'Receita'
+                                            : 'Despesa',
+                                        size: 22,
+                                        borderRadius: 6,
+                                      ),
+                                      const SizedBox(width: 8),
                                       Flexible(
                                         child: Text(
                                           g.name,
@@ -699,9 +711,19 @@ class _ReportsViewState extends State<ReportsView> {
                                 Expanded(
                                   child: Row(
                                     children: [
+                                      CategoryIconBadge(
+                                        store: widget.store,
+                                        categoryPath: fullPath,
+                                        fallbackType: isIncomeSection
+                                            ? 'Receita'
+                                            : 'Despesa',
+                                        size: 16,
+                                        borderRadius: 4.5,
+                                      ),
+                                      const SizedBox(width: 6),
                                       Flexible(
                                         child: Text(
-                                          '↳ ${sub.name}',
+                                          sub.name,
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: colors.textSecondary,
