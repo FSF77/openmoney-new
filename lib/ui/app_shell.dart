@@ -1050,19 +1050,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                 ),
               ),
               Tooltip(
-                message: 'Investimentos',
-                child: IconButton(
-                  icon: Icon(
-                    Icons.candlestick_chart_rounded,
-                    size: 20,
-                    color: widget.store.activeModule == NavModule.investments
-                        ? colors.income
-                        : colors.textSecondary,
-                  ),
-                  onPressed: () => selectModule(NavModule.investments),
-                ),
-              ),
-              Tooltip(
                 message: 'Agenda',
                 child: IconButton(
                   icon: Icon(
@@ -1112,6 +1099,19 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                         : colors.textSecondary,
                   ),
                   onPressed: () => selectModule(NavModule.cashFlow),
+                ),
+              ),
+              Tooltip(
+                message: 'Investimentos',
+                child: IconButton(
+                  icon: Icon(
+                    Icons.candlestick_chart_rounded,
+                    size: 20,
+                    color: widget.store.activeModule == NavModule.investments
+                        ? colors.income
+                        : colors.textSecondary,
+                  ),
+                  onPressed: () => selectModule(NavModule.investments),
                 ),
               ),
               Tooltip(
@@ -1780,12 +1780,6 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   onTap: () => selectModule(NavModule.transactions),
                 ),
                 _SidebarNavTile(
-                  icon: Icons.candlestick_chart_rounded,
-                  label: 'Investimentos',
-                  selected: widget.store.activeModule == NavModule.investments,
-                  onTap: () => selectModule(NavModule.investments),
-                ),
-                _SidebarNavTile(
                   icon: Icons.calendar_month_outlined,
                   label: 'Agenda',
                   selected: widget.store.activeModule == NavModule.agenda,
@@ -1814,6 +1808,12 @@ class _OpenMoneyAppShellState extends State<OpenMoneyAppShell> {
                   label: 'Fluxo de Caixa',
                   selected: widget.store.activeModule == NavModule.cashFlow,
                   onTap: () => selectModule(NavModule.cashFlow),
+                ),
+                _SidebarNavTile(
+                  icon: Icons.candlestick_chart_rounded,
+                  label: 'Investimentos',
+                  selected: widget.store.activeModule == NavModule.investments,
+                  onTap: () => selectModule(NavModule.investments),
                 ),
                 _SidebarNavTile(
                   icon: Icons.pie_chart_outline,
