@@ -5518,6 +5518,16 @@ class MoneyStore extends ChangeNotifier {
       for (final pred in catPreds) {
         final idx = db.txs.indexWhere((t) => t.id == pred.id);
         if (idx == -1) continue;
+        // Se a previsão já está com valor R$ 0,00 (zerada pela rotina ou manualmente
+        // pelo usuário), não faz nenhum ajuste nem recalcula/restaura o saldo.
+        if (db.txs[idx].amt == 0) {
+          final zeroedBase = parseBaseFromMemo(pred.memo) ?? 0;
+          final consumed = zeroedBase < remainingExpensesToAbate
+              ? zeroedBase
+              : remainingExpensesToAbate;
+          remainingExpensesToAbate -= consumed;
+          continue;
+        }
         final base = parseBaseFromMemo(pred.memo) ?? pred.amt.abs();
         final deduction =
             base < remainingExpensesToAbate ? base : remainingExpensesToAbate;
@@ -5623,6 +5633,11 @@ class MoneyStore extends ChangeNotifier {
         exhaustedItems.isEmpty) {
       sections.add(
         'ℹ️ PREVISÕES JÁ ATUALIZADAS:\n${unchangedItems.join("\n\n")}',
+      );
+    }
+    if (sections.isEmpty) {
+      sections.add(
+        'Todas as previsões do período já estão atualizadas ou zeradas (R\$ 0,00). Nenhum ajuste necessário.',
       );
     }
 
@@ -7966,7 +7981,7 @@ class MoneyStore extends ChangeNotifier {
     final tx = db.txs[idx];
     final base = parseBaseFromMemo(tx.memo);
     if (base == null) return;
-    final sign = tx.amt < 0 ? -1 : 1;
+    final sign = tx.amt <= 0 ? -1 : 1;
     tx.amt = sign * base;
     save();
   }

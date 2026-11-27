@@ -198,4 +198,67 @@ void main() {
       isTrue,
     );
   });
+
+  test('previsao com valor R\$ 0 nao sofre nenhum ajuste e nao volta o saldo mesmo que gastos sejam menores que a base', () {
+    final store = MoneyStore(autoBoot: false);
+    store.db = Database(
+      accounts: [
+        Account(id: 'bank', name: 'Banco', type: 'Corrente', opening: 0),
+      ],
+      txs: [
+        // Previsão já com valor 0 (zerada manualmente ou por execução anterior), mas com base de R$ 1.000,00 no memo
+        Transaction(
+          id: 'p_zero',
+          acc: 'bank',
+          date: '2026-11-05',
+          payee: 'Previsão Mercado',
+          cat: 'Mercado',
+          memo: '[Previsão base: R\$ 1.000,00]',
+          amt: 0,
+        ),
+        // Gasto na categoria de apenas R$ 300,00 (ainda haveria R$ 700,00 de saldo teórico)
+        Transaction(
+          id: 'g1',
+          acc: 'bank',
+          date: '2026-11-10',
+          payee: 'Supermercado',
+          cat: 'Mercado',
+          amt: -30000,
+        ),
+        // Outra previsão ativa com saldo > 0 para confirmar que apenas a zerada é ignorada
+        Transaction(
+          id: 'p_ativa',
+          acc: 'bank',
+          date: '2026-11-05',
+          payee: 'Previsão Farmácia',
+          cat: 'Farmácia',
+          memo: '[Previsão base: R\$ 200,00]',
+          amt: -20000,
+        ),
+        Transaction(
+          id: 'g2',
+          acc: 'bank',
+          date: '2026-11-12',
+          payee: 'Drogaria',
+          cat: 'Farmácia',
+          amt: -5000,
+        ),
+      ],
+      predMode: 'month',
+      predMonths: 1,
+    );
+
+    final res = store.adjustPredictions('2026-11');
+
+    // A previsão que estava com R$ 0 permanece exatamente com R$ 0 (não volta para -70000)
+    final predZero = store.db.txs.firstWhere((t) => t.id == 'p_zero');
+    expect(predZero.amt, 0);
+
+    // A previsão ativa de Farmácia foi abatida normalmente de -20000 para -15000
+    final predAtiva = store.db.txs.firstWhere((t) => t.id == 'p_ativa');
+    expect(predAtiva.amt, -15000);
+    expect(res.totalDeductedCents, 5000);
+    expect(res.items.length, 1);
+    expect(res.items.first.payee, 'Previsão Farmácia');
+  });
 }

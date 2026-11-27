@@ -103,8 +103,9 @@ Para evitar que sucessivas execuções do botão de ajuste consumam valores já 
    - A transação tem seu `amt` atualizado para $\text{novoSaldo}$ (respeitando o sinal negativo de despesa).
    - O campo `memo` recebe a tag imutável: `[Previsão base: R$ 1.000,00]`.
 4. Se $\text{novoSaldo} \le 0$:
-   - A previsão é considerada **esgotada** e o seu identificador é incluído em `idsToDelete`, removendo o lançamento da base e alertando o usuário no resumo da execução.
-   > **Nota de Evolução:** A remoção automática ao atingir $\text{novoSaldo} \le 0$ foi posteriormente substituída pela **retenção com saldo zerado (`R$ 0,00` e tag `ESGOTADA`)** para preservar o histórico do planejamento, conforme documentado no [ADR 020](020-predictions-management-view-and-zero-balance-retention.md).
+   - A previsão é considerada **esgotada** e seu valor `amt` passa a `0` (`R$ 0,00`), preservando a tag de base original no `memo`, conforme documentado no [ADR 020](020-predictions-management-view-and-zero-balance-retention.md).
+5. **Imutabilidade de Previsões Já Zeradas (`amt == 0`)**:
+   - Se a previsão já estiver com valor `R$ 0,00` (`tx.amt == 0`) no momento da execução (seja por ter sido zerada pela rotina anteriormente ou por ter sido zerada manualmente pelo usuário), a rotina **não realiza nenhum ajuste nela**, jamais recalculando ou restaurando saldo positivo/negativo mesmo que os gastos atuais da categoria sejam inferiores à base original. A restauração só ocorre se o usuário acionar explicitamente o botão *"Restaurar teto original"* (`restorePredictionBase`).
 
 ---
 
