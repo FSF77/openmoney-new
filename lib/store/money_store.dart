@@ -690,6 +690,7 @@ class MoneyStore extends ChangeNotifier {
   Map<String, List<Transaction>> _cachedTxsByAccount = {};
   Map<String, List<Transaction>> _cachedTxsByMonth = {};
   Map<String, _PayeeCacheEntry> _cachedPayeeSuggestions = {};
+  Map<String, CategoryItem> _cachedCatsByPath = {};
   bool _indexesDirty = true;
 
   Timer? _debounceSaveTimer;
@@ -2149,6 +2150,9 @@ class MoneyStore extends ChangeNotifier {
     _cachedTxsByAccount = byAcc;
     _cachedTxsByMonth = byMonth;
     _cachedPayeeSuggestions = payeeMap;
+    _cachedCatsByPath = {
+      for (final c in db.cats) c.path.toLowerCase(): c,
+    };
     _indexesDirty = false;
   }
 
@@ -3735,6 +3739,13 @@ class MoneyStore extends ChangeNotifier {
       return a.id.compareTo(b.id);
     });
     return list;
+  }
+
+  CategoryItem? categoryByPath(String path) {
+    final clean = path.trim();
+    if (clean.isEmpty) return null;
+    rebuildIndexesIfNeeded();
+    return _cachedCatsByPath[clean.toLowerCase()];
   }
 
   List<CategoryItem> topCategories({String? type}) {
@@ -5672,6 +5683,10 @@ class MoneyStore extends ChangeNotifier {
     required String type,
     bool includeInReports = true,
     bool? blocked,
+    String? icon,
+    String? color,
+    bool updateIcon = false,
+    bool updateColor = false,
   }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Informe o nome da categoria.';
@@ -5680,17 +5695,31 @@ class MoneyStore extends ChangeNotifier {
     }
 
     final cleanParent = (parent != null && parent.isEmpty) ? null : parent;
+    final existing = editingPath != null
+        ? db.cats.where((c) => c.path == editingPath).firstOrNull
+        : null;
     bool? resolvedBlocked = blocked;
     if (resolvedBlocked == null && editingPath != null) {
-      final existing = db.cats.where((c) => c.path == editingPath).firstOrNull;
       resolvedBlocked = existing?.blocked;
     }
+    final String? cleanIcon =
+        (icon != null && icon.trim().isNotEmpty) ? icon.trim() : null;
+    final String? cleanColor =
+        (color != null && color.trim().isNotEmpty) ? color.trim() : null;
+    final String? resolvedIcon = (editingPath == null || updateIcon)
+        ? cleanIcon
+        : existing?.icon;
+    final String? resolvedColor = (editingPath == null || updateColor)
+        ? cleanColor
+        : existing?.color;
     final newItem = CategoryItem(
       name: trimmed,
       parent: cleanParent,
       type: type,
       includeInReports: includeInReports,
       blocked: (resolvedBlocked == true) ? true : null,
+      icon: resolvedIcon,
+      color: resolvedColor,
     );
     final newPath = newItem.path;
 
@@ -5781,6 +5810,7 @@ class MoneyStore extends ChangeNotifier {
     }
 
     db.cats.sort(byCatSort);
+    rebuildIndexes();
     save();
 
     final actionType = editingPath != null ? AuditAction.update : AuditAction.create;
@@ -5851,6 +5881,7 @@ class MoneyStore extends ChangeNotifier {
     }
     db.cats.removeWhere((c) => affected.contains(c.path));
     db.cats.sort(byCatSort);
+    rebuildIndexes();
     save();
 
     AuditLogManager.instance.logAsync(

@@ -1294,7 +1294,7 @@ class CSVImporter {
 class CategoryCSVExporter {
   static String generateCSV(List<CategoryItem> categories) {
     final lines = <String>[
-      '"Tipo";"Categoria Principal";"Subcategoria";"Categoria Completa"',
+      '"Tipo";"Categoria Principal";"Subcategoria";"Categoria Completa";"Ícone";"Cor"',
     ];
 
     final extraTypes = categories
@@ -1316,7 +1316,9 @@ class CategoryCSVExporter {
       for (final top in topCats) {
         final topEsc = _escapeCSV(top.name);
         final typeEsc = _escapeCSV(type);
-        lines.add('"$typeEsc";"$topEsc";"";"$topEsc"');
+        final topIconEsc = _escapeCSV(top.icon ?? '');
+        final topColorEsc = _escapeCSV(top.color ?? '');
+        lines.add('"$typeEsc";"$topEsc";"";"$topEsc";"$topIconEsc";"$topColorEsc"');
         processedPaths.add(top.path);
 
         final subCats = typeCats.where((c) => c.parent == top.name).toList()
@@ -1324,20 +1326,24 @@ class CategoryCSVExporter {
         for (final sub in subCats) {
           final subEsc = _escapeCSV(sub.name);
           final fullEsc = _escapeCSV(sub.path);
-          lines.add('"$typeEsc";"$topEsc";"$subEsc";"$fullEsc"');
+          final subIconEsc = _escapeCSV(sub.icon ?? '');
+          final subColorEsc = _escapeCSV(sub.color ?? '');
+          lines.add('"$typeEsc";"$topEsc";"$subEsc";"$fullEsc";"$subIconEsc";"$subColorEsc"');
           processedPaths.add(sub.path);
         }
       }
 
       for (final rem in typeCats.where((c) => !processedPaths.contains(c.path))) {
         final typeEsc = _escapeCSV(rem.type);
+        final iconEsc = _escapeCSV(rem.icon ?? '');
+        final colorEsc = _escapeCSV(rem.color ?? '');
         if (rem.parent != null && rem.parent!.isNotEmpty) {
           lines.add(
-            '"$typeEsc";"${_escapeCSV(rem.parent!)}";"${_escapeCSV(rem.name)}";"${_escapeCSV(rem.path)}"',
+            '"$typeEsc";"${_escapeCSV(rem.parent!)}";"${_escapeCSV(rem.name)}";"${_escapeCSV(rem.path)}";"$iconEsc";"$colorEsc"',
           );
         } else {
           lines.add(
-            '"$typeEsc";"${_escapeCSV(rem.name)}";"";"${_escapeCSV(rem.path)}"',
+            '"$typeEsc";"${_escapeCSV(rem.name)}";"";"${_escapeCSV(rem.path)}";"$iconEsc";"$colorEsc"',
           );
         }
         processedPaths.add(rem.path);
@@ -1376,6 +1382,8 @@ class CategoryCSVImporter {
     int? colParent;
     int? colSub;
     int? colFull;
+    int? colIcon;
+    int? colColor;
 
     final firstRow = records[0];
     for (int idx = 0; idx < firstRow.length; idx++) {
@@ -1400,6 +1408,10 @@ class CategoryCSVImporter {
       } else if (colParent == null &&
           (col == 'categoria' || col == 'category')) {
         colParent = idx;
+      } else if (colIcon == null && (col == 'icone' || col == 'icon')) {
+        colIcon = idx;
+      } else if (colColor == null && (col == 'cor' || col == 'color')) {
+        colColor = idx;
       }
     }
 
@@ -1422,6 +1434,8 @@ class CategoryCSVImporter {
       String rawParent = '';
       String rawSub = '';
       String rawFull = '';
+      String? rawIcon;
+      String? rawColor;
 
       if (hasHeader) {
         if (colType != null && colType < row.length) {
@@ -1435,6 +1449,14 @@ class CategoryCSVImporter {
         }
         if (colFull != null && colFull < row.length) {
           rawFull = row[colFull].trim();
+        }
+        if (colIcon != null && colIcon < row.length) {
+          final v = row[colIcon].trim();
+          if (v.isNotEmpty) rawIcon = v;
+        }
+        if (colColor != null && colColor < row.length) {
+          final v = row[colColor].trim();
+          if (v.isNotEmpty) rawColor = v;
         }
       } else {
         if (row.length >= 4) {
@@ -1507,8 +1529,13 @@ class CategoryCSVImporter {
           newCats.add(CategoryItem(name: cleanParent, parent: null, type: catType));
           existingPaths.add(parentLower);
         }
-        final subItem =
-            CategoryItem(name: cleanSub, parent: cleanParent, type: catType);
+        final subItem = CategoryItem(
+          name: cleanSub,
+          parent: cleanParent,
+          type: catType,
+          icon: rawIcon,
+          color: rawColor,
+        );
         final subLower = subItem.path.toLowerCase();
         if (!existingPaths.contains(subLower)) {
           newCats.add(subItem);
@@ -1517,8 +1544,13 @@ class CategoryCSVImporter {
           skippedCount++;
         }
       } else {
-        final topItem =
-            CategoryItem(name: cleanSub, parent: null, type: catType);
+        final topItem = CategoryItem(
+          name: cleanSub,
+          parent: null,
+          type: catType,
+          icon: rawIcon,
+          color: rawColor,
+        );
         final topLower = topItem.path.toLowerCase();
         if (!existingPaths.contains(topLower)) {
           newCats.add(topItem);

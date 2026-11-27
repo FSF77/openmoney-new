@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -194,12 +195,32 @@ class _GlobalSearchViewState extends State<GlobalSearchView> {
                               fontSize: 13.5,
                             ),
                           ),
-                          Text(
-                            '${fmtDate(tx.date)} • $accName • ${tx.cat}${tx.memo.isNotEmpty ? " • ${tx.memo}" : ""}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            ),
+                          Row(
+                            children: [
+                              if (tx.cat.isNotEmpty || tx.peer != null) ...[
+                                CategoryIconBadge(
+                                  store: widget.store,
+                                  categoryPath: tx.cat,
+                                  isTransfer: tx.peer != null,
+                                  fallbackType:
+                                      tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                  size: 16,
+                                  borderRadius: 4.5,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  '${fmtDate(tx.date)} • $accName • ${tx.cat}${tx.memo.isNotEmpty ? " • ${tx.memo}" : ""}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

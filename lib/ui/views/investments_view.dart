@@ -1244,7 +1244,9 @@ class _InvestmentsViewState extends State<InvestmentsView>
                                   headerCell('Proventos', 9,
                                       width: 96, numeric: true),
                                   headerCell('Ações', 10,
-                                      width: 72, sortable: false),
+                                      width: 72,
+                                      numeric: true,
+                                      sortable: false),
                                 ],
                               ),
                             );

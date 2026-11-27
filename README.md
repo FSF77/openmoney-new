@@ -15,9 +15,10 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2026.11.27** (Build 188) | [⬇️ Baixar OpenMoney-macOS-2026.11.27.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.27.zip) | ~13 MB | 27/11/2026 |
+| 🍏 **macOS** | **v2026.11.27** (Build 189) | [⬇️ Baixar OpenMoney-macOS-2026.11.27.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.27.zip) | ~13 MB | 27/11/2026 |
 | 🪟 **Windows** | **v2026.11.27** (Build 188) | [⬇️ Baixar OpenMoney-Windows-2026.11.27.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2026.11.27.zip) | ~14 MB | 27/11/2026 |
 | 🌐 **Web** | **v2026.11.27** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 27/11/2026 |
+
 ### ⚡ Instalação Rápida via Terminal / PowerShell
 
 - **macOS** (Terminal):
@@ -965,6 +966,7 @@ OpenMoneyFlutter/
 - [ADR 037: Preenchimento Automático (Autofill), Chaves-senha (Passkeys / WebAuthn / FIDO2) e Bloqueio Biométrico](docs/adr/037-autofill-passkeys-webauthn-and-biometric-lock.md)
 - [ADR 038: Adoção do Padrão de Versionamento por Data (CalVer YYYY.M.D+BUILD) e Automação de Releases](docs/adr/038-calver-date-versioning-and-release-automation.md)
 - [ADR 039: Módulo Unificado de Carteira de Investimentos](docs/adr/039-investment-portfolio-management.md)
+- [ADR 040: Ícones Vetoriais, Cores Semânticas e Herança Visual nas Categorias](docs/adr/040-category-icons-and-visual-taxonomy.md)
 
 ---
 

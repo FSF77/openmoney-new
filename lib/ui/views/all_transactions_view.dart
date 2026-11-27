@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/importers_exporters.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
@@ -1316,19 +1317,38 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                           ),
                           Flexible(
                             flex: 4,
-                            child: Text(
-                              tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: tx.cat.isEmpty
-                                    ? colors.textMuted
-                                    : colors.textSecondary,
-                                fontStyle: tx.cat.isEmpty
-                                    ? FontStyle.italic
-                                    : FontStyle.normal,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (tx.cat.isNotEmpty || tx.peer != null) ...[
+                                  CategoryIconBadge(
+                                    store: widget.store,
+                                    categoryPath: tx.cat,
+                                    isTransfer: tx.peer != null,
+                                    fallbackType:
+                                        tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                    size: 16,
+                                    borderRadius: 4.5,
+                                  ),
+                                  const SizedBox(width: 5),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: tx.cat.isEmpty
+                                          ? colors.textMuted
+                                          : colors.textSecondary,
+                                      fontStyle: tx.cat.isEmpty
+                                          ? FontStyle.italic
+                                          : FontStyle.normal,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           if (isPred) ...[
@@ -1379,14 +1399,31 @@ class _AllTransactionsViewState extends State<AllTransactionsView> {
                           runSpacing: 2,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(
-                              tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: tx.cat.isEmpty
-                                    ? colors.textMuted
-                                    : colors.textSecondary,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (tx.cat.isNotEmpty || tx.peer != null) ...[
+                                  CategoryIconBadge(
+                                    store: widget.store,
+                                    categoryPath: tx.cat,
+                                    isTransfer: tx.peer != null,
+                                    fallbackType:
+                                        tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                    size: 15,
+                                    borderRadius: 4,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  tx.cat.isEmpty ? 'Sem categoria' : tx.cat,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: tx.cat.isEmpty
+                                        ? colors.textMuted
+                                        : colors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                             if (tx.memo.trim().isNotEmpty)
                               Text('• ${tx.memo.trim()}',

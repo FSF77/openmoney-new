@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
 import '../../store/money_store.dart';
 import '../modals/category_drill_down_modal.dart';
+import '../modals/category_icon_picker_dialog.dart';
 import '../theme/liquid_glass.dart';
 
 class CategoriesView extends StatefulWidget {
@@ -117,6 +119,8 @@ class _CategoriesViewState extends State<CategoriesView> {
     String? parent = editing != null ? editing.parent : presetParent;
     bool includeInReports = editing?.effectiveIncludeInReports ?? true;
     bool blocked = editing?.isBlocked ?? false;
+    String? selectedIcon = editing?.icon;
+    String? selectedColor = editing?.color;
     String? errorMsg;
 
     showDialog(
@@ -129,6 +133,29 @@ class _CategoriesViewState extends State<CategoriesView> {
               .topCategories(type: type)
               .where((c) => c.name != editing?.name)
               .toList();
+          final parentObj =
+              (parent != null && parent!.isNotEmpty) ? widget.store.categoryByPath(parent!) : null;
+          final previewItem = CategoryItem(
+            name: nameCtrl.text.trim().isEmpty
+                ? 'Nova Categoria'
+                : nameCtrl.text.trim(),
+            parent: parent,
+            type: type,
+            icon: selectedIcon,
+            color: selectedColor,
+          );
+          final resolvedPreview = CategoryIconRegistry.resolve(
+            category: previewItem,
+            parentCategory: parentObj,
+            fallbackType: type,
+            isDark: isDark,
+          );
+          final hasCustomVisual = selectedIcon != null || selectedColor != null;
+          final visualSubtitle = hasCustomVisual
+              ? 'Ícone/cor personalizados'
+              : (parentObj != null
+                  ? 'Herdado de ${parentObj.name}'
+                  : 'Padrão automático pelo nome');
 
           return AlertDialog(
             title: Text(
@@ -136,95 +163,185 @@ class _CategoriesViewState extends State<CategoriesView> {
             ),
             content: SizedBox(
               width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (errorMsg != null) ...[
-                    Text(
-                      errorMsg!,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  TextField(
-                    controller: nameCtrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome da Categoria / Subcategoria',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: type,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Despesa',
-                        child: Text('Despesa'),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (errorMsg != null) ...[
+                      Text(
+                        errorMsg!,
+                        style: const TextStyle(color: Colors.redAccent),
                       ),
-                      DropdownMenuItem(
-                        value: 'Receita',
-                        child: Text('Receita'),
-                      ),
+                      const SizedBox(height: 10),
                     ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setModalState(() {
-                          type = v;
-                          parent = null;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('parent_${type}_$parent'),
-                    initialValue: parent ?? '',
-                    decoration: const InputDecoration(
-                      labelText: 'Categoria Principal (Pai)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('— Nenhuma (Categoria Principal) —'),
+                    TextField(
+                      controller: nameCtrl,
+                      autofocus: true,
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Nome da Categoria / Subcategoria',
+                        border: OutlineInputBorder(),
                       ),
-                      ...topParents.map(
-                        (p) => DropdownMenuItem(
-                          value: p.name,
-                          child: Text(p.name),
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () async {
+                        final picked = await showCategoryIconPickerDialog(
+                          context,
+                          categoryName: nameCtrl.text,
+                          categoryType: type,
+                          isSubcategory: parent != null && parent!.isNotEmpty,
+                          parentCategory: parentObj,
+                          initialIcon: selectedIcon,
+                          initialColor: selectedColor,
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            selectedIcon = picked.icon;
+                            selectedColor = picked.color;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceGlass,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colors.borderGlass),
+                        ),
+                        child: Row(
+                          children: [
+                            CategoryIconBadge(
+                              icon: resolvedPreview.icon,
+                              color: resolvedPreview.color,
+                              size: 34,
+                              iconSize: 20,
+                              borderRadius: 9,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Ícone e Cor',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    visualSubtitle,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (hasCustomVisual)
+                              IconButton(
+                                tooltip: parentObj != null
+                                    ? 'Herdar da categoria principal'
+                                    : 'Voltar ao padrão automático',
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  Icons.restart_alt_rounded,
+                                  size: 18,
+                                  color: colors.textSecondary,
+                                ),
+                                onPressed: () => setModalState(() {
+                                  selectedIcon = null;
+                                  selectedColor = null;
+                                }),
+                              ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: colors.textSecondary,
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                    onChanged: (v) {
-                      setModalState(
-                          () => parent = (v == null || v.isEmpty) ? null : v);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Incluir nos Relatórios'),
-                    value: includeInReports,
-                    onChanged: (v) =>
-                        setModalState(() => includeInReports = v),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Bloquear Categoria'),
-                    subtitle: const Text(
-                      'Não permite novos lançamentos e oculta da caixa de seleção.',
-                      style: TextStyle(fontSize: 11.5),
                     ),
-                    value: blocked,
-                    onChanged: (v) =>
-                        setModalState(() => blocked = v),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: type,
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Despesa',
+                          child: Text('Despesa'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Receita',
+                          child: Text('Receita'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setModalState(() {
+                            type = v;
+                            parent = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('parent_${type}_$parent'),
+                      initialValue: parent ?? '',
+                      decoration: const InputDecoration(
+                        labelText: 'Categoria Principal (Pai)',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('— Nenhuma (Categoria Principal) —'),
+                        ),
+                        ...topParents.map(
+                          (p) => DropdownMenuItem(
+                            value: p.name,
+                            child: Text(p.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        setModalState(
+                            () => parent = (v == null || v.isEmpty) ? null : v);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Incluir nos Relatórios'),
+                      value: includeInReports,
+                      onChanged: (v) =>
+                          setModalState(() => includeInReports = v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Bloquear Categoria'),
+                      subtitle: const Text(
+                        'Não permite novos lançamentos e oculta da caixa de seleção.',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      value: blocked,
+                      onChanged: (v) =>
+                          setModalState(() => blocked = v),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -280,6 +397,10 @@ class _CategoriesViewState extends State<CategoriesView> {
                     type: type,
                     includeInReports: includeInReports,
                     blocked: blocked,
+                    icon: selectedIcon,
+                    color: selectedColor,
+                    updateIcon: true,
+                    updateColor: true,
                   );
                   if (err != null) {
                     setModalState(() => errorMsg = err);
@@ -508,6 +629,12 @@ class _CategoriesViewState extends State<CategoriesView> {
                               runSpacing: 4,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
+                                CategoryIconBadge(
+                                  store: widget.store,
+                                  category: top,
+                                  size: 26,
+                                  borderRadius: 7,
+                                ),
                                 Text(
                                   top.name,
                                   style: const TextStyle(
@@ -619,8 +746,15 @@ class _CategoriesViewState extends State<CategoriesView> {
                                     runSpacing: 4,
                                     crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
+                                      CategoryIconBadge(
+                                        store: widget.store,
+                                        category: sub,
+                                        parentCategory: top,
+                                        size: 20,
+                                        borderRadius: 6,
+                                      ),
                                       Text(
-                                        '↳ ${sub.name}',
+                                        sub.name,
                                         style: TextStyle(
                                           fontSize: 12.5,
                                           color: colors.textSecondary,

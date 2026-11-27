@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/cash_flow_engine.dart';
+import '../../services/category_icon_registry.dart';
 import '../../services/importers_exporters.dart';
 import '../../services/native_file_picker.dart';
 import '../../services/platform_io.dart';
@@ -371,7 +372,16 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               if (isMobile) ...[
                 Row(
                   children: [
-                    Icon(Icons.manage_search, color: colors.accent, size: 22),
+                    if (hasCat)
+                      CategoryIconBadge(
+                        store: widget.store,
+                        categoryPath: widget.categoryPath!,
+                        fallbackType: widget.categoryTypeFilter,
+                        size: 26,
+                        borderRadius: 7,
+                      )
+                    else
+                      Icon(Icons.manage_search, color: colors.accent, size: 22),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -451,7 +461,16 @@ class _CategoryDrillDownDialogState extends State<_CategoryDrillDownDialog> {
               ] else ...[
                 Row(
                   children: [
-                    Icon(Icons.manage_search, color: colors.accent, size: 24),
+                    if (hasCat)
+                      CategoryIconBadge(
+                        store: widget.store,
+                        categoryPath: widget.categoryPath!,
+                        fallbackType: widget.categoryTypeFilter,
+                        size: 28,
+                        borderRadius: 8,
+                      )
+                    else
+                      Icon(Icons.manage_search, color: colors.accent, size: 24),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -262,6 +263,12 @@ class BudgetView extends StatelessWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            CategoryIconBadge(
+                              store: store,
+                              category: top,
+                              size: 22,
+                              borderRadius: 6,
+                            ),
                             Text(
                               top.name,
                               style: const TextStyle(
@@ -330,8 +337,15 @@ class BudgetView extends StatelessWidget {
                                     crossAxisAlignment:
                                         WrapCrossAlignment.center,
                                     children: [
+                                      CategoryIconBadge(
+                                        store: store,
+                                        category: sub,
+                                        parentCategory: top,
+                                        size: 17,
+                                        borderRadius: 5,
+                                      ),
                                       Text(
-                                        '↳ ${sub.name}',
+                                        sub.name,
                                         style: TextStyle(
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w500,

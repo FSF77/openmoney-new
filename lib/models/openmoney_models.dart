@@ -441,6 +441,8 @@ class CategoryItem {
   String type;
   bool? includeInReports;
   bool? blocked;
+  String? icon;
+  String? color;
 
   CategoryItem({
     required this.name,
@@ -448,7 +450,11 @@ class CategoryItem {
     this.type = 'Despesa',
     this.includeInReports,
     this.blocked,
-  }) : parent = (parent != null && parent.isEmpty) ? null : parent;
+    String? icon,
+    String? color,
+  })  : parent = (parent != null && parent.isEmpty) ? null : parent,
+        icon = (icon != null && icon.trim().isEmpty) ? null : icon?.trim(),
+        color = (color != null && color.trim().isEmpty) ? null : color?.trim();
 
   String get id => path;
 
@@ -492,6 +498,8 @@ class CategoryItem {
         type: map['type'] as String? ?? 'Despesa',
         includeInReports: map['includeInReports'] as bool?,
         blocked: map['blocked'] as bool?,
+        icon: map['icon'] as String?,
+        color: map['color'] as String?,
       );
     }
     return CategoryItem(name: 'Outros');
@@ -503,6 +511,8 @@ class CategoryItem {
         'type': type,
         if (includeInReports != null) 'includeInReports': includeInReports,
         if (blocked == true) 'blocked': true,
+        if (icon != null && icon!.isNotEmpty) 'icon': icon,
+        if (color != null && color!.isNotEmpty) 'color': color,
       };
 
   CategoryItem copyWith({
@@ -511,6 +521,8 @@ class CategoryItem {
     String? type,
     bool? includeInReports,
     bool? blocked,
+    String? icon,
+    String? color,
   }) {
     return CategoryItem(
       name: name ?? this.name,
@@ -518,8 +530,26 @@ class CategoryItem {
       type: type ?? this.type,
       includeInReports: includeInReports ?? this.includeInReports,
       blocked: blocked ?? this.blocked,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CategoryItem &&
+          name == other.name &&
+          parent == other.parent &&
+          type == other.type &&
+          includeInReports == other.includeInReports &&
+          blocked == other.blocked &&
+          icon == other.icon &&
+          color == other.color;
+
+  @override
+  int get hashCode =>
+      Object.hash(name, parent, type, includeInReports, blocked, icon, color);
 }
 
 class Transaction {
@@ -1015,10 +1045,10 @@ class Database {
 }
 
 final List<CategoryItem> kDefaultCats = [
-  CategoryItem(name: 'Alimentação', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Alimentação', parent: null, type: 'Despesa', icon: 'restaurant', color: 'orange'),
   CategoryItem(name: 'Bares e Restaurantes', parent: 'Alimentação', type: 'Despesa'),
   CategoryItem(name: 'Mercado', parent: 'Alimentação', type: 'Despesa'),
-  CategoryItem(name: 'Assinaturas e Serviços', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Assinaturas e Serviços', parent: null, type: 'Despesa', icon: 'subscriptions', color: 'violet'),
   CategoryItem(name: 'Apple', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'Games', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'Google', parent: 'Assinaturas e Serviços', type: 'Despesa'),
@@ -1027,7 +1057,7 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Nintendo', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'Sites e Domínios', parent: 'Assinaturas e Serviços', type: 'Despesa'),
   CategoryItem(name: 'Streaming', parent: 'Assinaturas e Serviços', type: 'Despesa'),
-  CategoryItem(name: 'Casa', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Casa', parent: null, type: 'Despesa', icon: 'home', color: 'sky'),
   CategoryItem(name: 'Água, Esgoto', parent: 'Casa', type: 'Despesa'),
   CategoryItem(name: 'Condomínio', parent: 'Casa', type: 'Despesa'),
   CategoryItem(name: 'Despesas da casa', parent: 'Casa', type: 'Despesa'),
@@ -1037,7 +1067,7 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'IPTU', parent: 'Casa', type: 'Despesa'),
   CategoryItem(name: 'Telefonia', parent: 'Casa', type: 'Despesa'),
   CategoryItem(name: 'TV', parent: 'Casa', type: 'Despesa'),
-  CategoryItem(name: 'Compras', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Compras', parent: null, type: 'Despesa', icon: 'shopping_bag', color: 'pink'),
   CategoryItem(name: 'Automóveis', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Eletrodomésticos', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Eletrônicos e Informática', parent: 'Compras', type: 'Despesa'),
@@ -1045,23 +1075,23 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Músicas & Filmes', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Softwares', parent: 'Compras', type: 'Despesa'),
   CategoryItem(name: 'Videogames', parent: 'Compras', type: 'Despesa'),
-  CategoryItem(name: 'Cuidados pessoais', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Educação', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Família', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Festas', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Impostos e Taxas', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Investimentos (D)', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Lazer e hobbies', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Cuidados pessoais', parent: null, type: 'Despesa', icon: 'spa', color: 'rose'),
+  CategoryItem(name: 'Educação', parent: null, type: 'Despesa', icon: 'school', color: 'indigo'),
+  CategoryItem(name: 'Família', parent: null, type: 'Despesa', icon: 'family_restroom', color: 'amber'),
+  CategoryItem(name: 'Festas', parent: null, type: 'Despesa', icon: 'celebration', color: 'purple'),
+  CategoryItem(name: 'Impostos e Taxas', parent: null, type: 'Despesa', icon: 'account_balance', color: 'slate'),
+  CategoryItem(name: 'Investimentos (D)', parent: null, type: 'Despesa', icon: 'savings', color: 'teal'),
+  CategoryItem(name: 'Lazer e hobbies', parent: null, type: 'Despesa', icon: 'sports_esports', color: 'cyan'),
   CategoryItem(name: 'Academia', parent: 'Lazer e hobbies', type: 'Despesa'),
   CategoryItem(name: 'Cinema, Teatro', parent: 'Lazer e hobbies', type: 'Despesa'),
   CategoryItem(name: 'Diversão', parent: 'Lazer e hobbies', type: 'Despesa'),
-  CategoryItem(name: 'Saúde', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Saúde', parent: null, type: 'Despesa', icon: 'medical_services', color: 'red'),
   CategoryItem(name: 'Medicamentos', parent: 'Saúde', type: 'Despesa'),
   CategoryItem(name: 'Médicos', parent: 'Saúde', type: 'Despesa'),
   CategoryItem(name: 'Plano de saúde', parent: 'Saúde', type: 'Despesa'),
   CategoryItem(name: 'Seguro de Vida', parent: 'Saúde', type: 'Despesa'),
   CategoryItem(name: 'Terapeutas', parent: 'Saúde', type: 'Despesa'),
-  CategoryItem(name: 'Transporte', parent: null, type: 'Despesa'),
+  CategoryItem(name: 'Transporte', parent: null, type: 'Despesa', icon: 'directions_car', color: 'blue'),
   CategoryItem(name: 'Combustível', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Documentação', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Estacionamento, Pedágio', parent: 'Transporte', type: 'Despesa'),
@@ -1069,19 +1099,19 @@ final List<CategoryItem> kDefaultCats = [
   CategoryItem(name: 'Metro, Ônibus, Taxi', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Multas', parent: 'Transporte', type: 'Despesa'),
   CategoryItem(name: 'Seguro Auto', parent: 'Transporte', type: 'Despesa'),
-  CategoryItem(name: 'Viagem', parent: null, type: 'Despesa'),
-  CategoryItem(name: 'Cashback', parent: null, type: 'Receita'),
-  CategoryItem(name: 'Investimentos (C)', parent: null, type: 'Receita'),
-  CategoryItem(name: 'Renda', parent: null, type: 'Receita'),
+  CategoryItem(name: 'Viagem', parent: null, type: 'Despesa', icon: 'flight', color: 'teal'),
+  CategoryItem(name: 'Cashback', parent: null, type: 'Receita', icon: 'redeem', color: 'emerald'),
+  CategoryItem(name: 'Investimentos (C)', parent: null, type: 'Receita', icon: 'trending_up', color: 'teal'),
+  CategoryItem(name: 'Renda', parent: null, type: 'Receita', icon: 'payments', color: 'emerald'),
   CategoryItem(name: 'Distribuição de Lucros', parent: 'Renda', type: 'Receita'),
   CategoryItem(name: 'Pró-labore', parent: 'Renda', type: 'Receita'),
-  CategoryItem(name: 'Outras Rendas', parent: null, type: 'Receita'),
+  CategoryItem(name: 'Outras Rendas', parent: null, type: 'Receita', icon: 'account_balance_wallet', color: 'lime'),
   CategoryItem(name: 'Benefícios', parent: 'Outras Rendas', type: 'Receita'),
   CategoryItem(name: 'Devolução de impostos', parent: 'Outras Rendas', type: 'Receita'),
   CategoryItem(name: 'Prestação de Serviços', parent: 'Outras Rendas', type: 'Receita'),
   CategoryItem(name: 'Reembolso', parent: 'Outras Rendas', type: 'Receita'),
-  CategoryItem(name: 'Rendimentos', parent: null, type: 'Receita'),
-  CategoryItem(name: 'Vendas', parent: null, type: 'Receita'),
+  CategoryItem(name: 'Rendimentos', parent: null, type: 'Receita', icon: 'show_chart', color: 'emerald'),
+  CategoryItem(name: 'Vendas', parent: null, type: 'Receita', icon: 'storefront', color: 'amber'),
   CategoryItem(name: 'Automóveis', parent: 'Vendas', type: 'Receita'),
   CategoryItem(name: 'Eletrodomésticos', parent: 'Vendas', type: 'Receita'),
   CategoryItem(name: 'Eletrônicos e Informática', parent: 'Vendas', type: 'Receita'),

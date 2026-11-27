@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
@@ -366,14 +367,32 @@ class _DatagridTransactionTableState extends State<DatagridTransactionTable> {
                             // Categoria
                             Expanded(
                               flex: 3,
-                              child: Text(
-                                tx.cat.isEmpty ? '—' : tx.cat,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.textSecondary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              child: Row(
+                                children: [
+                                  if (tx.cat.isNotEmpty || tx.peer != null) ...[
+                                    CategoryIconBadge(
+                                      store: widget.store,
+                                      categoryPath: tx.cat,
+                                      isTransfer: tx.peer != null,
+                                      fallbackType:
+                                          tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                      size: isCompact ? 17 : 19,
+                                      borderRadius: 5,
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      tx.cat.isEmpty ? '—' : tx.cat,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.textSecondary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 8),

@@ -453,6 +453,11 @@ Consulte o [Guia de Autofill, Passkeys e Biometria](guia-autofill-passkeys-e-bio
 | `Cmd + N` / `Cmd + O` / `Cmd + Shift + M` | Nova base local / Abrir base / Mover base |
 | `Cmd + P` / `Cmd + ?` | Imprimir / Exportar PDF e Ajuda integrada |
 
+### Como funcionam os ícones e cores das categorias? Posso personalizar?
+Sim! Todas as categorias padrão já possuem ícones e cores automáticos e fáceis de identificar, que aparecem tanto na **escolha da categoria** (Novo Lançamento, Lançamento Rápido, OFX) quanto nas **telas de lançamentos** (Extratos, Todos os Lançamentos, Limite de Gastos).
+- **Herança inteligente:** Subcategorias herdam o ícone e a cor da categoria principal por padrão, mas você pode alterá-los individualmente a qualquer momento.
+- **Como alterar:** Em **Categorias**, edite a categoria ou subcategoria, toque em **Ícone e Cor** e escolha na biblioteca pesquisável em português (ou clique em **Automático / Herdar do Pai** para restaurar o padrão). Veja o passo a passo completo no [Guia de Dashboard e Personalização](guia-dashboard-e-personalizacao.md#7-%EF%B8%8F-ícones-e-cores-nas-categorias).
+
 ---
 
 ## 14. Perguntas Técnicas e de Arquitetura (Para Desenvolvedores e Administradores)

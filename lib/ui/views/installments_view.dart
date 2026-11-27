@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../modals/account_multi_select_filter.dart';
@@ -232,14 +233,31 @@ class _InstallmentsViewState extends State<InstallmentsView> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          'Venc: ${fmtDate(item.effectiveDueDate)}${item.tx.cat.isNotEmpty ? " • ${item.tx.cat}" : ""}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            if (item.tx.cat.isNotEmpty) ...[
+                              CategoryIconBadge(
+                                store: store,
+                                categoryPath: item.tx.cat,
+                                fallbackType:
+                                    item.tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                size: 16,
+                                borderRadius: 4.5,
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                'Venc: ${fmtDate(item.effectiveDueDate)}${item.tx.cat.isNotEmpty ? " • ${item.tx.cat}" : ""}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ] else ...[
                         Row(children: [
@@ -259,10 +277,29 @@ class _InstallmentsViewState extends State<InstallmentsView> {
                           ),
                         ]),
                         const SizedBox(height: 4),
-                        Text(
-                          'Venc: ${fmtDate(item.effectiveDueDate)} • ${item.accountName} • ${item.tx.cat}',
-                          style: TextStyle(
-                              fontSize: 12, color: colors.textSecondary),
+                        Row(
+                          children: [
+                            if (item.tx.cat.isNotEmpty) ...[
+                              CategoryIconBadge(
+                                store: store,
+                                categoryPath: item.tx.cat,
+                                fallbackType:
+                                    item.tx.amt >= 0 ? 'Receita' : 'Despesa',
+                                size: 16,
+                                borderRadius: 4.5,
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                'Venc: ${fmtDate(item.effectiveDueDate)} • ${item.accountName} • ${item.tx.cat}',
+                                style: TextStyle(
+                                    fontSize: 12, color: colors.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],

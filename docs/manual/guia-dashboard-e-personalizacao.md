@@ -177,3 +177,26 @@ Em dispositivos móveis ou janelas redimensionadas para largura inferior a 760 p
 - **Barra Superior Dedicada:** O antigo botão de início foi unificado com o ícone do **Dashboard** (`Icons.dashboard_rounded` no Flutter e `square.grid.2x2.fill` no iOS).
 - **Botão Circular de Novo Lançamento:** No topo do dashboard, o botão "+ Novo Lançamento" adota um formato circular compacto com `+`, garantindo que caiba perfeitamente ao lado da saudação sem quebras de linha.
 - **Grid Adaptativa de 1 Coluna:** Todos os cards se ajustam para a largura total do display, mantendo tipografia legível e sem qualquer transbordamento (*overflow*).
+
+---
+
+## 7. 🏷️ Ícones e Cores nas Categorias
+
+Para facilitar o reconhecimento rápido ao lançar ou conferir despesas e receitas, todas as categorias do OpenMoney contam com **ícones vetoriais e cores semânticas**.
+
+### 7.1. Como funciona o Padrão Automático e a Herança
+- **Modelos prontos de fábrica:** Todas as categorias padrão (*Alimentação*, *Casa*, *Transporte*, *Saúde*, *Renda*, etc.) já vêm com ícones e cores definidos automaticamente.
+- **Herança nas Subcategorias:** Por padrão, toda subcategoria herda automaticamente o ícone e a cor da sua **Categoria Principal** (ex.: subcategorias de *Alimentação* compartilham a identidade visual do grupo), mantendo a leitura coesa nos extratos e relatórios.
+- **Reconhecimento pelo nome:** Ao criar uma nova categoria principal (ex.: *"Pets"* ou *"Academia"*), o OpenMoney sugere o ícone e a cor automaticamente enquanto você digita o nome.
+
+### 7.2. Como personalizar o Ícone ou a Cor de uma Categoria
+1. Acesse **Categorias** no menu lateral.
+2. Clique no ícone de edição (**lápis**) da categoria ou subcategoria desejada (ou em **+ Nova Categoria**).
+3. Toque no bloco **Ícone e Cor** para abrir a **Biblioteca de Ícones**.
+4. Escolha uma cor na paleta superior (ou mantenha **Auto** para usar o padrão/herança), filtre por grupo ou pesquise em português (ex.: *"mercado"*, *"carro"*, *"streaming"*, *"pet"*).
+5. Clique em **Aplicar** e depois em **Salvar**.
+   - Para voltar ao comportamento padrão ou herdar novamente da categoria principal, clique no botão de restaurar (**seta circular**) no bloco **Ícone e Cor** ou em **Herdar do Pai** / **Automático** dentro do seletor.
+
+### 7.3. Onde os ícones aparecem
+- **Telas de Inclusão:** Ao escolher uma categoria no **Novo Lançamento**, **Lançamento Rápido**, **Conciliação OFX**, **Previsões** ou **Investimentos**, o campo e a lista suspensa exibem a miniatura do ícone (e o logo do banco nas transferências).
+- **Telas de Lançamentos e Controle:** Os ícones aparecem ao lado da categoria no **Extrato da Conta**, em **Todos os Lançamentos** (Tabela Datagrid e Lista), em **Limite de Gastos**, **Vencimentos**, **Parcelamentos** e na **Pesquisa Global**.

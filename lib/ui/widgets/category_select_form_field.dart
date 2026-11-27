@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
+import '../../services/bank_logo_registry.dart';
+import '../../services/category_icon_registry.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 
@@ -94,13 +96,49 @@ class CategorySelectFormField extends StatelessWidget {
       items: [
         DropdownMenuItem<String>(
           value: 'current',
-          child: Text(
-            displayText,
-            style: TextStyle(
-              fontSize: 13,
-              color: colors.textPrimary,
-            ),
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              if (currentSelection.startsWith('xfer:')) ...[
+                Builder(
+                  builder: (_) {
+                    final xferAcc =
+                        store.accById(currentSelection.substring(5));
+                    if (xferAcc != null) {
+                      return AccountLogoWidget(
+                        account: xferAcc,
+                        size: 18,
+                        cornerRadius: 4,
+                      );
+                    }
+                    return Icon(
+                      Icons.swap_horiz_rounded,
+                      size: 16,
+                      color: colors.accent,
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+              ] else if (currentSelection.isNotEmpty) ...[
+                CategoryIconBadge(
+                  store: store,
+                  categoryPath: currentSelection,
+                  fallbackType: categoryType,
+                  size: 18,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  displayText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -119,31 +157,56 @@ class CategorySelectFormField extends StatelessWidget {
           menuItems.add(
             PopupMenuItem<String>(
               value: opt.value,
-              height: 28,
+              height: 30,
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-              child: Text(
-                opt.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: colors.textPrimary,
-                ),
+              child: Row(
+                children: [
+                  CategoryIconBadge(
+                    store: store,
+                    categoryPath: opt.value,
+                    fallbackType: categoryType,
+                    size: 20,
+                    borderRadius: 6,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      opt.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: colors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
         } else {
           final isSelected = opt.value == currentSelection;
           final isSub = opt.label.startsWith('↳');
+          final cleanLabel =
+              isSub ? opt.label.replaceFirst('↳ ', '') : opt.label;
           menuItems.add(
             PopupMenuItem<String>(
               value: opt.value,
-              height: 26,
+              height: 28,
               padding: EdgeInsets.fromLTRB(isSub ? 24 : 12, 2, 12, 2),
               child: Row(
                 children: [
+                  CategoryIconBadge(
+                    store: store,
+                    categoryPath: opt.value,
+                    fallbackType: categoryType,
+                    size: isSub ? 16 : 18,
+                    borderRadius: 5,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      opt.label,
+                      cleanLabel,
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
@@ -169,14 +232,15 @@ class CategorySelectFormField extends StatelessWidget {
           menuItems.add(
             PopupMenuItem<String>(
               value: val,
-              height: 26,
+              height: 28,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.swap_horiz,
-                    size: 15,
-                    color: isSelected ? colors.accent : colors.textSecondary,
+                  AccountLogoWidget(
+                    account: a,
+                    size: 18,
+                    cornerRadius: 4,
+                    selected: isSelected,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
