@@ -61,7 +61,7 @@ Na barra lateral (expansível ou no modo compacto *Mini Rail*), você encontra:
 1. Na barra lateral, clique em **+ Nova Conta** (ou acesse **Módulos › Gestão de Contas**).
 2. Preencha:
    - **Nome da Conta:** ex.: *Itaú*, *Nubank*, *Carteira*.
-   - **Tipo de Conta:** **Corrente**, **Poupança**, **Investimento**, **Dinheiro** ou **Cartão de crédito**.
+   - **Tipo de Conta:** **Corrente**, **Poupança**, **Caixinha**, **Cofrinhos**, **Investimento**, **Dinheiro** ou **Cartão de crédito**.
    - **Moeda:** padrão **BRL (`R$`)**, ou qualquer uma das 11 moedas suportadas (`USD`, `EUR`, `CAD`, `AUD`, `GBP`, `PYG`, `ARS`, `UYU`, `CHF`, `CLP`).
    - **Saldo Inicial de Abertura:** quanto havia na conta na data em que você começou a controlar.
    - **Favoritar Conta** *(opcional)*: fixa a conta no grupo **Favoritas ★** no topo da barra lateral e do Dashboard.

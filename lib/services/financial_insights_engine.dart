@@ -1312,17 +1312,23 @@ class FinancialInsightsEngine {
       'focusAccountId': ?focusAccountId,
       'focusCategory': ?focusCategory,
       'patrimony': {
-        'totalReal': formatCurrency(realCash, baseCur),
+        'totalReal': formatCurrency(
+            realCash + (invSummary?.totalMarketValueGrossCents ?? 0), baseCur),
+        'cashAndCardsReal': formatCurrency(realCash, baseCur),
         if (invSummary != null)
           'investmentsGross':
               formatCurrency(invSummary.totalMarketValueGrossCents, baseCur),
         if (invSummary != null)
           'consolidatedTotal': formatCurrency(
               realCash + invSummary.totalMarketValueGrossCents, baseCur),
-        'totalPredictedMonth':
-            formatCurrency(store.totalBalance(predicted: true), baseCur),
-        'totalPredictedYear':
-            formatCurrency(store.totalBalancePredictedYear(), baseCur),
+        'totalPredictedMonth': formatCurrency(
+            store.totalBalance(predicted: true) +
+                (invSummary?.totalMarketValueGrossCents ?? 0),
+            baseCur),
+        'totalPredictedYear': formatCurrency(
+            store.totalBalancePredictedYear() +
+                (invSummary?.totalMarketValueGrossCents ?? 0),
+            baseCur),
       },
       if (invSummary != null && invReport != null)
         'investments': invReport.toAiContextJson(
@@ -1619,10 +1625,18 @@ class FinancialInsightsEngine {
     final report = store.buildMonthlyReport(ym);
     final spikes = explainCategorySpikes(store, targetMonth: ym);
     final recs = detectImplicitRecurrences(store);
+    final investMarket = store.portfolioMarketValue();
+    final realCash = store.totalBalance(predicted: false);
+    final predCash = store.totalBalance(predicted: true);
     buf.writeln('### ✨ Resumo Inteligente ($ym)');
     buf.writeln(
-      '- **Patrimônio Real Consolidado:** ${fmt(store.totalBalance(predicted: false))} (Previsto mês: ${fmt(store.totalBalance(predicted: true))})',
+      '- **Patrimônio Real Consolidado:** ${fmt(realCash + investMarket)} (Previsto mês: ${fmt(predCash + investMarket)})',
     );
+    if (investMarket != 0) {
+      buf.writeln(
+        '- **Composição:** Contas/Cartões ${fmt(realCash)} · Carteira de Investimentos ${fmt(investMarket)}',
+      );
+    }
     buf.writeln(
       '- **Resultado de $ym:** Receitas ${fmt(report.totalIncome)} · Despesas ${fmt(report.totalExpense)} · Saldo ${fmt(report.netTotal)} (Taxa de poupança: **${report.savingsRate}%**)',
     );

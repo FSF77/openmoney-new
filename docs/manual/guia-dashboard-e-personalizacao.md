@@ -43,7 +43,7 @@ Apresenta o livro resumido de contas correntes e caixas financeiros ativos (excl
 ### 2.3. Investimentos & Poupança ("Investimentos")
 Card dedicado para a gestão das reservas financeiras e patrimoniais:
 - **Privacidade Individual (Ocultar Saldos):** Ícone de olho no cabeçalho com tooltip, permitindo ocultar/exibir os saldos de investimentos e poupança de forma independente e persistida.
-- **Abrangência:** Reúne exclusivamente as contas categorizadas como **Investimento** e **Poupança**.
+- **Abrangência:** Reúne exclusivamente as contas categorizadas como **Investimento**, **Poupança**, **Caixinha** e **Cofrinhos** (reservas de liquidez imediata, sem compor caixa livre de corretoras).
 - **Apresentação Clara de Saldos:**
   - Exibição direta do saldo consolidado no presente.
   - A linha **Prev. mês** só aparece quando houver previsões ou agendamentos que alterem a posição ao final do mês.

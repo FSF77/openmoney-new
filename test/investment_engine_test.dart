@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/analytics_engine.dart';
-import 'package:openmoney/services/b3_import_service.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
 import 'package:openmoney/services/financial_insights_engine.dart';
 import 'package:openmoney/services/investment_engine.dart';
@@ -1153,6 +1152,36 @@ void main() {
       expect(aiSnapshot.containsKey('investments'), isTrue);
       expect(aiSnapshot['patrimony']['investmentsGross'], isNotNull);
       expect(aiSnapshot['patrimony']['consolidatedTotal'], isNotNull);
+      expect(
+        aiSnapshot['patrimony']['totalReal'],
+        aiSnapshot['patrimony']['consolidatedTotal'],
+      );
+      final offlineSummary =
+          FinancialInsightsEngine.generateOfflineDiagnosticMarkdown(
+        store,
+        topic: 'overview',
+      );
+      expect(offlineSummary, contains('Carteira de Investimentos'));
+      expect(offlineSummary, contains('Patrimônio Real Consolidado'));
+    });
+
+    test('Contas Caixinha e Cofrinhos integram kAccountTypes e saldo total sem contar como caixa de corretora', () {
+      expect(kAccountTypes, containsAll(['Caixinha', 'Cofrinhos']));
+      expect(isSavingsOrReserveAccountType('Poupança'), isTrue);
+      expect(isSavingsOrReserveAccountType('Caixinha'), isTrue);
+      expect(isSavingsOrReserveAccountType('Cofrinhos'), isTrue);
+      expect(isSavingsOrReserveAccountType('Investimento'), isFalse);
+
+      final store = MoneyStore(autoBoot: false);
+      store.db = Database(
+        accounts: [
+          Account(id: 'c1', name: 'Caixinha Nubank', type: 'Caixinha', opening: 150000),
+          Account(id: 'c2', name: 'Cofrinho Inter', type: 'Cofrinhos', opening: 250000),
+          Account(id: 'i1', name: 'XP', type: 'Investimento', opening: 100000),
+        ],
+      );
+      expect(store.investmentCashBalance(), 100000);
+      expect(store.totalBalance(predicted: false), 500000);
     });
   });
 }

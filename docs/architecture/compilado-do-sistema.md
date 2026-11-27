@@ -31,7 +31,7 @@ Referência completa no [Dicionário de Dados Completo](dicionario-de-dados.md).
 
 ### 2.1 Tipos de Conta Suportados (`ACCOUNT_TYPES` / `kAccountTypes`)
 - `"Corrente"`: movimentação rotineira, transferências e pagamentos.
-- `"Poupança"`: reservas de liquidez e aplicações de curto prazo.
+- `"Poupança"`, `"Caixinha"` e `"Cofrinhos"`: reservas de liquidez imediata e aplicações de curto prazo (agrupadas em Investimentos no Dashboard, sem compor caixa livre de corretoras).
 - `"Cartão de crédito"` (`CARD_TYPE` / `kCardType`): gestão de limites, ciclo de fechamento/vencimento e faturas.
 - `"Investimento"`: ativos financeiros, renda fixa/variável e aportes.
 - `"Dinheiro"`: carteira física e pequenos gastos em espécie.

@@ -1,29 +1,29 @@
 {
-    "githubReleaseUrl":  "https://github.com/FSF77/openmoney-new",
-    "version":  "2026.11.26",
-    "web":  {
-                "version":  "2026.11.26",
-                "build":  185,
-                "releaseDate":  "26/11/2026"
-            },
-    "build":  185,
-    "notes":  "Novo módulo de Carteira de Investimentos (Ações, FIIs, Renda Fixa, Tesouro Direto e Criptomoedas) (beta v2), Anteriores: novo modelo para versionamento, novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, calculadora dinâmica no campo valor, importar extrato OFX para conciliação, backup automático, lançamentos por tags, acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, acesse  https://openmoney.app.br",
-    "releaseDate":  "26/11/2026",
-    "windows":  {
-                    "build":  185,
-                    "version":  "2026.11.26",
-                    "sizeMb":  14,
-                    "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2026.11.26.zip",
-                    "sha256":  "105015aa755bee15fd7fd6afc0093f7e18f2387b391e0fcbfde4a0f75676c781",
-                    "releaseDate":  "26/11/2026"
-                },
-    "macos":  {
-                  "version":  "2026.11.26",
-                  "build":  185,
-                  "releaseDate":  "26/11/2026",
-                  "downloadUrl":  "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.26.zip",
-                  "sha256":  "306d49fb7b4cdc415688b5f8d5d52e33b81756da118b168a7ab0d48693372cfb",
-                  "sizeMb":  13
-              },
-    "title":  "OpenMoney Flutter v2026.11.26"
+  "githubReleaseUrl": "https://github.com/FSF77/openmoney-new",
+  "version": "2026.11.27",
+  "web": {
+    "version": "2026.11.27",
+    "build": 186,
+    "releaseDate": "27/11/2026"
+  },
+  "build": 186,
+  "notes": "Novo módulo de Carteira de Investimentos (Ações, FIIs, Renda Fixa, Tesouro Direto e Criptomoedas), novos gráficos de investimentos, Anteriores: novo modelo para versionamento, novo menu Agenda com calendário rápido para visualizar suas despesas e receitas, servidor MCP para disponibilizar os dados para sua IA preferida, Dashboard com gráficos e indicadores, calculadora dinâmica no campo valor, importar extrato OFX para conciliação, backup automático, lançamentos por tags, acompanhamentos das previsões, limite de gasto com alerta, contas em outras moedas, versão web em https://openmoney.app.br",
+  "releaseDate": "27/11/2026",
+  "windows": {
+    "build": 185,
+    "version": "2026.11.26",
+    "sizeMb": 14,
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2026.11.26.zip",
+    "sha256": "105015aa755bee15fd7fd6afc0093f7e18f2387b391e0fcbfde4a0f75676c781",
+    "releaseDate": "26/11/2026"
+  },
+  "macos": {
+    "version": "2026.11.27",
+    "build": 186,
+    "releaseDate": "27/11/2026",
+    "downloadUrl": "https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.27.zip",
+    "sha256": "2b62de81a6ceecdddce6334cc95b91adf7ce98a292684b84f0b38d1e2a5f22fb",
+    "sizeMb": 13
+  },
+  "title": "OpenMoney Flutter v2026.11.27"
 }

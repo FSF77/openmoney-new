@@ -534,7 +534,9 @@ class DashboardOverviewView extends StatelessWidget {
 
     bool isAccountVisible(Account a) {
       if (a.type == kCardType || a.card != null) return false;
-      if (a.type == 'Poupança' || a.type == 'Investimento') return false;
+      if (isSavingsOrReserveAccountType(a.type) || a.type == 'Investimento') {
+        return false;
+      }
       if (!showZero && store.balance(a, predicted: false) == 0) {
         return false;
       }
@@ -768,7 +770,9 @@ class DashboardOverviewView extends StatelessWidget {
     final showZero = store.dashboardInvestmentsShowZeroBalance;
 
     bool isInvestmentAccount(Account a) {
-      if (a.type != 'Poupança' && a.type != 'Investimento') return false;
+      if (!isSavingsOrReserveAccountType(a.type) && a.type != 'Investimento') {
+        return false;
+      }
       if (a.isInactive) return false;
       if (!showZero) {
         final real = store.accountTotalBalance(a, predicted: false);

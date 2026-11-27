@@ -68,7 +68,7 @@ Para prevenir alucinações de modelos de linguagem onde transações futuras ou
 
 | Ferramenta | Escopo | Finalidade |
 | :--- | :--- | :--- |
-| `openmoney_get_financial_overview` | Leitura | Saldos bancários atuais consolidados por conta, saldo previsto no mês, despesas e receitas do mês corrente. |
+| `openmoney_get_financial_overview` | Leitura | Caixa líquido conciliado por conta, carteira de investimentos bruta, patrimônio consolidado, saldo previsto no mês, despesas e receitas do mês corrente. |
 | `openmoney_list_accounts` | Leitura | Listagem de contas com identificadores, nomes, tipos, saldo atual conciliado e saldo previsto. |
 | `openmoney_list_categories` | Leitura | Listagem de categorias e subcategorias cadastradas, tipos e status em relatórios. |
 | `openmoney_query_transactions` | Leitura | Consulta filtrada de lançamentos por período (mês/ano), conta, beneficiário, status de conciliação ou busca textual. |
@@ -77,6 +77,10 @@ Para prevenir alucinações de modelos de linguagem onde transações futuras ou
 | `openmoney_delete_transaction` | Leitura/Escrita | Exclusão unitária de transação específica por ID com verificação de existência. |
 | `openmoney_transfer_funds` | Leitura/Escrita | Criação de transferência entre duas contas de forma atômica e consistente. |
 | `openmoney_get_predictions_and_budgets` | Leitura | Consulta do limite de gastos e previsões orçamentárias do mês, comparando valor orçado vs realizado. |
+| `openmoney_get_investments_overview` | Leitura | *(v2.6.0 · ADR 039)* Resumo da carteira, alocação por classe e insights automáticos (concentração, altas/baixas, vencimentos ≤ 90d e queda de IR ≤ 30d). |
+| `openmoney_list_investment_positions` | Leitura | *(v2.6.0 · ADR 039)* Listagem filtrável das posições da carteira (classe, corretora, busca e posições encerradas). |
+| `openmoney_list_investment_operations` | Leitura | *(v2.6.0 · ADR 039)* Extrato de operações da carteira filtrável por ativo, tipo, corretora e período. |
+| `openmoney_create_investment_operation` | Leitura/Escrita | *(v2.6.0 · ADR 039)* Registro de compras, vendas e proventos na carteira com movimentação opcional de caixa e Sync v2. |
 
 ---
 

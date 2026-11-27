@@ -38,7 +38,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _tabCtrl = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -428,11 +428,6 @@ class _InvestmentsViewState extends State<InvestmentsView>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isMobile = screenWidth < 720;
-    final isCompactHeader = screenWidth < 560;
-    final useIconOnlyActions = screenWidth < 1100;
-    final isCompactKpi = screenWidth < 900;
     final baseCur = widget.store.baseCurrency;
 
     final summary = widget.store.portfolioSummary(accountId: _accountFilter);
@@ -461,7 +456,15 @@ class _InvestmentsViewState extends State<InvestmentsView>
         .where((a) => a.isActive && a.type == 'Investimento')
         .toList();
 
-    final titleRow = Row(
+    return LayoutBuilder(
+      builder: (context, viewport) {
+        final availWidth = viewport.maxWidth;
+        final isMobile = availWidth < 720;
+        final isCompactHeader = availWidth < 640;
+        final useIconOnlyActions = availWidth < 1320;
+        final isCompactKpi = availWidth < 900;
+
+        final titleRow = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Icon(
@@ -481,22 +484,24 @@ class _InvestmentsViewState extends State<InvestmentsView>
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: colors.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            'Carteira',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: colors.accent,
+        if (availWidth >= 380) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'Carteira',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: colors.accent,
+              ),
             ),
           ),
-        ),
+        ],
         const SizedBox(width: 4),
         Tooltip(
           message: _summaryExpanded ? 'Ocultar resumo' : 'Mostrar resumo',
@@ -720,7 +725,8 @@ class _InvestmentsViewState extends State<InvestmentsView>
             tabs: const [
               Tab(height: 34, text: 'Posição Atual'),
               Tab(height: 34, text: 'Operações'),
-              Tab(height: 34, text: 'Renda Fixa & Tesouro'),
+              Tab(height: 34, text: 'Renda Fixa'),
+              Tab(height: 34, text: 'Tesouro Direto'),
               Tab(height: 34, text: 'Análise & Alocação'),
             ],
           ),
@@ -731,14 +737,29 @@ class _InvestmentsViewState extends State<InvestmentsView>
             controller: _tabCtrl,
             children: [
               _buildPositionsTab(
-                  colors, screenWidth, isMobile, filteredPositions, investAccounts),
+                  colors, availWidth, isMobile, filteredPositions, investAccounts),
               _buildOperationsTab(colors, isMobile),
-              _buildFixedIncomeTab(colors, summary, isMobile),
+              _buildFixedIncomeListTab(
+                colors,
+                summary,
+                isMobile,
+                assetClass: InvestAssetClass.fixedIncome,
+                emptyMessage: 'Nenhum título de Renda Fixa ativo.',
+              ),
+              _buildFixedIncomeListTab(
+                colors,
+                summary,
+                isMobile,
+                assetClass: InvestAssetClass.tesouro,
+                emptyMessage: 'Nenhum título do Tesouro Direto ativo.',
+              ),
               _buildAnalyticsTab(colors, summary, baseCur),
             ],
           ),
         ),
       ],
+    );
+      },
     );
   }
 
@@ -1086,288 +1107,610 @@ class _InvestmentsViewState extends State<InvestmentsView>
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                       child: GlassCard(
                         padding: EdgeInsets.zero,
-                        child: Scrollbar(
-                          controller: _tableVScrollCtrl,
-                          thumbVisibility: true,
-                          interactive: true,
-                          notificationPredicate: (n) =>
-                              n.metrics.axis == Axis.vertical,
-                          child: Scrollbar(
-                            controller: _tableHScrollCtrl,
-                            thumbVisibility: true,
-                            trackVisibility: true,
-                            interactive: true,
-                            notificationPredicate: (n) =>
-                                n.metrics.axis == Axis.horizontal,
-                            child: SingleChildScrollView(
-                              controller: _tableHScrollCtrl,
-                              scrollDirection: Axis.horizontal,
-                              physics: const ClampingScrollPhysics(),
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: ConstrainedBox(
-                                constraints:
-                                    BoxConstraints(minWidth: availW - 32),
-                                child: SingleChildScrollView(
-                                  controller: _tableVScrollCtrl,
-                                  scrollDirection: Axis.vertical,
-                                  physics: const ClampingScrollPhysics(),
-                                  child: DataTable(
-                                sortColumnIndex: _sortColumnIndex,
-                                sortAscending: _sortAscending,
-                                columnSpacing: 14,
-                                horizontalMargin: 14,
-                                headingRowHeight: 36,
-                                dataRowMinHeight: 40,
-                                dataRowMaxHeight: 46,
-                                headingTextStyle: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.textSecondary,
-                                ),
-                                dataTextStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: colors.textPrimary,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
+                        child: LayoutBuilder(
+                          builder: (context, tableBox) {
+                            const double minTableWidth = 1134.0;
+                            final innerW = tableBox.maxWidth;
+                            final innerH = tableBox.maxHeight;
+                            final needsHScroll = innerW < minTableWidth;
+
+                            Widget headerCell(
+                              String label,
+                              int colIndex, {
+                              double? width,
+                              bool numeric = false,
+                              bool sortable = true,
+                            }) {
+                              final isSorted =
+                                  sortable && _sortColumnIndex == colIndex;
+                              final content = Row(
+                                mainAxisAlignment: numeric
+                                    ? MainAxisAlignment.end
+                                    : MainAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  if (isSorted && numeric) ...[
+                                    Icon(
+                                      _sortAscending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward,
+                                      size: 13,
+                                      color: colors.accent,
+                                    ),
+                                    const SizedBox(width: 2),
                                   ],
-                                ),
-                                columns: [
-                                  DataColumn(
-                                    label: const Text('Ativo'),
-                                    onSort: _onSort,
+                                  Flexible(
+                                    child: Text(
+                                      label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: isSorted
+                                            ? colors.accent
+                                            : colors.textSecondary,
+                                      ),
+                                    ),
                                   ),
-                                  DataColumn(
-                                    label: const Text('Classe'),
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Qtde'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Valor Compra'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('PM Compra'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('PM Venda'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Preço Atual'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Valor Atual'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Rentab.'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  DataColumn(
-                                    label: const Text('Proventos'),
-                                    numeric: true,
-                                    onSort: _onSort,
-                                  ),
-                                  const DataColumn(label: Text('Ações')),
+                                  if (isSorted && !numeric) ...[
+                                    const SizedBox(width: 2),
+                                    Icon(
+                                      _sortAscending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward,
+                                      size: 13,
+                                      color: colors.accent,
+                                    ),
+                                  ],
                                 ],
-                                rows: positions.map((p) {
-                                  final cur = p.asset.currency;
-                                  final pnlColor = p.unrealizedPnlCents >= 0
-                                      ? colors.income
-                                      : colors.expense;
-                                  return DataRow(cells: [
-                                    DataCell(
-                                      onTap: () => showAssetOperationsModal(
-                                        context,
-                                        widget.store,
-                                        p.asset,
+                              );
+
+                              final cell = sortable
+                                  ? InkWell(
+                                      onTap: () => _onSort(
+                                        colIndex,
+                                        _sortColumnIndex == colIndex
+                                            ? !_sortAscending
+                                            : true,
                                       ),
-                                      Tooltip(
-                                        message:
-                                            'Ver movimentações de ${p.asset.displayCode}',
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              p.asset.displayCode,
-                                              style: TextStyle(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: colors.accent,
-                                              ),
-                                            ),
-                                            Text(
-                                              p.asset.name,
-                                              style: TextStyle(
-                                                fontSize: 10.5,
-                                                color: colors.textSecondary,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8),
+                                        child: content,
                                       ),
-                                    ),
-                                    DataCell(
-                                        Text(p.asset.assetClass.shortLabel)),
-                                    DataCell(Text(formatInvestQty(
-                                        p.currentQty, p.asset.assetClass))),
-                                    DataCell(Text(formatCurrency(
-                                        p.currentCostBasisCents, cur))),
-                                    DataCell(Text(formatCurrency(
-                                        p.avgBuyPriceCents, cur))),
-                                    DataCell(Text(p.avgSellPriceCents > 0
-                                        ? formatCurrency(
-                                            p.avgSellPriceCents, cur)
-                                        : '—')),
-                                    DataCell(
-                                      InkWell(
-                                        onTap: () => _editPriceInline(p),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(formatCurrency(
-                                                p.currentUnitPriceCents, cur)),
-                                            if (p.asset.manualPrice) ...[
-                                              const SizedBox(width: 4),
-                                              Tooltip(
-                                                message:
-                                                    'Preço em modo Manual (clique para editar ou voltar ao automático)',
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 1),
-                                                  decoration: BoxDecoration(
-                                                    color: colors.warning
-                                                        .withValues(alpha: 0.18),
-                                                    borderRadius:
-                                                        BorderRadius.circular(4),
-                                                  ),
-                                                  child: Text(
-                                                    'M',
-                                                    style: TextStyle(
-                                                      fontSize: 9.5,
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      color: colors.warning,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                            const SizedBox(width: 4),
-                                            Icon(Icons.edit_outlined,
-                                                size: 12,
-                                                color: colors.textMuted),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          formatCurrency(
-                                              p.currentGrossValueCents, cur),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w700),
-                                        ),
-                                        if (p.estimatedTaxCents > 0)
-                                          Text(
-                                            'Líq. ${formatCurrency(p.currentNetValueCents, cur)}',
-                                            style: TextStyle(
-                                              fontSize: 9.5,
-                                              color: colors.textMuted,
-                                            ),
-                                          ),
-                                      ],
-                                    )),
-                                    DataCell(Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          formatCurrency(
-                                              p.unrealizedPnlCents, cur),
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: pnlColor,
-                                              fontWeight: FontWeight.w700),
-                                        ),
-                                        Text(
-                                          '${p.unrealizedPnlPct >= 0 ? "+" : ""}${p.unrealizedPnlPct.toStringAsFixed(2)}%',
-                                          style: TextStyle(
-                                              fontSize: 10.5, color: pnlColor),
-                                        ),
-                                      ],
-                                    )),
-                                    DataCell(Text(formatCurrency(
-                                        p.totalDividendsCents, cur))),
-                                    DataCell(Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          tooltip: 'Nova Operação',
-                                          visualDensity: VisualDensity.compact,
-                                          icon: const Icon(
-                                              Icons.add_circle_outline,
-                                              size: 16),
-                                          onPressed: () =>
-                                              showInvestmentOperationModal(
-                                            context,
-                                            widget.store,
-                                            initialAsset: p.asset,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Editar Ativo',
-                                          visualDensity: VisualDensity.compact,
-                                          icon: const Icon(Icons.edit_outlined,
-                                              size: 16),
-                                          onPressed: () =>
-                                              showInvestmentAssetModal(
-                                            context,
-                                            widget.store,
-                                            existing: p.asset,
-                                          ),
-                                        ),
-                                      ],
-                                    )),
-                                  ]);
-                                }).toList(),
+                                    )
+                                  : Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 8),
+                                      child: content,
+                                    );
+
+                              return width != null
+                                  ? SizedBox(width: width, child: cell)
+                                  : Expanded(child: cell);
+                            }
+
+                            Widget numCell(
+                              double width,
+                              Widget child,
+                            ) {
+                              return SizedBox(
+                                width: width,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: child,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final headerRow = Container(
+                              height: 36,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                color:
+                                    colors.borderGlass.withValues(alpha: 0.14),
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: colors.borderGlass,
+                                    width: 1,
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
+                              child: Row(
+                                children: [
+                                  headerCell('Ativo', 0),
+                                  headerCell('Classe', 1, width: 58),
+                                  headerCell('Qtde', 2,
+                                      width: 72, numeric: true),
+                                  headerCell('Valor Compra', 3,
+                                      width: 108, numeric: true),
+                                  headerCell('PM Compra', 4,
+                                      width: 96, numeric: true),
+                                  headerCell('PM Venda', 5,
+                                      width: 90, numeric: true),
+                                  headerCell('Preço Atual', 6,
+                                      width: 118, numeric: true),
+                                  headerCell('Valor Atual', 7,
+                                      width: 114, numeric: true),
+                                  headerCell('Rentab.', 8,
+                                      width: 102, numeric: true),
+                                  headerCell('Proventos', 9,
+                                      width: 96, numeric: true),
+                                  headerCell('Ações', 10,
+                                      width: 72, sortable: false),
+                                ],
+                              ),
+                            );
+
+                            final dataTextStyle = TextStyle(
+                              fontSize: 12,
+                              color: colors.textPrimary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            );
+
+                            final bodyList = Expanded(
+                              child: Scrollbar(
+                                controller: _tableVScrollCtrl,
+                                thumbVisibility: true,
+                                interactive: true,
+                                notificationPredicate: (n) =>
+                                    n.metrics.axis == Axis.vertical,
+                                child: DefaultTextStyle(
+                                  style: dataTextStyle,
+                                  child: ListView.separated(
+                                    controller: _tableVScrollCtrl,
+                                    physics: const ClampingScrollPhysics(),
+                                    itemCount: positions.length,
+                                    separatorBuilder: (_, _) => Divider(
+                                      height: 1,
+                                      thickness: 0.6,
+                                      color: colors.borderGlass
+                                          .withValues(alpha: 0.55),
+                                    ),
+                                    itemBuilder: (ctx, i) {
+                                      final p = positions[i];
+                                      final cur = p.asset.currency;
+                                      final pnlColor =
+                                          p.unrealizedPnlCents >= 0
+                                              ? colors.income
+                                              : colors.expense;
+                                      return Container(
+                                        constraints:
+                                            const BoxConstraints(minHeight: 42),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 4,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: InkWell(
+                                                onTap: () =>
+                                                    showAssetOperationsModal(
+                                                  context,
+                                                  widget.store,
+                                                  p.asset,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                child: Tooltip(
+                                                  message:
+                                                      'Ver movimentações de ${p.asset.displayCode}',
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Text(
+                                                        p.asset.displayCode,
+                                                        style: TextStyle(
+                                                          fontSize: 12.5,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: colors.accent,
+                                                        ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                      Text(
+                                                        p.asset.name,
+                                                        style: TextStyle(
+                                                          fontSize: 10.5,
+                                                          color: colors
+                                                              .textSecondary,
+                                                        ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 58,
+                                              child: Text(
+                                                p.asset.assetClass.shortLabel,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            numCell(
+                                              72,
+                                              Text(formatInvestQty(p.currentQty,
+                                                  p.asset.assetClass)),
+                                            ),
+                                            numCell(
+                                              108,
+                                              Text(formatCurrency(
+                                                  p.currentCostBasisCents,
+                                                  cur)),
+                                            ),
+                                            numCell(
+                                              96,
+                                              Text(formatCurrency(
+                                                  p.avgBuyPriceCents, cur)),
+                                            ),
+                                            numCell(
+                                              90,
+                                              Text(p.avgSellPriceCents > 0
+                                                  ? formatCurrency(
+                                                      p.avgSellPriceCents, cur)
+                                                  : '—'),
+                                            ),
+                                            numCell(
+                                              118,
+                                              InkWell(
+                                                onTap: () =>
+                                                    _editPriceInline(p),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(formatCurrency(
+                                                        p.currentUnitPriceCents,
+                                                        cur)),
+                                                    if (p.asset.manualPrice) ...[
+                                                      const SizedBox(width: 4),
+                                                      Tooltip(
+                                                        message:
+                                                            'Preço em modo Manual (clique para editar ou voltar ao automático)',
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 4,
+                                                                  vertical: 1),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: colors
+                                                                .warning
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.18),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                          ),
+                                                          child: Text(
+                                                            'M',
+                                                            style: TextStyle(
+                                                              fontSize: 9.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              color: colors
+                                                                  .warning,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                    const SizedBox(width: 4),
+                                                    Icon(Icons.edit_outlined,
+                                                        size: 12,
+                                                        color:
+                                                            colors.textMuted),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            numCell(
+                                              114,
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    formatCurrency(
+                                                        p.currentGrossValueCents,
+                                                        cur),
+                                                    style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700),
+                                                  ),
+                                                  if (p.estimatedTaxCents > 0)
+                                                    Text(
+                                                      'Líq. ${formatCurrency(p.currentNetValueCents, cur)}',
+                                                      style: TextStyle(
+                                                        fontSize: 9.5,
+                                                        color: colors.textMuted,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                            numCell(
+                                              102,
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    formatCurrency(
+                                                        p.unrealizedPnlCents,
+                                                        cur),
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: pnlColor,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${p.unrealizedPnlPct >= 0 ? "+" : ""}${p.unrealizedPnlPct.toStringAsFixed(2)}%',
+                                                    style: TextStyle(
+                                                      fontSize: 10.5,
+                                                      color: pnlColor,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            numCell(
+                                              96,
+                                              Text(formatCurrency(
+                                                  p.totalDividendsCents, cur)),
+                                            ),
+                                            SizedBox(
+                                              width: 72,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    tooltip: 'Nova Operação',
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    style: IconButton.styleFrom(
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                    ),
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                      minWidth: 32,
+                                                      minHeight: 32,
+                                                    ),
+                                                    icon: const Icon(
+                                                        Icons
+                                                            .add_circle_outline,
+                                                        size: 16),
+                                                    onPressed: () =>
+                                                        showInvestmentOperationModal(
+                                                      context,
+                                                      widget.store,
+                                                      initialAsset: p.asset,
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    tooltip: 'Editar Ativo',
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    style: IconButton.styleFrom(
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                    ),
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                      minWidth: 32,
+                                                      minHeight: 32,
+                                                    ),
+                                                    icon: const Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 16),
+                                                    onPressed: () =>
+                                                        showInvestmentAssetModal(
+                                                      context,
+                                                      widget.store,
+                                                      existing: p.asset,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+
+                            final tableContent = Column(
+                              children: [
+                                headerRow,
+                                bodyList,
+                              ],
+                            );
+
+                            if (!needsHScroll) {
+                              return tableContent;
+                            }
+
+                            return Scrollbar(
+                              controller: _tableHScrollCtrl,
+                              thumbVisibility: true,
+                              trackVisibility: true,
+                              interactive: true,
+                              notificationPredicate: (n) =>
+                                  n.metrics.axis == Axis.horizontal,
+                              child: SingleChildScrollView(
+                                controller: _tableHScrollCtrl,
+                                scrollDirection: Axis.horizontal,
+                                physics: const ClampingScrollPhysics(),
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: SizedBox(
+                                  width: minTableWidth,
+                                  height: (innerH - 12)
+                                      .clamp(120.0, double.infinity),
+                                  child: tableContent,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     );
                   },
                 ),
         ),
+        if (positions.isNotEmpty)
+          _buildPositionsTotalsFooter(colors, isMobile, positions),
       ],
+    );
+  }
+
+  Widget _buildPositionsTotalsFooter(
+    OpenMoneyColors colors,
+    bool isMobile,
+    List<AssetPositionSummary> positions,
+  ) {
+    final baseCur = widget.store.baseCurrency;
+    int totalCost = 0;
+    int totalGross = 0;
+    int totalNet = 0;
+    int totalTax = 0;
+    for (final p in positions) {
+      final cur = p.asset.currency;
+      totalCost += widget.store.convertToBase(p.currentCostBasisCents, cur);
+      totalGross += widget.store.convertToBase(p.currentGrossValueCents, cur);
+      totalNet += widget.store.convertToBase(p.currentNetValueCents, cur);
+      totalTax += widget.store.convertToBase(p.estimatedTaxCents, cur);
+    }
+    final totalPnl = totalGross - totalCost;
+    final totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100.0 : 0.0;
+    final pnlColor = totalPnl >= 0 ? colors.income : colors.expense;
+
+    Widget stat(String label, String val, {Color? color, String? sub}) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: colors.textSecondary),
+          ),
+          Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                val,
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 13,
+                  fontWeight: FontWeight.w800,
+                  color: color ?? colors.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (sub != null)
+                Text(
+                  sub,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: color ?? colors.textMuted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 20,
+        vertical: isMobile ? 8 : 10,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        border: Border(top: BorderSide(color: colors.borderGlass)),
+      ),
+      child: Wrap(
+        spacing: isMobile ? 14 : 24,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
+        children: [
+          Text(
+            'Totais (${positions.length} ativo${positions.length == 1 ? "" : "s"})',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: colors.textSecondary,
+            ),
+          ),
+          Wrap(
+            spacing: isMobile ? 14 : 24,
+            runSpacing: 6,
+            children: [
+              stat('Valor Compra', formatCurrency(totalCost, baseCur)),
+              stat(
+                'Valor Atual',
+                formatCurrency(totalGross, baseCur),
+                sub: totalTax > 0
+                    ? '(Líq. ${formatCurrency(totalNet, baseCur)})'
+                    : null,
+              ),
+              stat(
+                'Rentabilidade',
+                formatCurrency(totalPnl, baseCur),
+                color: pnlColor,
+                sub:
+                    '(${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toStringAsFixed(2)}%)',
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1563,15 +1906,26 @@ class _InvestmentsViewState extends State<InvestmentsView>
     );
   }
 
-  Widget _buildFixedIncomeTab(
-      OpenMoneyColors colors, PortfolioSummary summary, bool isMobile) {
+  Widget _buildFixedIncomeListTab(
+    OpenMoneyColors colors,
+    PortfolioSummary summary,
+    bool isMobile, {
+    required InvestAssetClass assetClass,
+    required String emptyMessage,
+  }) {
     final rf = summary.positions
-        .where((p) => p.asset.isFixedIncome && p.hasOpenPosition)
+        .where((p) => p.asset.assetClass == assetClass && p.hasOpenPosition)
         .toList();
     if (rf.isEmpty) {
       return Center(
-        child: Text('Nenhum título de Renda Fixa ou Tesouro Direto ativo.',
-            style: TextStyle(fontSize: 13, color: colors.textSecondary)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            emptyMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: colors.textSecondary),
+          ),
+        ),
       );
     }
     return ListView.builder(
@@ -1585,52 +1939,143 @@ class _InvestmentsViewState extends State<InvestmentsView>
       itemBuilder: (ctx, i) {
         final p = rf[i];
         final cur = p.asset.currency;
-        return GlassCard(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${p.asset.displayCode} · ${p.asset.subType ?? p.asset.assetClass.label}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        color: colors.textPrimary,
+        final title = p.asset.subType != null &&
+                p.asset.subType!.trim().isNotEmpty &&
+                !p.asset.displayCode
+                    .toLowerCase()
+                    .contains(p.asset.subType!.trim().toLowerCase())
+            ? '${p.asset.displayCode} · ${p.asset.subType}'
+            : p.asset.displayCode;
+        final meta =
+            '${p.asset.indexerSummary}${p.asset.maturityDate != null ? " · Vence ${fmtDate(p.asset.maturityDate!)}" : ""} · ${p.daysHeld} dias (${p.asset.taxExempt ? "Isento IR" : "IR ${p.irRatePct.toStringAsFixed(1)}%"})';
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showAssetOperationsModal(context, widget.store, p.asset),
+          child: GlassCard(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 14,
+              vertical: 10,
+            ),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: colors.accent,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            formatCurrency(p.currentGrossValueCents, cur),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: colors.textPrimary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${p.asset.indexerSummary}${p.asset.maturityDate != null ? " · Vence ${fmtDate(p.asset.maturityDate!)}" : ""} · ${p.daysHeld} dias (${p.asset.taxExempt ? "Isento IR" : "IR ${p.irRatePct.toStringAsFixed(1)}%"})',
-                      style:
-                          TextStyle(fontSize: 11.5, color: colors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Bruto: ${formatCurrency(p.currentGrossValueCents, cur)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                      color: colors.textPrimary,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                      const SizedBox(height: 3),
+                      Text(
+                        meta,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const Divider(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            'Aplicado: ${formatCurrency(p.currentCostBasisCents, cur)}',
+                            style: TextStyle(
+                                fontSize: 11, color: colors.textSecondary),
+                          ),
+                          Text(
+                            'Líq.: ${formatCurrency(p.currentNetValueCents, cur)}',
+                            style: TextStyle(
+                                fontSize: 11, color: colors.textSecondary),
+                          ),
+                          Text(
+                            'IR est.: ${formatCurrency(p.estimatedTaxCents, cur)}',
+                            style: TextStyle(
+                                fontSize: 11, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: colors.accent,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              meta,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11.5, color: colors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Bruto: ${formatCurrency(p.currentGrossValueCents, cur)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: colors.textPrimary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'Líq.: ${formatCurrency(p.currentNetValueCents, cur)} · IR: ${formatCurrency(p.estimatedTaxCents, cur)} · Aplic.: ${formatCurrency(p.currentCostBasisCents, cur)}',
+                            style: TextStyle(
+                                fontSize: 11, color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Líq.: ${formatCurrency(p.currentNetValueCents, cur)} · IR: ${formatCurrency(p.estimatedTaxCents, cur)} · Aplic.: ${formatCurrency(p.currentCostBasisCents, cur)}',
-                    style:
-                        TextStyle(fontSize: 11, color: colors.textSecondary),
-                  ),
-                ],
-              ),
-            ],
           ),
         );
       },

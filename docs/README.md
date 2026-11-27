@@ -380,7 +380,7 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 ### 1. Gestão Completa de Contas e Patrimônio Global
 - **Múltiplos Tipos de Conta Suportados**:
   - **Corrente**: Movimentação bancária diária, transferências e pagamentos.
-  - **Poupança**: Contas de reserva e rendimento básico.
+  - **Poupança / Caixinha / Cofrinhos**: Contas de reserva com liquidez imediata e rendimento básico.
   - **Investimento**: Aplicações de renda fixa/variável e patrimônio investido.
   - **Dinheiro**: Controle de carteira, pequenos gastos em espécie e caixinha.
   - **Cartão de Crédito**: Gestão de limite, fechamento, vencimento e faturas.

@@ -365,7 +365,7 @@ classDiagram
 
 ### Constantes e Catálogos Canônicos (`openmoney_models.dart`)
 
-- **Tipos de conta (`kAccountTypes`):** `"Corrente"`, `"Poupança"`, `"Cartão de crédito"` (`kCardType`), `"Investimento"`, `"Dinheiro"`.
+- **Tipos de conta (`kAccountTypes`):** `"Corrente"`, `"Poupança"`, `"Caixinha"`, `"Cofrinhos"`, `"Cartão de crédito"` (`kCardType`), `"Investimento"`, `"Dinheiro"`.
 - **Separador hierárquico de categorias (`kCategorySep`):** `" › "` (máximo de 2 níveis: Pai e Subcategoria). Categorias com `"transferencia"` no nome retornam `effectiveIncludeInReports == false` por padrão quando `includeInReports == null`.
 - **11 moedas suportadas (`kSupportedCurrencies`):** `BRL` (2 casas), `USD` (2), `EUR` (2), `CAD` (2), `AUD` (2), `GBP` (2), `PYG` (0 casas quando centavos zerados), `ARS` (2), `UYU` (2), `CHF` (2), `CLP` (0 casas quando centavos zerados), com taxas de fallback em `kFallbackRatesBrl`.
 - **Identificação de transações automáticas e geradas:**

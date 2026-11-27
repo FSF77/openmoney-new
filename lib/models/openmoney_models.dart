@@ -7,10 +7,15 @@ const String kCategorySep = ' › ';
 const List<String> kAccountTypes = [
   'Corrente',
   'Poupança',
+  'Caixinha',
+  'Cofrinhos',
   'Cartão de crédito',
   'Investimento',
   'Dinheiro',
 ];
+
+bool isSavingsOrReserveAccountType(String type) =>
+    type == 'Poupança' || type == 'Caixinha' || type == 'Cofrinhos';
 
 class CurrencyMeta {
   final String code;

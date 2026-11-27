@@ -94,7 +94,7 @@ Representa qualquer custódia de valor monetário: conta corrente, carteira fís
 | :--- | :--- | :---: | :--- | :--- | :--- |
 | `id` | `String` | Sim | `uid()` | Identificador único alfanumérico da conta (ex: `"acc-123"`, `"a1"`). | Chave primária referenciada por `Transaction.acc`, `Transaction.peer`, `CardConfig.pay`. |
 | `name` | `String` | Sim | — | Nome de exibição da conta (ex: `"Itaú Personalité"`, `"Nubank Ultravioleta"`). | Exibição em telas e menus. |
-| `type` | `String` | Sim | `"Corrente"` | Tipo de conta contábil. Valores permitidos: `"Corrente"`, `"Poupança"`, `"Cartão de crédito"`, `"Investimento"`, `"Dinheiro"`. | Define comportamento da interface e regras de balanço. |
+| `type` | `String` | Sim | `"Corrente"` | Tipo de conta contábil. Valores permitidos: `"Corrente"`, `"Poupança"`, `"Caixinha"`, `"Cofrinhos"`, `"Cartão de crédito"`, `"Investimento"`, `"Dinheiro"`. | Define comportamento da interface e regras de balanço. |
 | `opening` | `Int` | Sim | `0` | Saldo inicial de abertura da conta expresso em centavos inteiros. Pode ser negativo em contas de cartão de crédito legadas. | Adicionado ao somatório de transações para calcular o saldo atual. |
 | `card` | `CardConfig?` | Não | `null` | Objeto contendo os parâmetros operacionais de fechamento e vencimento de fatura. | Presente exclusivamente quando `type == "Cartão de crédito"`. |
 | `invoices` | `Map<String, InvoiceInfo>?` | Não | `null` | Dicionário de exceções e configurações personalizadas de faturas históricas, indexado por competência (`"YYYY-MM"`). | 1:N indexado por chave de competência (`ik`). |
@@ -278,7 +278,7 @@ Quando um relatório mensal/anual ou fluxo de caixa é filtrado para uma única 
 
 ### Tipos de Conta (`Account.type` / `kAccountTypes` / `ACCOUNT_TYPES`):
 - `"Corrente"`: Conta bancária de movimentação diária com saldo livre.
-- `"Poupança"`: Conta de reserva com rendimento simples.
+- `"Poupança"` / `"Caixinha"` / `"Cofrinhos"`: Contas de reserva de liquidez imediata (agrupadas junto a Investimentos no Dashboard, sem compor caixa livre de corretoras).
 - `"Cartão de crédito"`: Linha de crédito rotativo com ciclos de fechamento, vencimento e limite.
 - `"Investimento"`: Ativos financeiros, corretoras ou aplicações.
 - `"Dinheiro"`: Caixa físico, numerário em espécie e carteira.

@@ -73,7 +73,8 @@ No topo do painel da Assistente, uma barra compacta de ferramentas com ícones e
 - 🔁 **Detectar Recorrências:** Detecta cobranças periódicas nos últimos 12 meses. O tooltip informa a contagem de assinaturas e recorrências identificadas.
 - 🪄 **Organizar Base:** Localiza lançamentos pendentes de classificação e possíveis inconsistências.
   - **Filtro Anti-Falso-Positivo:** A rotina inteligente de deduplicação **exclui automaticamente transações já conciliadas** (`rec == true`), **compras parceladas** (`plan` ou parcelas `pn`/`pt`) e **pagamentos antecipados**, garantindo que compras legítimas parceladas ou adiantadas não sejam sugeridas indevidamente como duplicidades.
-- 📑 **Diagnóstico Geral:** Apresenta uma síntese financeira completa da posição corrente.
+- 📑 **Diagnóstico Geral:** Apresenta uma síntese financeira completa da posição corrente, consolidando no **Patrimônio Real Consolidado** o saldo de Contas/Cartões somado ao valor atualizado da **Carteira de Investimentos** (além da composição separada).
+- 📈 **Análise de IA Local para Investimentos:** O contexto enviado ao Assistente IA (inclusive **Apple Intelligence** offline) e o painel na aba **Análise & Alocação** incluem o diagnóstico completo da carteira (`InvestmentInsightsEngine`): Score de Diversificação (0–100), mix de indexadores da Renda Fixa, alertas de concentração, radar de queda de alíquota de IR (≤ 30d), vencimentos próximos (≤ 90d), caixa parado em corretora e *Yield on Cost*.
 
 ---
 

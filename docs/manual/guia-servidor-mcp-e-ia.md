@@ -126,6 +126,12 @@ Com a IA conectada, você pode falar em linguagem natural como se estivesse conv
 - *"Quais assinaturas ou pagamentos recorrentes estão previstos até o fim do mês?"*
 - *"Estou perto de estourar algum limite no meu orçamento?"*
 
+### Análise de Carteira e Investimentos
+- *"Qual o resumo da minha carteira de investimentos, rentabilidade e score de diversificação?"*
+- *"Quais ativos da minha carteira estão com maior alta, maior baixa ou concentração acima de 25%?"*
+- *"Tenho títulos de Renda Fixa vencendo nos próximos 90 dias ou prestes a cair de alíquota de IR?"*
+- *"Registre a compra de 50 cotas de PETR4 a R$ 38,50 hoje na minha corretora XP."*
+
 ### Lançamentos Rápidos e Transferências
 - *"Almocei no restaurante Sabor da Terra e paguei R$ 45,00 no débito Itaú hoje. Lança pra mim na categoria Alimentação com a tag #trabalho."*
 - *"Comprei uma mesa de escritório de R$ 600,00 em 3x no cartão Nubank hoje."*
@@ -214,7 +220,7 @@ Esta seção documenta a arquitetura técnica, padrões de segurança e especifi
 
 | Ferramenta | Método | Escopo | Finalidade |
 | :--- | :--- | :--- | :--- |
-| `openmoney_get_financial_overview` | Leitura | `read_only` | Resumo financeiro consolidado: saldo bancário conciliado por conta, saldo previsto no mês, total de despesas, receitas e resultado líquido. |
+| `openmoney_get_financial_overview` | Leitura | `read_only` | Resumo financeiro consolidado: caixa líquido conciliado por conta, carteira de investimentos bruta, patrimônio consolidado, saldo previsto no mês, receitas, despesas e resultado líquido. |
 | `openmoney_list_accounts` | Leitura | `read_only` | Relação detalhada de contas bancárias, tipos, identificadores e saldos. |
 | `openmoney_list_categories` | Leitura | `read_only` | Estrutura hierárquica de categorias e subcategorias cadastradas. |
 | `openmoney_query_transactions` | Leitura | `read_only` | Busca e filtro de lançamentos por data, conta, texto, tag ou status de conciliação. |
@@ -222,3 +228,7 @@ Esta seção documenta a arquitetura técnica, padrões de segurança e especifi
 | `openmoney_update_transaction` | Escrita | `read_write` | Edição de campos de lançamentos existentes por ID. |
 | `openmoney_delete_transaction` | Escrita | `read_write` | Remoção unitária e segura de transação por ID (e de contraparte em transferências). |
 | `openmoney_get_predictions_and_budgets` | Leitura | `read_only` | Avaliação completa dos limites de gastos (orçamento mensal configurado em Limite de Gastos) e previsões de gastos do mês, com teto planejado, gastos realizados, % consumido e saldo restante. Suporta alias `openmoney_get_budget_status`. |
+| `openmoney_get_investments_overview` | Leitura | `read_only` | Resumo da carteira de investimentos (aplicado, bruto, IR estimado, líquido, rentabilidade, realizado, proventos, caixa livre em corretoras), alocação por classe e **insights automáticos** (concentração, maiores altas/baixas, vencimentos ≤ 90d e queda de faixa de IR ≤ 30d). |
+| `openmoney_list_investment_positions` | Leitura | `read_only` | Lista posições da carteira filtráveis por classe, corretora, busca ou posições encerradas, com quantidade, PM, preço atual, valor bruto/líquido, rentabilidade e proventos. |
+| `openmoney_list_investment_operations` | Leitura | `read_only` | Extrato de operações da carteira (compra, venda, dividendo, JCP, rendimento FII, amortização, posição inicial) filtrável por ticker, tipo, corretora e período. |
+| `openmoney_create_investment_operation` | Escrita | `read_write` | Registra nova operação na carteira (compra, venda, dividendo, JCP, rendimento FII ou amortização) com movimentação opcional de caixa e Sync v2. |
