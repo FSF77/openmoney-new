@@ -75,9 +75,13 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Navegação no Seletor de Mês e Tela de Lançamentos**:
   - No seletor de mês superior da tela de lançamentos de uma conta de cartão de crédito, ao selecionar **Novembro**, o sistema exibe os lançamentos da **Fatura de Novembro** (vencimento em Novembro), independentemente de terem ocorrido no final de setembro ou em outubro.
   - O cabeçalho exibe o detalhamento completo do ciclo: `Fatura Novembro de 2026 · Fecha dia 23 (23/10/2026) · Vence dia 3 (03/11/2026) · Débito em ...`.
+  - **Direcionamento Automático para Fatura Fechada em Aberto (`defaultInvoiceForAccount`)**: Ao alternar para uma conta de cartão de crédito ou visualizar o card de faturas no Dashboard, caso a fatura anterior tenha fechado recentemente e ainda esteja dentro da janela de pagamento (`closeDate <= hoje <= dueDate`) com saldo a pagar, o app direciona diretamente para essa fatura pendente antes de avançar para o próximo ciclo.
 - **Saldo Previsto por Competência de Vencimento**:
   - O **saldo previsto** de contas do tipo cartão de crédito (exibido na barra lateral e nos resumos da conta) considera rigorosamente a data de vencimento da fatura.
   - Ao selecionar Novembro, o valor previsto totaliza as compras da fatura que vence em Novembro, garantindo que compras já pertencentes à fatura seguinte (Dezembro) não antecipem ou onerem indevidamente a previsão financeira de Novembro.
+  - **Prevenção de Rolagem Prematura**: Faturas anteriores fechadas que ainda estejam dentro do prazo de vencimento (`hoje <= dueDate`) têm seu pagamento automático programado considerado no cálculo de previsão dos períodos seguintes, evitando que o saldo da fatura fechada seja somado ao próximo ciclo. O saldo devedor só rola para o período seguinte caso ultrapasse o vencimento (`hoje > dueDate`) sem quitação.
+- **Conciliação Inicial de Compras Pós-Fechamento**:
+  - Novos lançamentos no cartão (únicos, parcelados ou recorrentes, exceto transferências) cuja fatura (`ik`) seja posterior à fatura ativa ainda em aberto iniciam automaticamente como **não conciliados** (`rec = false`), preservando o **Saldo Real** da fatura fechada até que ela seja quitada e o usuário concilie os novos itens. Assim que a fatura anterior é paga, novos lançamentos do ciclo atual voltam a iniciar conciliados (`rec = true`).
 - **Seleção Manual de Fatura (Override)**: Embora o sistema calcule a fatura padrão com base no ciclo de fechamento/vencimento, o usuário pode **escolher manualmente outra fatura** para qualquer lançamento (ex.: postergar ou antecipar uma compra de fechamento tardio). Essa opção está disponível tanto no macOS quanto no iOS/iPadOS, na barra de inserção e na edição do lançamento.
 - **Pagamento Parcial e Adiantamento de Fatura**:
   - O usuário pode registrar pagamentos totais ou parciais em qualquer data antes ou depois do vencimento (ex.: fatura de R$ 1.000 em Novembro com vencimento em 03/11; pagamento de R$ 500 no dia 15/10).
@@ -159,7 +163,7 @@ Esta seção consolida as regras fundamentais que regem o cálculo, a integridad
 - **Vínculo Correto de Transferências no QIF**: Em arquivos QIF com marcação de transferência entre contas (`[NomeDaConta]`), o sistema pré-cadastra a conta de contraparte se ela ainda não existir, preservando o relacionamento bidirecional da transferência em vez de convertê-la incorretamente em categoria avulsa.
 
 ### 9. Gestão Centralizada e Ajuste Automático de Previsões Orçamentárias
-- **Módulo Dedicado de Previsões**: Nova tela no menu principal (*PLANEJAMENTO*) para controle panorâmico dos tetos de gastos, com seletor de competência, cards de KPIs (Teto Previsto, Total Abatido, Saldo Remanescente e Total de Previsões), barras de progresso visual por categoria e drill-down expansível com a lista dos lançamentos reais (`dd/mm/aaaa`, favorecido, observação e valor) que causaram o abatimento.
+- **Módulo Dedicado de Previsões**: Tela no menu principal (*PLANEJAMENTO*) para controle panorâmico dos tetos de gastos no Desktop, Web e Mobile, com seletor de competência, quarteto realista de KPIs (**Teto Previsto**, **Gasto Real**, **Estouro** e **Saldo** líquido global com referência ao saldo restante nos tetos individuais), barras de progresso visual por categoria, drill-down expansível com os lançamentos reais (`dd/mm/aaaa`, favorecido, observação e valor) e guia detalhado em [guia-gestao-de-previsoes.md](docs/manual/guia-gestao-de-previsoes.md).
 - **Conceito de Previsão**: Lançamentos iniciados com o prefixo `Previsão` (ex.: *Previsão Posto*, *Previsão Mercado*, *Previsão Farmácia*) funcionam como reservas prévias de teto de gastos no mês, impactando ativamente o saldo projetado.
 - **Abrangência Global Multiconta**: Ao acionar o botão **"Ajustar"**, o sistema avalia as previsões do mês selecionado em todas as contas cadastradas.
 - **Apuração por Categoria em Todas as Contas**: Para cada categoria com previsão, o sistema consolida todos os gastos já realizados no mês em **todas as contas** ativas (excluindo outras previsões e transferências).
@@ -375,7 +379,7 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 ### 1. Gestão Completa de Contas e Patrimônio Global
 - **Múltiplos Tipos de Conta Suportados**:
   - **Corrente**: Movimentação bancária diária, transferências e pagamentos.
-  - **Poupança**: Contas de reserva e rendimento básico.
+  - **Poupança / Caixinha / Cofrinhos**: Contas de reserva com liquidez imediata e rendimento básico.
   - **Investimento**: Aplicações de renda fixa/variável e patrimônio investido.
   - **Dinheiro**: Controle de carteira, pequenos gastos em espécie e caixinha.
   - **Cartão de Crédito**: Gestão de limite, fechamento, vencimento e faturas.
@@ -831,6 +835,13 @@ O script executa `git pull origin main`, compila `flutter build windows --releas
 - **Alerta Preventivo de Janela Temporal**: Caso a data informada seja **anterior a mais de 30 dias** ou **posterior a mais de 12 meses** da data atual, o aplicativo exibe um aviso visual abaixo do campo e abre um diálogo de confirmação (*"Corrigir Data"* / *"Salvar Mesmo Assim"*) antes de persistir o lançamento, evitando inclusões acidentais em datas erradas.
 - **Teclado Numérico Direto em Dispositivos Móveis**: Em smartphones, iPads e tablets (nativo e Web PWA), tocar nos campos de **Data** (`TextInputType.number`) ou **Valor** (`TextInputType.numberWithOptions(decimal: true)`) abre diretamente o teclado numérico do sistema em vez do teclado alfanumérico.
 
+### 28. Servidor MCP Remoto, OAuth 2.1 e Integração com Agentes de IA Externos (ADR 036)
+- **Model Context Protocol (MCP) sobre Streamable HTTP**: Conexão padronizada para assistentes externos modernos (**ChatGPT**, **Claude Desktop**, **Claude Web**, **Google Gemini**, **Cursor**, **LM Studio**, **Claude Code** e agentes autônomos) hospedada na borda do Cloudflare Pages Functions (`/api/mcp`).
+- **Autodescoberta OAuth 2.1 (Conexão 1-Clique)**: Implementação das especificações RFC 9728 (`/.well-known/oauth-protected-resource`), RFC 8414 (`/.well-known/oauth-authorization-server`), RFC 7591 (Dynamic Client Registration) e PKCE `S256` com parâmetro `iss` (RFC 9207), permitindo vincular o ChatGPT sem inserção manual de chaves.
+- **Tokens de API Bearer com Hash SHA-256**: Geração de chaves `opm_live_...` salvas no Cloudflare D1 exclusivamente sob hash SHA-256, com confirmação obrigatória de revogação na UI e invalidação em tempo real.
+- **Trilha de Auditoria e Anti-Wipe**: Ações de inclusão ou edição via IA recebem o marcador `[MCP Remoto]` nos logs do sistema. Salvaguardas anti-wipe garantem operações unitárias por ID e impedem qualquer exclusão ou sobregravação indevida da base.
+- **Cálculo Determinístico de Saldos**: Separação clara entre **Saldo Atual do Dia (Conciliado)** (apenas lançamentos conciliados até a data de hoje, idêntico ao extrato do banco) e **Saldo Previsto no Mês** (projeção matemática incluindo pendências).
+
 ---
 
 ## 📁 Estrutura do Projeto
@@ -896,6 +907,7 @@ OpenMoneyFlutter/
 - [Relatório de Comparação Técnica e Paridade Multi-Stack](docs/architecture/relatorio-comparacao-paridade.md)
 
 ### Guias e Manuais do Usuário (`docs/manual/`)
+- [❓ Perguntas Frequentes (FAQ Completo do OpenMoney)](docs/manual/faq.md)
 - [Guia do Usuário: Agenda e Calendário Financeiro](docs/manual/guia-agenda-financeira.md)
 - [Guia do Usuário: Atualizações do Sistema, Versionamento por Data (CalVer) e Releases](docs/manual/guia-atualizacao-e-versionamento.md)
 - [Guia do Usuário: Preenchimento Automático (Autofill), Chaves-senha (Passkeys) e Bloqueio Biométrico](docs/manual/guia-autofill-passkeys-e-biometria.md)

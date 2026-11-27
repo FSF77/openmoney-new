@@ -35,6 +35,11 @@ Este documento registra as diretrizes, repositório oficial, versionamento e flu
    - **Build Number (`+BUILD`):** Incrementado automaticamente (`+1`) a cada compilação de release no `pubspec.yaml` e sincronizado em `lib/services/update_service.dart` e `version.json` (servindo também como critério de desempate para múltiplos builds publicados no mesmo dia).
 
 4. **Diretriz de Documentação e Manuais (User-First Always):**
+   - **Atualização Compulsória de ADRs, Guias de Uso e FAQ:** A cada nova funcionalidade, decisão arquitetural ou alteração relevante de comportamento, é obrigatório **criar ou atualizar**:
+     - O respectivo **ADR** em `docs/adr/` (registrando contexto, decisão, regras e impacto).
+     - O **Guia de Uso** correspondente em `docs/manual/` (seguindo a ordem centrada no usuário abaixo).
+     - O **FAQ oficial** em `docs/manual/faq.md` (adicionando ou atualizando perguntas, respostas e links).
+     - O índice de documentação no `README.md` da raiz sempre que novos arquivos forem criados.
    - Todo manual e guia de uso (`docs/manual/`) deve seguir estritamente a ordem centrada no usuário:
      1. Passo a passo prático de configuração e uso na perspectiva do usuário final (telas, botões, fluxo de 1 clique, interfaces suportadas).
      2. Exemplos práticos de comandos, prompts e casos reais de uso do dia a dia.
