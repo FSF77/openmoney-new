@@ -2,10 +2,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/investment_engine.dart';
+import '../../services/investment_insights_engine.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/investment_modals.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/ai_assistant_drawer.dart';
 import '../widgets/csv_export.dart';
 
 class InvestmentsView extends StatefulWidget {
@@ -1656,6 +1658,12 @@ class _InvestmentsViewState extends State<InvestmentsView>
     final entries = summary.byClass.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final total = summary.totalMarketValueGrossCents;
+    final cashBal = widget.store.investmentCashBalance(accountId: _accountFilter);
+    final aiReport = InvestmentInsightsEngine.analyze(
+      summary: summary,
+      cashBalanceCents: cashBal,
+      baseCurrency: baseCur,
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -1724,6 +1732,213 @@ class _InvestmentsViewState extends State<InvestmentsView>
                         ],
                       ),
                     ),
+                ],
+              ),
+            ),
+          ),
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 280, maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_awesome_rounded,
+                          size: 18, color: colors.accent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Análise de IA Local',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (aiReport.diversificationScore >= 70
+                                  ? colors.income
+                                  : aiReport.diversificationScore >= 45
+                                      ? colors.warning
+                                      : colors.expense)
+                              .withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Score ${aiReport.diversificationScore}/100 · ${aiReport.scoreLabel}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: aiReport.diversificationScore >= 70
+                                ? colors.income
+                                : aiReport.diversificationScore >= 45
+                                    ? colors.warning
+                                    : colors.expense,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Diagnóstico 100% offline da carteira. Toque em um insight para aprofundar com a IA.',
+                          style: TextStyle(
+                              fontSize: 11.5, color: colors.textSecondary),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => showAiAssistantModal(
+                          context,
+                          widget.store,
+                          initialPrompt:
+                              'Faça uma análise completa da minha carteira de investimentos: diversificação, riscos, renda fixa/IR e oportunidades.',
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline_rounded,
+                            size: 14),
+                        label: const Text('Perguntar à IA'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          minimumSize: const Size(0, 30),
+                          textStyle: const TextStyle(
+                              fontSize: 11.5, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (aiReport.fixedIncomeByIndexer.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: aiReport.fixedIncomeByIndexer.entries
+                          .map((e) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceCard,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border:
+                                      Border.all(color: colors.borderGlass),
+                                ),
+                                child: Text(
+                                  'RF ${e.key}: ${formatCurrency(e.value, baseCur)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  if (aiReport.insights.isEmpty)
+                    Text(
+                      'Nenhum alerta relevante identificado no momento.',
+                      style: TextStyle(
+                          fontSize: 12, color: colors.textSecondary),
+                    )
+                  else
+                    for (final ins in aiReport.insights) ...[
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => showAiAssistantModal(
+                          context,
+                          widget.store,
+                          initialPrompt: ins.aiPrompt,
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 7),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceCard,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: ins.severity ==
+                                      InvestmentInsightSeverity.critical
+                                  ? colors.expense.withValues(alpha: 0.45)
+                                  : ins.severity ==
+                                          InvestmentInsightSeverity.warning
+                                      ? colors.warning.withValues(alpha: 0.45)
+                                      : ins.severity ==
+                                              InvestmentInsightSeverity.positive
+                                          ? colors.income
+                                              .withValues(alpha: 0.40)
+                                          : colors.borderGlass,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                ins.severity ==
+                                        InvestmentInsightSeverity.critical
+                                    ? Icons.error_outline_rounded
+                                    : ins.severity ==
+                                            InvestmentInsightSeverity.warning
+                                        ? Icons.warning_amber_rounded
+                                        : ins.severity ==
+                                                InvestmentInsightSeverity
+                                                    .positive
+                                            ? Icons.trending_up_rounded
+                                            : Icons.lightbulb_outline_rounded,
+                                size: 16,
+                                color: ins.severity ==
+                                        InvestmentInsightSeverity.critical
+                                    ? colors.expense
+                                    : ins.severity ==
+                                            InvestmentInsightSeverity.warning
+                                        ? colors.warning
+                                        : ins.severity ==
+                                                InvestmentInsightSeverity
+                                                    .positive
+                                            ? colors.income
+                                            : colors.accent,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${ins.category} · ${ins.title}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: colors.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      ins.detail,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded,
+                                  size: 16, color: colors.textMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                 ],
               ),
             ),

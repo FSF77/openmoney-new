@@ -90,7 +90,7 @@ Se você já transferia dinheiro da Conta Corrente (ex: *Nubank*) para a Conta I
 - **Relatórios e Exportação:**
   - **Posição Atual:** exibe Ativo, Classe, Qtde, Valor Compra (Aplicado), PM Compra, PM Venda, Preço Atualizado, Valor Atual Bruto (com Líquido estimado em Renda Fixa), Rentabilidade (R$ e %) e Proventos.
   - **Renda Fixa & Tesouro:** exibe indexador, vencimento, dias corridos, valor bruto atual, valor líquido estimado, IR estimado e valor aplicado.
-  - **Análise & Alocação:** gráfico de alocação por classe (`fl_chart`).
+  - **Análise & Alocação + IA Local:** além do gráfico de alocação por classe (`fl_chart`), exibe o painel **Análise de IA Local** (100% offline e instantâneo) com **Score de Diversificação**, mix de indexadores da Renda Fixa, alertas de concentração, radar de queda de alíquota de IR (≤ 30 dias), vencimentos próximos (≤ 90 dias), caixa parado em corretora, maiores altas/baixas e *Yield on Cost*. Clicar em **Perguntar à IA** (ou em qualquer insight) abre o Assistente IA do OpenMoney (incluindo **Apple Intelligence** offline) já com os dados completos da sua carteira no contexto.
   - **Exportação:** botão **PDF** (relatório A4 Paisagem) e botão **CSV** com opção de escolher entre **Posição Consolidada** (resumo atual por ativo) ou **Operações Detalhadas** (histórico cronológico completo de todas as compras, vendas, proventos, taxas e IR), ambos compatíveis com Excel no macOS e Windows (UTF-8 BOM).
 
 ---

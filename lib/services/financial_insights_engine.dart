@@ -7,6 +7,8 @@ import '../models/openmoney_models.dart';
 import '../models/prediction_models.dart';
 import '../store/money_store.dart';
 import 'ofx_reconciliation_service.dart';
+import 'investment_engine.dart';
+import 'investment_insights_engine.dart';
 import 'wallet_import_service.dart';
 
 class PayeeSpikeDriver {
@@ -1288,6 +1290,21 @@ class FinancialInsightsEngine {
     final weekTopCats = weekCatExpenseCents.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    final realCash = store.totalBalance(predicted: false);
+    final hasInvestments = store.db.investAssets.isNotEmpty;
+    PortfolioSummary? invSummary;
+    InvestmentInsightsReport? invReport;
+    int invCash = 0;
+    if (hasInvestments) {
+      invSummary = store.portfolioSummary();
+      invCash = store.investmentCashBalance();
+      invReport = InvestmentInsightsEngine.analyze(
+        summary: invSummary,
+        cashBalanceCents: invCash,
+        baseCurrency: baseCur,
+      );
+    }
+
     return {
       'todayIso': todayIso,
       'referenceMonth': ym,
@@ -1295,13 +1312,24 @@ class FinancialInsightsEngine {
       'focusAccountId': ?focusAccountId,
       'focusCategory': ?focusCategory,
       'patrimony': {
-        'totalReal':
-            formatCurrency(store.totalBalance(predicted: false), baseCur),
+        'totalReal': formatCurrency(realCash, baseCur),
+        if (invSummary != null)
+          'investmentsGross':
+              formatCurrency(invSummary.totalMarketValueGrossCents, baseCur),
+        if (invSummary != null)
+          'consolidatedTotal': formatCurrency(
+              realCash + invSummary.totalMarketValueGrossCents, baseCur),
         'totalPredictedMonth':
             formatCurrency(store.totalBalance(predicted: true), baseCur),
         'totalPredictedYear':
             formatCurrency(store.totalBalancePredictedYear(), baseCur),
       },
+      if (invSummary != null && invReport != null)
+        'investments': invReport.toAiContextJson(
+          summary: invSummary,
+          cashBalanceCents: invCash,
+          baseCurrency: baseCur,
+        ),
       'accounts': activeAccs,
       'availableCategories': {
         'Despesa': store.allCategoryPaths('Despesa'),

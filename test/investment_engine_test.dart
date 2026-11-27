@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/analytics_engine.dart';
+import 'package:openmoney/services/b3_import_service.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
+import 'package:openmoney/services/financial_insights_engine.dart';
 import 'package:openmoney/services/investment_engine.dart';
+import 'package:openmoney/services/investment_insights_engine.dart';
 import 'package:openmoney/services/investment_quote_service.dart';
 import 'package:openmoney/store/money_store.dart';
 
@@ -1059,6 +1062,97 @@ void main() {
       expect(divOp.totalCents, 5000); // 100 * 0,50
       expect(jcpOp.taxCents, 300); // 15% de R$ 20,00 = R$ 3,00
       expect(jcpOp.totalCents, 1700); // R$ 17,00 líquido na conta
+    });
+
+    test('InvestmentInsightsEngine analisa diversificação, IR, vencimento e alimenta contexto da IA Local', () {
+      final store = MoneyStore(autoBoot: false);
+      store.db = Database(
+        accounts: [
+          Account(
+            id: 'inv1',
+            name: 'XP',
+            type: 'Investimento',
+            opening: 300000, // R$ 3.000 caixa livre
+          ),
+        ],
+        investAssets: [
+          InvestAsset(
+            id: 'a1',
+            ticker: 'PETR4',
+            name: 'Petrobras',
+            assetClass: InvestAssetClass.stock,
+            accountId: 'inv1',
+            currentPriceCents: 4200,
+          ),
+          InvestAsset(
+            id: 'cdb1',
+            ticker: 'CDB 110% CDI',
+            name: 'CDB Vencimento Próximo',
+            assetClass: InvestAssetClass.fixedIncome,
+            subType: 'CDB',
+            accountId: 'inv1',
+            indexer: InvestFixedIncomeIndexer.cdi,
+            ratePct: 110.0,
+            maturityDate: '2026-12-20',
+          ),
+        ],
+        investOps: [
+          InvestOperation(
+            id: 'op1',
+            assetId: 'a1',
+            accountId: 'inv1',
+            type: InvestOpType.buy,
+            date: '2026-01-10',
+            quantity: 100,
+            unitPriceCents: 3000,
+            totalCents: 300000,
+          ),
+          InvestOperation(
+            id: 'op2',
+            assetId: 'cdb1',
+            accountId: 'inv1',
+            type: InvestOpType.buy,
+            date: '2026-06-10', // 169 dias até 2026-11-26 -> faltam 12 dias para 181d (20%)
+            quantity: 1,
+            unitPriceCents: 100000,
+            totalCents: 100000,
+          ),
+          InvestOperation(
+            id: 'op3',
+            assetId: 'a1',
+            accountId: 'inv1',
+            type: InvestOpType.dividend,
+            date: '2026-05-01',
+            quantity: 100,
+            unitPriceCents: 150,
+            totalCents: 15000,
+          ),
+        ],
+      );
+
+      final summary = store.portfolioSummary();
+      final cashBal = store.investmentCashBalance();
+      final report = InvestmentInsightsEngine.analyze(
+        summary: summary,
+        cashBalanceCents: cashBal,
+        baseCurrency: 'BRL',
+        asOfDateIso: '2026-11-26',
+      );
+
+      expect(report.diversificationScore, inInclusiveRange(10, 100));
+      expect(report.fixedIncomeByIndexer.containsKey('CDI / Selic'), isTrue);
+      // Concentração > 40% em PETR4, queda de alíquota de IR em 12d, vencimento <= 90d, caixa livre e proventos
+      expect(report.insights.any((i) => i.id == 'conc_asset_crit'), isTrue);
+      expect(report.insights.any((i) => i.id == 'ir_drop_cdb1'), isTrue);
+      expect(report.insights.any((i) => i.id == 'mat_cdb1'), isTrue);
+      expect(report.insights.any((i) => i.id == 'idle_cash'), isTrue);
+      expect(report.insights.any((i) => i.id == 'passive_income'), isTrue);
+
+      final aiSnapshot =
+          FinancialInsightsEngine.buildCompactContextSnapshot(store);
+      expect(aiSnapshot.containsKey('investments'), isTrue);
+      expect(aiSnapshot['patrimony']['investmentsGross'], isNotNull);
+      expect(aiSnapshot['patrimony']['consolidatedTotal'], isNotNull);
     });
   });
 }
