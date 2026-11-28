@@ -440,6 +440,7 @@ class CategoryItem {
   String? parent;
   String type;
   bool? includeInReports;
+  bool? includeInCashFlow;
   bool? blocked;
   String? icon;
   String? color;
@@ -449,6 +450,7 @@ class CategoryItem {
     String? parent,
     this.type = 'Despesa',
     this.includeInReports,
+    this.includeInCashFlow,
     this.blocked,
     String? icon,
     String? color,
@@ -478,6 +480,8 @@ class CategoryItem {
     return true;
   }
 
+  bool get effectiveIncludeInCashFlow => includeInCashFlow ?? true;
+
   factory CategoryItem.fromJson(dynamic json) {
     if (json is String) {
       final lower = json.toLowerCase();
@@ -486,6 +490,7 @@ class CategoryItem {
         parent: null,
         type: (lower == 'salário' || lower == 'salario') ? 'Receita' : 'Despesa',
         includeInReports: null,
+        includeInCashFlow: null,
         blocked: null,
       );
     }
@@ -497,6 +502,7 @@ class CategoryItem {
         parent: (p != null && p.isEmpty) ? null : p,
         type: map['type'] as String? ?? 'Despesa',
         includeInReports: map['includeInReports'] as bool?,
+        includeInCashFlow: map['includeInCashFlow'] as bool?,
         blocked: map['blocked'] as bool?,
         icon: map['icon'] as String?,
         color: map['color'] as String?,
@@ -510,6 +516,7 @@ class CategoryItem {
         if (parent != null) 'parent': parent,
         'type': type,
         if (includeInReports != null) 'includeInReports': includeInReports,
+        if (includeInCashFlow != null) 'includeInCashFlow': includeInCashFlow,
         if (blocked == true) 'blocked': true,
         if (icon != null && icon!.isNotEmpty) 'icon': icon,
         if (color != null && color!.isNotEmpty) 'color': color,
@@ -520,6 +527,7 @@ class CategoryItem {
     String? parent,
     String? type,
     bool? includeInReports,
+    bool? includeInCashFlow,
     bool? blocked,
     String? icon,
     String? color,
@@ -529,6 +537,7 @@ class CategoryItem {
       parent: parent ?? this.parent,
       type: type ?? this.type,
       includeInReports: includeInReports ?? this.includeInReports,
+      includeInCashFlow: includeInCashFlow ?? this.includeInCashFlow,
       blocked: blocked ?? this.blocked,
       icon: icon ?? this.icon,
       color: color ?? this.color,
@@ -543,13 +552,14 @@ class CategoryItem {
           parent == other.parent &&
           type == other.type &&
           includeInReports == other.includeInReports &&
+          includeInCashFlow == other.includeInCashFlow &&
           blocked == other.blocked &&
           icon == other.icon &&
           color == other.color;
 
   @override
-  int get hashCode =>
-      Object.hash(name, parent, type, includeInReports, blocked, icon, color);
+  int get hashCode => Object.hash(name, parent, type, includeInReports,
+      includeInCashFlow, blocked, icon, color);
 }
 
 class Transaction {

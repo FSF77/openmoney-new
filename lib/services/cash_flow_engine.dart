@@ -446,6 +446,8 @@ class CashFlowEngine {
     String searchQuery = '',
     String baseCurrency = 'BRL',
     Map<String, CurrencyRateInfo> rates = const {},
+    Map<String, int> investmentMarketValueByAccount = const {},
+    bool Function(String categoryPath)? isCategoryIncludedInCashFlow,
   }) {
     final currentISO = todayISO();
     final currentYM = currentISO.substring(0, 7);
@@ -657,6 +659,11 @@ class CashFlowEngine {
 
     for (final tx in filteredTxs) {
       if (tx.amt == 0) continue;
+      if (isCategoryIncludedInCashFlow != null &&
+          !isTransferTransaction(tx) &&
+          !isCategoryIncludedInCashFlow(tx.cat)) {
+        continue;
+      }
       final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
       int colIdx = -1;
       for (int i = 0; i < numCols; i++) {
@@ -862,10 +869,20 @@ class CashFlowEngine {
       }
     });
 
-    final baseOpening = (statusFilter == CashFlowStatusFilter.pendingOnly ||
-            kindFilter != CashFlowKindFilter.all)
-        ? 0
-        : initialOpening;
+    bool isNonWealthInvestTx(Transaction tx) {
+      if (tx.investOpId != null && isTransferTransaction(tx)) return true;
+      final acc = accMap[tx.acc];
+      if (acc != null &&
+          acc.type == 'Investimento' &&
+          isCategoryIncludedInCashFlow != null &&
+          !isTransferTransaction(tx) &&
+          !isCategoryIncludedInCashFlow(tx.cat)) {
+        return true;
+      }
+      return false;
+    }
+
+    final nonWealthByAccount = <String, int>{};
     final priorDeltas = List<int>.filled(numCols, 0);
     final firstColStart = colStartDates.isNotEmpty ? colStartDates.first : '';
     final validAccountIds = accounts.map((a) => a.id).toSet();
@@ -886,8 +903,14 @@ class CashFlowEngine {
           break;
       }
 
-      final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
       final convAmt = convertTxAmount(tx, tx.amt);
+      if (isNonWealthInvestTx(tx)) {
+        nonWealthByAccount[tx.acc] =
+            (nonWealthByAccount[tx.acc] ?? 0) + convAmt;
+        continue;
+      }
+
+      final effDate = effectiveDateForTransaction(tx, accounts, dateMode);
       if (effDate.compareTo(firstColStart) < 0) {
         if (numCols > 0) priorDeltas[0] += convAmt;
       } else {
@@ -900,6 +923,27 @@ class CashFlowEngine {
         }
       }
     }
+
+    int investmentDeltaOpening = 0;
+    for (final a in accounts) {
+      if (isSpecificAccounts && !activeAccountFilter.contains(a.id)) continue;
+      final rawMarket = investmentMarketValueByAccount[a.id] ?? 0;
+      final nonWealth = nonWealthByAccount[a.id] ?? 0;
+      if (rawMarket != 0 || nonWealth != 0) {
+        final marketConv = convertCents(
+          rawMarket,
+          fromCurrency: a.effectiveCurrency,
+          toCurrency: targetCurrency,
+          rates: rates,
+        );
+        investmentDeltaOpening += marketConv + nonWealth;
+      }
+    }
+
+    final baseOpening = (statusFilter == CashFlowStatusFilter.pendingOnly ||
+            kindFilter != CashFlowKindFilter.all)
+        ? 0
+        : initialOpening + investmentDeltaOpening;
 
     final priorBalances = List<int>.filled(numCols, 0);
     int runningPrior = baseOpening;

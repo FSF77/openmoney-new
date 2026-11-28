@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
 import 'package:openmoney/services/cash_flow_engine.dart';
+import 'package:openmoney/store/money_store.dart';
 
 void main() {
   test('soma do detalhe bate com cada celula da matriz', () {
@@ -152,5 +153,111 @@ void main() {
       expect(y >= currentYear - 7 && y <= currentYear + 2, isTrue,
           reason: 'Ano $y fora da janela permitida');
     }
+  });
+
+  test('concilia saldo acumulado com conta de investimentos e saída fora de relatórios', () {
+    final accounts = [
+      Account(id: 'cc', name: 'Nubank', type: 'Corrente', opening: -500000),
+      Account(
+          id: 'inv',
+          name: 'Corretora',
+          type: 'Investimento',
+          opening: 19400000),
+    ];
+    final txs = [
+      Transaction(
+        acc: 'inv',
+        date: '2026-11-10',
+        payee: 'Ajuste Posição Inicial',
+        cat: 'Ajuste Carteira',
+        amt: -19400000,
+      ),
+      Transaction(
+        acc: 'cc',
+        date: '2026-11-15',
+        payee: 'Mercado',
+        cat: 'Alimentação',
+        amt: -10000,
+      ),
+    ];
+
+    bool includeInCashFlow(String cat) => cat != 'Ajuste Carteira';
+
+    // 1. Todas as contas: saída de ajuste não entra em Despesas e carteira entra no saldo acumulado
+    final mAll = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      investmentMarketValueByAccount: {'inv': 19400889},
+      isCategoryIncludedInCashFlow: includeInCashFlow,
+    );
+
+    expect(mAll.expenseSection.grandTotal, 10000);
+    // Saldo inicial consolidado: -5.000 + (194.000 - 194.000 + 194.008,89) = +189.008,89
+    expect(mAll.priorBalancePeriodTotals[10], 18900889);
+    // Saldo final em Nov/2026: 189.008,89 - 100,00 = 188.908,89
+    expect(mAll.endingBalancePeriodTotals[10], 18890889);
+
+    // 2. Filtrando apenas conta Corrente: não soma carteira da corretora
+    final mCcOnly = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      accountFilterIds: {'cc'},
+      investmentMarketValueByAccount: {'inv': 19400889},
+      isCategoryIncludedInCashFlow: includeInCashFlow,
+    );
+    expect(mCcOnly.priorBalancePeriodTotals[10], -500000);
+    expect(mCcOnly.endingBalancePeriodTotals[10], -510000);
+
+    // 3. Conta de investimento criada do zero (opening = 0) com carteira de R$ 50.000
+    final mZeroOpen = CashFlowEngine.buildMatrix(
+      transactions: const [],
+      accounts: [
+        Account(id: 'inv0', name: 'XP', type: 'Investimento', opening: 0),
+      ],
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      investmentMarketValueByAccount: {'inv0': 5000000},
+    );
+    expect(mZeroOpen.priorBalanceGrandTotal, 5000000);
+    expect(mZeroOpen.endingBalanceGrandTotal, 5000000);
+  });
+
+  test('CategoryItem e MoneyStore separam includeInReports de includeInCashFlow', () {
+    final legacy = CategoryItem.fromJson({'name': 'Histórico', 'type': 'Despesa', 'includeInReports': false});
+    expect(legacy.effectiveIncludeInReports, isFalse);
+    expect(legacy.effectiveIncludeInCashFlow, isTrue);
+
+    final excludedBoth = CategoryItem(
+      name: 'Ajuste Carteira',
+      type: 'Despesa',
+      includeInReports: false,
+      includeInCashFlow: false,
+    );
+    final roundtrip = CategoryItem.fromJson(excludedBoth.toJson());
+    expect(roundtrip.includeInCashFlow, isFalse);
+    expect(roundtrip.effectiveIncludeInCashFlow, isFalse);
+
+    final store = MoneyStore(autoBoot: false);
+    store.saveCategory(
+      name: 'Histórico Antigo',
+      type: 'Despesa',
+      includeInReports: false,
+      includeInCashFlow: true,
+    );
+    store.saveCategory(
+      name: 'Ajuste Investimentos',
+      type: 'Despesa',
+      includeInReports: false,
+      includeInCashFlow: false,
+    );
+
+    expect(store.isCategoryIncludedInReports('Histórico Antigo'), isFalse);
+    expect(store.isCategoryIncludedInCashFlow('Histórico Antigo'), isTrue);
+    expect(store.isCategoryIncludedInReports('Ajuste Investimentos'), isFalse);
+    expect(store.isCategoryIncludedInCashFlow('Ajuste Investimentos'), isFalse);
   });
 }

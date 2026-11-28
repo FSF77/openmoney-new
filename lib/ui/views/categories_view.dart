@@ -118,6 +118,7 @@ class _CategoriesViewState extends State<CategoriesView> {
     String type = editing?.type ?? _selectedType;
     String? parent = editing != null ? editing.parent : presetParent;
     bool includeInReports = editing?.effectiveIncludeInReports ?? true;
+    bool includeInCashFlow = editing?.effectiveIncludeInCashFlow ?? true;
     bool blocked = editing?.isBlocked ?? false;
     String? selectedIcon = editing?.icon;
     String? selectedColor = editing?.color;
@@ -331,6 +332,13 @@ class _CategoriesViewState extends State<CategoriesView> {
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      title: const Text('Incluir no Fluxo de Caixa'),
+                      value: includeInCashFlow,
+                      onChanged: (v) =>
+                          setModalState(() => includeInCashFlow = v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('Bloquear Categoria'),
                       subtitle: const Text(
                         'Não permite novos lançamentos e oculta da caixa de seleção.',
@@ -396,6 +404,7 @@ class _CategoriesViewState extends State<CategoriesView> {
                     parent: parent,
                     type: type,
                     includeInReports: includeInReports,
+                    includeInCashFlow: includeInCashFlow,
                     blocked: blocked,
                     icon: selectedIcon,
                     color: selectedColor,

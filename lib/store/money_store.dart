@@ -5682,6 +5682,7 @@ class MoneyStore extends ChangeNotifier {
     String? parent,
     required String type,
     bool includeInReports = true,
+    bool? includeInCashFlow,
     bool? blocked,
     String? icon,
     String? color,
@@ -5702,6 +5703,8 @@ class MoneyStore extends ChangeNotifier {
     if (resolvedBlocked == null && editingPath != null) {
       resolvedBlocked = existing?.blocked;
     }
+    final bool? resolvedIncludeInCashFlow = includeInCashFlow ??
+        (editingPath != null ? existing?.includeInCashFlow : true);
     final String? cleanIcon =
         (icon != null && icon.trim().isNotEmpty) ? icon.trim() : null;
     final String? cleanColor =
@@ -5717,6 +5720,7 @@ class MoneyStore extends ChangeNotifier {
       parent: cleanParent,
       type: type,
       includeInReports: includeInReports,
+      includeInCashFlow: resolvedIncludeInCashFlow,
       blocked: (resolvedBlocked == true) ? true : null,
       icon: resolvedIcon,
       color: resolvedColor,
@@ -6016,6 +6020,25 @@ class MoneyStore extends ChangeNotifier {
     final norm = removeDiacritics(catPath).toLowerCase();
     if (norm.contains('transferencia') || norm.contains('transferencias')) {
       return false;
+    }
+    return true;
+  }
+
+  bool isCategoryIncludedInCashFlow(String catPath) {
+    for (final cat in db.cats) {
+      if (cat.path.toLowerCase() == catPath.toLowerCase()) {
+        return cat.effectiveIncludeInCashFlow;
+      }
+    }
+    final parts = catPath.split(kCategorySep);
+    if (parts.length > 1) {
+      final parentName = parts[0].trim();
+      for (final cat in db.cats) {
+        if (cat.name.toLowerCase() == parentName.toLowerCase() &&
+            cat.parent == null) {
+          if (!cat.effectiveIncludeInCashFlow) return false;
+        }
+      }
     }
     return true;
   }

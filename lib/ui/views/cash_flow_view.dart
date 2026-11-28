@@ -246,6 +246,17 @@ class _CashFlowViewState extends State<CashFlowView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
 
+    final investMarketByAcc = <String, int>{};
+    for (final a in widget.store.db.accounts) {
+      if (a.type == 'Investimento') {
+        final mv = widget.store.portfolioMarketValue(
+          accountId: a.id,
+          targetCurrency: a.effectiveCurrency,
+        );
+        if (mv != 0) investMarketByAcc[a.id] = mv;
+      }
+    }
+
     final matrix = CashFlowEngine.buildMatrix(
       transactions: widget.store.db.txs,
       accounts: widget.store.db.accounts,
@@ -260,6 +271,8 @@ class _CashFlowViewState extends State<CashFlowView> {
       searchQuery: _searchQuery,
       baseCurrency: widget.store.baseCurrency,
       rates: widget.store.db.rates,
+      investmentMarketValueByAccount: investMarketByAcc,
+      isCategoryIncludedInCashFlow: widget.store.isCategoryIncludedInCashFlow,
     );
 
     final isMobile = MediaQuery.sizeOf(context).width < 720;
