@@ -195,6 +195,39 @@ class AgendaEngine {
       }
     }
 
+    // 3. Vencimentos de Renda Fixa e Tesouro Direto
+    final investSummary = store.portfolioSummary();
+    for (final p in investSummary.positions) {
+      if (!p.hasOpenPosition || !p.asset.isFixedIncome) continue;
+      final md = p.asset.maturityDate?.trim() ?? '';
+      if (md.length < 10) continue;
+      if (accountIds != null &&
+          accountIds.isNotEmpty &&
+          !accountIds.contains(p.asset.accountId)) {
+        continue;
+      }
+      if (md.compareTo(range.startDate) < 0 ||
+          md.compareTo(range.endDate) > 0) {
+        continue;
+      }
+      final accName = store.accById(p.asset.accountId)?.name ?? 'Corretora';
+      entries.add(
+        AgendaEntry(
+          id: 'invmat_${p.asset.id}',
+          kind: AgendaEntryKind.income,
+          date: md,
+          title: 'Vencimento ${p.asset.displayCode}',
+          category: 'Investimentos · ${p.asset.assetClass.label}',
+          accountName: accName,
+          amountCents: p.currentGrossValueCents,
+          currency: p.asset.currency,
+          isDone: false,
+          isOverdue: md.compareTo(today) < 0,
+          investAsset: p.asset,
+        ),
+      );
+    }
+
     // Ordenar entradas: primeiro por data, depois pendentes antes de concluídos, faturas/contas antes de receitas
     entries.sort((a, b) {
       final dateComp = a.date.compareTo(b.date);

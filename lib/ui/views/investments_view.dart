@@ -1950,6 +1950,66 @@ class _InvestmentsViewState extends State<InvestmentsView>
             : p.asset.displayCode;
         final meta =
             '${p.asset.indexerSummary}${p.asset.maturityDate != null ? " · Vence ${fmtDate(p.asset.maturityDate!)}" : ""} · ${p.daysHeld} dias (${p.asset.taxExempt ? "Isento IR" : "IR ${p.irRatePct.toStringAsFixed(1)}%"})';
+        final int? daysToMat = (p.asset.maturityDate != null &&
+                p.asset.maturityDate!.length >= 10)
+            ? DateTime.tryParse(p.asset.maturityDate!)
+                ?.difference(DateTime.parse(todayISO()))
+                .inDays
+            : null;
+        final bool isMaturedOrToday = daysToMat != null && daysToMat <= 0;
+        final bool isSoon =
+            daysToMat != null && daysToMat > 0 && daysToMat <= 90;
+
+        Widget? maturityBadge;
+        if (daysToMat != null && (isMaturedOrToday || isSoon)) {
+          final Color bColor = daysToMat < 0 ? colors.expense : colors.warning;
+          final String bText = daysToMat < 0
+              ? 'VENCIDO (${daysToMat.abs()}d)'
+              : (daysToMat == 0 ? 'VENCE HOJE' : 'VENCE EM ${daysToMat}d');
+          maturityBadge = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: bColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: bColor.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              bText,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: bColor,
+              ),
+            ),
+          );
+        }
+
+        Widget redeemBtn() => OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                foregroundColor:
+                    daysToMat != null && daysToMat < 0 ? colors.expense : colors.accent,
+                side: BorderSide(
+                  color: (daysToMat != null && daysToMat < 0
+                          ? colors.expense
+                          : colors.accent)
+                      .withValues(alpha: 0.5),
+                ),
+              ),
+              icon: const Icon(Icons.savings_outlined, size: 14),
+              label: const Text('Resgatar',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+              onPressed: () => showInvestmentOperationModal(
+                context,
+                widget.store,
+                initialAsset: p.asset,
+                initialType: InvestOpType.sell,
+                initialDateIso: p.asset.maturityDate,
+                initialGrossCents: p.currentGrossValueCents,
+              ),
+            );
 
         return InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -1993,6 +2053,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
                           ),
                         ],
                       ),
+                      if (maturityBadge != null) ...[
+                        const SizedBox(height: 4),
+                        maturityBadge,
+                      ],
                       const SizedBox(height: 3),
                       Text(
                         meta,
@@ -2007,6 +2071,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
                       Wrap(
                         spacing: 10,
                         runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Aplicado: ${formatCurrency(p.currentCostBasisCents, cur)}',
@@ -2023,6 +2088,7 @@ class _InvestmentsViewState extends State<InvestmentsView>
                             style: TextStyle(
                                 fontSize: 11, color: colors.textSecondary),
                           ),
+                          if (isMaturedOrToday) redeemBtn(),
                         ],
                       ),
                     ],
@@ -2033,15 +2099,25 @@ class _InvestmentsViewState extends State<InvestmentsView>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                                color: colors.accent,
-                              ),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: colors.accent,
+                                    ),
+                                  ),
+                                ),
+                                if (maturityBadge != null) ...[
+                                  const SizedBox(width: 8),
+                                  maturityBadge,
+                                ],
+                              ],
                             ),
                             const SizedBox(height: 3),
                             Text(
@@ -2076,6 +2152,10 @@ class _InvestmentsViewState extends State<InvestmentsView>
                           ),
                         ],
                       ),
+                      if (isMaturedOrToday) ...[
+                        const SizedBox(width: 10),
+                        redeemBtn(),
+                      ],
                     ],
                   ),
           ),

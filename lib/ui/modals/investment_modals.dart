@@ -479,6 +479,8 @@ Future<bool?> showInvestmentOperationModal(
   InvestAsset? initialAsset,
   InvestOpType initialType = InvestOpType.buy,
   InvestOperation? existingOp,
+  String? initialDateIso,
+  int? initialGrossCents,
 }) async {
   return showDialog<bool>(
     context: context,
@@ -487,6 +489,8 @@ Future<bool?> showInvestmentOperationModal(
       initialAsset: initialAsset,
       initialType: initialType,
       existingOp: existingOp,
+      initialDateIso: initialDateIso,
+      initialGrossCents: initialGrossCents,
     ),
   );
 }
@@ -496,12 +500,16 @@ class _InvestOperationDialog extends StatefulWidget {
   final InvestAsset? initialAsset;
   final InvestOpType initialType;
   final InvestOperation? existingOp;
+  final String? initialDateIso;
+  final int? initialGrossCents;
 
   const _InvestOperationDialog({
     required this.store,
     this.initialAsset,
     required this.initialType,
     this.existingOp,
+    this.initialDateIso,
+    this.initialGrossCents,
   });
 
   @override
@@ -603,8 +611,18 @@ class _InvestOperationDialogState extends State<_InvestOperationDialog> {
     _feesCtrl.addListener(_onQtyOrUnitChanged);
     _totalCtrl.addListener(_onTotalChanged);
 
-    if (ex == null && _opType == InvestOpType.sell) {
-      _prefillAvailableQtyForSell();
+    if (ex == null) {
+      if (widget.initialDateIso != null &&
+          widget.initialDateIso!.trim().length >= 10) {
+        _dateCtrl.text = fmtDate(widget.initialDateIso!.trim());
+      }
+      if (_opType == InvestOpType.sell) {
+        _prefillAvailableQtyForSell();
+        if (widget.initialGrossCents != null && widget.initialGrossCents! > 0) {
+          _totalCtrl.text = formatInputCents(widget.initialGrossCents!);
+          _onTotalChanged();
+        }
+      }
     }
   }
 

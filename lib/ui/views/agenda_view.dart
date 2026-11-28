@@ -6,6 +6,7 @@ import '../../services/category_icon_registry.dart';
 import '../../services/pdf_report_generator.dart';
 import '../../store/money_store.dart';
 import '../modals/agenda_help_modal.dart';
+import '../modals/investment_modals.dart';
 import '../modals/transaction_modal.dart';
 import '../theme/liquid_glass.dart';
 
@@ -1345,9 +1346,11 @@ class _AgendaViewState extends State<AgendaView> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                entry.isInvoice
-                    ? Icons.credit_card
-                    : (isIncome ? Icons.trending_up : Icons.receipt_long),
+                entry.isInvestmentMaturity
+                    ? Icons.savings_outlined
+                    : (entry.isInvoice
+                        ? Icons.credit_card
+                        : (isIncome ? Icons.trending_up : Icons.receipt_long)),
                 color: entry.isDone
                     ? Colors.grey
                     : (isIncome ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
@@ -1387,9 +1390,15 @@ class _AgendaViewState extends State<AgendaView> {
               _buildDetailRow('Categoria:', entry.category, colors),
               _buildDetailRow(
                 'Situação:',
-                entry.isDone
-                    ? 'Concluído / Conciliado'
-                    : (entry.isOverdue ? 'Atrasado' : 'Aguardando pagamento'),
+                entry.isInvestmentMaturity
+                    ? (entry.isOverdue
+                        ? 'Título vencido — aguardando resgate'
+                        : 'Vencimento de título (Renda Fixa / Tesouro)')
+                    : (entry.isDone
+                        ? 'Concluído / Conciliado'
+                        : (entry.isOverdue
+                            ? 'Atrasado'
+                            : 'Aguardando pagamento')),
                 colors,
                 highlightColor: entry.isOverdue ? colors.expense : null,
               ),
@@ -1431,8 +1440,31 @@ class _AgendaViewState extends State<AgendaView> {
             child: Text('Fechar', style: TextStyle(color: colors.textSecondary)),
           ),
 
-          // Se for fatura de cartão
-          if (entry.isInvoice && entry.cardId != null && entry.invoiceKey != null) ...[
+          // Se for vencimento de título de Renda Fixa / Tesouro
+          if (entry.investAsset != null) ...[
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor:
+                    entry.isOverdue ? colors.expense : colors.income,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.savings_outlined, size: 16),
+              label: const Text('Resgatar',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await showInvestmentOperationModal(
+                  context,
+                  store,
+                  initialAsset: entry.investAsset!,
+                  initialType: InvestOpType.sell,
+                  initialDateIso: entry.date,
+                  initialGrossCents: entry.amountCents,
+                );
+                setState(() {});
+              },
+            ),
+          ] else if (entry.isInvoice && entry.cardId != null && entry.invoiceKey != null) ...[
             FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: colors.accent,

@@ -1183,5 +1183,76 @@ void main() {
       expect(store.investmentCashBalance(), 100000);
       expect(store.totalBalance(predicted: false), 500000);
     });
+
+    test('InvestmentInsightsEngine gera alerta crítico para título vencido e aviso para vencimento hoje', () {
+      const asOfIso = '2026-11-28';
+      final expiredCdb = InvestAsset(
+        id: 'rf_exp',
+        accountId: 'i1',
+        ticker: 'CDB-VENCIDO',
+        name: 'CDB Vencido',
+        assetClass: InvestAssetClass.fixedIncome,
+        indexer: InvestFixedIncomeIndexer.cdi,
+        ratePct: 100,
+        maturityDate: '2026-11-20',
+      );
+      final dueTodayCdb = InvestAsset(
+        id: 'rf_today',
+        accountId: 'i1',
+        ticker: 'CDB-HOJE',
+        name: 'CDB Vence Hoje',
+        assetClass: InvestAssetClass.fixedIncome,
+        indexer: InvestFixedIncomeIndexer.cdi,
+        ratePct: 100,
+        maturityDate: '2026-11-28',
+      );
+
+      final db = Database(
+        investAssets: [expiredCdb, dueTodayCdb],
+        investOps: [
+          InvestOperation(
+            assetId: 'rf_exp',
+            accountId: 'i1',
+            type: InvestOpType.buy,
+            date: '2025-11-20',
+            quantity: 1,
+            unitPriceCents: 1000000,
+            totalCents: 1000000,
+          ),
+          InvestOperation(
+            assetId: 'rf_today',
+            accountId: 'i1',
+            type: InvestOpType.buy,
+            date: '2025-11-28',
+            quantity: 1,
+            unitPriceCents: 500000,
+            totalCents: 500000,
+          ),
+        ],
+      );
+
+      final summary = InvestmentEngine.computePortfolio(
+        db,
+        asOfDateIso: asOfIso,
+      );
+
+      final report = InvestmentInsightsEngine.analyze(
+        summary: summary,
+        cashBalanceCents: 0,
+        baseCurrency: 'BRL',
+        asOfDateIso: asOfIso,
+      );
+
+      final expInsight = report.insights
+          .firstWhere((i) => i.id == 'mat_rf_exp');
+      expect(expInsight.severity, InvestmentInsightSeverity.critical);
+      expect(expInsight.category, 'Vencido');
+      expect(expInsight.title, contains('venceu há 8 dia(s)'));
+
+      final todayInsight = report.insights
+          .firstWhere((i) => i.id == 'mat_rf_today');
+      expect(todayInsight.severity, InvestmentInsightSeverity.warning);
+      expect(todayInsight.title, contains('vence hoje'));
+    });
   });
 }

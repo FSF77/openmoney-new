@@ -21,6 +21,9 @@ class AgendaEntry {
   // Referência para contas a pagar e receitas
   final Transaction? tx;
 
+  // Referência para vencimento de título de Renda Fixa / Tesouro Direto
+  final InvestAsset? investAsset;
+
   // Referências para fatura de cartão de crédito
   final String? cardId;
   final String? invoiceKey;
@@ -42,6 +45,7 @@ class AgendaEntry {
     required this.isDone,
     required this.isOverdue,
     this.tx,
+    this.investAsset,
     this.cardId,
     this.invoiceKey,
     this.invoiceCloseDate,
@@ -55,6 +59,7 @@ class AgendaEntry {
   bool get isInvoice => kind == AgendaEntryKind.invoice;
   bool get isIncome => kind == AgendaEntryKind.income;
   bool get isPayable => isBill || isInvoice;
+  bool get isInvestmentMaturity => investAsset != null;
 }
 
 class AgendaMonthSummary {

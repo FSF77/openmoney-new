@@ -1,9 +1,12 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/category_icon_registry.dart';
+import '../../services/investment_engine.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
 import '../modals/account_multi_select_filter.dart';
+import '../modals/investment_modals.dart';
 import '../widgets/ai_assistant_drawer.dart';
 import '../widgets/csv_export.dart';
 
@@ -28,6 +31,23 @@ class _DueBillsViewState extends State<DueBillsView> {
     final ids = _selectedAccountIds;
     final items = store.dueBillItems(accountIds: ids);
     final summary = store.dueBillsSummary(accountIds: ids);
+
+    final todayDate = DateTime.parse(todayISO());
+    final investHorizonDays = math.max(store.reminderDaysAhead, 30);
+    final investMaturities = <({AssetPositionSummary pos, int daysUntil})>[];
+    for (final p in store.portfolioSummary().positions) {
+      if (!p.hasOpenPosition || !p.asset.isFixedIncome) continue;
+      if (ids.isNotEmpty && !ids.contains(p.asset.accountId)) continue;
+      final md = p.asset.maturityDate?.trim() ?? '';
+      if (md.length < 10) continue;
+      final dMat = DateTime.tryParse(md);
+      if (dMat == null) continue;
+      final days = dMat.difference(todayDate).inDays;
+      if (days <= investHorizonDays) {
+        investMaturities.add((pos: p, daysUntil: days));
+      }
+    }
+    investMaturities.sort((a, b) => a.daysUntil.compareTo(b.daysUntil));
 
     return ListView(
       padding: EdgeInsets.fromLTRB(
@@ -277,7 +297,7 @@ class _DueBillsViewState extends State<DueBillsView> {
           },
         ),
         const SizedBox(height: 14),
-        if (items.isEmpty)
+        if (items.isEmpty && investMaturities.isEmpty)
           GlassCard(
             padding: const EdgeInsets.symmetric(vertical: 42),
             child: Center(
@@ -486,6 +506,137 @@ class _DueBillsViewState extends State<DueBillsView> {
             ),
           );
         }),
+        if (investMaturities.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(Icons.savings_outlined, size: 18, color: colors.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Vencimentos de Renda Fixa & Tesouro (${investMaturities.length})',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...investMaturities.map((entry) {
+            final p = entry.pos;
+            final days = entry.daysUntil;
+            final accName = store.accById(p.asset.accountId)?.name ?? 'Corretora';
+            final Color bColor = days < 0
+                ? colors.expense
+                : (days == 0 ? colors.warning : colors.accent);
+            final String bLabel = days < 0
+                ? 'VENCIDO (${days.abs()}D)'
+                : (days == 0 ? 'VENCE HOJE' : 'EM $days DIAS');
+
+            return GlassCard(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 14,
+                vertical: isMobile ? 8 : 10,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: bColor.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                bLabel,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: bColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                p.asset.displayCode,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '$accName · Vence ${fmtDate(p.asset.maturityDate!)} · IR est.: ${formatCurrency(p.estimatedTaxCents, p.asset.currency)}',
+                          style: TextStyle(
+                              fontSize: 11.5, color: colors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatCurrency(p.currentGrossValueCents, p.asset.currency),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: isMobile ? 13 : 14,
+                          color: colors.income,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 2),
+                          minimumSize: const Size(0, 26),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: const Icon(Icons.savings_outlined, size: 13),
+                        label: const Text('Resgatar',
+                            style: TextStyle(
+                                fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        onPressed: () async {
+                          await showInvestmentOperationModal(
+                            context,
+                            store,
+                            initialAsset: p.asset,
+                            initialType: InvestOpType.sell,
+                            initialDateIso: p.asset.maturityDate,
+                            initialGrossCents: p.currentGrossValueCents,
+                          );
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ],
     );
   }

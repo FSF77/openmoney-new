@@ -273,6 +273,9 @@ O módulo **Investimentos** ([Guia de Investimentos](guia-investimentos.md) e [A
 - **Renda Fixa & Tesouro (IR Regressivo):** na venda/resgate de títulos tributados, o IR Retido na Fonte é pré-calculado em ordem **FIFO** pela tabela regressiva (`22,5%` até 180d, `20,0%` 181–360d, `17,5%` 361–720d, `15,0%` > 720d) e lançado em `Investimentos (-) › IR` (títulos isentos como LCI/LCA/CRI/CRA ficam zerados).
 - **Proventos B3:** o botão **Proventos B3** consulta dividendos, JCP (já descontando 15% de IR) e rendimentos de FIIs anunciados na B3 pela posição na Data-Com e agenda na **Agenda** para a data de pagamento em `Investimentos (+) › Dividendos`.
 
+### O sistema faz resgate automático no vencimento de Renda Fixa ou Tesouro Direto?
+**Não automaticamente**, para evitar divergência de centavos com o líquido creditado pela corretora. Em vez disso, o OpenMoney **avisa antes e depois do vencimento** (alertas de 90 dias, vencendo hoje e título vencido em **Análise & Alocação**, **Gráficos**, **Agenda** e **Contas a Pagar & Receber**) e oferece o botão **Resgatar** com 1 clique, que já abre a operação de Venda pré-preenchida com a data do vencimento, quantidade, valor bruto estimado e IR regressivo calculado para você só conferir e confirmar.
+
 ### Preciso criar um ativo de Renda Fixa novo a cada aporte?
 **Não**, se for o mesmo título (ex.: vários aportes no mesmo *Tesouro Selic 2029* ou *CDB Liquidez Diária 100% CDI*): lance todas as compras no mesmo ativo, pois o motor controla lote a lote pela data de cada aporte. Crie ativos separados apenas para títulos com emissor, taxa, indexador ou vencimento distintos.
 

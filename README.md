@@ -15,7 +15,7 @@
 
 | Plataforma | Versão | Pacote / Instalador | Tamanho | Data |
 | :--- | :--- | :--- | :--- | :--- |
-| 🍏 **macOS** | **v2026.11.28** (Build 194) | [⬇️ Baixar OpenMoney-macOS-2026.11.28.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.28.zip) | ~13 MB | 28/11/2026 |
+| 🍏 **macOS** | **v2026.11.28** (Build 195) | [⬇️ Baixar OpenMoney-macOS-2026.11.28.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/macos/OpenMoney-macOS-2026.11.28.zip) | ~13 MB | 28/11/2026 |
 | 🪟 **Windows** | **v2026.11.28** (Build 193) | [⬇️ Baixar OpenMoney-Windows-2026.11.28.zip](https://github.com/FSF77/openmoney-new/raw/main/downloads/windows/OpenMoney-Windows-2026.11.28.zip) | ~14 MB | 28/11/2026 |
 | 🌐 **Web** | **v2026.11.28** | [🚀 Acessar App Web (openmoney.app.br)](https://openmoney.app.br) | — | 28/11/2026 |
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openmoney/models/openmoney_models.dart';
+import 'package:openmoney/services/agenda_engine.dart';
 import 'package:openmoney/store/money_store.dart';
 import 'package:openmoney/ui/views/agenda_view.dart';
 
@@ -72,5 +73,55 @@ void main() {
     expect(find.byTooltip('Registrar Nova Despesa'), findsOneWidget);
     expect(find.byTooltip('Registrar Nova Receita'), findsOneWidget);
     expect(find.byTooltip('Registrar Nova Transferência'), findsOneWidget);
+  });
+
+  testWidgets('título de Renda Fixa com vencimento no mês aparece na Agenda e abre diálogo com Resgatar', (t) async {
+    final store = MoneyStore(autoBoot: false);
+    final today = DateTime.now();
+    final ym = '${today.year}-${today.month.toString().padLeft(2, '0')}';
+    final matIso = '$ym-15';
+
+    store.db = Database(
+      accounts: [
+        Account(id: 'inv1', name: 'XP Investimentos', type: 'Investimento', opening: 0),
+      ],
+      investAssets: [
+        InvestAsset(
+          id: 'cdb1',
+          accountId: 'inv1',
+          ticker: 'CDB-XP-2026',
+          name: 'CDB XP 110% CDI',
+          assetClass: InvestAssetClass.fixedIncome,
+          indexer: InvestFixedIncomeIndexer.cdi,
+          ratePct: 110,
+          maturityDate: matIso,
+          currentPriceCents: 105000,
+        ),
+      ],
+      investOps: [
+        InvestOperation(
+          id: 'op1',
+          assetId: 'cdb1',
+          accountId: 'inv1',
+          type: InvestOpType.buy,
+          date: '2026-01-10',
+          quantity: 1,
+          unitPriceCents: 100000,
+          totalCents: 100000,
+        ),
+      ],
+    );
+
+    final entries = AgendaEngine.generateMonthEntries(
+      store: store,
+      month: ym,
+    );
+    final matEntry = entries.where((e) => e.isInvestmentMaturity).toList();
+    expect(matEntry.length, 1);
+    expect(matEntry.first.title, 'Vencimento CDB-XP-2026');
+    expect(matEntry.first.date, matIso);
+
+    await pumpAgenda(t, store, const Size(1280, 900));
+    expect(find.textContaining('Vencimento CDB-XP-2026'), findsWidgets);
   });
 }

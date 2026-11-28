@@ -245,7 +245,31 @@ class InvestmentInsightsEngine {
       if (p.asset.maturityDate != null && p.asset.maturityDate!.length >= 10) {
         final dMat = _parseIsoSafe(p.asset.maturityDate!);
         final daysToMat = dMat.difference(asOf).inDays;
-        if (daysToMat >= 0 && daysToMat <= 90) {
+        if (daysToMat < 0) {
+          insights.add(InvestmentInsight(
+            id: 'mat_${p.asset.id}',
+            severity: InvestmentInsightSeverity.critical,
+            category: 'Vencido',
+            title:
+                '${p.asset.displayCode} venceu há ${daysToMat.abs()} dia(s) (${fmtDate(p.asset.maturityDate!)})',
+            detail:
+                'Valor bruto estimado de ${formatCurrency(p.currentGrossValueCents, p.asset.currency)}. Registre o resgate para atualizar seu caixa e IR.',
+            aiPrompt:
+                'Meu título ${p.asset.displayCode} venceu em ${fmtDate(p.asset.maturityDate!)}. Como devo lançar o resgate e reinvestir o valor?',
+          ));
+        } else if (daysToMat == 0) {
+          insights.add(InvestmentInsight(
+            id: 'mat_${p.asset.id}',
+            severity: InvestmentInsightSeverity.warning,
+            category: 'Vencimento',
+            title:
+                '${p.asset.displayCode} vence hoje (${fmtDate(p.asset.maturityDate!)})',
+            detail:
+                'Valor bruto estimado de ${formatCurrency(p.currentGrossValueCents, p.asset.currency)}. Confira o crédito líquido na corretora e registre o resgate.',
+            aiPrompt:
+                'Meu título ${p.asset.displayCode} vence hoje (${fmtDate(p.asset.maturityDate!)}). Quais opções combinam com minha carteira para reinvestir?',
+          ));
+        } else if (daysToMat <= 90) {
           insights.add(InvestmentInsight(
             id: 'mat_${p.asset.id}',
             severity: InvestmentInsightSeverity.warning,
