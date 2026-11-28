@@ -212,7 +212,9 @@ As categorias são organizadas em 2 níveis (`Categoria Principal › Subcategor
 - **Detalhamento:** clique no botão **Lançamentos** ou na pílula de contagem de qualquer categoria para auditar, filtrar, editar ou exportar seus lançamentos em CSV.
 
 ### Para que serve a opção "Considerar nos relatórios" (`includeInReports`)?
-Categorias com essa opção desmarcada (exibindo o badge `OCULTA DE RELATÓRIOS`) **não entram nos totais de receitas e despesas dos Relatórios nem do Dashboard de Gráficos**, sendo ideais para ajustes técnicos, transferências ou movimentações neutras de patrimônio. No **Fluxo de Caixa**, porém, todas as contas e movimentações continuam sendo consideradas para fechar o saldo real de caixa.
+Cada categoria possui duas opções independentes de visibilidade (ambas marcadas por padrão):
+- **Incluir nos Relatórios:** controla se a categoria aparece nos totais de receitas e despesas dos **Relatórios** e do módulo **Gráficos** (ideal para ocultar movimentações neutras de patrimônio).
+- **Incluir no Fluxo de Caixa:** controla se a categoria entra na matriz do **Fluxo de Caixa**. Assim, você pode manter categorias históricas ocultas dos Relatórios, mas visíveis no Fluxo para compor o saldo acumulado, ou desmarcar ambas em categorias de ajuste técnico (como migração de saldo antigo de corretora).
 
 ### O que são e como usar Tags (`#tags`)?
 Tags são etiquetas transversais (ex.: `#Viagem`, `#Reembolso`, `#Trabalho`) que complementam as categorias ([Guia de Tags](guia-tags.md) e [ADR 023](../adr/023-tags-and-batch-transaction-editing.md)):
@@ -247,7 +249,7 @@ Acessível pelo menu lateral ou `Cmd + Option + 5`, lista pendências não conci
 
 ### Qual é a diferença entre **Fluxo de Caixa** e **Relatórios**?
 - **Relatórios (Mensal / Anual):** focam em desempenho de receitas e despesas. **Excluem** transferências entre contas, pagamentos automáticos de fatura e categorias com *"Considerar nos relatórios"* desmarcado. Calculam a **Taxa de Poupança** (*Savings Rate*) e exportam em **1 página A4** ou CSV.
-- **Fluxo de Caixa:** é uma matriz contábil completa (Diária, Mensal, Trimestral, Semestral ou Anual) que calcula `Saldo Anterior Acumulado + Rendimento − Despesas = Saldo Final Acumulado`. Inclui todas as contas selecionadas e **suprime apenas transferências internas entre as contas do próprio filtro ativo** (mantendo transferências de/para fora do filtro para fechar o caixa). Suporta anotações na linha de saldo final (`comments`).
+- **Fluxo de Caixa:** é uma matriz contábil completa (Diária, Mensal, Trimestral, Semestral ou Anual) que calcula `Saldo Anterior Acumulado` e `Saldo Final Acumulado` conciliando todas as contas selecionadas — incluindo **valor de mercado das contas de Investimento** (sem duplicar compras/vendas vinculadas `investOpId`), transferências parciais e conversão de contas estrangeiras (`USD`, `EUR`, etc.) pela **cotação atual** (enquanto receitas/despesas usam a taxa histórica do lançamento). Suprime transferências internas entre as contas do filtro ativo e suporta anotações na linha de saldo final (`comments`).
 
 ### Como funcionam o drill-down interativo e os filtros nos Relatórios e Fluxo de Caixa?
 - **Drill-down:** clicar em qualquer categoria/subcategoria nos Relatórios ou em qualquer célula numérica da matriz do Fluxo de Caixa abre a lista exata de lançamentos que compõem aquele valor, com busca em tempo real, filtro de conciliação (*Todos*, *Conciliados*, *Pendentes*), edição direta e exportação CSV ([ADR 024](../adr/024-drill-down-reconciliation-filter-and-ui-cleanup.md)).

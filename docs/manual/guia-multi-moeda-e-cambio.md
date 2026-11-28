@@ -99,7 +99,9 @@ Se você já cadastrou lançamentos passados (por exemplo, histórico de **2012*
 ## 7. 📊 Relatórios, Fluxo de Caixa e Exportação CSV
 
 ### Como os valores são exibidos nos Relatórios e Fluxo de Caixa
-- **Todas as contas (ou múltiplas moedas selecionadas):** Todos os saldos e categorias são consolidados na **Moeda Padrão** configurada, convertendo cada lançamento pela **taxa histórica gravada nele**.
+- **Todas as contas (ou múltiplas moedas selecionadas):**
+  - As linhas de **Receitas**, **Despesas** e **Categorias** são consolidadas na **Moeda Padrão** convertendo cada lançamento pela **taxa histórica gravada nele** (preservando o poder de compra/câmbio da data da operação).
+  - As linhas de **Saldo Anterior Acumulado** e **Saldo Final Acumulado** do Fluxo de Caixa acumulam o saldo de cada conta na sua **moeda original** (ex.: `US$`) e convertem pela **cotação atual** configurada em *Moedas & Cotações*, garantindo que o **Saldo Final Acumulado** bata exatamente com o **Saldo Real Atualizado** mesmo quando você mistura contas em `R$` e `US$`.
 - **Filtro por uma conta ou contas da mesma moeda estrangeira (ex.: só contas `US$`):**
   - Os valores principais na tabela e nos cards aparecem na **moeda da conta** (`US$`).
   - Os subtítulos `≈` nos cards de totais (`Receitas`, `Despesas`, `Resultado Líquido`) somam o equivalente convertido na **Moeda Padrão** respeitando a **taxa histórica individual de cada transação** (assim despesas de 2012 continuam aparecendo pelo dólar de 2012, não pelo dólar de hoje).

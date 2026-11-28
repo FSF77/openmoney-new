@@ -29,8 +29,8 @@ Se você já possuía uma conta do tipo `Investimento` com transferências antig
 #### Opção C: Migração limpa quando a conta já tem saldo histórico (sem mexer no passado)
 Se você já transferia dinheiro da Conta Corrente (ex: *Nubank*) para a Conta Investimento (*Nubank Investimentos*) antes deste módulo existir, o extrato da conta de investimentos já acumula esse saldo histórico (inclusive eventuais rendimentos lançados no passado):
 1. No extrato da conta de investimentos, faça **1 único lançamento de ajuste negativo** na data de hoje no valor já aplicado (ex: `-R$ 200.000,00`), deixando no extrato apenas o **caixa livre real** parado hoje (geralmente `R$ 0,00`).
-2. **Importante:** use para esse ajuste uma categoria com **"Incluir em relatórios" DESMARCADO** (ex: `Investimentos (-) › Ajuste de Carteira`), para não distorcer despesas ou gráficos do mês.
-3. Em seguida, cadastre todos os seus títulos antigos como **Posição Inicial** com **"Movimentar caixa da conta selecionada" DESMARCADO**. Ao final, `Caixa Livre + Carteira Atualizada` refletirá exatamente o seu patrimônio real sem duplicação.
+2. **Importante:** use para esse ajuste uma categoria com **"Incluir nos Relatórios" DESMARCADO** e **"Incluir no Fluxo de Caixa" DESMARCADO** (ex: `Investimentos (-) › Ajuste de Carteira`), para não distorcer despesas, gráficos nem o Fluxo de Caixa. Já categorias históricas antigas podem manter *"Incluir no Fluxo de Caixa"* marcado (padrão) para continuar compondo o saldo normalmente.
+3. Em seguida, cadastre todos os seus títulos antigos como **Posição Inicial** com **"Movimentar caixa da conta selecionada" DESMARCADO**. Ao final, `Caixa Livre + Carteira Atualizada` refletirá exatamente o seu patrimônio real sem duplicação, e o **Saldo Final Acumulado** do Fluxo de Caixa continuará batendo com o seu patrimônio em todas as visões (Diária, Mensal, Trimestral, Semestral e Anual).
 
 ### Rotina do dia a dia (daqui para frente)
 1. **Antes ou no momento de aplicar:** faça uma **Transferência** da sua Conta Corrente (ex: *Nubank*) para a Conta Investimento (*Nubank Investimentos*).

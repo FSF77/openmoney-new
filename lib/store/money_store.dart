@@ -6002,19 +6002,16 @@ class MoneyStore extends ChangeNotifier {
   }
 
   bool isCategoryIncludedInReports(String catPath) {
-    for (final cat in db.cats) {
-      if (cat.path.toLowerCase() == catPath.toLowerCase()) {
-        return cat.effectiveIncludeInReports;
-      }
-    }
+    rebuildIndexesIfNeeded();
+    final exact = _cachedCatsByPath[catPath.toLowerCase()];
+    if (exact != null) return exact.effectiveIncludeInReports;
     final parts = catPath.split(kCategorySep);
     if (parts.length > 1) {
-      final parentName = parts[0].trim();
-      for (final cat in db.cats) {
-        if (cat.name.toLowerCase() == parentName.toLowerCase() &&
-            cat.parent == null) {
-          if (!cat.effectiveIncludeInReports) return false;
-        }
+      final parent = _cachedCatsByPath[parts[0].trim().toLowerCase()];
+      if (parent != null &&
+          parent.parent == null &&
+          !parent.effectiveIncludeInReports) {
+        return false;
       }
     }
     final norm = removeDiacritics(catPath).toLowerCase();
@@ -6025,19 +6022,16 @@ class MoneyStore extends ChangeNotifier {
   }
 
   bool isCategoryIncludedInCashFlow(String catPath) {
-    for (final cat in db.cats) {
-      if (cat.path.toLowerCase() == catPath.toLowerCase()) {
-        return cat.effectiveIncludeInCashFlow;
-      }
-    }
+    rebuildIndexesIfNeeded();
+    final exact = _cachedCatsByPath[catPath.toLowerCase()];
+    if (exact != null) return exact.effectiveIncludeInCashFlow;
     final parts = catPath.split(kCategorySep);
     if (parts.length > 1) {
-      final parentName = parts[0].trim();
-      for (final cat in db.cats) {
-        if (cat.name.toLowerCase() == parentName.toLowerCase() &&
-            cat.parent == null) {
-          if (!cat.effectiveIncludeInCashFlow) return false;
-        }
+      final parent = _cachedCatsByPath[parts[0].trim().toLowerCase()];
+      if (parent != null &&
+          parent.parent == null &&
+          !parent.effectiveIncludeInCashFlow) {
+        return false;
       }
     }
     return true;

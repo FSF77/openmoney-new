@@ -148,8 +148,10 @@ Em **Ajustes & Personalização → Moedas & Cotações**:
 - **Contas Individuais / Extratos / Faturas:** Valores principais sempre na **moeda da conta**; quando `accountCurrency != baseCurrency`, exibe linha discreta `≈ <valor convertido para baseCurrency>`.
 - **Patrimônio Consolidado & Cards Globais:** Somatório de todas as contas ativas sempre convertido para a `baseCurrency` configurada.
 
-### 6.2. Relatórios Mensais/Anuais e Fluxo de Caixa (`≈` Histórico)
-- **Filtro Global ou Múltiplas Moedas:** Consolidação integral na `baseCurrency` utilizando o `tx.rate` histórico de cada lançamento.
+### 6.2. Relatórios Mensais/Anuais e Fluxo de Caixa (`≈` Histórico vs Saldo Atual)
+- **Filtro Global ou Múltiplas Moedas:**
+  - **Receitas, Despesas e Categorias:** Consolidação na `baseCurrency` utilizando o `tx.rate` histórico de cada lançamento.
+  - **Saldos Acumulados no Fluxo de Caixa (`Saldo Anterior Acumulado` e `Saldo Final Acumulado`):** Acumulam o saldo de cada conta em sua **moeda nativa** (`a.opening + movimentações nativas + valor de mercado de investimentos`) e convertem o saldo acumulado de cada conta para a `targetCurrency` utilizando a **cotação corrente** (`Database.rates`), garantindo paridade exata ao centavo com `MoneyStore.totalBalance` mesmo quando há lançamentos antigos em `USD`/`EUR` com `tx.rate` histórico diferente da cotação de hoje.
 - **Filtro por Conta ou Contas de Mesma Moeda Estrangeira:**
   - Os totais principais (categorias, meses, receitas, despesas e resultado) são exibidos diretamente na **moeda da conta filtrada** (`USD`, `EUR`, etc.).
   - Os subtítulos `≈` dos cards KPI (`Total de Receitas`, `Total de Despesas`, `Resultado Líquido` / `Saldo do Mês/Ano`) utilizam **`totalIncomeInBase`, `totalExpenseInBase` e `netTotalInBase` / `netGrandTotalInBase`**, calculados somando cada transação convertida pelo seu respectivo `tx.rate` histórico (e não convertendo o total agregado pela taxa atual).

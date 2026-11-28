@@ -65,7 +65,11 @@ Implementado em `lib/store/money_store.dart`, `lib/services/cash_flow_engine.dar
 - **Lançamentos sem Poluir Relatórios:**
   - Compra e conversão de Posição Inicial → geram `Transaction` na conta selecionada com categoria **`Transferência (-)`** (`amt < 0`).
   - Venda → gera `Transaction` com categoria **`Transferência (+)`** (`amt > 0`).
-  - `isTransferTransaction(tx)` e `AnalyticsEngine` excluem automaticamente tais lançamentos de despesas, receitas, orçamentos e Fluxo de Caixa.
+  - `isTransferTransaction(tx)` e `AnalyticsEngine` excluem automaticamente tais lançamentos de despesas, receitas e orçamentos; no `CashFlowEngine.filterTransactions`, transferências vinculadas a operações de investimento (`tx.investOpId != null`) são sempre excluídas mesmo quando o usuário filtra uma única conta `Investimento`, garantindo saldos idênticos entre as visões **Diária**, **Mensal**, **Trimestral** e **Semestral**.
+- **Separação entre Relatórios e Fluxo de Caixa nas Categorias (`includeInReports` vs `includeInCashFlow`):**
+  - `CategoryItem` possui flags independentes: `includeInReports` (controla DRE, Relatórios e Gráficos) e `includeInCashFlow` (padrão `true` quando omitido, controla a matriz do Fluxo de Caixa).
+  - Categorias históricas podem permanecer fora de Relatórios (`includeInReports: false`) e ativas no Fluxo de Caixa (`includeInCashFlow: true`); já ajustes técnicos de migração em conta `Investimento` podem desmarcar ambas para não poluir despesas nem o Fluxo.
+  - Em `CashFlowEngine.buildMatrix`, os saldos acumulados (**Saldo Anterior Acumulado** e **Saldo Final Acumulado**) somam `colDeltas` por conta + `investmentMarketValueByAccount` (neutralizando movimentos não patrimoniais internos `isNonWealthInvestTx`), garantindo continuidade entre períodos (`Saldo Final[i] == Saldo Anterior[i+1]`) e batimento exato com o Saldo Real Atualizado. Em `CashFlowView`, a matriz é memoizada por chave de filtros/store com cálculo único de `portfolioSummary()` e lookups O(1) (`_cachedCatsByPath` e `accountById`).
 - **Proventos e IR com Categorias Configuráveis:**
   - `investDividendCategory` (padrão **`Investimentos (-) › Rendimentos`**) e `investIrCategory` (padrão **`Investimentos (-) › IR`**), persistidos em `config.json` e sincronizados na Web.
   - `ensureCategoryPath(path, type: 'Despesa')` garante a criação automática da categoria pai e subcategoria em `db.cats` caso ainda não existam.

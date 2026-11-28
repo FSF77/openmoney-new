@@ -50,9 +50,18 @@ class _CashFlowViewState extends State<CashFlowView> {
   bool _isSyncingHScroll = false;
   bool _isSyncingVScroll = false;
 
+  CashFlowMatrix? _cachedMatrix;
+  String? _cachedMatrixKey;
+
+  void _invalidateMatrixCache() {
+    _cachedMatrix = null;
+    _cachedMatrixKey = null;
+  }
+
   @override
   void initState() {
     super.initState();
+    widget.store.addListener(_invalidateMatrixCache);
     final mParts = widget.store.month.split('-');
     _year = int.tryParse(mParts[0]) ?? DateTime.now().year;
     _month = mParts.length >= 2 ? (int.tryParse(mParts[1]) ?? DateTime.now().month) : DateTime.now().month;
@@ -104,7 +113,18 @@ class _CashFlowViewState extends State<CashFlowView> {
   }
 
   @override
+  void didUpdateWidget(covariant CashFlowView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.store != widget.store) {
+      oldWidget.store.removeListener(_invalidateMatrixCache);
+      widget.store.addListener(_invalidateMatrixCache);
+      _invalidateMatrixCache();
+    }
+  }
+
+  @override
   void dispose() {
+    widget.store.removeListener(_invalidateMatrixCache);
     _headerHScrollController.dispose();
     _bodyHScrollController.dispose();
     _catVScrollController.dispose();
@@ -246,34 +266,57 @@ class _CashFlowViewState extends State<CashFlowView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = OpenMoneyColors(isDark);
 
-    final investMarketByAcc = <String, int>{};
-    for (final a in widget.store.db.accounts) {
-      if (a.type == 'Investimento') {
-        final mv = widget.store.portfolioMarketValue(
-          accountId: a.id,
-          targetCurrency: a.effectiveCurrency,
-        );
-        if (mv != 0) investMarketByAcc[a.id] = mv;
+    final accIdsKey = (_selectedAccountIds.toList()..sort()).join(',');
+    final matrixKey =
+        '${_periodKind.name}|$_year|$_month|$accIdsKey|${_statusFilter.name}|${_kindFilter.name}|${_dateMode.name}|$_searchQuery|${widget.store.baseCurrency}';
+    final CashFlowMatrix matrix;
+    if (_cachedMatrix != null && _cachedMatrixKey == matrixKey) {
+      matrix = _cachedMatrix!;
+    } else {
+      final investMarketByAcc = <String, int>{};
+      final accCurrencyById = {
+        for (final a in widget.store.db.accounts)
+          if (a.type == 'Investimento') a.id: a.effectiveCurrency,
+      };
+      if (accCurrencyById.isNotEmpty) {
+        final summary = widget.store.portfolioSummary();
+        for (final p in summary.positions) {
+          if (!p.hasOpenPosition) continue;
+          final accId = p.asset.accountId;
+          final accCur = accCurrencyById[accId];
+          if (accCur == null) continue;
+          final val = p.asset.currency.toUpperCase() == accCur
+              ? p.currentGrossValueCents
+              : convertCents(
+                  p.currentGrossValueCents,
+                  fromCurrency: p.asset.currency,
+                  toCurrency: accCur,
+                  rates: widget.store.db.rates,
+                );
+          investMarketByAcc[accId] = (investMarketByAcc[accId] ?? 0) + val;
+        }
       }
-    }
 
-    final matrix = CashFlowEngine.buildMatrix(
-      transactions: widget.store.db.txs,
-      accounts: widget.store.db.accounts,
-      periodKind: _periodKind,
-      year: _year,
-      month: _month,
-      accountFilterIds:
-          _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
-      statusFilter: _statusFilter,
-      kindFilter: _kindFilter,
-      dateMode: _dateMode,
-      searchQuery: _searchQuery,
-      baseCurrency: widget.store.baseCurrency,
-      rates: widget.store.db.rates,
-      investmentMarketValueByAccount: investMarketByAcc,
-      isCategoryIncludedInCashFlow: widget.store.isCategoryIncludedInCashFlow,
-    );
+      matrix = CashFlowEngine.buildMatrix(
+        transactions: widget.store.db.txs,
+        accounts: widget.store.db.accounts,
+        periodKind: _periodKind,
+        year: _year,
+        month: _month,
+        accountFilterIds:
+            _selectedAccountIds.isEmpty ? null : _selectedAccountIds,
+        statusFilter: _statusFilter,
+        kindFilter: _kindFilter,
+        dateMode: _dateMode,
+        searchQuery: _searchQuery,
+        baseCurrency: widget.store.baseCurrency,
+        rates: widget.store.db.rates,
+        investmentMarketValueByAccount: investMarketByAcc,
+        isCategoryIncludedInCashFlow: widget.store.isCategoryIncludedInCashFlow,
+      );
+      _cachedMatrix = matrix;
+      _cachedMatrixKey = matrixKey;
+    }
 
     final isMobile = MediaQuery.sizeOf(context).width < 720;
 

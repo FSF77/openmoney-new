@@ -260,4 +260,161 @@ void main() {
     expect(store.isCategoryIncludedInReports('Ajuste Investimentos'), isFalse);
     expect(store.isCategoryIncludedInCashFlow('Ajuste Investimentos'), isFalse);
   });
+
+  test('Item 2: Todas as Contas + Conciliado bate com saldo real mesmo com transferência meio conciliada', () {
+    final accounts = [
+      Account(id: 'a1', name: 'Banco A', type: 'Corrente', opening: 100000),
+      Account(id: 'a2', name: 'Banco B', type: 'Corrente', opening: 50000),
+    ];
+    final txs = [
+      // Perna de saída conciliada em Nov/2026
+      Transaction(
+        acc: 'a1',
+        peer: 'a2',
+        date: '2026-11-10',
+        payee: 'Transf',
+        cat: 'Transferência (-)',
+        amt: -7933,
+        xfer: 'x1',
+        rec: true,
+      ),
+      // Perna de entrada ainda pendente
+      Transaction(
+        acc: 'a2',
+        peer: 'a1',
+        date: '2026-11-10',
+        payee: 'Transf',
+        cat: 'Transferência (+)',
+        amt: 7933,
+        xfer: 'x1',
+        rec: false,
+      ),
+    ];
+
+    final m = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      statusFilter: CashFlowStatusFilter.reconciledOnly,
+    );
+
+    // Saldo real conciliado: (100000 - 7933) + 50000 = 142067
+    expect(m.endingBalancePeriodTotals[11], 142067);
+    expect(m.endingBalanceGrandTotal, 142067);
+  });
+
+  test('Itens 3 e 4: Conta de investimento filtrada mantém mesmo saldo em Diário, Mensal, Trimestral e Semestral', () {
+    final accounts = [
+      Account(id: 'inv', name: 'Corretora', type: 'Investimento', opening: 20000000),
+    ];
+    final txs = [
+      Transaction(
+        acc: 'inv',
+        date: '2026-10-05',
+        payee: 'Compra PETR4',
+        cat: 'Transferência (-)',
+        amt: -600000,
+        investOpId: 'op1',
+        rec: true,
+      ),
+      Transaction(
+        acc: 'inv',
+        date: '2026-10-15',
+        payee: 'Dividendo PETR4',
+        cat: 'Investimentos (+) › Dividendos',
+        amt: 50000,
+        investOpId: 'op2',
+        rec: true,
+      ),
+    ];
+
+    const mv = {'inv': 175214 + 600000}; // ex: caixa 19.400.000 + 50.000 + carteira 775.214
+
+    final mDaily = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.daily,
+      year: 2026,
+      month: 10,
+      accountFilterIds: {'inv'},
+      investmentMarketValueByAccount: mv,
+    );
+    final mMonthly = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      accountFilterIds: {'inv'},
+      investmentMarketValueByAccount: mv,
+    );
+    final mQuarterly = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.quarterly,
+      year: 2026,
+      accountFilterIds: {'inv'},
+      investmentMarketValueByAccount: mv,
+    );
+    final mSemiannual = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.semiannual,
+      year: 2026,
+      accountFilterIds: {'inv'},
+      investmentMarketValueByAccount: mv,
+    );
+
+    const expectedEnd = 20000000 - 600000 + 50000 + 775214;
+    expect(mDaily.endingBalanceGrandTotal, expectedEnd);
+    expect(mMonthly.endingBalanceGrandTotal, expectedEnd);
+    expect(mQuarterly.endingBalanceGrandTotal, expectedEnd);
+    expect(mSemiannual.endingBalanceGrandTotal, expectedEnd);
+  });
+
+  test('Multi-moeda: Saldo final acumulado com contas BRL e USD usa cotação atual em vez de tx.rate histórico', () {
+    final accounts = [
+      Account(id: 'brl', name: 'Conta BRL', type: 'Corrente', opening: 1000000, currency: 'BRL'),
+      Account(id: 'usd', name: 'Conta USD', type: 'Corrente', opening: 10000, currency: 'USD'),
+    ];
+    final rates = {
+      'USD': const CurrencyRateInfo(rate: 5.80, updatedAt: '2026-11-28T10:00:00Z'),
+    };
+    final txs = [
+      // Transação USD com taxa histórica antiga (5.00), diferente da taxa atual (5.80)
+      Transaction(
+        acc: 'usd',
+        date: '2026-06-10',
+        payee: 'Compra USD',
+        cat: 'Viagem',
+        amt: -5000,
+        rate: 5.00,
+        rec: true,
+      ),
+      Transaction(
+        acc: 'brl',
+        date: '2026-11-10',
+        payee: 'Mercado',
+        cat: 'Alimentação',
+        amt: -20000,
+        rec: true,
+      ),
+    ];
+
+    final m = CashFlowEngine.buildMatrix(
+      transactions: txs,
+      accounts: accounts,
+      periodKind: CashFlowPeriodKind.monthly,
+      year: 2026,
+      statusFilter: CashFlowStatusFilter.reconciledOnly,
+      baseCurrency: 'BRL',
+      rates: rates,
+    );
+
+    // Saldo real BRL = 1.000.000 - 20.000 = 980.000
+    // Saldo real USD = 10.000 - 5.000 = 5.000 USD -> 5.000 * 5.80 = 29.000 BRL
+    // Consolidado real = 980.000 + 29.000 = 1.009.000
+    expect(m.endingBalanceGrandTotal, 1009000);
+    expect(m.endingBalancePeriodTotals[10], 1009000);
+  });
 }
