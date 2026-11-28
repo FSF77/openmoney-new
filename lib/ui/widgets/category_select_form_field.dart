@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/openmoney_models.dart';
 import '../../services/bank_logo_registry.dart';
@@ -149,140 +150,88 @@ class CategorySelectFormField extends StatelessWidget {
       final RenderBox box = context.findRenderObject()! as RenderBox;
       final Offset position = box.localToGlobal(Offset.zero);
       final size = box.size;
+      final screen = MediaQuery.sizeOf(context);
+      final isMobile = screen.width < 600;
 
-      final menuItems = <PopupMenuEntry<String>>[];
-
-      for (final opt in options) {
-        if (opt.isHeader) {
-          menuItems.add(
-            PopupMenuItem<String>(
-              value: opt.value,
-              height: 30,
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-              child: Row(
-                children: [
-                  CategoryIconBadge(
-                    store: store,
-                    categoryPath: opt.value,
-                    fallbackType: categoryType,
-                    size: 20,
-                    borderRadius: 6,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      opt.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: colors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else {
-          final isSelected = opt.value == currentSelection;
-          final isSub = opt.label.startsWith('↳');
-          final cleanLabel =
-              isSub ? opt.label.replaceFirst('↳ ', '') : opt.label;
-          menuItems.add(
-            PopupMenuItem<String>(
-              value: opt.value,
-              height: 28,
-              padding: EdgeInsets.fromLTRB(isSub ? 24 : 12, 2, 12, 2),
-              child: Row(
-                children: [
-                  CategoryIconBadge(
-                    store: store,
-                    categoryPath: opt.value,
-                    fallbackType: categoryType,
-                    size: isSub ? 16 : 18,
-                    borderRadius: 5,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      cleanLabel,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                        color: isSelected ? colors.accent : colors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isSelected)
-                    Icon(Icons.check, size: 14, color: colors.accent),
-                ],
-              ),
-            ),
-          );
-        }
+      final groups = <({CategoryItem top, List<CategoryItem> subs})>[];
+      for (final top in store.topCategories(type: categoryType)) {
+        if (top.isBlocked) continue;
+        final subs = store
+            .subCategories(top.name, type: categoryType)
+            .where((s) => !s.isBlocked)
+            .toList();
+        groups.add((top: top, subs: subs));
       }
 
-      if (transferAccounts.isNotEmpty) {
-        menuItems.add(const PopupMenuDivider(height: 10));
-        for (final a in transferAccounts) {
-          final val = 'xfer:${a.id}';
-          final isSelected = val == currentSelection;
-          menuItems.add(
-            PopupMenuItem<String>(
-              value: val,
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              child: Row(
-                children: [
-                  AccountLogoWidget(
-                    account: a,
-                    size: 18,
-                    cornerRadius: 4,
-                    selected: isSelected,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '⇄ Transferência: ${a.name}',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                        color: isSelected ? colors.accent : colors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isSelected)
-                    Icon(Icons.check, size: 14, color: colors.accent),
-                ],
-              ),
-            ),
-          );
-        }
-      }
-
-      showMenu<String>(
+      showGeneralDialog<String>(
         context: context,
-        position: RelativeRect.fromLTRB(
-          position.dx,
-          position.dy + size.height + 2,
-          position.dx + size.width,
-          position.dy + size.height + 400,
-        ),
-        constraints: BoxConstraints(
-          minWidth: size.width,
-          maxWidth: size.width < 280 ? 280 : size.width,
-          maxHeight: 380,
-        ),
-        elevation: 8,
-        color: colors.bgSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: colors.borderGlass),
-        ),
-        items: menuItems,
+        barrierDismissible: true,
+        barrierLabel: 'Fechar seletor de categoria',
+        barrierColor: isMobile ? Colors.black45 : Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 120),
+        pageBuilder: (dialogCtx, _, __) {
+          final popup = _CategorySearchPopup(
+            store: store,
+            colors: colors,
+            categoryType: categoryType,
+            currentSelection: currentSelection,
+            groups: groups,
+            transferAccounts: transferAccounts,
+          );
+
+          if (isMobile) {
+            return AnimatedPadding(
+              duration: const Duration(milliseconds: 100),
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 24,
+                bottom: math.max(24, MediaQuery.viewInsetsOf(dialogCtx).bottom + 12),
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 420,
+                    maxHeight: screen.height * 0.72,
+                  ),
+                  child: popup,
+                ),
+              ),
+            );
+          }
+
+          final double popupWidth = (size.width < 300 ? 300.0 : size.width)
+              .clamp(280.0, math.min(420.0, screen.width - 16.0))
+              .toDouble();
+          final double left = position.dx
+              .clamp(8.0, math.max(8.0, screen.width - popupWidth - 8.0))
+              .toDouble();
+
+          final spaceBelow = screen.height - (position.dy + size.height + 2) - 8.0;
+          final spaceAbove = position.dy - 8.0;
+          final openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
+          final availableVertical = openAbove ? spaceAbove : spaceBelow;
+          final double maxHeight =
+              math.min(400.0, availableVertical - 12.0).clamp(180.0, 400.0).toDouble();
+
+          final topPos = openAbove
+              ? math.max(8.0, position.dy - maxHeight - 2)
+              : position.dy + size.height + 2;
+
+          return Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: topPos,
+                width: popupWidth,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxHeight),
+                  child: popup,
+                ),
+              ),
+            ],
+          );
+        },
       ).then((selected) {
         if (selected != null) {
           onChanged(selected);
@@ -302,5 +251,365 @@ class CategorySelectFormField extends StatelessWidget {
       return SizedBox(width: width, child: clickable);
     }
     return clickable;
+  }
+}
+
+String _normalizeSearch(String input) {
+  final lower = input.toLowerCase();
+  const accents = 'áàâãäéèêëíìîïóòôõöúùûüç';
+  const plain = 'aaaaaeeeeiiiiooooouuuuc';
+  final sb = StringBuffer();
+  for (int i = 0; i < lower.length; i++) {
+    final ch = lower[i];
+    final idx = accents.indexOf(ch);
+    sb.write(idx >= 0 ? plain[idx] : ch);
+  }
+  return sb.toString();
+}
+
+sealed class _PopupEntry {}
+
+class _CategoryEntry extends _PopupEntry {
+  final String label;
+  final String value;
+  final bool isHeader;
+  final bool isSub;
+
+  _CategoryEntry({
+    required this.label,
+    required this.value,
+    required this.isHeader,
+    required this.isSub,
+  });
+}
+
+class _DividerEntry extends _PopupEntry {}
+
+class _TransferEntry extends _PopupEntry {
+  final Account account;
+
+  _TransferEntry(this.account);
+}
+
+class _CategorySearchPopup extends StatefulWidget {
+  final MoneyStore store;
+  final OpenMoneyColors colors;
+  final String categoryType;
+  final String currentSelection;
+  final List<({CategoryItem top, List<CategoryItem> subs})> groups;
+  final List<Account> transferAccounts;
+
+  const _CategorySearchPopup({
+    required this.store,
+    required this.colors,
+    required this.categoryType,
+    required this.currentSelection,
+    required this.groups,
+    required this.transferAccounts,
+  });
+
+  @override
+  State<_CategorySearchPopup> createState() => _CategorySearchPopupState();
+}
+
+class _CategorySearchPopupState extends State<_CategorySearchPopup> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  ({List<_PopupEntry> entries, String? firstMatchValue}) _buildFiltered() {
+    final normQuery = _normalizeSearch(_query.trim());
+    final entries = <_PopupEntry>[];
+    String? firstMatchValue;
+
+    for (final g in widget.groups) {
+      if (normQuery.isEmpty) {
+        entries.add(_CategoryEntry(
+          label: g.top.name,
+          value: g.top.path,
+          isHeader: g.subs.isNotEmpty,
+          isSub: false,
+        ));
+        firstMatchValue ??= g.top.path;
+        for (final sub in g.subs) {
+          entries.add(_CategoryEntry(
+            label: '↳ ${sub.name}',
+            value: sub.path,
+            isHeader: false,
+            isSub: true,
+          ));
+        }
+      } else {
+        final topMatches = _normalizeSearch(g.top.name).contains(normQuery) ||
+            _normalizeSearch(g.top.path).contains(normQuery);
+        if (topMatches) {
+          entries.add(_CategoryEntry(
+            label: g.top.name,
+            value: g.top.path,
+            isHeader: g.subs.isNotEmpty,
+            isSub: false,
+          ));
+          firstMatchValue ??= g.top.path;
+          for (final sub in g.subs) {
+            entries.add(_CategoryEntry(
+              label: '↳ ${sub.name}',
+              value: sub.path,
+              isHeader: false,
+              isSub: true,
+            ));
+          }
+        } else {
+          final matchingSubs = g.subs
+              .where((s) =>
+                  _normalizeSearch(s.name).contains(normQuery) ||
+                  _normalizeSearch(s.path).contains(normQuery))
+              .toList();
+          if (matchingSubs.isNotEmpty) {
+            entries.add(_CategoryEntry(
+              label: g.top.name,
+              value: g.top.path,
+              isHeader: true,
+              isSub: false,
+            ));
+            for (final sub in matchingSubs) {
+              entries.add(_CategoryEntry(
+                label: '↳ ${sub.name}',
+                value: sub.path,
+                isHeader: false,
+                isSub: true,
+              ));
+              firstMatchValue ??= sub.path;
+            }
+          }
+        }
+      }
+    }
+
+    final matchingTransfers = normQuery.isEmpty
+        ? widget.transferAccounts
+        : widget.transferAccounts
+            .where((a) =>
+                _normalizeSearch(a.name).contains(normQuery) ||
+                'transferencia'.contains(normQuery))
+            .toList();
+
+    if (matchingTransfers.isNotEmpty) {
+      if (entries.isNotEmpty) {
+        entries.add(_DividerEntry());
+      }
+      for (final a in matchingTransfers) {
+        entries.add(_TransferEntry(a));
+        firstMatchValue ??= 'xfer:${a.id}';
+      }
+    }
+
+    return (entries: entries, firstMatchValue: firstMatchValue);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.colors;
+    final filtered = _buildFiltered();
+
+    return Material(
+      color: c.bgSecondary,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: c.borderGlass),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              style: TextStyle(fontSize: 12.5, color: c.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Pesquisar categoria...',
+                hintStyle: TextStyle(fontSize: 12, color: c.textMuted),
+                prefixIcon: Icon(Icons.search, size: 16, color: c.textMuted),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 30),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.close, size: 15, color: c.textMuted),
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: c.borderGlass),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: c.borderGlass),
+                ),
+              ),
+              onChanged: (val) => setState(() => _query = val),
+              onSubmitted: (_) {
+                if (filtered.firstMatchValue != null) {
+                  Navigator.of(context).pop(filtered.firstMatchValue);
+                }
+              },
+            ),
+          ),
+          Divider(height: 1, color: c.borderGlass),
+          Flexible(
+            child: filtered.entries.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 20),
+                    child: Text(
+                      'Nenhuma categoria encontrada',
+                      style: TextStyle(fontSize: 12.5, color: c.textMuted),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    shrinkWrap: true,
+                    itemCount: filtered.entries.length,
+                    itemBuilder: (ctx, idx) {
+                      final entry = filtered.entries[idx];
+                      if (entry is _DividerEntry) {
+                        return Divider(height: 10, color: c.borderGlass);
+                      }
+                      if (entry is _TransferEntry) {
+                        final a = entry.account;
+                        final val = 'xfer:${a.id}';
+                        final isSelected = val == widget.currentSelection;
+                        return InkWell(
+                          onTap: () => Navigator.of(context).pop(val),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            child: Row(
+                              children: [
+                                AccountLogoWidget(
+                                  account: a,
+                                  size: 18,
+                                  cornerRadius: 4,
+                                  selected: isSelected,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '⇄ Transferência: ${a.name}',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                      color: isSelected
+                                          ? c.accent
+                                          : c.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Icon(Icons.check, size: 14, color: c.accent),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      final cat = entry as _CategoryEntry;
+                      final isSelected = cat.value == widget.currentSelection;
+                      if (cat.isHeader) {
+                        return InkWell(
+                          onTap: () => Navigator.of(context).pop(cat.value),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                            child: Row(
+                              children: [
+                                CategoryIconBadge(
+                                  store: widget.store,
+                                  categoryPath: cat.value,
+                                  fallbackType: widget.categoryType,
+                                  size: 20,
+                                  borderRadius: 6,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    cat.label,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: isSelected
+                                          ? c.accent
+                                          : c.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Icon(Icons.check, size: 14, color: c.accent),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      return InkWell(
+                        onTap: () => Navigator.of(context).pop(cat.value),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              cat.isSub ? 24 : 12, 5, 12, 5),
+                          child: Row(
+                            children: [
+                              CategoryIconBadge(
+                                store: widget.store,
+                                categoryPath: cat.value,
+                                fallbackType: widget.categoryType,
+                                size: cat.isSub ? 16 : 18,
+                                borderRadius: 5,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  cat.label,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
+                                    color:
+                                        isSelected ? c.accent : c.textPrimary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(Icons.check, size: 14, color: c.accent),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }

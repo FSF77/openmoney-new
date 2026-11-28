@@ -2537,4 +2537,89 @@ Data;Conta;Descrição;Categoria;Nota;Valor;Conciliado
     final txPos = store.db.txs.firstWhere((t) => t.payee == 'Compra Pós Quitação');
     expect(txPos.rec, isTrue);
   });
+
+  testWidgets('47. CategorySelectFormField supports real-time accent-insensitive search and selection', (tester) async {
+    final store = MoneyStore(autoBoot: false);
+    store.db = Database(
+      v: 7,
+      accounts: [
+        Account(id: 'a1', name: 'Conta Corrente', type: 'Corrente', opening: 0),
+        Account(id: 'a2', name: 'Poupança', type: 'Poupança', opening: 0),
+      ],
+      txs: [],
+      cats: [
+        CategoryItem(name: 'Alimentação', type: 'Despesa'),
+        CategoryItem(name: 'Supermercado', parent: 'Alimentação', type: 'Despesa'),
+        CategoryItem(name: 'Restaurante', parent: 'Alimentação', type: 'Despesa'),
+        CategoryItem(name: 'Transporte', type: 'Despesa'),
+        CategoryItem(name: 'Combustível', parent: 'Transporte', type: 'Despesa'),
+      ],
+    );
+
+    String selected = 'Alimentação › Supermercado';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => Center(
+              child: SizedBox(
+                width: 320,
+                child: CategorySelectFormField(
+                  store: store,
+                  categoryType: 'Despesa',
+                  currentSelection: selected,
+                  onChanged: (v) => setState(() => selected = v),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Abre o seletor pesquisável
+    await tester.tap(find.byType(CategorySelectFormField));
+    await tester.pumpAndSettle();
+
+    final searchField = find.widgetWithText(TextField, 'Pesquisar categoria...');
+    expect(searchField, findsOneWidget);
+
+    // Pesquisa sem acentos por "alimentacao" -> exibe pai e todas as subcategorias
+    await tester.enterText(searchField, 'alimentacao');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alimentação'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.text('↳ Supermercado'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('↳ Restaurante'), findsOneWidget);
+    expect(find.text('↳ Combustível'), findsNothing);
+
+    // Pesquisa por subcategoria "combus" -> exibe pai para contexto + subcategoria
+    await tester.enterText(searchField, 'combus');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Transporte'), findsOneWidget);
+    expect(find.text('↳ Combustível'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.text('↳ Supermercado'),
+      ),
+      findsNothing,
+    );
+
+    // Seleciona a subcategoria filtrada e fecha o popup
+    await tester.tap(find.text('↳ Combustível'));
+    await tester.pumpAndSettle();
+
+    expect(selected, 'Transporte › Combustível');
+    expect(find.widgetWithText(TextField, 'Pesquisar categoria...'), findsNothing);
+  });
 }

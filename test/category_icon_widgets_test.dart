@@ -82,7 +82,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Alimentação'), findsOneWidget);
-    expect(find.text('Mercado'), findsOneWidget);
+    expect(find.text('↳ Mercado'), findsWidgets);
   });
 
   testWidgets('CategoryIconPickerDialog filters icons and returns selection',

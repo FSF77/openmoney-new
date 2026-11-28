@@ -3,6 +3,7 @@ import '../../models/openmoney_models.dart';
 import '../../services/date_validator.dart';
 import '../../store/money_store.dart';
 import '../theme/liquid_glass.dart';
+import '../widgets/category_select_form_field.dart';
 import '../widgets/date_input_formatter.dart';
 import '../widgets/tag_input_field.dart';
 
@@ -438,34 +439,14 @@ class _BatchEditTransactionsModalState
                                 ],
                               ),
                             )
-                          : DropdownButtonFormField<String>(
-                              value: catOptions.any((c) => c.value == _selectedCategory)
-                                  ? _selectedCategory
-                                  : (catOptions.isNotEmpty ? catOptions.first.value : null),
-                              isExpanded: true,
-                              dropdownColor: c.surfaceCard,
-                              style: TextStyle(fontSize: 13, color: c.textPrimary),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                filled: true,
-                                fillColor: c.surfaceCard,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              items: catOptions
-                                  .map((opt) => DropdownMenuItem<String>(
-                                        value: opt.value,
-                                        child: Text(
-                                          opt.label,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ))
-                                  .toList(),
+                          : CategorySelectFormField(
+                              store: store,
+                              categoryType: allowedCatType,
+                              currentSelection: _selectedCategory,
+                              allowTransfers: false,
+                              labelText: 'Categoria',
                               onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _selectedCategory = val);
-                                }
+                                setState(() => _selectedCategory = val);
                               },
                             ),
                     ),
